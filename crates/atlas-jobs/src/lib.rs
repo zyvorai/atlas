@@ -731,12 +731,13 @@ async fn dispatch(
             max_size,
         } => {
             let k8s = require_k8s(k8s)?;
+            let max_size = max_size.filter(|s| !s.is_empty());
             let mut additional_config = std::collections::BTreeMap::new();
             if let Some(n) = max_objects {
                 additional_config.insert("maxObjects".to_string(), n.to_string());
             }
-            if let Some(sz) = max_size.filter(|s| !s.is_empty()) {
-                additional_config.insert("maxSize".to_string(), sz);
+            if let Some(sz) = &max_size {
+                additional_config.insert("maxSize".to_string(), sz.clone());
             }
             k8s.create_obc(&namespace, &obc_name, &storage_class, &additional_config)
                 .await
@@ -768,8 +769,28 @@ async fn dispatch(
                 &obc_name,
             )
             .await?;
+
+            // Enforce the RGW per-bucket quota directly (Rook may not apply OBC additionalConfig).
+            let quota_set = if max_objects.is_some() || max_size.is_some() {
+                match atlas_driver_ceph::radosgw_bucket_quota(
+                    &bucket_name,
+                    max_objects,
+                    max_size.as_deref(),
+                )
+                .await
+                {
+                    Ok(()) => true,
+                    Err(e) => {
+                        tracing::warn!("set bucket quota on {bucket_name}: {e:#}");
+                        false
+                    }
+                }
+            } else {
+                false
+            };
             Ok(serde_json::json!({
-                "bucket_id": bucket_id, "bucket_name": bucket_name, "endpoint": endpoint
+                "bucket_id": bucket_id, "bucket_name": bucket_name, "endpoint": endpoint,
+                "quota_set": quota_set
             }))
         }
 

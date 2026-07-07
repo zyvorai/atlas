@@ -33,6 +33,51 @@ pub async fn rbd_snap_create(pool: &str, image: &str, snap: &str) -> Result<(), 
     Ok(())
 }
 
+/// Set + enable an RGW per-bucket quota via `radosgw-admin` (Rook doesn't always apply the OBC
+/// additionalConfig quota, so Atlas enforces it directly with the admin keyring in the pod).
+pub async fn radosgw_bucket_quota(
+    bucket: &str,
+    max_objects: Option<i64>,
+    max_size: Option<&str>,
+) -> Result<(), DriverError> {
+    let mo = max_objects.map(|n| n.to_string());
+    let mut set_args: Vec<&str> = vec!["quota", "set", "--bucket", bucket, "--quota-scope=bucket"];
+    if let Some(ref n) = mo {
+        set_args.push("--max-objects");
+        set_args.push(n);
+    }
+    if let Some(sz) = max_size {
+        set_args.push("--max-size");
+        set_args.push(sz);
+    }
+    radosgw_admin(&set_args).await?;
+    radosgw_admin(&[
+        "quota",
+        "enable",
+        "--bucket",
+        bucket,
+        "--quota-scope=bucket",
+    ])
+    .await?;
+    Ok(())
+}
+
+async fn radosgw_admin(args: &[&str]) -> Result<(), DriverError> {
+    let output = tokio::process::Command::new("radosgw-admin")
+        .args(args)
+        .output()
+        .await
+        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `radosgw-admin`: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(DriverError::Backend(format!(
+            "radosgw-admin {}: {stderr}",
+            args.join(" ")
+        )));
+    }
+    Ok(())
+}
+
 /// Remove an RBD snapshot `pool/image@snap` (best-effort; ignores "not found").
 pub async fn rbd_snap_rm(pool: &str, image: &str, snap: &str) -> Result<(), DriverError> {
     let spec = format!("{pool}/{image}@{snap}");
