@@ -73,7 +73,11 @@ Read-only control plane + real Ceph lab.
 - Product integrations: Veyron (VM datastores), Hyper2KVM (direct-to-RBD migration), GuestKit
   (read-only snapshot inspection), PacketWolf (VM→OSD network/storage RCA), Ragnarok (AI storage
   facts), Aether (intent YAML), Machina (RGW/CephFS artifacts), HyperSDK (install/onboard CLI).
-- **Monitor worker**: scrape Ceph mgr Prometheus, normalize metrics, drive alerts (PDF §15).
+- ✅ **Monitor worker** (`atlas-monitor`): periodic discovery + alert rules (cluster unhealthy,
+  pool near-full 75/85%, OSD down) → real `GET /alerts?state=`, `POST /alerts/evaluate`. Deterministic
+  alert ids upsert on recurrence and resolve when conditions clear. Verified on real Ceph
+  (`HEALTH_WARN` → one open cluster alert). Follow-up: scrape Ceph mgr Prometheus for latency/IOPS
+  metrics + latency/recovery alerts.
 - **Zeus OS UI** — Storage Center. Note two known collisions to resolve first:
   - `atlas` is already a Zeus OS module codename ("Machine Finder") in `v9s`.
   - A `ZeusStorageCenter.tsx` + `web/src/routes/storage.rs` already ship — decide whether Atlas's

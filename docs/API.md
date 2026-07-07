@@ -106,8 +106,21 @@ Aggregate capacity across clusters (PDF §13.2 overview cards).
   "available_capacity_bytes": 1000177254400, "clusters": 1, "pools": 1, "volumes": 1 }
 ```
 
-### `GET /api/atlas/v1/alerts`
-Returns `[]` (alert engine lands in a later slice).
+### `GET /api/atlas/v1/alerts[?state=open]`
+Alerts produced by the monitor worker (PDF §15.2): cluster unhealthy, pool near-full (75/85%),
+OSD down. Filter by `state` (`open`/`resolved`).
+```json
+[{ "id": "alert_cluster_unhealthy_cls_5ace73d1-...", "severity": "warning", "source": "monitor",
+   "resource_type": "cluster", "resource_id": "cls_5ace73d1-...",
+   "title": "Cluster health degraded", "description": "Cluster ... is HEALTH_WARN",
+   "evidence": { "health": "warn" }, "state": "open", "created_at": "...", "resolved_at": null }]
+```
+
+### `POST /api/atlas/v1/alerts/evaluate`
+Run the alert rules on demand (also runs every `ATLAS_MONITOR_INTERVAL_SECS`).
+```json
+{ "evaluated": true, "open_alerts": 1 }
+```
 
 ## Write path (async jobs) — slice 2
 
