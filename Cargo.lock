@@ -252,6 +252,7 @@ dependencies = [
  "atlas-driver-k8s",
  "atlas-inventory",
  "atlas-jobs",
+ "atlas-monitor",
  "atlas-policy",
  "axum",
  "chrono",
@@ -297,6 +298,21 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "sqlx",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "atlas-monitor"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "atlas-api-types",
+ "atlas-discovery",
+ "atlas-driver-core",
+ "atlas-inventory",
+ "serde_json",
  "sqlx",
  "tokio",
  "tracing",

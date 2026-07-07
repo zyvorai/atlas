@@ -52,6 +52,7 @@ pub fn router(state: AppState) -> Router {
         .route("/policies", get(list_policies))
         .route("/metrics/summary", get(metrics_summary))
         .route("/alerts", get(list_alerts))
+        .route("/alerts/evaluate", post(evaluate_alerts))
         .route("/jobs", get(list_jobs))
         .route("/jobs/{id}", get(get_job))
         .route_layer(middleware::from_fn_with_state(
@@ -245,9 +246,26 @@ async fn metrics_summary(State(s): State<AppState>) -> AppResult<Json<Value>> {
     Ok(Json(atlas_inventory::metrics_summary(&s.pool).await?))
 }
 
-async fn list_alerts() -> Json<Value> {
-    // Alert engine arrives with the monitor worker (a later slice).
-    Json(json!([]))
+#[derive(Debug, Deserialize)]
+struct AlertQuery {
+    state: Option<String>,
+}
+
+/// `GET /alerts[?state=open]` — alerts produced by the monitor worker (PDF §15.2).
+async fn list_alerts(
+    State(s): State<AppState>,
+    Query(q): Query<AlertQuery>,
+) -> AppResult<Json<Value>> {
+    Ok(Json(json!(
+        atlas_inventory::alerts::list(&s.pool, q.state.as_deref()).await?
+    )))
+}
+
+/// `POST /alerts/evaluate` — run the alert rules on demand (also runs on the monitor interval).
+async fn evaluate_alerts(State(s): State<AppState>) -> AppResult<Json<Value>> {
+    atlas_monitor::evaluate(&s.pool).await?;
+    let open = atlas_inventory::alerts::count_open(&s.pool).await?;
+    Ok(Json(json!({ "evaluated": true, "open_alerts": open })))
 }
 
 // ---- jobs ----

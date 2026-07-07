@@ -26,6 +26,7 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
         kubeconfig_path: None,
         jwt_secret: "test-secret".into(),
         auth_required: false,
+        monitor_interval_secs: 0,
     };
 
     let state = build_state(
@@ -33,6 +34,7 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
         BuildOptions {
             enable_k8s: false,
             initial_discovery: false,
+            enable_monitor: false,
         },
     )
     .await
@@ -205,6 +207,121 @@ async fn discovery_populates_inventory_and_audit() {
         .await
         .unwrap();
     assert!(audits >= 1, "expected discovery audit row, got {audits}");
+}
+
+#[tokio::test]
+async fn monitor_raises_and_resolves_alerts() {
+    // The fake driver reports HEALTH_OK, so a plain discovery yields no alerts. We instead seed a
+    // WARN cluster + a near-full pool + a down OSD and evaluate the rules directly.
+    let (addr, pool) = spawn().await;
+    let base = format!("http://{addr}");
+
+    let backend = atlas_api_types::StorageBackend {
+        id: "bkd_ceph_lab".into(),
+        name: "b".into(),
+        backend_type: atlas_api_types::BackendType::Ceph,
+        mode: atlas_api_types::BackendMode::ManagedRook,
+        status: "active".into(),
+        capabilities: Default::default(),
+        connection_ref: None,
+    };
+    atlas_inventory::upsert_backend(&pool, &backend)
+        .await
+        .unwrap();
+    let discovery = atlas_api_types::DiscoveryResult {
+        cluster: atlas_api_types::StorageCluster {
+            id: "cls_1".into(),
+            backend_id: "bkd_ceph_lab".into(),
+            name: "lab".into(),
+            native_fsid: None,
+            health: atlas_api_types::Health::Warn,
+            raw_capacity_bytes: Some(100),
+            used_capacity_bytes: Some(90),
+            available_capacity_bytes: Some(10),
+        },
+        pools: vec![atlas_api_types::StoragePool {
+            id: "pool_1".into(),
+            cluster_id: "cls_1".into(),
+            name: "hot".into(),
+            kind: "rbd".into(),
+            device_class: None,
+            replica_size: Some(1),
+            used_bytes: Some(90),
+            max_bytes: Some(100),
+            health: atlas_api_types::Health::Warn,
+        }],
+        osds: vec![atlas_api_types::Osd {
+            id: 7,
+            cluster_id: "cls_1".into(),
+            up: false,
+            in_cluster: true,
+            device_class: None,
+            host: Some("n1".into()),
+            used_bytes: None,
+            capacity_bytes: None,
+        }],
+        volumes: vec![],
+        health: atlas_api_types::StorageHealth {
+            status: atlas_api_types::Health::Warn,
+            summary: "WARN".into(),
+            raw_capacity_bytes: None,
+            used_capacity_bytes: None,
+            available_capacity_bytes: None,
+            recovering: false,
+            degraded_objects: 0,
+        },
+    };
+    atlas_inventory::upsert_discovery(&pool, "bkd_ceph_lab", &discovery)
+        .await
+        .unwrap();
+
+    // Evaluate → expect 3 open alerts (cluster warn, pool 90% full, osd down).
+    let ev: serde_json::Value = client()
+        .post(format!("{base}/api/atlas/v1/alerts/evaluate"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(ev["open_alerts"], 3);
+
+    let open: serde_json::Value = client()
+        .get(format!("{base}/api/atlas/v1/alerts?state=open"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let arr = open.as_array().unwrap();
+    assert_eq!(arr.len(), 3);
+    assert!(arr.iter().any(|a| a["title"] == "OSD down"));
+    assert!(arr.iter().any(|a| a["title"] == "Pool near full"));
+
+    // Heal the cluster/pool/osd → re-evaluate → alerts resolved.
+    let healthy = atlas_api_types::DiscoveryResult {
+        cluster: atlas_api_types::StorageCluster {
+            health: atlas_api_types::Health::Ok,
+            ..discovery.cluster.clone()
+        },
+        pools: vec![atlas_api_types::StoragePool {
+            used_bytes: Some(10),
+            ..discovery.pools[0].clone()
+        }],
+        osds: vec![atlas_api_types::Osd {
+            up: true,
+            ..discovery.osds[0].clone()
+        }],
+        volumes: vec![],
+        health: discovery.health.clone(),
+    };
+    atlas_inventory::upsert_discovery(&pool, "bkd_ceph_lab", &healthy)
+        .await
+        .unwrap();
+    atlas_monitor::evaluate(&pool).await.unwrap();
+    let still_open = atlas_inventory::alerts::count_open(&pool).await.unwrap();
+    assert_eq!(still_open, 0, "alerts should resolve when conditions clear");
 }
 
 #[tokio::test]

@@ -19,6 +19,7 @@ atlas-driver-k8s = { workspace = true }
 atlas-policy = { workspace = true }
 atlas-inventory = { workspace = true }
 atlas-discovery = { workspace = true }
+atlas-monitor = { workspace = true }
 atlas-jobs = { workspace = true }
 
 axum = { workspace = true }

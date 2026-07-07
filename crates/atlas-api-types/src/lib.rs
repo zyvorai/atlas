@@ -358,6 +358,23 @@ pub struct BackupRecord {
     pub created_at: Option<String>,
 }
 
+/// An alert record (PDF §15.2).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlertRecord {
+    pub id: String,
+    pub severity: String,
+    pub source: String,
+    pub resource_type: String,
+    pub resource_id: String,
+    pub title: String,
+    pub description: String,
+    #[serde(default)]
+    pub evidence: serde_json::Value,
+    pub state: String,
+    pub created_at: Option<String>,
+    pub resolved_at: Option<String>,
+}
+
 /// A snapshot record as surfaced by the API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorageSnapshot {

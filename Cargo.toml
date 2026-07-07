@@ -10,6 +10,7 @@ members = [
     "crates/atlas-policy",
     "crates/atlas-inventory",
     "crates/atlas-discovery",
+    "crates/atlas-monitor",
     "crates/atlas-jobs",
     "crates/atlas-gateway",
     "crates/atlas-cli",
@@ -33,6 +34,7 @@ atlas-driver-rgw = { path = "crates/atlas-driver-rgw" }
 atlas-policy = { path = "crates/atlas-policy" }
 atlas-inventory = { path = "crates/atlas-inventory" }
 atlas-discovery = { path = "crates/atlas-discovery" }
+atlas-monitor = { path = "crates/atlas-monitor" }
 atlas-jobs = { path = "crates/atlas-jobs" }
 
 # Async / runtime

@@ -33,6 +33,8 @@ pub struct Config {
     pub jwt_secret: String,
     /// When true, protected routes require a valid JWT; when false (dev), they are open.
     pub auth_required: bool,
+    /// Monitor loop interval in seconds (0 disables the monitor/alerts worker).
+    pub monitor_interval_secs: u64,
 }
 
 impl Config {
@@ -60,6 +62,10 @@ impl Config {
             jwt_secret: std::env::var("ATLAS_JWT_SECRET")
                 .unwrap_or_else(|_| DEV_JWT_DEFAULT.into()),
             auth_required,
+            monitor_interval_secs: std::env::var("ATLAS_MONITOR_INTERVAL_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(60),
         }
     }
 
@@ -78,6 +84,7 @@ impl Default for Config {
             kubeconfig_path: None,
             jwt_secret: DEV_JWT_DEFAULT.into(),
             auth_required: false,
+            monitor_interval_secs: 0,
         }
     }
 }

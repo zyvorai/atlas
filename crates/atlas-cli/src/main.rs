@@ -44,6 +44,11 @@ enum Command {
     StorageClasses,
     /// GET /api/atlas/v1/metrics/summary
     Metrics,
+    /// GET /api/atlas/v1/alerts (optionally filter by --state open|resolved)
+    Alerts {
+        #[arg(long)]
+        state: Option<String>,
+    },
     /// GET /api/atlas/v1/policies
     Policies,
     /// GET /api/atlas/v1/jobs  (or a single job with an id)
@@ -136,6 +141,14 @@ async fn main() -> Result<()> {
         Command::Volumes => ("GET", "/api/atlas/v1/volumes".to_string(), None),
         Command::StorageClasses => ("GET", "/api/atlas/v1/storage-classes".to_string(), None),
         Command::Metrics => ("GET", "/api/atlas/v1/metrics/summary".to_string(), None),
+        Command::Alerts { state } => (
+            "GET",
+            match state {
+                Some(st) => format!("/api/atlas/v1/alerts?state={st}"),
+                None => "/api/atlas/v1/alerts".to_string(),
+            },
+            None,
+        ),
         Command::Policies => ("GET", "/api/atlas/v1/policies".to_string(), None),
         Command::Jobs { id } => match id {
             Some(id) => ("GET", format!("/api/atlas/v1/jobs/{id}"), None),

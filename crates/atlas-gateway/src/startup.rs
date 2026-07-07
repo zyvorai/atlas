@@ -23,6 +23,8 @@ pub struct BuildOptions {
     pub enable_k8s: bool,
     /// Run one discovery pass at startup so inventory is populated immediately.
     pub initial_discovery: bool,
+    /// Spawn the monitor/alerts worker (disable in tests).
+    pub enable_monitor: bool,
 }
 
 impl Default for BuildOptions {
@@ -30,6 +32,7 @@ impl Default for BuildOptions {
         Self {
             enable_k8s: true,
             initial_discovery: true,
+            enable_monitor: true,
         }
     }
 }
@@ -100,10 +103,19 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
     };
 
     if opts.initial_discovery {
-        match atlas_discovery::run_discovery(&state.pool, driver).await {
+        match atlas_discovery::run_discovery(&state.pool, driver.clone()).await {
             Ok(sum) => tracing::info!(?sum, "initial discovery complete"),
             Err(e) => tracing::warn!("initial discovery failed: {e:#}"),
         }
+    }
+
+    // Start the monitor/alerts worker (periodic discovery + alert-rule evaluation).
+    if opts.enable_monitor {
+        atlas_monitor::spawn(
+            state.pool.clone(),
+            driver,
+            state.config.monitor_interval_secs,
+        );
     }
 
     Ok(state)
