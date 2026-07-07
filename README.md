@@ -42,11 +42,17 @@ call **stable Atlas APIs**; Atlas talks to storage backends through **pluggable 
 - **Job engine** (`atlas-jobs`): SQLite-backed tokio worker, PDF §10.5 state machine.
 - `POST /volumes` (create Ceph-backed PVC), `DELETE`, `expand`, snapshots — all `202 + job id`.
 - `atlas-policy` intent→placement; idempotency keys; ownership bindings.
-- Real `GET /jobs`, `/snapshots`, `/policies`; `atlasctl create-volume|snapshot-volume|…`.
-- **Verified**: `POST /volumes` → PVC Bound on `zyvor-rbd-prod` → snapshot `readyToUse=true`.
+- Real `GET /jobs`, `/snapshots`, `/policies`; snapshot **clone/restore** with a safe-delete guard.
+- **Verified**: `POST /volumes` → PVC Bound on `zyvor-rbd-prod` → snapshot → clone/restore.
+- Durable DB: SQLite backed by a Ceph PVC (survives pod restarts).
 
-**Deferred:** snapshot clone/restore, safe-delete approval, gRPC edge, RGW/backup, per-product
-integrations, Zeus OS UI. See [docs/ROADMAP.md](docs/ROADMAP.md).
+**Slice 3 (part 1) — RGW object storage + backups:**
+- `atlas-driver-rgw` S3 client; buckets via **ObjectBucketClaim** (`POST /buckets`).
+- `POST /backup-jobs`: snapshot + write a **backup manifest** to RGW over S3 + verify (checksum).
+- **Verified** on real Ceph RGW: bucket bound, manifest object written + verified.
+
+**Deferred:** full data backup (`rbd export`→S3), restore-jobs, gRPC edge, per-product integrations,
+Zeus OS UI, monitor/alerts. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Quickstart (no Ceph, no cluster needed)
 

@@ -163,6 +163,40 @@ defaults to `restore-<snap-suffix>`. `resource.mode` is `"restore"`.
 Delete the VolumeSnapshot + snapshot row (async job). **Blocked with `409 CONFLICT`** if any volume
 was cloned/restored from it (PDF §8.3); pass `?force=true` to override.
 
+## Object storage & backups (RGW) — slice 3
+
+### `POST /api/atlas/v1/buckets`
+Provision an RGW bucket via an ObjectBucketClaim (async job).
+```json
+{ "name": "atlas-backups", "namespace": "rook-ceph", "storage_class": "zyvor-rgw-bucket" }
+// 202 → resource: { bucket_id, namespace }
+```
+
+### `GET /api/atlas/v1/buckets` · `GET /api/atlas/v1/buckets/{id}`
+```json
+[{ "id": "bkt_9624f5a6596f", "tenant_id": "global", "name": "atlas-backups",
+   "bucket_name": "atlas-backups-63f4f511-...", "endpoint": "http://rook-ceph-rgw-...:80",
+   "region": "us-east-1", "secret_ref": "atlas-backups", "namespace": "rook-ceph",
+   "state": "bound", "created_at": "..." }]
+```
+`secret_ref` is the Kubernetes Secret name holding the S3 credentials — the keys are never returned.
+
+### `POST /api/atlas/v1/backup-jobs`
+Snapshot a volume and write a backup manifest to a (bound) bucket over S3, verifying the write.
+```json
+{ "volume_id": "vol_cfe1c97958f3", "bucket_id": "bkt_9624f5a6596f" }
+// 202 → resource: { backup_id, object_key, bucket_id }
+```
+`400` if the bucket is not `bound`; `404` if the volume/bucket is unknown.
+
+### `GET /api/atlas/v1/backups` · `GET /api/atlas/v1/backups/{id}`
+```json
+[{ "id": "bkp_691e0b1e464b604c", "tenant_id": "global", "volume_id": "vol_cfe1c97958f3",
+   "snapshot_id": "snap_697f4a9351c9", "bucket_id": "bkt_9624f5a6596f",
+   "object_key": "backups/vol_cfe1c97958f3/bkp_691e0b1e464b604c.manifest.json",
+   "format": "manifest-v1", "checksum": "8495f123...", "state": "verified", "created_at": "..." }]
+```
+
 ## Jobs, snapshots, policies
 
 ### `GET /api/atlas/v1/jobs` · `GET /api/atlas/v1/jobs/{id}`
@@ -232,6 +266,10 @@ atlasctl clone-snapshot SNAPSHOT_ID --name NAME [--namespace NS]
 atlasctl restore-snapshot SNAPSHOT_ID [--name NAME]
 atlasctl delete-volume VOLUME_ID
 atlasctl delete-snapshot SNAPSHOT_ID [--force]
+atlasctl create-bucket NAME [--namespace rook-ceph]
+atlasctl buckets
+atlasctl backup-volume VOLUME_ID --bucket-id BUCKET_ID
+atlasctl backups
 atlasctl jobs [ID]                  # GET /jobs (or a single job)
 atlasctl snapshots                  # GET /snapshots
 # global flags: --base-url (ATLAS_BASE_URL), --token (ATLAS_TOKEN)

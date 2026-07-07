@@ -48,9 +48,26 @@ Read-only control plane + real Ceph lab.
   cluster default StorageClass so it still deploys without Ceph. Verified: inventory survives a pod
   restart. (For multi-replica HA, move to Postgres — the sqlx layer already abstracts this.)
 
+## ✅ Slice 3 (part 1) — RGW object storage + backups (done, verified)
+
+- `atlas-driver-rgw` — minimal S3 client for RGW (`rusty-s3` SigV4 signing + `reqwest`).
+- Buckets via **ObjectBucketClaim**: `POST /buckets` (async job) creates an OBC; Rook provisions the
+  bucket + Secret + ConfigMap; Atlas records the endpoint + a **secret reference** (never the keys).
+  `GET /buckets`, `GET /buckets/{id}`.
+- Backups: `POST /backup-jobs` snapshots the volume, writes a **backup manifest** (PDF §16.2) to the
+  RGW bucket over S3, reads it back to **verify** (sha256 checksum). `GET /backups`, `GET /backups/{id}`.
+- Credentials are read from the OBC Secret **in-cluster** by the job and never logged.
+- migration 0003 (`storage_buckets`, `storage_backups`); single-node RGW object store + bucket SC.
+- **Verified** on real Ceph RGW: bucket bound, manifest object written + verified, independently
+  confirmed via `radosgw-admin bucket list`.
+
+### RGW/backup follow-ups
+- Full **data** backup (`rbd export-diff` streamed to S3), not just the manifest.
+- `POST /restore-jobs` from a backup manifest; restore verification job (PDF §16).
+- Bucket lifecycle policies, quotas, delete; presigned download URLs for exports.
+
 ## ⏭ Slice 3+ — Enterprise & product integration
 
-- **RGW/object** + `atlas-backup`: S3 buckets, backup manifests, restore verification (PDF §16).
 - **gRPC edge** on the gateway (typed internal contracts).
 - Product integrations: Veyron (VM datastores), Hyper2KVM (direct-to-RBD migration), GuestKit
   (read-only snapshot inspection), PacketWolf (VM→OSD network/storage RCA), Ragnarok (AI storage
