@@ -74,7 +74,9 @@ Read-only control plane + real Ceph lab.
   a new PVC from the backup's VolumeSnapshot (PDF §16, DR-2). Verified on real Ceph.
 - ✅ **Backup delete** (`DELETE /backups/{id}`) — removes the S3 manifest + `.rbd-diff` data objects
   (idempotent) and the RBD snapshot (best-effort), then the row. Verified live (RGW objects → 0, row 404).
-- Bucket lifecycle policies, quotas, delete; retention (prune last-N); presigned download URLs.
+- ✅ **Retention** — `ATLAS_BACKUP_KEEP` (0=unlimited) + per-request `keep`; on backup create, prunes
+  backups beyond the keep count (most-recent-first) via delete jobs. Verified live (3 backups, keep=2 → 2).
+- Bucket lifecycle policies, quotas, delete; presigned download URLs; time-based retention.
 
 ## ✅ gRPC edge (done, verified)
 
