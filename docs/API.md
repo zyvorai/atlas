@@ -219,11 +219,14 @@ Delete the bucket: removes its ObjectBucketClaim (Rook releases the bucket) + ro
 ### `POST /api/atlas/v1/backup-jobs`
 Snapshot a volume and write a backup manifest to a (bound) bucket over S3, verifying the write.
 ```json
-{ "volume_id": "vol_cfe1c97958f3", "bucket_id": "bkt_9624f5a6596f", "mode": "manifest", "keep": 0 }
+{ "volume_id": "vol_cfe1c97958f3", "bucket_id": "bkt_9624f5a6596f", "mode": "manifest",
+  "keep": 0, "max_age_secs": 0 }
 // 202 → resource: { backup_id, object_key, bucket_id }
 ```
 `keep` (default `ATLAS_BACKUP_KEEP`, 0=unlimited) retains only the most recent N backups for the
-volume, pruning older ones.
+volume, pruning older ones. `max_age_secs` (default `ATLAS_BACKUP_MAX_AGE_SECS`, 0=disabled) prunes
+backups for the volume older than the cutoff. Both prune via delete jobs after the backup completes.
+List with `GET /api/atlas/v1/backups?volume_id=<id>` to scope to one volume.
 `mode` (default `manifest`) — `data` also exports the **real RBD image data** (`rbd export-diff`) to
 `<object_key>.rbd-diff` in the bucket and records `data_bytes`/`data_checksum` in the manifest.
 `400` if the bucket is not `bound`; `404` if the volume/bucket is unknown.

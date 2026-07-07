@@ -74,8 +74,11 @@ Read-only control plane + real Ceph lab.
   a new PVC from the backup's VolumeSnapshot (PDF §16, DR-2). Verified on real Ceph.
 - ✅ **Backup delete** (`DELETE /backups/{id}`) — removes the S3 manifest + `.rbd-diff` data objects
   (idempotent) and the RBD snapshot (best-effort), then the row. Verified live (RGW objects → 0, row 404).
-- ✅ **Retention** — `ATLAS_BACKUP_KEEP` (0=unlimited) + per-request `keep`; on backup create, prunes
-  backups beyond the keep count (most-recent-first) via delete jobs. Verified live (3 backups, keep=2 → 2).
+- ✅ **Retention (count)** — `ATLAS_BACKUP_KEEP` (0=unlimited) + per-request `keep`; on backup create,
+  prunes backups beyond the keep count (most-recent-first) via delete jobs. Verified live (3 → keep=2 → 2).
+- ✅ **Retention (age)** — `ATLAS_BACKUP_MAX_AGE_SECS` (0=disabled) + per-request/CLI `max_age_secs`; on
+  backup create, prunes completed backups for the volume older than the cutoff via delete jobs.
+  `GET /backups?volume_id=` filters by volume. Verified live (backup aged past a 3s cutoff → pruned).
 - ✅ **Bucket delete** (`DELETE /buckets/{id}`) — deletes the OBC (Rook releases the bucket) + row;
   blocked with `409` if backups still reference the bucket, unless `?force=true`. Verified live
   (OBC NotFound, row 404).
