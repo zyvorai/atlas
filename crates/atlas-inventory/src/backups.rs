@@ -49,6 +49,14 @@ pub async fn set_state(
     Ok(())
 }
 
+pub async fn delete_backup_row(pool: &SqlitePool, id: &str) -> Result<()> {
+    sqlx::query("DELETE FROM storage_backups WHERE id=?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn get_backup(pool: &SqlitePool, id: &str) -> Result<Option<BackupRecord>> {
     let row = sqlx::query(&select("WHERE id = ?"))
         .bind(id)

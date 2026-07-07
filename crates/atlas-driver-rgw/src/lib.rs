@@ -88,4 +88,23 @@ impl S3Target {
     pub async fn object_exists(&self, key: &str) -> bool {
         self.get_object(key).await.is_ok()
     }
+
+    /// DELETE an object. S3 delete is idempotent (deleting a missing key returns success).
+    pub async fn delete_object(&self, key: &str) -> Result<()> {
+        let action = self.bucket.delete_object(Some(&self.creds), key);
+        let signed = action.sign(SIGN_TTL);
+        let resp = self
+            .http
+            .delete(signed)
+            .send()
+            .await
+            .with_context(|| format!("DELETE {key}"))?;
+        let status = resp.status();
+        // 204/200 on success; 404 is fine (already gone).
+        if !status.is_success() && status.as_u16() != 404 {
+            let detail = resp.text().await.unwrap_or_default();
+            anyhow::bail!("DELETE {key} failed: HTTP {status}: {detail}");
+        }
+        Ok(())
+    }
 }

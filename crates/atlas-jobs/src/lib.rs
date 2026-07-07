@@ -149,6 +149,21 @@ pub enum JobSpec {
         #[serde(default)]
         mode: String,
     },
+    /// Delete a backup: remove its S3 manifest + data objects and the RBD snapshot (best-effort).
+    #[serde(rename = "backup.delete")]
+    BackupDelete {
+        backup_id: String,
+        manifest_key: String,
+        data_key: String,
+        volume_namespace: String,
+        pvc_name: String,
+        rbd_snap: String,
+        bucket_namespace: String,
+        bucket_secret_ref: String,
+        bucket_endpoint: String,
+        bucket_name: String,
+        bucket_region: String,
+    },
 }
 
 impl JobSpec {
@@ -164,6 +179,7 @@ impl JobSpec {
             JobSpec::BucketCreate { .. } => "bucket.create",
             JobSpec::BackupCreate { .. } => "backup.create",
             JobSpec::RestoreBackup { .. } => "backup.restore",
+            JobSpec::BackupDelete { .. } => "backup.delete",
         }
     }
 }
@@ -624,6 +640,59 @@ async fn dispatch(
                 "pvc": format!("{namespace}/{new_name}"),
                 "phase": phase, "bound": phase.as_deref() == Some("Bound")
             }))
+        }
+
+        JobSpec::BackupDelete {
+            backup_id,
+            manifest_key,
+            data_key,
+            volume_namespace,
+            pvc_name,
+            rbd_snap,
+            bucket_namespace,
+            bucket_secret_ref,
+            bucket_endpoint,
+            bucket_name,
+            bucket_region,
+        } => {
+            let k8s = require_k8s(k8s)?;
+            let secret = k8s
+                .get_secret(&bucket_namespace, &bucket_secret_ref)
+                .await?
+                .ok_or_else(|| anyhow!("bucket secret {bucket_secret_ref} not found"))?;
+            let access = secret
+                .get("AWS_ACCESS_KEY_ID")
+                .ok_or_else(|| anyhow!("bucket secret missing AWS_ACCESS_KEY_ID"))?;
+            let secret_key = secret
+                .get("AWS_SECRET_ACCESS_KEY")
+                .ok_or_else(|| anyhow!("bucket secret missing AWS_SECRET_ACCESS_KEY"))?;
+            let s3 = atlas_driver_rgw::S3Target::new(
+                &bucket_endpoint,
+                &bucket_region,
+                &bucket_name,
+                access,
+                secret_key,
+            )?;
+            // Remove the S3 objects (idempotent).
+            if let Err(e) = s3.delete_object(&manifest_key).await {
+                tracing::warn!("delete manifest {manifest_key}: {e:#}");
+            }
+            if !data_key.is_empty() {
+                if let Err(e) = s3.delete_object(&data_key).await {
+                    tracing::warn!("delete data {data_key}: {e:#}");
+                }
+            }
+            // Best-effort: remove the RBD snapshot if the source volume still resolves.
+            if let Ok(Some((pool_name, image))) =
+                k8s.resolve_rbd(&volume_namespace, &pvc_name).await
+            {
+                if let Err(e) = atlas_driver_ceph::rbd_snap_rm(&pool_name, &image, &rbd_snap).await
+                {
+                    tracing::warn!("rbd snap rm {pool_name}/{image}@{rbd_snap}: {e:#}");
+                }
+            }
+            atlas_inventory::backups::delete_backup_row(pool, &backup_id).await?;
+            Ok(serde_json::json!({ "backup_id": backup_id, "deleted": true }))
         }
 
         JobSpec::BucketCreate {

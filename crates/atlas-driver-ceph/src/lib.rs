@@ -9,6 +9,6 @@ mod cmd;
 mod fake;
 mod real;
 
-pub use cmd::{ceph_cmd, rbd_cmd, rbd_export_diff, rbd_import_diff, rbd_snap_create};
+pub use cmd::{ceph_cmd, rbd_cmd, rbd_export_diff, rbd_import_diff, rbd_snap_create, rbd_snap_rm};
 pub use fake::FakeCephDriver;
 pub use real::RealCephDriver;

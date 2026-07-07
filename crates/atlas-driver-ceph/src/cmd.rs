@@ -33,6 +33,27 @@ pub async fn rbd_snap_create(pool: &str, image: &str, snap: &str) -> Result<(), 
     Ok(())
 }
 
+/// Remove an RBD snapshot `pool/image@snap` (best-effort; ignores "not found").
+pub async fn rbd_snap_rm(pool: &str, image: &str, snap: &str) -> Result<(), DriverError> {
+    let spec = format!("{pool}/{image}@{snap}");
+    let output = tokio::process::Command::new("rbd")
+        .args(["snap", "rm", &spec])
+        .output()
+        .await
+        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("No such file") || stderr.contains("does not exist") {
+            return Ok(());
+        }
+        return Err(DriverError::Backend(format!(
+            "rbd snap rm {spec}: {}",
+            stderr.trim()
+        )));
+    }
+    Ok(())
+}
+
 /// Export an RBD snapshot as an incremental diff stream (`rbd export-diff pool/image@snap -`).
 /// For a fresh/sparse image this is small; the caller must cap the size it buffers.
 pub async fn rbd_export_diff(pool: &str, image: &str, snap: &str) -> Result<Vec<u8>, DriverError> {

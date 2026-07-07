@@ -120,6 +120,8 @@ enum Command {
     },
     /// GET /api/atlas/v1/backups
     Backups,
+    /// DELETE /api/atlas/v1/backups/{id}
+    DeleteBackup { id: String },
     /// POST /api/atlas/v1/restore-jobs — restore a volume from a backup
     RestoreBackup {
         backup_id: String,
@@ -235,6 +237,7 @@ async fn main() -> Result<()> {
             ),
         ),
         Command::Backups => ("GET", "/api/atlas/v1/backups".to_string(), None),
+        Command::DeleteBackup { id } => ("DELETE", format!("/api/atlas/v1/backups/{id}"), None),
         Command::RestoreBackup {
             backup_id,
             name,

@@ -828,6 +828,51 @@ async fn restore_from_backup_enqueues() {
 }
 
 #[tokio::test]
+async fn backup_delete_enqueues() {
+    let (addr, pool) = spawn().await;
+    let base = format!("http://{addr}");
+
+    // Unknown backup → 404.
+    let r = client()
+        .delete(format!("{base}/api/atlas/v1/backups/nope"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::NOT_FOUND);
+
+    // Seed volume + bound bucket + backup, then DELETE → 202.
+    seed_volume(&pool, "vol_bd", "vol-bd").await;
+    atlas_inventory::buckets::insert_bucket(&pool, "bkt_bd", "t1", "b", "rook-ceph", "b")
+        .await
+        .unwrap();
+    atlas_inventory::buckets::set_bound(&pool, "bkt_bd", "b-1", "http://rgw:80", "us-east-1", "b")
+        .await
+        .unwrap();
+    atlas_inventory::backups::insert_backup(
+        &pool,
+        "bkp_bd",
+        "t1",
+        "vol_bd",
+        None,
+        "bkt_bd",
+        "backups/vol_bd/bkp_bd.manifest.json",
+        "manifest-v1",
+        &serde_json::json!({}),
+    )
+    .await
+    .unwrap();
+
+    let r = client()
+        .delete(format!("{base}/api/atlas/v1/backups/bkp_bd"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::ACCEPTED);
+    let body: serde_json::Value = r.json().await.unwrap();
+    assert_eq!(body["resource"]["backup_id"], "bkp_bd");
+}
+
+#[tokio::test]
 async fn snapshot_delete_blocked_by_dependents() {
     let (addr, pool) = spawn().await;
     let base = format!("http://{addr}");

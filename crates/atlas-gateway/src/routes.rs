@@ -48,7 +48,7 @@ pub fn router(state: AppState) -> Router {
         .route("/backup-jobs", post(create_backup))
         .route("/restore-jobs", post(create_restore))
         .route("/backups", get(list_backups))
-        .route("/backups/{id}", get(get_backup))
+        .route("/backups/{id}", get(get_backup).delete(delete_backup))
         .route("/policies", get(list_policies))
         .route("/metrics/summary", get(metrics_summary))
         .route("/metrics/ceph", get(metrics_ceph))
@@ -928,6 +928,62 @@ async fn get_backup(State(s): State<AppState>, Path(id): Path<String>) -> AppRes
         .await?
         .ok_or_else(|| AppError::NotFound(format!("backup {id}")))?;
     Ok(Json(json!(b)))
+}
+
+/// `DELETE /backups/{id}` — remove the backup's S3 objects + RBD snapshot + row (async job).
+async fn delete_backup(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let backup = atlas_inventory::backups::get_backup(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("backup {id}")))?;
+    let bucket = atlas_inventory::buckets::get_bucket(&s.pool, &backup.bucket_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("bucket {}", backup.bucket_id)))?;
+
+    // The source volume gives the namespace/pvc for best-effort RBD snapshot cleanup.
+    let vol = atlas_inventory::get_volume(&s.pool, &backup.volume_id).await?;
+    let volume_namespace = vol
+        .as_ref()
+        .and_then(|v| v.kubernetes_namespace.clone())
+        .unwrap_or_default();
+    let pvc_name = vol.and_then(|v| v.pvc_name).unwrap_or_default();
+
+    let spec = JobSpec::BackupDelete {
+        backup_id: id.clone(),
+        manifest_key: backup.object_key.clone(),
+        data_key: format!("{}.rbd-diff", backup.object_key),
+        volume_namespace,
+        pvc_name,
+        rbd_snap: format!("atlasbkp-{}", &id[4..]),
+        bucket_namespace: bucket.namespace.unwrap_or_else(|| "rook-ceph".into()),
+        bucket_secret_ref: bucket.secret_ref.unwrap_or_default(),
+        bucket_endpoint: bucket.endpoint.unwrap_or_default(),
+        bucket_name: bucket.bucket_name.unwrap_or_default(),
+        bucket_region: bucket.region.unwrap_or_else(|| "us-east-1".into()),
+    };
+    let job_id = ids::job_id();
+    let job = s
+        .jobs
+        .enqueue(&job_id, &backup.tenant_id, &actor.id, spec, None)
+        .await
+        .map_err(AppError::from)?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "backup.delete.requested",
+        "backup",
+        &id,
+        "accepted",
+        None,
+        None,
+    )
+    .await;
+    Ok(accepted(&job, json!({ "backup_id": id })))
 }
 
 #[derive(Debug, Deserialize)]
