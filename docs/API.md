@@ -213,10 +213,23 @@ Provision an RGW bucket via an ObjectBucketClaim (async job).
 ### `POST /api/atlas/v1/backup-jobs`
 Snapshot a volume and write a backup manifest to a (bound) bucket over S3, verifying the write.
 ```json
-{ "volume_id": "vol_cfe1c97958f3", "bucket_id": "bkt_9624f5a6596f" }
+{ "volume_id": "vol_cfe1c97958f3", "bucket_id": "bkt_9624f5a6596f", "mode": "manifest" }
 // 202 → resource: { backup_id, object_key, bucket_id }
 ```
+`mode` (default `manifest`) — `data` also exports the **real RBD image data** (`rbd export-diff`) to
+`<object_key>.rbd-diff` in the bucket and records `data_bytes`/`data_checksum` in the manifest.
 `400` if the bucket is not `bound`; `404` if the volume/bucket is unknown.
+
+### `GET /api/atlas/v1/jobs/{id}/watch`
+**Server-Sent Events** (`text/event-stream`): emits the job on each state change until it reaches a
+terminal state (REST parity with the gRPC `WatchJob` stream).
+```
+event: job
+data: {"id":"job_...","state":"running","progress_percent":5,...}
+
+event: job
+data: {"id":"job_...","state":"succeeded","progress_percent":100,...}
+```
 
 ### `POST /api/atlas/v1/restore-jobs`
 Restore a volume from a backup (PDF §16, DR-2): the job reads + checksum-verifies the backup

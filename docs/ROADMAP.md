@@ -62,7 +62,10 @@ Read-only control plane + real Ceph lab.
   confirmed via `radosgw-admin bucket list`.
 
 ### RGW/backup follow-ups
-- Full **data** backup (`rbd export-diff` streamed to S3), not just the manifest.
+- ✅ Full **data** backup (`POST /backup-jobs {"mode":"data"}`) — resolves the PVC's real RBD image
+  (PV csi attributes), `rbd snap create` + `rbd export-diff` (capped 512 MiB), uploads the diff to
+  RGW alongside the manifest. Verified on real Ceph (data object present, checksum recorded).
+  Follow-ups: multipart streaming for large images; `rbd import-diff` restore-from-data.
 - ✅ `POST /restore-jobs` — reads + checksum-verifies the backup manifest from RGW, then provisions
   a new PVC from the backup's VolumeSnapshot (PDF §16, DR-2). Verified on real Ceph.
 - Bucket lifecycle policies, quotas, delete; presigned download URLs for exports.
@@ -84,7 +87,9 @@ Read-only control plane + real Ceph lab.
   create-backend / force-snapshot-delete need admin. Verified live (401/403/202/admin-gated).
 - ✅ **WatchJob** server-streaming RPC — emits the job on each state change until terminal (verified
   live: `CreateVolume` → `WatchJob` streamed to `succeeded`).
-- Follow-ups: REST SSE job progress; gRPC clients in the products.
+- ✅ **REST SSE** parity: `GET /jobs/{id}/watch` streams `text/event-stream` job frames until terminal
+  (verified live: running → succeeded).
+- Follow-ups: gRPC clients in the products.
 
 ## ⏭ Slice 3+ — Enterprise & product integration
 - Product integrations: Veyron (VM datastores), Hyper2KVM (direct-to-RBD migration), GuestKit
