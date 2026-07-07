@@ -907,6 +907,10 @@ struct CreateBucketBody {
     name: String,
     namespace: Option<String>,
     storage_class: Option<String>,
+    /// Optional RGW quota: max object count.
+    max_objects: Option<i64>,
+    /// Optional RGW quota: max size (e.g. "2G").
+    max_size: Option<String>,
 }
 
 /// `POST /buckets` — provision an RGW bucket via an ObjectBucketClaim (async job).
@@ -938,6 +942,8 @@ async fn create_bucket(
         namespace: namespace.clone(),
         obc_name,
         storage_class,
+        max_objects: body.max_objects,
+        max_size: body.max_size.clone(),
     };
     let job = s
         .jobs

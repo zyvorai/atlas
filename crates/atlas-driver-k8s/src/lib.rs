@@ -245,18 +245,25 @@ impl K8sDriver {
     }
 
     /// Create an ObjectBucketClaim; Rook provisions the bucket + a Secret + ConfigMap (same name).
+    /// `additional_config` becomes the OBC `spec.additionalConfig` (e.g. `maxObjects`, `maxSize`).
     pub async fn create_obc(
         &self,
         ns: &str,
         name: &str,
         storage_class: &str,
+        additional_config: &BTreeMap<String, String>,
     ) -> Result<(), K8sError> {
         let (api, ar) = self.obc_api(ns);
         let mut obj = DynamicObject::new(name, &ar);
         obj.metadata.namespace = Some(ns.to_string());
-        obj.data = serde_json::json!({
-            "spec": { "generateBucketName": name, "storageClassName": storage_class }
+        let mut spec = serde_json::json!({
+            "generateBucketName": name, "storageClassName": storage_class
         });
+        if !additional_config.is_empty() {
+            spec["additionalConfig"] =
+                serde_json::to_value(additional_config).unwrap_or_else(|_| serde_json::json!({}));
+        }
+        obj.data = serde_json::json!({ "spec": spec });
         api.create(&PostParams::default(), &obj).await?;
         Ok(())
     }

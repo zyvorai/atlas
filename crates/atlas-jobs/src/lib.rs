@@ -85,6 +85,12 @@ pub enum JobSpec {
         namespace: String,
         obc_name: String,
         storage_class: String,
+        /// Optional RGW quota (OBC additionalConfig): max object count.
+        #[serde(default)]
+        max_objects: Option<i64>,
+        /// Optional RGW quota (OBC additionalConfig): max size (e.g. "2G").
+        #[serde(default)]
+        max_size: Option<String>,
     },
     /// Back up a volume: snapshot it and write a manifest to an RGW bucket over S3 (PDF §16).
     #[serde(rename = "backup.create")]
@@ -721,9 +727,18 @@ async fn dispatch(
             namespace,
             obc_name,
             storage_class,
+            max_objects,
+            max_size,
         } => {
             let k8s = require_k8s(k8s)?;
-            k8s.create_obc(&namespace, &obc_name, &storage_class)
+            let mut additional_config = std::collections::BTreeMap::new();
+            if let Some(n) = max_objects {
+                additional_config.insert("maxObjects".to_string(), n.to_string());
+            }
+            if let Some(sz) = max_size.filter(|s| !s.is_empty()) {
+                additional_config.insert("maxSize".to_string(), sz);
+            }
+            k8s.create_obc(&namespace, &obc_name, &storage_class, &additional_config)
                 .await
                 .with_context(|| format!("create OBC {namespace}/{obc_name}"))?;
 

@@ -114,6 +114,12 @@ enum Command {
         name: String,
         #[arg(long)]
         namespace: Option<String>,
+        /// RGW quota: max object count.
+        #[arg(long)]
+        max_objects: Option<i64>,
+        /// RGW quota: max size (e.g. 2G).
+        #[arg(long)]
+        max_size: Option<String>,
     },
     /// POST /api/atlas/v1/backup-jobs — back up a volume to a bucket
     BackupVolume {
@@ -240,10 +246,18 @@ async fn main() -> Result<()> {
             format!("/api/atlas/v1/buckets/{id}?force={force}"),
             None,
         ),
-        Command::CreateBucket { name, namespace } => (
+        Command::CreateBucket {
+            name,
+            namespace,
+            max_objects,
+            max_size,
+        } => (
             "POST",
             "/api/atlas/v1/buckets".to_string(),
-            Some(serde_json::json!({ "name": name, "namespace": namespace })),
+            Some(serde_json::json!({
+                "name": name, "namespace": namespace,
+                "max_objects": max_objects, "max_size": max_size
+            })),
         ),
         Command::BackupVolume {
             volume_id,
