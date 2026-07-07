@@ -1,0 +1,110 @@
+# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Atlas gateway on Kubernetes. RBAC grants the read-only access the live k8s driver needs
+# (StorageClasses / PVCs / PVs). Ceph driver defaults to fake until a Ceph cluster exists.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zyvor-system
+  labels:
+    zyvor.dev/component: control-plane
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: atlas-gateway
+  namespace: zyvor-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: atlas-gateway-readonly
+rules:
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses", "volumesnapshotclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims", "persistentvolumes"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: atlas-gateway-readonly
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: atlas-gateway-readonly
+subjects:
+  - kind: ServiceAccount
+    name: atlas-gateway
+    namespace: zyvor-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlas-gateway
+  namespace: zyvor-system
+  labels:
+    app: atlas-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: atlas-gateway
+  template:
+    metadata:
+      labels:
+        app: atlas-gateway
+    spec:
+      serviceAccountName: atlas-gateway
+      securityContext:
+        # Image runs as uid/gid 10001; fsGroup makes the emptyDir writable for the SQLite file.
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: atlas-gateway
+          image: localhost/atlas-gateway:dev
+          imagePullPolicy: Never   # image is imported into k3s containerd, not pulled
+          env:
+            - name: ATLAS_BIND_ADDR
+              value: "0.0.0.0:5110"
+            - name: ATLAS_DATABASE_URL
+              value: "sqlite:///var/lib/atlas/atlas.db?mode=rwc"
+            - name: ATLAS_CEPH_DRIVER_MODE
+              value: "fake"          # switch to "real" once Rook Ceph + ceph client are present
+            - name: ATLAS_AUTH_REQUIRED
+              value: "0"
+            - name: RUST_LOG
+              value: "info,atlas_gateway=debug"
+          ports:
+            - containerPort: 5110
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5110
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/atlas
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlas-gateway
+  namespace: zyvor-system
+  labels:
+    app: atlas-gateway
+spec:
+  type: NodePort
+  selector:
+    app: atlas-gateway
+  ports:
+    - name: http
+      port: 5110
+      targetPort: 5110
+      nodePort: 30510

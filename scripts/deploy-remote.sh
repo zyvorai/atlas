@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+#
+# Deploy the Atlas gateway to a remote k3s host (same convention as the other Zyvor projects:
+# `./scripts/deploy-remote.sh <host> <user>`).
+#
+# What it does:
+#   1. rsync the repo to <user>@<host>:~/.deployment/atlas
+#   2. build the atlas-gateway image on the remote with podman (no local Rust toolchain needed)
+#   3. import the image into k3s containerd
+#   4. kubectl apply deploy/k8s/atlas-gateway.yaml (+ RBAC + NodePort 30510)
+#   5. verify /health and /storage-classes over the NodePort
+#
+# Optional:
+#   --with-ceph   also run deploy/rook-ceph-lab/up.sh on the remote (CONSUMES an empty disk for
+#                 a Ceph OSD — destructive to that disk; see up.sh). Off by default.
+#
+# Usage:
+#   ./scripts/deploy-remote.sh 212.8.248.187 sus
+#   ./scripts/deploy-remote.sh 212.8.248.187 sus --with-ceph
+set -euo pipefail
+
+HOST="${1:-${DEPLOY_HOST:-}}"
+USER="${2:-${DEPLOY_USER:-sus}}"
+WITH_CEPH=0
+for a in "$@"; do [[ "$a" == "--with-ceph" ]] && WITH_CEPH=1; done
+[[ -z "$HOST" ]] && { echo "usage: $0 <host> <user> [--with-ceph]" >&2; exit 2; }
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REMOTE_DIR=".deployment/atlas"
+SSH="ssh -o StrictHostKeyChecking=accept-new ${USER}@${HOST}"
+NODEPORT=30510
+
+log() { printf '\033[1;36m==> %s\033[0m\n' "$*"; }
+
+log "1/5 rsync repo -> ${USER}@${HOST}:~/${REMOTE_DIR}"
+$SSH "mkdir -p ~/${REMOTE_DIR}"
+rsync -az --delete \
+  --exclude target --exclude .git --exclude '*.db' --exclude '*.db-wal' --exclude '*.db-shm' \
+  -e "ssh -o StrictHostKeyChecking=accept-new" \
+  "${HERE}/" "${USER}@${HOST}:${REMOTE_DIR}/"
+
+log "2/5 build image with podman on remote"
+$SSH "cd ~/${REMOTE_DIR} && podman build -t atlas-gateway:dev -f Dockerfile ."
+
+log "3/5 import image into k3s containerd"
+$SSH "cd ~/${REMOTE_DIR} && podman save atlas-gateway:dev -o /tmp/atlas-gateway.tar && sudo k3s ctr images import /tmp/atlas-gateway.tar && rm -f /tmp/atlas-gateway.tar"
+
+log "4/5 apply k8s manifests"
+$SSH "cd ~/${REMOTE_DIR} && kubectl apply -f deploy/k8s/atlas-gateway.yaml && kubectl -n zyvor-system rollout status deploy/atlas-gateway --timeout=180s"
+
+if [[ "$WITH_CEPH" == "1" ]]; then
+  log "4b/5 installing Rook Ceph (DESTRUCTIVE: consumes an empty disk as an OSD)"
+  $SSH "cd ~/${REMOTE_DIR} && bash deploy/rook-ceph-lab/up.sh"
+fi
+
+log "5/5 verify over NodePort ${NODEPORT}"
+$SSH "set -e
+  echo '--- /health ---'; curl -fsS http://127.0.0.1:${NODEPORT}/health; echo
+  echo '--- /version ---'; curl -fsS http://127.0.0.1:${NODEPORT}/version; echo
+  echo '--- trigger discovery ---'; curl -fsS -X POST http://127.0.0.1:${NODEPORT}/api/atlas/v1/backends/bkd_ceph_lab/discover; echo
+  echo '--- /pools ---'; curl -fsS http://127.0.0.1:${NODEPORT}/api/atlas/v1/pools; echo
+  echo '--- /storage-classes (LIVE from k3s) ---'; curl -fsS http://127.0.0.1:${NODEPORT}/api/atlas/v1/storage-classes; echo
+"
+
+log "done. Atlas gateway on http://${HOST}:${NODEPORT}"
