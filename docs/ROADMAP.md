@@ -69,7 +69,11 @@ Read-only control plane + real Ceph lab.
   RBD image, downloads the diff from S3 (checksum-verified), and `rbd import-diff`s it into the new
   image. **Verified byte-for-byte on real Ceph**: wrote a file to volume A → data backup → restore to
   a new volume B → mounted B → the file read back identical.
-  Follow-ups: multipart streaming for large images (current cap 512 MiB in memory).
+- ✅ **Multipart streaming** — data backup/restore no longer buffer the whole image. Backup streams
+  `rbd export-diff` straight into an **S3 multipart upload** (16 MiB parts); restore streams the S3
+  object into `rbd import-diff` stdin. sha256 is computed over the stream, so there is no in-memory
+  size cap. Verified live: a 20 MiB random file → ~23 MiB diff (**2 parts**) → restore byte-identical
+  (`data_verified: true`, source/restored sha256 match).
 - ✅ `POST /restore-jobs` — reads + checksum-verifies the backup manifest from RGW, then provisions
   a new PVC from the backup's VolumeSnapshot (PDF §16, DR-2). Verified on real Ceph.
 - ✅ **Backup delete** (`DELETE /backups/{id}`) — removes the S3 manifest + `.rbd-diff` data objects

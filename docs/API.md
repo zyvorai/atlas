@@ -228,7 +228,9 @@ volume, pruning older ones. `max_age_secs` (default `ATLAS_BACKUP_MAX_AGE_SECS`,
 backups for the volume older than the cutoff. Both prune via delete jobs after the backup completes.
 List with `GET /api/atlas/v1/backups?volume_id=<id>` to scope to one volume.
 `mode` (default `manifest`) — `data` also exports the **real RBD image data** (`rbd export-diff`) to
-`<object_key>.rbd-diff` in the bucket and records `data_bytes`/`data_checksum` in the manifest.
+`<object_key>.rbd-diff` in the bucket and records `data_bytes`/`data_checksum` in the manifest. The
+data is **streamed** `rbd export-diff` → S3 multipart upload (16 MiB parts, sha256 over the stream) —
+there is no in-memory size cap. Restore streams the object back into `rbd import-diff`.
 `400` if the bucket is not `bound`; `404` if the volume/bucket is unknown.
 
 ### `GET /api/atlas/v1/jobs/{id}/watch`
