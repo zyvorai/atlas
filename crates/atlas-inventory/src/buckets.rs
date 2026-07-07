@@ -51,6 +51,14 @@ pub async fn set_bound(
     Ok(())
 }
 
+pub async fn delete_bucket_row(pool: &SqlitePool, id: &str) -> Result<()> {
+    sqlx::query("DELETE FROM storage_buckets WHERE id=?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn get_bucket(pool: &SqlitePool, id: &str) -> Result<Option<StorageBucket>> {
     let row = sqlx::query(&select("WHERE id = ?"))
         .bind(id)

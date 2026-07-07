@@ -57,6 +57,16 @@ pub async fn delete_backup_row(pool: &SqlitePool, id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Count backups referencing a bucket (blocks bucket deletion while non-empty).
+pub async fn count_for_bucket(pool: &SqlitePool, bucket_id: &str) -> Result<i64> {
+    Ok(
+        sqlx::query_scalar("SELECT COUNT(*) FROM storage_backups WHERE bucket_id=?")
+            .bind(bucket_id)
+            .fetch_one(pool)
+            .await?,
+    )
+}
+
 pub async fn get_backup(pool: &SqlitePool, id: &str) -> Result<Option<BackupRecord>> {
     let row = sqlx::query(&select("WHERE id = ?"))
         .bind(id)

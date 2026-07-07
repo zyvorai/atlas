@@ -44,7 +44,7 @@ pub fn router(state: AppState) -> Router {
         .route("/snapshots/{id}/clone", post(clone_snapshot))
         .route("/snapshots/{id}/restore", post(restore_snapshot))
         .route("/buckets", get(list_buckets).post(create_bucket))
-        .route("/buckets/{id}", get(get_bucket))
+        .route("/buckets/{id}", get(get_bucket).delete(delete_bucket))
         .route("/backup-jobs", post(create_backup))
         .route("/restore-jobs", post(create_restore))
         .route("/backups", get(list_backups))
@@ -853,6 +853,52 @@ async fn get_bucket(State(s): State<AppState>, Path(id): Path<String>) -> AppRes
         .await?
         .ok_or_else(|| AppError::NotFound(format!("bucket {id}")))?;
     Ok(Json(json!(b)))
+}
+
+/// `DELETE /buckets/{id}[?force=true]` — delete the OBC + row; blocked if backups reference it.
+async fn delete_bucket(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+    Query(q): Query<ForceParams>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let bucket = atlas_inventory::buckets::get_bucket(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("bucket {id}")))?;
+
+    let deps = atlas_inventory::backups::count_for_bucket(&s.pool, &id).await?;
+    if deps > 0 && !q.force {
+        return Err(AppError::Conflict(format!(
+            "bucket {id} still holds {deps} backup(s); delete them first or pass ?force=true"
+        )));
+    }
+
+    let spec = JobSpec::BucketDelete {
+        bucket_id: id.clone(),
+        namespace: bucket.namespace.unwrap_or_else(|| "rook-ceph".into()),
+        // The OBC name equals the bucket's registered name (set at creation).
+        obc_name: bucket.name,
+    };
+    let job_id = ids::job_id();
+    let job = s
+        .jobs
+        .enqueue(&job_id, &bucket.tenant_id, &actor.id, spec, None)
+        .await
+        .map_err(AppError::from)?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "bucket.delete.requested",
+        "bucket",
+        &id,
+        "accepted",
+        None,
+        None,
+    )
+    .await;
+    Ok(accepted(&job, json!({ "bucket_id": id })))
 }
 
 #[derive(Debug, Deserialize)]

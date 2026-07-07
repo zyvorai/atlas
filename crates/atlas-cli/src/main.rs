@@ -103,6 +103,12 @@ enum Command {
     },
     /// GET /api/atlas/v1/buckets
     Buckets,
+    /// DELETE /api/atlas/v1/buckets/{id}  (--force if it still holds backups)
+    DeleteBucket {
+        id: String,
+        #[arg(long)]
+        force: bool,
+    },
     /// POST /api/atlas/v1/buckets — provision an RGW bucket
     CreateBucket {
         name: String,
@@ -223,6 +229,11 @@ async fn main() -> Result<()> {
             None,
         ),
         Command::Buckets => ("GET", "/api/atlas/v1/buckets".to_string(), None),
+        Command::DeleteBucket { id, force } => (
+            "DELETE",
+            format!("/api/atlas/v1/buckets/{id}?force={force}"),
+            None,
+        ),
         Command::CreateBucket { name, namespace } => (
             "POST",
             "/api/atlas/v1/buckets".to_string(),

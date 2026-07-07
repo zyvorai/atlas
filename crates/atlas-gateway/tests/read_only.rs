@@ -875,6 +875,62 @@ async fn backup_delete_enqueues() {
 }
 
 #[tokio::test]
+async fn bucket_delete_guarded_by_backups() {
+    let (addr, pool) = spawn().await;
+    let base = format!("http://{addr}");
+
+    // Unknown bucket → 404.
+    let r = client()
+        .delete(format!("{base}/api/atlas/v1/buckets/nope"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::NOT_FOUND);
+
+    // Empty bucket → 202.
+    atlas_inventory::buckets::insert_bucket(&pool, "bkt_empty", "t1", "e", "rook-ceph", "e")
+        .await
+        .unwrap();
+    let r = client()
+        .delete(format!("{base}/api/atlas/v1/buckets/bkt_empty"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::ACCEPTED);
+
+    // Bucket with a backup → 409, force → 202.
+    seed_volume(&pool, "vol_bk", "vol-bk").await;
+    atlas_inventory::buckets::insert_bucket(&pool, "bkt_used", "t1", "u", "rook-ceph", "u")
+        .await
+        .unwrap();
+    atlas_inventory::backups::insert_backup(
+        &pool,
+        "bkp_u",
+        "t1",
+        "vol_bk",
+        None,
+        "bkt_used",
+        "k",
+        "manifest-v1",
+        &serde_json::json!({}),
+    )
+    .await
+    .unwrap();
+    let blocked = client()
+        .delete(format!("{base}/api/atlas/v1/buckets/bkt_used"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(blocked.status(), reqwest::StatusCode::CONFLICT);
+    let forced = client()
+        .delete(format!("{base}/api/atlas/v1/buckets/bkt_used?force=true"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(forced.status(), reqwest::StatusCode::ACCEPTED);
+}
+
+#[tokio::test]
 async fn backup_retention_prunes_old() {
     let (addr, pool) = spawn().await;
     let base = format!("http://{addr}");

@@ -149,6 +149,13 @@ pub enum JobSpec {
         #[serde(default)]
         mode: String,
     },
+    /// Delete an RGW bucket: remove its ObjectBucketClaim (Rook releases the bucket) and the row.
+    #[serde(rename = "bucket.delete")]
+    BucketDelete {
+        bucket_id: String,
+        namespace: String,
+        obc_name: String,
+    },
     /// Delete a backup: remove its S3 manifest + data objects and the RBD snapshot (best-effort).
     #[serde(rename = "backup.delete")]
     BackupDelete {
@@ -180,6 +187,7 @@ impl JobSpec {
             JobSpec::BackupCreate { .. } => "backup.create",
             JobSpec::RestoreBackup { .. } => "backup.restore",
             JobSpec::BackupDelete { .. } => "backup.delete",
+            JobSpec::BucketDelete { .. } => "bucket.delete",
         }
     }
 }
@@ -693,6 +701,19 @@ async fn dispatch(
             }
             atlas_inventory::backups::delete_backup_row(pool, &backup_id).await?;
             Ok(serde_json::json!({ "backup_id": backup_id, "deleted": true }))
+        }
+
+        JobSpec::BucketDelete {
+            bucket_id,
+            namespace,
+            obc_name,
+        } => {
+            let k8s = require_k8s(k8s)?;
+            if let Err(e) = k8s.delete_obc(&namespace, &obc_name).await {
+                tracing::warn!("delete OBC {namespace}/{obc_name}: {e}");
+            }
+            atlas_inventory::buckets::delete_bucket_row(pool, &bucket_id).await?;
+            Ok(serde_json::json!({ "bucket_id": bucket_id, "deleted": true }))
         }
 
         JobSpec::BucketCreate {
