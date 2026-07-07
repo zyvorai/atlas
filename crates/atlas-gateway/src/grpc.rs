@@ -2,11 +2,14 @@
 //! gRPC edge (PDF §5.3): a typed contract for products, served alongside REST over the same
 //! `AppState`. Read RPCs plus the async volume-create path (returns a job id).
 
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use tonic::service::interceptor::InterceptedService;
+use tonic::service::Interceptor;
 use tonic::{Request, Response, Status};
 
 use atlas_api_types::VolumeKind;
 
-use crate::auth::Actor;
+use crate::auth::Claims;
 use crate::proto::atlas_storage_server::{AtlasStorage, AtlasStorageServer};
 use crate::proto::{
     Alert, Cluster, CreateVolumeReply, CreateVolumeRequest, Empty, GetJobRequest, GetVolumeRequest,
@@ -15,9 +18,51 @@ use crate::proto::{
 };
 use crate::state::AppState;
 
-/// Build the tonic service for the gateway state.
-pub fn service(state: AppState) -> AtlasStorageServer<GrpcService> {
-    AtlasStorageServer::new(GrpcService { state })
+/// The authenticated actor id, injected into request extensions by the auth interceptor.
+#[derive(Clone)]
+pub struct GrpcActor(pub String);
+
+/// Build the tonic service with a JWT auth interceptor. When `auth_required` is false (dev), calls
+/// pass through as `anonymous`; when true, a valid HS256 Bearer token in the `authorization`
+/// metadata is required (mirrors the REST middleware).
+// tonic's Interceptor must return `Result<_, Status>`; Status is large but this is the required
+// signature, so silence the size lint.
+#[allow(clippy::result_large_err)]
+pub fn service(
+    state: AppState,
+) -> InterceptedService<AtlasStorageServer<GrpcService>, impl Interceptor + Clone> {
+    let secret = state.config.jwt_secret.clone();
+    let required = state.config.auth_required;
+    AtlasStorageServer::with_interceptor(
+        GrpcService { state },
+        move |mut req: Request<()>| -> Result<Request<()>, Status> {
+            if !required {
+                req.extensions_mut().insert(GrpcActor("anonymous".into()));
+                return Ok(req);
+            }
+            let token = req
+                .metadata()
+                .get("authorization")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.strip_prefix("Bearer "));
+            let Some(token) = token else {
+                return Err(Status::unauthenticated("missing bearer token"));
+            };
+            let mut validation = Validation::new(Algorithm::HS256);
+            validation.validate_exp = true;
+            match decode::<Claims>(
+                token,
+                &DecodingKey::from_secret(secret.as_bytes()),
+                &validation,
+            ) {
+                Ok(data) => {
+                    req.extensions_mut().insert(GrpcActor(data.claims.sub));
+                    Ok(req)
+                }
+                Err(e) => Err(Status::unauthenticated(format!("invalid token: {e}"))),
+            }
+        },
+    )
 }
 
 pub struct GrpcService {
@@ -119,6 +164,11 @@ impl AtlasStorage for GrpcService {
         &self,
         req: Request<CreateVolumeRequest>,
     ) -> Result<Response<CreateVolumeReply>, Status> {
+        let actor = req
+            .extensions()
+            .get::<GrpcActor>()
+            .map(|a| a.0.clone())
+            .unwrap_or_else(|| "grpc".into());
         let r = req.into_inner();
         if r.name.trim().is_empty() {
             return Err(Status::invalid_argument("name is required"));
@@ -160,7 +210,7 @@ impl AtlasStorage for GrpcService {
         let job = self
             .state
             .jobs
-            .enqueue(&job_id, &tenant_id, Actor::grpc_id(), spec, Some(&idem))
+            .enqueue(&job_id, &tenant_id, &actor, spec, Some(&idem))
             .await
             .map_err(internal)?;
         Ok(Response::new(CreateVolumeReply {
