@@ -116,7 +116,12 @@ Read-only control plane + real Ceph lab.
   live: `CreateVolume` → `WatchJob` streamed to `succeeded`).
 - ✅ **REST SSE** parity: `GET /jobs/{id}/watch` streams `text/event-stream` job frames until terminal
   (verified live: running → succeeded).
-- Follow-ups: gRPC clients in the products.
+- ✅ **Product-integration surface**: `CreateVolume` takes an `Owner {product, resource_type,
+  resource_id, role}` recorded in `product_bindings`; `ListVolumesByOwner(product, resource_id?)`
+  lets a product enumerate only the volumes it owns; `CreateSnapshot` (operator) and `DeleteVolume`
+  (admin) return job replies. Verified live over gRPC reflection (Veyron flow: create-owned →
+  list-by-owner scoped correctly → snapshot → delete, all jobs `succeeded`).
+- Follow-ups: generated gRPC client stubs vendored into each product (Veyron, Hyper2KVM, …).
 
 ## ⏭ Slice 3+ — Enterprise & product integration
 - Product integrations: Veyron (VM datastores), Hyper2KVM (direct-to-RBD migration), GuestKit
