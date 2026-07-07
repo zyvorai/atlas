@@ -72,7 +72,9 @@ Read-only control plane + real Ceph lab.
   Follow-ups: multipart streaming for large images (current cap 512 MiB in memory).
 - ✅ `POST /restore-jobs` — reads + checksum-verifies the backup manifest from RGW, then provisions
   a new PVC from the backup's VolumeSnapshot (PDF §16, DR-2). Verified on real Ceph.
-- Bucket lifecycle policies, quotas, delete; presigned download URLs for exports.
+- ✅ **Backup delete** (`DELETE /backups/{id}`) — removes the S3 manifest + `.rbd-diff` data objects
+  (idempotent) and the RBD snapshot (best-effort), then the row. Verified live (RGW objects → 0, row 404).
+- Bucket lifecycle policies, quotas, delete; retention (prune last-N); presigned download URLs.
 
 ## ✅ gRPC edge (done, verified)
 

@@ -242,6 +242,10 @@ manifest from RGW, then provisions a **new PVC from the backup's VolumeSnapshot*
 the RBD diff in S3 (creates an empty PVC → downloads + checksum-verifies the diff → `rbd import-diff`).
 `404` if the backup is unknown.
 
+### `DELETE /api/atlas/v1/backups/{id}`
+Remove a backup: deletes its S3 manifest + `.rbd-diff` data objects (idempotent) and the RBD
+snapshot (best-effort), then the row (async job). `202 + job id`. Requires operator.
+
 ### `GET /api/atlas/v1/backups` · `GET /api/atlas/v1/backups/{id}`
 ```json
 [{ "id": "bkp_691e0b1e464b604c", "tenant_id": "global", "volume_id": "vol_cfe1c97958f3",
