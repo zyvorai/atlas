@@ -2,7 +2,10 @@
 //! gRPC edge (PDF §5.3): a typed contract for products, served alongside REST over the same
 //! `AppState`. Read RPCs plus the async volume-create path (returns a job id).
 
+use std::pin::Pin;
+
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use tokio_stream::Stream;
 use tonic::service::interceptor::InterceptedService;
 use tonic::service::Interceptor;
 use tonic::{Request, Response, Status};
@@ -242,13 +245,38 @@ impl AtlasStorage for GrpcService {
             .await
             .map_err(internal)?
             .ok_or_else(|| Status::not_found(format!("job {id}")))?;
-        Ok(Response::new(Job {
-            id: j.id,
-            job_type: j.job_type,
-            state: j.state,
-            progress_percent: j.progress_percent,
-            error: j.error.unwrap_or_default(),
-        }))
+        Ok(Response::new(job_to_proto(j)))
+    }
+
+    type WatchJobStream = Pin<Box<dyn Stream<Item = Result<Job, Status>> + Send>>;
+
+    /// Stream a job on each state change until it reaches a terminal state (or a ~2 min cap).
+    async fn watch_job(
+        &self,
+        req: Request<GetJobRequest>,
+    ) -> Result<Response<Self::WatchJobStream>, Status> {
+        let id = req.into_inner().id;
+        let pool = self.state.pool.clone();
+        let stream = async_stream::try_stream! {
+            let mut last = String::new();
+            for _ in 0..240 {
+                match atlas_inventory::jobs::get_job(&pool, &id).await.map_err(internal)? {
+                    Some(j) => {
+                        let terminal = j.state == "succeeded" || j.state == "failed";
+                        if j.state != last {
+                            last = j.state.clone();
+                            yield job_to_proto(j);
+                        }
+                        if terminal {
+                            break;
+                        }
+                    }
+                    None => Err(Status::not_found(format!("job {id}")))?,
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+        };
+        Ok(Response::new(Box::pin(stream) as Self::WatchJobStream))
     }
 
     async fn list_alerts(
@@ -276,6 +304,16 @@ impl AtlasStorage for GrpcService {
 
 /// The single Ceph backend id (mirrors startup::CEPH_BACKEND_ID).
 pub const CEPH_BACKEND_ID: &str = "bkd_ceph_lab";
+
+fn job_to_proto(j: atlas_api_types::JobRecord) -> Job {
+    Job {
+        id: j.id,
+        job_type: j.job_type,
+        state: j.state,
+        progress_percent: j.progress_percent,
+        error: j.error.unwrap_or_default(),
+    }
+}
 
 fn volume_to_proto(v: atlas_api_types::StorageVolume) -> Volume {
     Volume {

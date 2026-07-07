@@ -244,6 +244,7 @@ name = "atlas-gateway"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-stream",
  "atlas-api-types",
  "atlas-common",
  "atlas-discovery",

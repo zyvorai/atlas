@@ -12,6 +12,8 @@ service AtlasStorage {
   rpc GetVolume(GetVolumeRequest) returns (Volume);
   rpc CreateVolume(CreateVolumeRequest) returns (CreateVolumeReply);
   rpc GetJob(GetJobRequest) returns (Job);
+  // Server-streaming: emit the job on each state change until it reaches a terminal state.
+  rpc WatchJob(GetJobRequest) returns (stream Job);
   rpc ListAlerts(ListAlertsRequest) returns (ListAlertsReply);
 }
 

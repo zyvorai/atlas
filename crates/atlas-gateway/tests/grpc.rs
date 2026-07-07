@@ -74,6 +74,24 @@ async fn grpc_edge_health_create_and_list() {
         .into_inner();
     assert!(!created.job_id.is_empty());
     assert!(!created.volume_id.is_empty());
+
+    // WatchJob streams the job to a terminal state (fails without a cluster).
+    use atlas_gateway::proto::GetJobRequest;
+    let mut stream = client
+        .watch_job(GetJobRequest {
+            id: created.job_id.clone(),
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    let mut last = String::new();
+    let mut count = 0;
+    while let Some(job) = stream.message().await.unwrap() {
+        last = job.state;
+        count += 1;
+    }
+    assert!(count >= 1, "expected at least one streamed job update");
+    assert_eq!(last, "failed", "job terminates failed without a cluster");
 }
 
 #[tokio::test]
