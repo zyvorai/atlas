@@ -92,15 +92,16 @@ pub async fn list_backups(pool: &SqlitePool, volume_id: Option<&str>) -> Result<
     Ok(rows.into_iter().map(row_to_backup).collect())
 }
 
-/// List `succeeded` backups for a volume created strictly before `cutoff` (RFC3339 UTC, DB format
-/// `YYYY-MM-DDTHH:MM:SS.mmmZ`), oldest first — used by time-based retention pruning.
+/// List completed backups (`verified`/`completed`) for a volume created strictly before `cutoff`
+/// (RFC3339 UTC, DB format `YYYY-MM-DDTHH:MM:SS.mmmZ`), oldest first — used by age-based retention.
 pub async fn list_older_than(
     pool: &SqlitePool,
     volume_id: &str,
     cutoff: &str,
 ) -> Result<Vec<BackupRecord>> {
     let rows = sqlx::query(&select(
-        "WHERE volume_id = ? AND state = 'succeeded' AND created_at < ? ORDER BY created_at ASC",
+        "WHERE volume_id = ? AND state IN ('verified', 'completed') AND created_at < ? \
+         ORDER BY created_at ASC",
     ))
     .bind(volume_id)
     .bind(cutoff)

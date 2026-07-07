@@ -970,9 +970,17 @@ async fn create_bucket(
 
 // ---- backups ----
 
-async fn list_backups(State(s): State<AppState>) -> AppResult<Json<Value>> {
+#[derive(Debug, Deserialize)]
+struct ListBackupsQuery {
+    volume_id: Option<String>,
+}
+
+async fn list_backups(
+    State(s): State<AppState>,
+    Query(q): Query<ListBackupsQuery>,
+) -> AppResult<Json<Value>> {
     Ok(Json(json!(
-        atlas_inventory::backups::list_backups(&s.pool, None).await?
+        atlas_inventory::backups::list_backups(&s.pool, q.volume_id.as_deref()).await?
     )))
 }
 
