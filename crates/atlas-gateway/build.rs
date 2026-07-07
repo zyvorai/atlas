@@ -3,5 +3,9 @@
 //! installed in the Docker builder stages and present on dev machines.
 fn main() {
     println!("cargo:rerun-if-changed=proto/atlas.proto");
-    tonic_build::compile_protos("proto/atlas.proto").expect("compile atlas.proto");
+    let out = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    tonic_build::configure()
+        .file_descriptor_set_path(out.join("atlas_descriptor.bin"))
+        .compile_protos(&["proto/atlas.proto"], &["proto"])
+        .expect("compile atlas.proto");
 }

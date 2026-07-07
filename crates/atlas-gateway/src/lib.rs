@@ -12,4 +12,8 @@ pub use state::AppState;
 /// Generated gRPC types + service stubs (package `atlas.v1`).
 pub mod proto {
     tonic::include_proto!("atlas.v1");
+
+    /// Encoded FileDescriptorSet for gRPC server reflection (lets grpcurl work without the proto).
+    pub const FILE_DESCRIPTOR_SET: &[u8] =
+        include_bytes!(concat!(env!("OUT_DIR"), "/atlas_descriptor.bin"));
 }

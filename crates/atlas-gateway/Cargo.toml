@@ -38,6 +38,7 @@ sqlx = { workspace = true }
 jsonwebtoken = { workspace = true }
 uuid = { workspace = true }
 tonic = "0.12"
+tonic-reflection = "0.12"
 prost = "0.13"
 
 [build-dependencies]

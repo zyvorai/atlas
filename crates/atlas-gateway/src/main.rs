@@ -46,9 +46,13 @@ async fn main() -> anyhow::Result<()> {
     }
     let gaddr: SocketAddr = grpc_addr.parse()?;
     info!("atlas-gateway gRPC listening on {gaddr}");
+    let reflection = tonic_reflection::server::Builder::configure()
+        .register_encoded_file_descriptor_set(atlas_gateway::proto::FILE_DESCRIPTOR_SET)
+        .build_v1()?;
     let grpc = async move {
         tonic::transport::Server::builder()
             .add_service(grpc::service(state))
+            .add_service(reflection)
             .serve(gaddr)
             .await
             .map_err(anyhow::Error::from)
