@@ -6,6 +6,7 @@ members = [
     "crates/atlas-driver-core",
     "crates/atlas-driver-ceph",
     "crates/atlas-driver-k8s",
+    "crates/atlas-driver-rgw",
     "crates/atlas-policy",
     "crates/atlas-inventory",
     "crates/atlas-discovery",
@@ -28,6 +29,7 @@ atlas-api-types = { path = "crates/atlas-api-types" }
 atlas-driver-core = { path = "crates/atlas-driver-core" }
 atlas-driver-ceph = { path = "crates/atlas-driver-ceph" }
 atlas-driver-k8s = { path = "crates/atlas-driver-k8s" }
+atlas-driver-rgw = { path = "crates/atlas-driver-rgw" }
 atlas-policy = { path = "crates/atlas-policy" }
 atlas-inventory = { path = "crates/atlas-inventory" }
 atlas-discovery = { path = "crates/atlas-discovery" }

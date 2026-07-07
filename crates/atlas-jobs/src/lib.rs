@@ -78,6 +78,31 @@ pub enum JobSpec {
         namespace: String,
         name: String,
     },
+    /// Provision an RGW bucket via an ObjectBucketClaim and record its endpoint/credentials-ref.
+    #[serde(rename = "bucket.create")]
+    BucketCreate {
+        bucket_id: String,
+        namespace: String,
+        obc_name: String,
+        storage_class: String,
+    },
+    /// Back up a volume: snapshot it and write a manifest to an RGW bucket over S3 (PDF §16).
+    #[serde(rename = "backup.create")]
+    BackupCreate {
+        backup_id: String,
+        snapshot_id: String,
+        volume_namespace: String,
+        pvc_name: String,
+        snapshot_name: String,
+        snapshot_class: String,
+        object_key: String,
+        manifest_json: String,
+        bucket_namespace: String,
+        bucket_secret_ref: String,
+        bucket_endpoint: String,
+        bucket_name: String,
+        bucket_region: String,
+    },
     /// Clone or restore: provision a new volume (PVC) populated from a VolumeSnapshot.
     #[serde(rename = "snapshot.clone")]
     SnapshotClone {
@@ -107,6 +132,8 @@ impl JobSpec {
             JobSpec::SnapshotDelete { .. } => "snapshot.delete",
             JobSpec::SnapshotClone { mode, .. } if mode == "restore" => "snapshot.restore",
             JobSpec::SnapshotClone { .. } => "snapshot.clone",
+            JobSpec::BucketCreate { .. } => "bucket.create",
+            JobSpec::BackupCreate { .. } => "backup.create",
         }
     }
 }
@@ -456,6 +483,153 @@ async fn dispatch(
                 "phase": phase, "bound": phase.as_deref() == Some("Bound")
             }))
         }
+
+        JobSpec::BucketCreate {
+            bucket_id,
+            namespace,
+            obc_name,
+            storage_class,
+        } => {
+            let k8s = require_k8s(k8s)?;
+            k8s.create_obc(&namespace, &obc_name, &storage_class)
+                .await
+                .with_context(|| format!("create OBC {namespace}/{obc_name}"))?;
+
+            // Rook writes a ConfigMap (same name) with BUCKET_* once the OBC binds.
+            let cm = poll_configmap(&k8s, &namespace, &obc_name)
+                .await
+                .ok_or_else(|| anyhow!("OBC {obc_name} did not bind (no ConfigMap) in time"))?;
+            let bucket_name = cm.get("BUCKET_NAME").cloned().unwrap_or_default();
+            let host = cm.get("BUCKET_HOST").cloned().unwrap_or_default();
+            let port = cm
+                .get("BUCKET_PORT")
+                .cloned()
+                .unwrap_or_else(|| "80".into());
+            let region = cm
+                .get("BUCKET_REGION")
+                .filter(|r| !r.is_empty())
+                .cloned()
+                .unwrap_or_else(|| "us-east-1".into());
+            let endpoint = format!("http://{host}:{port}");
+            // The OBC Secret (same name) holds the S3 credentials; store only the reference.
+            atlas_inventory::buckets::set_bound(
+                pool,
+                &bucket_id,
+                &bucket_name,
+                &endpoint,
+                &region,
+                &obc_name,
+            )
+            .await?;
+            Ok(serde_json::json!({
+                "bucket_id": bucket_id, "bucket_name": bucket_name, "endpoint": endpoint
+            }))
+        }
+
+        JobSpec::BackupCreate {
+            backup_id,
+            snapshot_id,
+            volume_namespace,
+            pvc_name,
+            snapshot_name,
+            snapshot_class,
+            object_key,
+            manifest_json,
+            bucket_namespace,
+            bucket_secret_ref,
+            bucket_endpoint,
+            bucket_name,
+            bucket_region,
+        } => {
+            let k8s = require_k8s(k8s)?;
+            // 1. point-in-time snapshot of the source volume.
+            k8s.create_volume_snapshot(
+                &volume_namespace,
+                &snapshot_name,
+                &pvc_name,
+                &snapshot_class,
+            )
+            .await
+            .with_context(|| format!("snapshot {volume_namespace}/{snapshot_name} for backup"))?;
+            let ready = poll_snapshot_ready(&k8s, &volume_namespace, &snapshot_name).await;
+            atlas_inventory::snapshots::set_state(
+                pool,
+                &snapshot_id,
+                if ready { "ready" } else { "creating" },
+            )
+            .await?;
+
+            // 2. read the bucket's S3 credentials in-cluster (never logged).
+            let secret = k8s
+                .get_secret(&bucket_namespace, &bucket_secret_ref)
+                .await?
+                .ok_or_else(|| anyhow!("bucket secret {bucket_secret_ref} not found"))?;
+            let access = secret
+                .get("AWS_ACCESS_KEY_ID")
+                .ok_or_else(|| anyhow!("bucket secret missing AWS_ACCESS_KEY_ID"))?;
+            let secret_key = secret
+                .get("AWS_SECRET_ACCESS_KEY")
+                .ok_or_else(|| anyhow!("bucket secret missing AWS_SECRET_ACCESS_KEY"))?;
+
+            // 3. write the manifest object to RGW over S3, then read it back to verify.
+            let s3 = atlas_driver_rgw::S3Target::new(
+                &bucket_endpoint,
+                &bucket_region,
+                &bucket_name,
+                access,
+                secret_key,
+            )?;
+            let bytes = manifest_json.into_bytes();
+            let checksum = sha256_hex(&bytes);
+            s3.put_object(&object_key, bytes.clone())
+                .await
+                .with_context(|| format!("PUT backup manifest {object_key}"))?;
+            let verified = match s3.get_object(&object_key).await {
+                Ok(got) => got == bytes,
+                Err(e) => {
+                    tracing::warn!("backup verify GET failed: {e}");
+                    false
+                }
+            };
+            atlas_inventory::backups::set_state(
+                pool,
+                &backup_id,
+                if verified { "verified" } else { "completed" },
+                Some(&checksum),
+            )
+            .await?;
+            Ok(serde_json::json!({
+                "backup_id": backup_id, "object_key": object_key,
+                "checksum": checksum, "verified": verified, "snapshot_ready": ready
+            }))
+        }
+    }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(bytes);
+    hex::encode(h.finalize())
+}
+
+/// Poll for an OBC's output ConfigMap (present once the bucket is bound).
+async fn poll_configmap(
+    k8s: &K8sDriver,
+    ns: &str,
+    name: &str,
+) -> Option<std::collections::BTreeMap<String, String>> {
+    let deadline = std::time::Instant::now() + BIND_TIMEOUT;
+    loop {
+        if let Ok(Some(cm)) = k8s.get_configmap(ns, name).await {
+            if cm.contains_key("BUCKET_NAME") {
+                return Some(cm);
+            }
+        }
+        if std::time::Instant::now() >= deadline {
+            return None;
+        }
+        tokio::time::sleep(POLL_INTERVAL).await;
     }
 }
 

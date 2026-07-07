@@ -91,6 +91,22 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// GET /api/atlas/v1/buckets
+    Buckets,
+    /// POST /api/atlas/v1/buckets — provision an RGW bucket
+    CreateBucket {
+        name: String,
+        #[arg(long)]
+        namespace: Option<String>,
+    },
+    /// POST /api/atlas/v1/backup-jobs — back up a volume to a bucket
+    BackupVolume {
+        volume_id: String,
+        #[arg(long)]
+        bucket_id: String,
+    },
+    /// GET /api/atlas/v1/backups
+    Backups,
 }
 
 #[tokio::main]
@@ -163,6 +179,21 @@ async fn main() -> Result<()> {
             format!("/api/atlas/v1/snapshots/{id}?force={force}"),
             None,
         ),
+        Command::Buckets => ("GET", "/api/atlas/v1/buckets".to_string(), None),
+        Command::CreateBucket { name, namespace } => (
+            "POST",
+            "/api/atlas/v1/buckets".to_string(),
+            Some(serde_json::json!({ "name": name, "namespace": namespace })),
+        ),
+        Command::BackupVolume {
+            volume_id,
+            bucket_id,
+        } => (
+            "POST",
+            "/api/atlas/v1/backup-jobs".to_string(),
+            Some(serde_json::json!({ "volume_id": volume_id, "bucket_id": bucket_id })),
+        ),
+        Command::Backups => ("GET", "/api/atlas/v1/backups".to_string(), None),
     };
 
     let url = format!("{base}{path}");

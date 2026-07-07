@@ -1,0 +1,36 @@
+# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Single-node RGW object store (replica size 1) + the bucket StorageClass used by ObjectBucketClaims.
+apiVersion: ceph.rook.io/v1
+kind: CephObjectStore
+metadata:
+  name: zyvor-rgw
+  namespace: rook-ceph
+spec:
+  metadataPool:
+    failureDomain: osd
+    replicated:
+      size: 1
+      requireSafeReplicaSize: false
+  dataPool:
+    failureDomain: osd
+    replicated:
+      size: 1
+      requireSafeReplicaSize: false
+  preservePoolsOnDelete: false
+  gateway:
+    port: 80
+    instances: 1
+---
+# Bucket provisioning StorageClass (Rook's bucket provisioner). ObjectBucketClaims reference this.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: zyvor-rgw-bucket
+  labels:
+    zyvor.dev/storage-backend: ceph
+    zyvor.dev/storage-kind: object
+provisioner: rook-ceph.ceph.rook.io/bucket
+reclaimPolicy: Delete
+parameters:
+  objectStoreName: zyvor-rgw
+  objectStoreNamespace: rook-ceph

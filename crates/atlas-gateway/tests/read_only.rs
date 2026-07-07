@@ -403,6 +403,85 @@ async fn clone_requires_name_and_enqueues() {
 }
 
 #[tokio::test]
+async fn bucket_create_enqueues_and_lists() {
+    let (addr, _pool) = spawn().await;
+    let base = format!("http://{addr}");
+    let resp = client()
+        .post(format!("{base}/api/atlas/v1/buckets"))
+        .json(&serde_json::json!({ "name": "backups-acme" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::ACCEPTED);
+
+    let buckets: serde_json::Value = client()
+        .get(format!("{base}/api/atlas/v1/buckets"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(buckets
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|b| b["name"] == "backups-acme"));
+}
+
+#[tokio::test]
+async fn backup_requires_known_volume_and_bound_bucket() {
+    let (addr, pool) = spawn().await;
+    let base = format!("http://{addr}");
+
+    // Unknown volume → 404.
+    let r404 = client()
+        .post(format!("{base}/api/atlas/v1/backup-jobs"))
+        .json(&serde_json::json!({ "volume_id": "nope", "bucket_id": "nope" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r404.status(), reqwest::StatusCode::NOT_FOUND);
+
+    // Seed a volume + a *pending* bucket → backup rejected (400) until the bucket binds.
+    seed_volume(&pool, "vol_b", "vol-b").await;
+    atlas_inventory::buckets::insert_bucket(&pool, "bkt_1", "t1", "b1", "rook-ceph", "b1")
+        .await
+        .unwrap();
+    let r400 = client()
+        .post(format!("{base}/api/atlas/v1/backup-jobs"))
+        .json(&serde_json::json!({ "volume_id": "vol_b", "bucket_id": "bkt_1" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r400.status(), reqwest::StatusCode::BAD_REQUEST);
+
+    // Bind the bucket → backup accepted (202).
+    atlas_inventory::buckets::set_bound(
+        &pool,
+        "bkt_1",
+        "b1-abc",
+        "http://rgw.rook-ceph:80",
+        "us-east-1",
+        "b1",
+    )
+    .await
+    .unwrap();
+    let r202 = client()
+        .post(format!("{base}/api/atlas/v1/backup-jobs"))
+        .json(&serde_json::json!({ "volume_id": "vol_b", "bucket_id": "bkt_1" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r202.status(), reqwest::StatusCode::ACCEPTED);
+    let body: serde_json::Value = r202.json().await.unwrap();
+    assert!(body["resource"]["object_key"]
+        .as_str()
+        .unwrap()
+        .starts_with("backups/vol_b/"));
+}
+
+#[tokio::test]
 async fn snapshot_delete_blocked_by_dependents() {
     let (addr, pool) = spawn().await;
     let base = format!("http://{addr}");

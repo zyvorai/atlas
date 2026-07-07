@@ -43,6 +43,11 @@ pub fn router(state: AppState) -> Router {
         .route("/snapshots/{id}", axum::routing::delete(delete_snapshot))
         .route("/snapshots/{id}/clone", post(clone_snapshot))
         .route("/snapshots/{id}/restore", post(restore_snapshot))
+        .route("/buckets", get(list_buckets).post(create_bucket))
+        .route("/buckets/{id}", get(get_bucket))
+        .route("/backup-jobs", post(create_backup))
+        .route("/backups", get(list_backups))
+        .route("/backups/{id}", get(get_backup))
         .route("/policies", get(list_policies))
         .route("/metrics/summary", get(metrics_summary))
         .route("/alerts", get(list_alerts))
@@ -745,6 +750,219 @@ async fn list_pvs(State(s): State<AppState>) -> AppResult<Json<Value>> {
         .await
         .map_err(|e| AppError::Driver(e.to_string()))?;
     Ok(Json(json!(pvs)))
+}
+
+// ---- object storage (buckets) ----
+
+async fn list_buckets(State(s): State<AppState>) -> AppResult<Json<Value>> {
+    Ok(Json(json!(
+        atlas_inventory::buckets::list_buckets(&s.pool).await?
+    )))
+}
+
+async fn get_bucket(State(s): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
+    let b = atlas_inventory::buckets::get_bucket(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("bucket {id}")))?;
+    Ok(Json(json!(b)))
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateBucketBody {
+    name: String,
+    namespace: Option<String>,
+    storage_class: Option<String>,
+}
+
+/// `POST /buckets` — provision an RGW bucket via an ObjectBucketClaim (async job).
+async fn create_bucket(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Json(body): Json<CreateBucketBody>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    if body.name.trim().is_empty() {
+        return Err(AppError::Validation("name is required".into()));
+    }
+    // The OBC (and its Secret/ConfigMap) live where this gateway can read them.
+    let namespace = body.namespace.unwrap_or_else(|| "rook-ceph".into());
+    let storage_class = body
+        .storage_class
+        .unwrap_or_else(|| "zyvor-rgw-bucket".into());
+    let bucket_id = ids::bucket_id();
+    let obc_name = body.name.clone();
+
+    atlas_inventory::buckets::insert_bucket(
+        &s.pool, &bucket_id, "global", &body.name, &namespace, &obc_name,
+    )
+    .await?;
+
+    let job_id = ids::job_id();
+    let spec = JobSpec::BucketCreate {
+        bucket_id: bucket_id.clone(),
+        namespace: namespace.clone(),
+        obc_name,
+        storage_class,
+    };
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, spec, None)
+        .await
+        .map_err(AppError::from)?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "bucket.create.requested",
+        "bucket",
+        &bucket_id,
+        "accepted",
+        Some(json!({ "name": body.name })),
+        None,
+    )
+    .await;
+    Ok(accepted(
+        &job,
+        json!({ "bucket_id": bucket_id, "namespace": namespace }),
+    ))
+}
+
+// ---- backups ----
+
+async fn list_backups(State(s): State<AppState>) -> AppResult<Json<Value>> {
+    Ok(Json(json!(
+        atlas_inventory::backups::list_backups(&s.pool, None).await?
+    )))
+}
+
+async fn get_backup(State(s): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
+    let b = atlas_inventory::backups::get_backup(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("backup {id}")))?;
+    Ok(Json(json!(b)))
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateBackupBody {
+    volume_id: String,
+    bucket_id: String,
+}
+
+/// `POST /backup-jobs` — snapshot a volume and write a backup manifest to an RGW bucket (PDF §16).
+async fn create_backup(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Json(body): Json<CreateBackupBody>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    let vol = atlas_inventory::get_volume(&s.pool, &body.volume_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("volume {}", body.volume_id)))?;
+    let volume_namespace = vol
+        .kubernetes_namespace
+        .clone()
+        .ok_or_else(|| AppError::Validation("volume has no kubernetes namespace".into()))?;
+    let pvc_name = vol
+        .pvc_name
+        .clone()
+        .ok_or_else(|| AppError::Validation("volume has no pvc".into()))?;
+
+    let bucket = atlas_inventory::buckets::get_bucket(&s.pool, &body.bucket_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("bucket {}", body.bucket_id)))?;
+    if bucket.state != "bound" {
+        return Err(AppError::Validation(format!(
+            "bucket {} is not bound yet (state: {})",
+            bucket.id, bucket.state
+        )));
+    }
+    let bucket_endpoint = bucket
+        .endpoint
+        .ok_or_else(|| AppError::Validation("bucket has no endpoint".into()))?;
+    let bucket_name = bucket
+        .bucket_name
+        .ok_or_else(|| AppError::Validation("bucket has no bucket_name".into()))?;
+    let bucket_secret_ref = bucket
+        .secret_ref
+        .ok_or_else(|| AppError::Validation("bucket has no secret ref".into()))?;
+    let bucket_namespace = bucket.namespace.unwrap_or_else(|| "rook-ceph".into());
+    let bucket_region = bucket.region.unwrap_or_else(|| "us-east-1".into());
+
+    let backup_id = ids::stable_id("bkp", &format!("{}-{}", body.volume_id, ids::job_id()));
+    let snapshot_id = ids::snapshot_id();
+    let snapshot_name = format!("{pvc_name}-bkp-{}", &backup_id[4..]);
+    let object_key = format!("backups/{}/{}.manifest.json", body.volume_id, backup_id);
+
+    let manifest = json!({
+        "backup_id": backup_id,
+        "source_volume": body.volume_id,
+        "source_snapshot": snapshot_id,
+        "pvc": format!("{volume_namespace}/{pvc_name}"),
+        "object_key": object_key,
+        "format": "manifest-v1",
+        "created_at": chrono::Utc::now().to_rfc3339(),
+    });
+
+    // Record the point-in-time snapshot + the pending backup.
+    atlas_inventory::snapshots::insert_snapshot(
+        &s.pool,
+        &snapshot_id,
+        "global",
+        &body.volume_id,
+        &snapshot_name,
+        None,
+        "app",
+        "creating",
+    )
+    .await?;
+    atlas_inventory::backups::insert_backup(
+        &s.pool,
+        &backup_id,
+        "global",
+        &body.volume_id,
+        Some(&snapshot_id),
+        &body.bucket_id,
+        &object_key,
+        "manifest-v1",
+        &manifest,
+    )
+    .await?;
+
+    let job_id = ids::job_id();
+    let spec = JobSpec::BackupCreate {
+        backup_id: backup_id.clone(),
+        snapshot_id,
+        volume_namespace,
+        pvc_name,
+        snapshot_name,
+        snapshot_class: "zyvor-rbd-snapclass".into(),
+        object_key: object_key.clone(),
+        manifest_json: manifest.to_string(),
+        bucket_namespace,
+        bucket_secret_ref,
+        bucket_endpoint,
+        bucket_name,
+        bucket_region,
+    };
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, spec, None)
+        .await
+        .map_err(AppError::from)?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "backup.create.requested",
+        "volume",
+        &body.volume_id,
+        "accepted",
+        Some(json!({ "backup_id": backup_id, "bucket_id": body.bucket_id })),
+        None,
+    )
+    .await;
+    Ok(accepted(
+        &job,
+        json!({ "backup_id": backup_id, "object_key": object_key, "bucket_id": body.bucket_id }),
+    ))
 }
 
 // ---- helpers ----

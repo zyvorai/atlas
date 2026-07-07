@@ -324,6 +324,40 @@ pub struct JobRecord {
     pub updated_at: Option<String>,
 }
 
+/// An object-storage bucket (RGW/S3) as surfaced by the API.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StorageBucket {
+    pub id: String,
+    pub tenant_id: String,
+    pub name: String,
+    /// The actual bucket name RGW assigned (OBC may generate one).
+    pub bucket_name: Option<String>,
+    /// S3 endpoint (e.g. http://rook-ceph-rgw-...:80).
+    pub endpoint: Option<String>,
+    pub region: Option<String>,
+    /// Reference to the Kubernetes Secret holding S3 credentials — never the keys (PDF §14.1).
+    pub secret_ref: Option<String>,
+    /// Namespace of the OBC / Secret / ConfigMap.
+    pub namespace: Option<String>,
+    pub state: String,
+    pub created_at: Option<String>,
+}
+
+/// A backup record + manifest pointer (PDF §16.2).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupRecord {
+    pub id: String,
+    pub tenant_id: String,
+    pub volume_id: String,
+    pub snapshot_id: Option<String>,
+    pub bucket_id: String,
+    pub object_key: String,
+    pub format: String,
+    pub checksum: Option<String>,
+    pub state: String,
+    pub created_at: Option<String>,
+}
+
 /// A snapshot record as surfaced by the API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorageSnapshot {

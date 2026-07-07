@@ -229,6 +229,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "atlas-driver-rgw"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "reqwest",
+ "rusty-s3",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "atlas-gateway"
 version = "0.1.0"
 dependencies = [
@@ -279,10 +290,13 @@ dependencies = [
  "anyhow",
  "atlas-api-types",
  "atlas-driver-k8s",
+ "atlas-driver-rgw",
  "atlas-inventory",
  "atlas-policy",
+ "hex",
  "serde",
  "serde_json",
+ "sha2",
  "sqlx",
  "tokio",
  "tracing",
@@ -2083,6 +2097,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick-xml"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eff6510e86862b57b210fd8cbe8ed3f0d7d600b9c2863cd4549a2e033c66e956"
+dependencies = [
+ "memchr",
+ "serde",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2357,6 +2381,25 @@ name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
+
+[[package]]
+name = "rusty-s3"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31aa883f1b986a5249641e574ca0e11ac4fb9970b009c6fbb96fedaf4fa78db8"
+dependencies = [
+ "base64 0.21.7",
+ "hmac",
+ "md-5",
+ "percent-encoding",
+ "quick-xml",
+ "serde",
+ "serde_json",
+ "sha2",
+ "time",
+ "url",
+ "zeroize",
+]
 
 [[package]]
 name = "ryu"

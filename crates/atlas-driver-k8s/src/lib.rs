@@ -9,8 +9,8 @@
 
 use atlas_api_types::StorageClassInfo;
 use k8s_openapi::api::core::v1::{
-    PersistentVolume, PersistentVolumeClaim, PersistentVolumeClaimSpec, TypedLocalObjectReference,
-    VolumeResourceRequirements,
+    ConfigMap, PersistentVolume, PersistentVolumeClaim, PersistentVolumeClaimSpec, Secret,
+    TypedLocalObjectReference, VolumeResourceRequirements,
 };
 use k8s_openapi::api::storage::v1::StorageClass;
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
@@ -234,6 +234,90 @@ impl K8sDriver {
         let (api, _ar) = self.volume_snapshot_api(ns);
         api.delete(name, &DeleteParams::default()).await?;
         Ok(())
+    }
+
+    // ---- object storage (RGW via ObjectBucketClaim) ----
+
+    fn obc_api(&self, ns: &str) -> (Api<DynamicObject>, ApiResource) {
+        let gvk = GroupVersionKind::gvk("objectbucket.io", "v1alpha1", "ObjectBucketClaim");
+        let ar = ApiResource::from_gvk(&gvk);
+        (Api::namespaced_with(self.client.clone(), ns, &ar), ar)
+    }
+
+    /// Create an ObjectBucketClaim; Rook provisions the bucket + a Secret + ConfigMap (same name).
+    pub async fn create_obc(
+        &self,
+        ns: &str,
+        name: &str,
+        storage_class: &str,
+    ) -> Result<(), K8sError> {
+        let (api, ar) = self.obc_api(ns);
+        let mut obj = DynamicObject::new(name, &ar);
+        obj.metadata.namespace = Some(ns.to_string());
+        obj.data = serde_json::json!({
+            "spec": { "generateBucketName": name, "storageClassName": storage_class }
+        });
+        api.create(&PostParams::default(), &obj).await?;
+        Ok(())
+    }
+
+    /// Whether an OBC reports `status.phase == Bound`.
+    pub async fn obc_bound(&self, ns: &str, name: &str) -> Result<bool, K8sError> {
+        let (api, _ar) = self.obc_api(ns);
+        Ok(api
+            .get_opt(name)
+            .await?
+            .and_then(|o| {
+                o.data
+                    .get("status")
+                    .and_then(|s| s.get("phase"))
+                    .and_then(|p| p.as_str())
+                    .map(|p| p.eq_ignore_ascii_case("bound"))
+            })
+            .unwrap_or(false))
+    }
+
+    /// Delete an OBC (releases the bucket per its reclaim policy).
+    pub async fn delete_obc(&self, ns: &str, name: &str) -> Result<(), K8sError> {
+        let (api, _ar) = self.obc_api(ns);
+        api.delete(name, &DeleteParams::default()).await?;
+        Ok(())
+    }
+
+    /// Read a ConfigMap's `data` (string values). Used for OBC bucket/endpoint outputs.
+    pub async fn get_configmap(
+        &self,
+        ns: &str,
+        name: &str,
+    ) -> Result<Option<BTreeMap<String, String>>, K8sError> {
+        let api: Api<ConfigMap> = Api::namespaced(self.client.clone(), ns);
+        Ok(api
+            .get_opt(name)
+            .await?
+            .and_then(|c| c.data)
+            .map(|d| d.into_iter().collect()))
+    }
+
+    /// Read a Secret's `data`, base64-decoded to strings. Credentials stay in this process; the
+    /// caller must not log them.
+    pub async fn get_secret(
+        &self,
+        ns: &str,
+        name: &str,
+    ) -> Result<Option<BTreeMap<String, String>>, K8sError> {
+        let api: Api<Secret> = Api::namespaced(self.client.clone(), ns);
+        match api.get_opt(name).await? {
+            Some(s) => {
+                let data = s
+                    .data
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(k, v)| (k, String::from_utf8_lossy(&v.0).to_string()))
+                    .collect();
+                Ok(Some(data))
+            }
+            None => Ok(None),
+        }
     }
 }
 

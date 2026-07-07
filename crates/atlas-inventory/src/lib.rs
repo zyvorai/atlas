@@ -17,6 +17,8 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use sqlx::{Row, SqlitePool};
 
 pub mod audit;
+pub mod backups;
+pub mod buckets;
 pub mod jobs;
 pub mod snapshots;
 

@@ -10,6 +10,7 @@ authors.workspace = true
 atlas-api-types = { workspace = true }
 atlas-inventory = { workspace = true }
 atlas-driver-k8s = { workspace = true }
+atlas-driver-rgw = { workspace = true }
 atlas-policy = { workspace = true }
 sqlx = { workspace = true }
 tokio = { workspace = true }
@@ -17,3 +18,5 @@ anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
+sha2 = "0.10"
+hex = "0.4"
