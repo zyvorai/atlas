@@ -29,21 +29,24 @@ call **stable Atlas APIs**; Atlas talks to storage backends through **pluggable 
                                              Ceph cluster   Kubernetes
 ```
 
-## Status — MVP slice 1 (read-only backend + Rook lab) ✅
+## Status — slices 1 & 2 done, **verified end-to-end on a real k3s + Rook Ceph cluster** ✅
 
-Implemented and **verified end-to-end on a real k3s + Rook Ceph cluster**:
-
+**Slice 1 — read-only control plane:**
 - `atlas-*` Cargo workspace; axum 0.8 gateway; SQLite (`sqlx`) inventory.
-- **Read-only** REST discovery/inventory API (`/api/atlas/v1/...`).
-- Pluggable `StorageDriver` trait with:
-  - a **real Ceph driver** (`ceph`/`rbd` CLI, arg-arrays only), and a **fake driver** (fixtures);
-  - a **live Kubernetes driver** (lists StorageClasses / PVCs / PVs via `kube-rs`).
-- `atlas-discovery` worker normalizing driver output into inventory.
-- `deploy/rook-ceph-lab/` manifests + `up.sh` to stand up Rook Ceph + KubeVirt/CDI.
-- `deploy/k8s/` + `scripts/deploy-remote.sh` to deploy the gateway onto a k3s node.
+- Read-only REST discovery/inventory API (`/api/atlas/v1/...`).
+- Pluggable `StorageDriver` trait: **real Ceph driver** (`ceph`/`rbd` CLI) + **fake driver**;
+  **live Kubernetes driver** (StorageClasses / PVCs / PVs via `kube-rs`).
+- `atlas-discovery` worker → normalized inventory; `deploy/rook-ceph-lab/` + `scripts/deploy-remote.sh`.
 
-**Deferred to later slices:** write/provisioning path + job engine, gRPC edge, RGW/backup,
-per-product integrations, Zeus OS UI. See [docs/ROADMAP.md](docs/ROADMAP.md).
+**Slice 2 — async write path:**
+- **Job engine** (`atlas-jobs`): SQLite-backed tokio worker, PDF §10.5 state machine.
+- `POST /volumes` (create Ceph-backed PVC), `DELETE`, `expand`, snapshots — all `202 + job id`.
+- `atlas-policy` intent→placement; idempotency keys; ownership bindings.
+- Real `GET /jobs`, `/snapshots`, `/policies`; `atlasctl create-volume|snapshot-volume|…`.
+- **Verified**: `POST /volumes` → PVC Bound on `zyvor-rbd-prod` → snapshot `readyToUse=true`.
+
+**Deferred:** snapshot clone/restore, safe-delete approval, gRPC edge, RGW/backup, per-product
+integrations, Zeus OS UI. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Quickstart (no Ceph, no cluster needed)
 
