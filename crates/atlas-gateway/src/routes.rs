@@ -104,6 +104,7 @@ async fn create_backend(
     Extension(actor): Extension<Actor>,
     Json(body): Json<CreateBackendBody>,
 ) -> AppResult<Json<StorageBackend>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
     if body.name.trim().is_empty() {
         return Err(AppError::Validation("name is required".into()));
     }
@@ -156,6 +157,7 @@ async fn discover_backend(
     Extension(actor): Extension<Actor>,
     Path(id): Path<String>,
 ) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
     let driver = s
         .driver_for(&id)
         .ok_or_else(|| AppError::NotFound(format!("no driver registered for backend {id}")))?;
@@ -345,6 +347,7 @@ async fn create_volume(
     Extension(actor): Extension<Actor>,
     Json(body): Json<CreateVolumeRequest>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
     if body.name.trim().is_empty() {
         return Err(AppError::Validation("name is required".into()));
     }
@@ -435,6 +438,7 @@ async fn delete_volume(
     Extension(actor): Extension<Actor>,
     Path(id): Path<String>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
     let vol = atlas_inventory::get_volume(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("volume {id}")))?;
@@ -484,6 +488,7 @@ async fn expand_volume(
     Path(id): Path<String>,
     Json(body): Json<ExpandBody>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
     let vol = atlas_inventory::get_volume(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("volume {id}")))?;
@@ -530,6 +535,7 @@ async fn create_snapshot(
     Path(id): Path<String>,
     Json(body): Json<SnapshotBody>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
     let vol = atlas_inventory::get_volume(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("volume {id}")))?;
@@ -594,6 +600,11 @@ async fn delete_snapshot(
     Path(id): Path<String>,
     Query(q): Query<ForceParams>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    // Force-deleting past the dependency guard is an admin action.
+    if q.force {
+        crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    }
     let snap = atlas_inventory::snapshots::get_snapshot(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("snapshot {id}")))?;
@@ -679,6 +690,7 @@ async fn enqueue_clone(
     new_name: String,
     body: CloneBody,
 ) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, actor, crate::auth::ROLE_OPERATOR)?;
     let snap = atlas_inventory::snapshots::get_snapshot(&s.pool, snapshot_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("snapshot {snapshot_id}")))?;
@@ -815,6 +827,7 @@ async fn create_bucket(
     Extension(actor): Extension<Actor>,
     Json(body): Json<CreateBucketBody>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
     if body.name.trim().is_empty() {
         return Err(AppError::Validation("name is required".into()));
     }
@@ -888,6 +901,7 @@ async fn create_backup(
     Extension(actor): Extension<Actor>,
     Json(body): Json<CreateBackupBody>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
     let vol = atlas_inventory::get_volume(&s.pool, &body.volume_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("volume {}", body.volume_id)))?;
@@ -1015,6 +1029,7 @@ async fn create_restore(
     Extension(actor): Extension<Actor>,
     Json(body): Json<CreateRestoreBody>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
     let backup = atlas_inventory::backups::get_backup(&s.pool, &body.backup_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("backup {}", body.backup_id)))?;

@@ -18,9 +18,12 @@ use crate::proto::{
 };
 use crate::state::AppState;
 
-/// The authenticated actor id, injected into request extensions by the auth interceptor.
+/// The authenticated actor (id + role), injected into request extensions by the auth interceptor.
 #[derive(Clone)]
-pub struct GrpcActor(pub String);
+pub struct GrpcActor {
+    pub id: String,
+    pub role: String,
+}
 
 /// Build the tonic service with a JWT auth interceptor. When `auth_required` is false (dev), calls
 /// pass through as `anonymous`; when true, a valid HS256 Bearer token in the `authorization`
@@ -37,7 +40,10 @@ pub fn service(
         GrpcService { state },
         move |mut req: Request<()>| -> Result<Request<()>, Status> {
             if !required {
-                req.extensions_mut().insert(GrpcActor("anonymous".into()));
+                req.extensions_mut().insert(GrpcActor {
+                    id: "anonymous".into(),
+                    role: "viewer".into(),
+                });
                 return Ok(req);
             }
             let token = req
@@ -56,7 +62,10 @@ pub fn service(
                 &validation,
             ) {
                 Ok(data) => {
-                    req.extensions_mut().insert(GrpcActor(data.claims.sub));
+                    req.extensions_mut().insert(GrpcActor {
+                        id: data.claims.sub,
+                        role: data.claims.role,
+                    });
                     Ok(req)
                 }
                 Err(e) => Err(Status::unauthenticated(format!("invalid token: {e}"))),
@@ -164,11 +173,18 @@ impl AtlasStorage for GrpcService {
         &self,
         req: Request<CreateVolumeRequest>,
     ) -> Result<Response<CreateVolumeReply>, Status> {
-        let actor = req
-            .extensions()
-            .get::<GrpcActor>()
-            .map(|a| a.0.clone())
+        let ga = req.extensions().get::<GrpcActor>().cloned();
+        let actor = ga
+            .as_ref()
+            .map(|a| a.id.clone())
             .unwrap_or_else(|| "grpc".into());
+        // RBAC: creating a volume requires operator (enforced only when auth is on).
+        if self.state.config.auth_required {
+            let role = ga.as_ref().map(|a| a.role.as_str()).unwrap_or("viewer");
+            if crate::auth::role_level(role) < crate::auth::ROLE_OPERATOR {
+                return Err(Status::permission_denied("requires operator role"));
+            }
+        }
         let r = req.into_inner();
         if r.name.trim().is_empty() {
             return Err(Status::invalid_argument("name is required"));

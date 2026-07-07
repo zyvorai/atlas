@@ -80,6 +80,133 @@ async fn seed_volume(pool: &sqlx::SqlitePool, id: &str, name: &str) {
         .unwrap();
 }
 
+/// Spawn a gateway with auth enabled and the given JWT secret; returns its base URL.
+async fn spawn_auth(secret: &str) -> String {
+    let db = format!(
+        "{}/atlas-rbac-{}-{}.db",
+        std::env::temp_dir().display(),
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+    );
+    let _ = std::fs::remove_file(&db);
+    let config = Config {
+        bind_addr: "127.0.0.1:0".into(),
+        grpc_addr: "127.0.0.1:0".into(),
+        database_url: format!("sqlite://{db}?mode=rwc"),
+        ceph_driver_mode: CephDriverMode::Fake,
+        kubeconfig_path: None,
+        jwt_secret: secret.into(),
+        auth_required: true,
+        monitor_interval_secs: 0,
+        ceph_prometheus_url: None,
+    };
+    let state = build_state(
+        config,
+        BuildOptions {
+            enable_k8s: false,
+            initial_discovery: false,
+            enable_monitor: false,
+        },
+    )
+    .await
+    .unwrap();
+    let app = routes::router(state);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    format!("http://{addr}")
+}
+
+fn mint(secret: &str, role: &str) -> String {
+    use jsonwebtoken::{encode, EncodingKey, Header};
+    let exp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as usize
+        + 3600;
+    let claims = atlas_gateway::auth::Claims {
+        sub: "u".into(),
+        role: role.into(),
+        exp,
+    };
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .unwrap()
+}
+
+#[tokio::test]
+async fn rbac_enforced_on_writes() {
+    let secret = "rbac-test-secret";
+    let base = spawn_auth(secret).await;
+    let body = serde_json::json!({
+        "tenant_id": "t", "name": "rbac-vol", "size_bytes": 1073741824_i64,
+        "kind": "block", "policy": "database"
+    });
+
+    // No token → 401.
+    let r = client()
+        .post(format!("{base}/api/atlas/v1/volumes"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::UNAUTHORIZED);
+
+    // Viewer token → 403 (read role can't create).
+    let r = client()
+        .post(format!("{base}/api/atlas/v1/volumes"))
+        .bearer_auth(mint(secret, "viewer"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::FORBIDDEN);
+
+    // Viewer CAN read.
+    let r = client()
+        .get(format!("{base}/api/atlas/v1/pools"))
+        .bearer_auth(mint(secret, "viewer"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::OK);
+
+    // Operator token → 202.
+    let r = client()
+        .post(format!("{base}/api/atlas/v1/volumes"))
+        .bearer_auth(mint(secret, "storage.operator"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::ACCEPTED);
+
+    // Operator CANNOT create a backend (admin-only) → 403.
+    let r = client()
+        .post(format!("{base}/api/atlas/v1/backends"))
+        .bearer_auth(mint(secret, "storage.operator"))
+        .json(&serde_json::json!({ "name": "b" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::FORBIDDEN);
+
+    // Admin CAN create a backend → 200.
+    let r = client()
+        .post(format!("{base}/api/atlas/v1/backends"))
+        .bearer_auth(mint(secret, "storage.admin"))
+        .json(&serde_json::json!({ "name": "b" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::OK);
+}
+
 #[tokio::test]
 async fn health_and_version() {
     let (addr, _pool) = spawn().await;

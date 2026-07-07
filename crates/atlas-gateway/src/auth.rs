@@ -41,10 +41,36 @@ impl Actor {
         }
     }
 
-    /// Actor id used for gRPC-originated actions (auth on the gRPC edge is a follow-up).
-    pub fn grpc_id() -> &'static str {
-        "grpc"
+    pub fn level(&self) -> u8 {
+        role_level(&self.role)
     }
+}
+
+/// Role levels (PDF §14.2). Higher = more privilege; each level includes the ones below it.
+pub const ROLE_VIEWER: u8 = 0;
+pub const ROLE_OPERATOR: u8 = 1;
+pub const ROLE_ADMIN: u8 = 2;
+
+/// Map a JWT `role` claim to a privilege level. Product service accounts get operator-level access
+/// for volume lifecycle. Unknown roles are viewer (read-only).
+pub fn role_level(role: &str) -> u8 {
+    match role {
+        "admin" | "storage.admin" | "storage.security" | "storage.breakglass" => ROLE_ADMIN,
+        "operator" | "storage.operator" => ROLE_OPERATOR,
+        r if r.starts_with("product.service.") => ROLE_OPERATOR,
+        _ => ROLE_VIEWER,
+    }
+}
+
+/// Enforce a minimum role. No-op when auth is disabled (dev), so open-dev keeps working.
+pub fn require_role(auth_required: bool, actor: &Actor, min: u8) -> atlas_common::AppResult<()> {
+    if auth_required && actor.level() < min {
+        return Err(atlas_common::AppError::Forbidden(format!(
+            "action requires a higher role; actor '{}' has role '{}'",
+            actor.id, actor.role
+        )));
+    }
+    Ok(())
 }
 
 pub async fn auth_middleware(
