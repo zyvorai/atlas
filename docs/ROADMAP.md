@@ -76,7 +76,10 @@ Read-only control plane + real Ceph lab.
   Docker builders). Integration test drives the server with the generated client.
 - **Verified** on the cluster with `grpcurl` (NodePort 30512): `ListPools` returned the real Ceph
   pools over gRPC via reflection.
-- Follow-ups: JWT auth on the gRPC edge; streaming job-progress RPC; gRPC clients in the products.
+- ✅ **JWT auth** — a tonic interceptor gated by `ATLAS_AUTH_REQUIRED` verifies an HS256 Bearer token
+  in the `authorization` metadata with the shared secret (mirrors REST) and injects the actor.
+  Verified live: no token → `Unauthenticated`, valid token → OK.
+- Follow-ups: streaming job-progress RPC; gRPC clients in the products; RBAC roles on RPCs.
 
 ## ⏭ Slice 3+ — Enterprise & product integration
 - Product integrations: Veyron (VM datastores), Hyper2KVM (direct-to-RBD migration), GuestKit

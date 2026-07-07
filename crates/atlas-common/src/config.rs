@@ -33,7 +33,7 @@ pub struct Config {
     /// Optional explicit kubeconfig path for the live k8s driver (empty = default resolution).
     pub kubeconfig_path: Option<String>,
     pub jwt_secret: String,
-    /// When true, protected routes require a valid JWT; when false (dev), they are open.
+    /// When true, protected REST routes AND the gRPC edge require a valid JWT; false (dev) = open.
     pub auth_required: bool,
     /// Monitor loop interval in seconds (0 disables the monitor/alerts worker).
     pub monitor_interval_secs: u64,
