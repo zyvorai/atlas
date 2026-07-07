@@ -197,9 +197,11 @@ was cloned/restored from it (PDF §8.3); pass `?force=true` to override.
 ### `POST /api/atlas/v1/buckets`
 Provision an RGW bucket via an ObjectBucketClaim (async job).
 ```json
-{ "name": "atlas-backups", "namespace": "rook-ceph", "storage_class": "zyvor-rgw-bucket" }
+{ "name": "atlas-backups", "namespace": "rook-ceph", "storage_class": "zyvor-rgw-bucket",
+  "max_objects": 1000, "max_size": "2G" }
 // 202 → resource: { bucket_id, namespace }
 ```
+`max_objects` / `max_size` (optional) set an RGW per-bucket quota (enforced via `radosgw-admin`).
 
 ### `GET /api/atlas/v1/buckets` · `GET /api/atlas/v1/buckets/{id}`
 ```json

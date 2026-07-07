@@ -82,7 +82,10 @@ Read-only control plane + real Ceph lab.
 - ✅ **Presigned download** (`GET /backups/{id}/download?what=data|manifest`) — returns a time-limited
   SigV4 URL signed with the bucket's in-cluster credentials (never exposed), so a client pulls the
   object straight from RGW. Verified live (credential-free download → 200, real `rbd diff v1` bytes).
-- Bucket quotas + lifecycle policies; time-based backup retention; external RGW ingress for downloads.
+- ✅ **Bucket quotas** — `POST /buckets` accepts `max_objects`/`max_size`; the job sets the OBC
+  `additionalConfig` and enforces the RGW per-bucket quota directly via `radosgw-admin`
+  (`quota set`+`enable`). Verified live (`enabled: true, max_objects: 100, max_size: 1 GiB`).
+- Bucket lifecycle policies; time-based backup retention; external RGW ingress for downloads.
 
 ## ✅ gRPC edge (done, verified)
 
