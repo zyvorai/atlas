@@ -1,0 +1,90 @@
+// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Atlas storage control-plane gRPC edge (PDF §5.3: typed internal contracts for products).
+syntax = "proto3";
+
+package atlas.v1;
+
+service AtlasStorage {
+  rpc Health(HealthRequest) returns (HealthReply);
+  rpc ListClusters(Empty) returns (ListClustersReply);
+  rpc ListPools(Empty) returns (ListPoolsReply);
+  rpc ListVolumes(Empty) returns (ListVolumesReply);
+  rpc GetVolume(GetVolumeRequest) returns (Volume);
+  rpc CreateVolume(CreateVolumeRequest) returns (CreateVolumeReply);
+  rpc GetJob(GetJobRequest) returns (Job);
+  rpc ListAlerts(ListAlertsRequest) returns (ListAlertsReply);
+}
+
+message Empty {}
+
+message HealthRequest {}
+message HealthReply {
+  string status = 1;
+  string version = 2;
+}
+
+message Cluster {
+  string id = 1;
+  string name = 2;
+  string health = 3;
+  int64 raw_capacity_bytes = 4;
+  int64 used_capacity_bytes = 5;
+  int64 available_capacity_bytes = 6;
+}
+message ListClustersReply { repeated Cluster clusters = 1; }
+
+message Pool {
+  string id = 1;
+  string name = 2;
+  string kind = 3;
+  int64 used_bytes = 4;
+  int64 max_bytes = 5;
+  string health = 6;
+}
+message ListPoolsReply { repeated Pool pools = 1; }
+
+message Volume {
+  string id = 1;
+  string name = 2;
+  string kind = 3;
+  int64 size_bytes = 4;
+  string state = 5;
+  string pvc_name = 6;
+  string storage_class = 7;
+  string namespace = 8;
+}
+message ListVolumesReply { repeated Volume volumes = 1; }
+message GetVolumeRequest { string id = 1; }
+
+message CreateVolumeRequest {
+  string tenant_id = 1;
+  string name = 2;
+  int64 size_bytes = 3;
+  string policy = 4;
+  string namespace = 5;
+}
+message CreateVolumeReply {
+  string job_id = 1;
+  string volume_id = 2;
+  string state = 3;
+}
+
+message GetJobRequest { string id = 1; }
+message Job {
+  string id = 1;
+  string job_type = 2;
+  string state = 3;
+  int64 progress_percent = 4;
+  string error = 5;
+}
+
+message Alert {
+  string id = 1;
+  string severity = 2;
+  string title = 3;
+  string description = 4;
+  string state = 5;
+  string resource_id = 6;
+}
+message ListAlertsRequest { string state = 1; }
+message ListAlertsReply { repeated Alert alerts = 1; }

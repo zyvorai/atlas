@@ -92,6 +92,8 @@ spec:
           env:
             - name: ATLAS_BIND_ADDR
               value: "0.0.0.0:5110"
+            - name: ATLAS_GRPC_ADDR
+              value: "0.0.0.0:5111"
             - name: ATLAS_DATABASE_URL
               value: "sqlite:///var/lib/atlas/atlas.db?mode=rwc"
             - name: ATLAS_CEPH_DRIVER_MODE
@@ -104,6 +106,7 @@ spec:
               value: "info,atlas_gateway=debug,atlas_driver_ceph=debug"
           ports:
             - containerPort: 5110
+            - containerPort: 5111
           readinessProbe:
             httpGet:
               path: /health
@@ -152,3 +155,7 @@ spec:
       port: 5110
       targetPort: 5110
       nodePort: 30511
+    - name: grpc
+      port: 5111
+      targetPort: 5111
+      nodePort: 30512

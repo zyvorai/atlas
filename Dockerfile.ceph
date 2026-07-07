@@ -4,6 +4,7 @@
 # cluster major (v18) and the glibc lines up with the debian-bookworm-built binary.
 # ---- builder ----
 FROM rust:1.88-bookworm AS builder
+RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 COPY . .
 RUN cargo build --release -p atlas-gateway -p atlas-cli

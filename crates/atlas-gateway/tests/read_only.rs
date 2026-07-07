@@ -21,6 +21,7 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
 
     let config = Config {
         bind_addr: "127.0.0.1:0".into(),
+        grpc_addr: "127.0.0.1:0".into(),
         database_url: format!("sqlite://{db}?mode=rwc"),
         ceph_driver_mode: CephDriverMode::Fake,
         kubeconfig_path: None,

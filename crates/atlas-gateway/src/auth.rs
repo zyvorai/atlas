@@ -40,6 +40,11 @@ impl Actor {
             role: "viewer".into(),
         }
     }
+
+    /// Actor id used for gRPC-originated actions (auth on the gRPC edge is a follow-up).
+    pub fn grpc_id() -> &'static str {
+        "grpc"
+    }
 }
 
 pub async fn auth_middleware(

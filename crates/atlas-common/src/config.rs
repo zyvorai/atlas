@@ -26,6 +26,8 @@ impl CephDriverMode {
 #[derive(Clone)]
 pub struct Config {
     pub bind_addr: String,
+    /// gRPC listen address (empty disables the gRPC edge).
+    pub grpc_addr: String,
     pub database_url: String,
     pub ceph_driver_mode: CephDriverMode,
     /// Optional explicit kubeconfig path for the live k8s driver (empty = default resolution).
@@ -57,6 +59,7 @@ impl Config {
         );
         Self {
             bind_addr: std::env::var("ATLAS_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:5110".into()),
+            grpc_addr: std::env::var("ATLAS_GRPC_ADDR").unwrap_or_else(|_| "127.0.0.1:5111".into()),
             database_url: std::env::var("ATLAS_DATABASE_URL")
                 .unwrap_or_else(|_| "sqlite://atlas.db?mode=rwc".into()),
             ceph_driver_mode,
@@ -84,6 +87,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             bind_addr: "127.0.0.1:5110".into(),
+            grpc_addr: "127.0.0.1:5111".into(),
             database_url: "sqlite://atlas.db?mode=rwc".into(),
             ceph_driver_mode: CephDriverMode::Fake,
             kubeconfig_path: None,
