@@ -240,6 +240,8 @@ dependencies = [
  "atlas-driver-core",
  "atlas-driver-k8s",
  "atlas-inventory",
+ "atlas-jobs",
+ "atlas-policy",
  "axum",
  "chrono",
  "clap",
@@ -268,6 +270,30 @@ dependencies = [
  "serde_json",
  "sqlx",
  "tracing",
+]
+
+[[package]]
+name = "atlas-jobs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "atlas-api-types",
+ "atlas-driver-k8s",
+ "atlas-inventory",
+ "atlas-policy",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "atlas-policy"
+version = "0.1.0"
+dependencies = [
+ "atlas-api-types",
+ "serde",
 ]
 
 [[package]]

@@ -44,6 +44,33 @@ enum Command {
     StorageClasses,
     /// GET /api/atlas/v1/metrics/summary
     Metrics,
+    /// GET /api/atlas/v1/policies
+    Policies,
+    /// GET /api/atlas/v1/jobs  (or a single job with an id)
+    Jobs { id: Option<String> },
+    /// GET /api/atlas/v1/snapshots
+    Snapshots,
+    /// POST /api/atlas/v1/volumes — create a Ceph-backed volume (PVC)
+    CreateVolume {
+        name: String,
+        /// Size in GiB.
+        #[arg(long, default_value_t = 2)]
+        size_gib: i64,
+        #[arg(long, default_value = "database")]
+        policy: String,
+        #[arg(long, default_value = "default")]
+        namespace: String,
+        #[arg(long, default_value = "tenant_default")]
+        tenant: String,
+    },
+    /// POST /api/atlas/v1/volumes/{id}/snapshots
+    SnapshotVolume {
+        volume_id: String,
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// DELETE /api/atlas/v1/volumes/{id}
+    DeleteVolume { id: String },
 }
 
 #[tokio::main]
@@ -52,26 +79,62 @@ async fn main() -> Result<()> {
     let client = reqwest::Client::new();
     let base = cli.base_url.trim_end_matches('/');
 
-    let (method, path) = match &cli.command {
-        Command::Health => ("GET", "/health".to_string()),
-        Command::Version => ("GET", "/version".to_string()),
-        Command::Backends => ("GET", "/api/atlas/v1/backends".to_string()),
-        Command::Discover { backend } => {
-            ("POST", format!("/api/atlas/v1/backends/{backend}/discover"))
-        }
-        Command::Clusters => ("GET", "/api/atlas/v1/clusters".to_string()),
-        Command::Pools => ("GET", "/api/atlas/v1/pools".to_string()),
-        Command::Osds => ("GET", "/api/atlas/v1/osds".to_string()),
-        Command::Volumes => ("GET", "/api/atlas/v1/volumes".to_string()),
-        Command::StorageClasses => ("GET", "/api/atlas/v1/storage-classes".to_string()),
-        Command::Metrics => ("GET", "/api/atlas/v1/metrics/summary".to_string()),
+    let (method, path, body): (&str, String, Option<serde_json::Value>) = match &cli.command {
+        Command::Health => ("GET", "/health".to_string(), None),
+        Command::Version => ("GET", "/version".to_string(), None),
+        Command::Backends => ("GET", "/api/atlas/v1/backends".to_string(), None),
+        Command::Discover { backend } => (
+            "POST",
+            format!("/api/atlas/v1/backends/{backend}/discover"),
+            None,
+        ),
+        Command::Clusters => ("GET", "/api/atlas/v1/clusters".to_string(), None),
+        Command::Pools => ("GET", "/api/atlas/v1/pools".to_string(), None),
+        Command::Osds => ("GET", "/api/atlas/v1/osds".to_string(), None),
+        Command::Volumes => ("GET", "/api/atlas/v1/volumes".to_string(), None),
+        Command::StorageClasses => ("GET", "/api/atlas/v1/storage-classes".to_string(), None),
+        Command::Metrics => ("GET", "/api/atlas/v1/metrics/summary".to_string(), None),
+        Command::Policies => ("GET", "/api/atlas/v1/policies".to_string(), None),
+        Command::Jobs { id } => match id {
+            Some(id) => ("GET", format!("/api/atlas/v1/jobs/{id}"), None),
+            None => ("GET", "/api/atlas/v1/jobs".to_string(), None),
+        },
+        Command::Snapshots => ("GET", "/api/atlas/v1/snapshots".to_string(), None),
+        Command::CreateVolume {
+            name,
+            size_gib,
+            policy,
+            namespace,
+            tenant,
+        } => (
+            "POST",
+            "/api/atlas/v1/volumes".to_string(),
+            Some(serde_json::json!({
+                "tenant_id": tenant,
+                "name": name,
+                "size_bytes": size_gib * 1024 * 1024 * 1024,
+                "kind": "block",
+                "policy": policy,
+                "kubernetes": { "namespace": namespace, "create_pvc": true }
+            })),
+        ),
+        Command::SnapshotVolume { volume_id, name } => (
+            "POST",
+            format!("/api/atlas/v1/volumes/{volume_id}/snapshots"),
+            Some(serde_json::json!({ "name": name })),
+        ),
+        Command::DeleteVolume { id } => ("DELETE", format!("/api/atlas/v1/volumes/{id}"), None),
     };
 
     let url = format!("{base}{path}");
     let mut req = match method {
         "POST" => client.post(&url),
+        "DELETE" => client.delete(&url),
         _ => client.get(&url),
     };
+    if let Some(b) = &body {
+        req = req.json(b);
+    }
     if let Some(token) = &cli.token {
         req = req.bearer_auth(token);
     }

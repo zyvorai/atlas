@@ -1,0 +1,147 @@
+// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+//! Intent → placement resolution (PDF §12.3 default policies).
+//!
+//! Products request *intent* ("production", "database", ...) and Atlas decides the concrete
+//! backend placement (StorageClass, access mode, volume mode). This keeps Ceph internals out of
+//! every product. The MVP ships a built-in policy table; later slices load policies from the
+//! `storage_policies` table / CRDs.
+
+use atlas_api_types::{Placement, VolumeKind};
+
+/// A built-in policy definition.
+#[derive(Debug, Clone)]
+pub struct Policy {
+    pub intent: &'static str,
+    pub storage_class: &'static str,
+    pub access_mode: &'static str,
+    pub volume_mode: &'static str,
+    pub description: &'static str,
+}
+
+/// Default block/file StorageClasses (match the Rook lab manifests, PDF §7.1).
+pub const DEFAULT_BLOCK_SC: &str = "zyvor-rbd-prod";
+pub const DEFAULT_FILE_SC: &str = "zyvor-cephfs-shared";
+
+/// The built-in policy catalog (PDF §12.3).
+pub const POLICIES: &[Policy] = &[
+    Policy {
+        intent: "production",
+        storage_class: DEFAULT_BLOCK_SC,
+        access_mode: "ReadWriteOnce",
+        volume_mode: "Filesystem",
+        description: "Business VMs / app servers — RBD, 3 replicas, daily snapshots",
+    },
+    Policy {
+        intent: "database",
+        storage_class: DEFAULT_BLOCK_SC,
+        access_mode: "ReadWriteOnce",
+        volume_mode: "Filesystem",
+        description: "Databases — RBD NVMe, hourly snapshots, daily backup",
+    },
+    Policy {
+        intent: "development",
+        storage_class: DEFAULT_BLOCK_SC,
+        access_mode: "ReadWriteOnce",
+        volume_mode: "Filesystem",
+        description: "Dev/test VMs — RBD, 2 replicas, manual snapshots",
+    },
+    Policy {
+        intent: "shared",
+        storage_class: DEFAULT_FILE_SC,
+        access_mode: "ReadWriteMany",
+        volume_mode: "Filesystem",
+        description: "ISO library, templates, shared reports — CephFS RWX",
+    },
+    Policy {
+        intent: "ai",
+        storage_class: DEFAULT_BLOCK_SC,
+        access_mode: "ReadWriteOnce",
+        volume_mode: "Filesystem",
+        description: "AI datasets / model workspaces — high-throughput RBD/CephFS",
+    },
+];
+
+/// Look up a policy by intent name.
+pub fn find(intent: &str) -> Option<&'static Policy> {
+    POLICIES.iter().find(|p| p.intent == intent)
+}
+
+/// Resolve a placement decision from an optional intent and the requested volume kind.
+///
+/// Precedence: explicit `storage_class_override` › named policy › kind default.
+pub fn resolve(
+    intent: Option<&str>,
+    kind: VolumeKind,
+    storage_class_override: Option<&str>,
+) -> Placement {
+    // Explicit override wins.
+    if let Some(sc) = storage_class_override {
+        let (access, mode) = defaults_for_kind(kind);
+        return Placement {
+            intent: intent.unwrap_or("custom").to_string(),
+            storage_class: sc.to_string(),
+            access_mode: access.to_string(),
+            volume_mode: mode.to_string(),
+        };
+    }
+    // Named policy.
+    if let Some(p) = intent.and_then(find) {
+        return Placement {
+            intent: p.intent.to_string(),
+            storage_class: p.storage_class.to_string(),
+            access_mode: p.access_mode.to_string(),
+            volume_mode: p.volume_mode.to_string(),
+        };
+    }
+    // Fall back to a sensible default for the kind.
+    let (access, mode) = defaults_for_kind(kind);
+    Placement {
+        intent: intent.unwrap_or("default").to_string(),
+        storage_class: match kind {
+            VolumeKind::Filesystem => DEFAULT_FILE_SC.to_string(),
+            _ => DEFAULT_BLOCK_SC.to_string(),
+        },
+        access_mode: access.to_string(),
+        volume_mode: mode.to_string(),
+    }
+}
+
+fn defaults_for_kind(kind: VolumeKind) -> (&'static str, &'static str) {
+    match kind {
+        VolumeKind::Filesystem => ("ReadWriteMany", "Filesystem"),
+        VolumeKind::Block => ("ReadWriteOnce", "Filesystem"),
+        VolumeKind::Object => ("ReadWriteOnce", "Filesystem"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn named_policy_resolves() {
+        let p = resolve(Some("database"), VolumeKind::Block, None);
+        assert_eq!(p.storage_class, DEFAULT_BLOCK_SC);
+        assert_eq!(p.access_mode, "ReadWriteOnce");
+        assert_eq!(p.intent, "database");
+    }
+
+    #[test]
+    fn shared_uses_cephfs_rwx() {
+        let p = resolve(Some("shared"), VolumeKind::Filesystem, None);
+        assert_eq!(p.storage_class, DEFAULT_FILE_SC);
+        assert_eq!(p.access_mode, "ReadWriteMany");
+    }
+
+    #[test]
+    fn override_wins() {
+        let p = resolve(Some("production"), VolumeKind::Block, Some("custom-sc"));
+        assert_eq!(p.storage_class, "custom-sc");
+    }
+
+    #[test]
+    fn unknown_intent_falls_back_by_kind() {
+        let p = resolve(Some("nonsense"), VolumeKind::Filesystem, None);
+        assert_eq!(p.storage_class, DEFAULT_FILE_SC);
+    }
+}

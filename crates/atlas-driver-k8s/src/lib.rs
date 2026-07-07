@@ -8,10 +8,28 @@
 //! `create_pvc` is defined but returns `NotImplemented` until MVP slice 2 (the write path).
 
 use atlas_api_types::StorageClassInfo;
-use k8s_openapi::api::core::v1::{PersistentVolume, PersistentVolumeClaim};
+use k8s_openapi::api::core::v1::{
+    PersistentVolume, PersistentVolumeClaim, PersistentVolumeClaimSpec, VolumeResourceRequirements,
+};
 use k8s_openapi::api::storage::v1::StorageClass;
-use kube::api::ListParams;
+use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use kube::api::{DeleteParams, ListParams, Patch, PatchParams, PostParams};
+use kube::core::{ApiResource, DynamicObject, GroupVersionKind};
 use kube::{Api, Client};
+use std::collections::BTreeMap;
+
+/// Request to create a PVC (the MVP write path).
+#[derive(Debug, Clone)]
+pub struct PvcCreateSpec {
+    pub name: String,
+    pub namespace: String,
+    pub storage_class: String,
+    pub size_bytes: i64,
+    pub access_modes: Vec<String>,
+    pub volume_mode: Option<String>,
+    pub labels: BTreeMap<String, String>,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum K8sError {
@@ -85,6 +103,126 @@ impl K8sDriver {
         let api: Api<PersistentVolume> = Api::all(self.client.clone());
         let list = api.list(&ListParams::default().limit(500)).await?;
         Ok(list.items.into_iter().map(PvSummary::from).collect())
+    }
+
+    // ---- write path (slice 2) ----
+
+    fn pvc_api(&self, ns: &str) -> Api<PersistentVolumeClaim> {
+        Api::namespaced(self.client.clone(), ns)
+    }
+
+    /// Create a PVC. Returns its summary (initially Pending until bound).
+    pub async fn create_pvc(&self, spec: &PvcCreateSpec) -> Result<PvcSummary, K8sError> {
+        let access_modes = if spec.access_modes.is_empty() {
+            vec!["ReadWriteOnce".to_string()]
+        } else {
+            spec.access_modes.clone()
+        };
+        let mut requests = std::collections::BTreeMap::new();
+        requests.insert("storage".to_string(), Quantity(spec.size_bytes.to_string()));
+
+        let pvc = PersistentVolumeClaim {
+            metadata: ObjectMeta {
+                name: Some(spec.name.clone()),
+                namespace: Some(spec.namespace.clone()),
+                labels: (!spec.labels.is_empty()).then(|| spec.labels.clone()),
+                ..Default::default()
+            },
+            spec: Some(PersistentVolumeClaimSpec {
+                access_modes: Some(access_modes),
+                storage_class_name: Some(spec.storage_class.clone()),
+                volume_mode: spec.volume_mode.clone(),
+                resources: Some(VolumeResourceRequirements {
+                    requests: Some(requests),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let created = self
+            .pvc_api(&spec.namespace)
+            .create(&PostParams::default(), &pvc)
+            .await?;
+        Ok(PvcSummary::from(created))
+    }
+
+    /// Fetch a PVC summary (None if it doesn't exist).
+    pub async fn get_pvc(&self, ns: &str, name: &str) -> Result<Option<PvcSummary>, K8sError> {
+        match self.pvc_api(ns).get_opt(name).await? {
+            Some(p) => Ok(Some(PvcSummary::from(p))),
+            None => Ok(None),
+        }
+    }
+
+    /// Delete a PVC.
+    pub async fn delete_pvc(&self, ns: &str, name: &str) -> Result<(), K8sError> {
+        self.pvc_api(ns)
+            .delete(name, &DeleteParams::default())
+            .await?;
+        Ok(())
+    }
+
+    /// Expand a PVC to a larger size (merge-patch `spec.resources.requests.storage`).
+    pub async fn expand_pvc(&self, ns: &str, name: &str, new_bytes: i64) -> Result<(), K8sError> {
+        let patch = serde_json::json!({
+            "spec": { "resources": { "requests": { "storage": new_bytes.to_string() } } }
+        });
+        self.pvc_api(ns)
+            .patch(name, &PatchParams::default(), &Patch::Merge(&patch))
+            .await?;
+        Ok(())
+    }
+
+    fn volume_snapshot_api(&self, ns: &str) -> (Api<DynamicObject>, ApiResource) {
+        let gvk = GroupVersionKind::gvk("snapshot.storage.k8s.io", "v1", "VolumeSnapshot");
+        let ar = ApiResource::from_gvk(&gvk);
+        (Api::namespaced_with(self.client.clone(), ns, &ar), ar)
+    }
+
+    /// Create a VolumeSnapshot from a source PVC. Returns the snapshot object name.
+    pub async fn create_volume_snapshot(
+        &self,
+        ns: &str,
+        name: &str,
+        source_pvc: &str,
+        snapshot_class: &str,
+    ) -> Result<String, K8sError> {
+        let (api, ar) = self.volume_snapshot_api(ns);
+        let mut obj = DynamicObject::new(name, &ar);
+        obj.metadata.namespace = Some(ns.to_string());
+        obj.data = serde_json::json!({
+            "spec": {
+                "volumeSnapshotClassName": snapshot_class,
+                "source": { "persistentVolumeClaimName": source_pvc }
+            }
+        });
+        let created = api.create(&PostParams::default(), &obj).await?;
+        Ok(created.metadata.name.unwrap_or_else(|| name.to_string()))
+    }
+
+    /// Whether a VolumeSnapshot reports `status.readyToUse` (None if not yet reported / absent).
+    pub async fn volume_snapshot_ready(
+        &self,
+        ns: &str,
+        name: &str,
+    ) -> Result<Option<bool>, K8sError> {
+        let (api, _ar) = self.volume_snapshot_api(ns);
+        match api.get_opt(name).await? {
+            Some(obj) => Ok(obj
+                .data
+                .get("status")
+                .and_then(|s| s.get("readyToUse"))
+                .and_then(|v| v.as_bool())),
+            None => Ok(None),
+        }
+    }
+
+    /// Delete a VolumeSnapshot.
+    pub async fn delete_volume_snapshot(&self, ns: &str, name: &str) -> Result<(), K8sError> {
+        let (api, _ar) = self.volume_snapshot_api(ns);
+        api.delete(name, &DeleteParams::default()).await?;
+        Ok(())
     }
 }
 

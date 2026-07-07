@@ -6,8 +6,10 @@ members = [
     "crates/atlas-driver-core",
     "crates/atlas-driver-ceph",
     "crates/atlas-driver-k8s",
+    "crates/atlas-policy",
     "crates/atlas-inventory",
     "crates/atlas-discovery",
+    "crates/atlas-jobs",
     "crates/atlas-gateway",
     "crates/atlas-cli",
 ]
@@ -26,8 +28,10 @@ atlas-api-types = { path = "crates/atlas-api-types" }
 atlas-driver-core = { path = "crates/atlas-driver-core" }
 atlas-driver-ceph = { path = "crates/atlas-driver-ceph" }
 atlas-driver-k8s = { path = "crates/atlas-driver-k8s" }
+atlas-policy = { path = "crates/atlas-policy" }
 atlas-inventory = { path = "crates/atlas-inventory" }
 atlas-discovery = { path = "crates/atlas-discovery" }
+atlas-jobs = { path = "crates/atlas-jobs" }
 
 # Async / runtime
 tokio = { version = "1", features = ["full"] }

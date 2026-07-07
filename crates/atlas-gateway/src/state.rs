@@ -16,6 +16,8 @@ pub struct AppState {
     pub drivers: Arc<DriverRegistry>,
     /// Live Kubernetes driver, if a cluster was reachable at startup.
     pub k8s: Option<Arc<K8sDriver>>,
+    /// Async job engine (write path).
+    pub jobs: atlas_jobs::JobEngine,
 }
 
 impl AppState {

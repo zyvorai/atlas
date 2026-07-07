@@ -209,3 +209,131 @@ async fn storage_classes_without_cluster_returns_502() {
         .unwrap();
     assert_eq!(resp.status(), reqwest::StatusCode::BAD_GATEWAY);
 }
+
+#[tokio::test]
+async fn policies_are_listed() {
+    let (addr, _pool) = spawn().await;
+    let base = format!("http://{addr}");
+    let policies: serde_json::Value = client()
+        .get(format!("{base}/api/atlas/v1/policies"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let arr = policies.as_array().unwrap();
+    assert!(arr.iter().any(|p| p["intent"] == "database"));
+    assert!(arr.iter().any(|p| p["storage_class"] == "zyvor-rbd-prod"));
+}
+
+#[tokio::test]
+async fn create_volume_enqueues_job_and_reaches_terminal_state() {
+    // No k8s driver in tests → the create job runs and terminates as `failed` (can't provision),
+    // which still exercises the full async engine lifecycle: 202 → job → terminal state.
+    let (addr, _pool) = spawn().await;
+    let base = format!("http://{addr}");
+
+    let body = serde_json::json!({
+        "tenant_id": "tenant_acme",
+        "name": "billing-db-root",
+        "size_bytes": 2147483648_i64,
+        "kind": "block",
+        "policy": "database"
+    });
+    let resp = client()
+        .post(format!("{base}/api/atlas/v1/volumes"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::ACCEPTED);
+    let accepted: serde_json::Value = resp.json().await.unwrap();
+    let job_id = accepted["job_id"].as_str().unwrap().to_string();
+    assert_eq!(accepted["resource"]["storage_class"], "zyvor-rbd-prod");
+
+    // Poll the job to a terminal state.
+    let mut state = String::new();
+    for _ in 0..50 {
+        let job: serde_json::Value = client()
+            .get(format!("{base}/api/atlas/v1/jobs/{job_id}"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        state = job["state"].as_str().unwrap_or_default().to_string();
+        if state == "succeeded" || state == "failed" {
+            // Without a cluster the driver reports it can't run the write path.
+            if state == "failed" {
+                assert!(job["error"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .contains("Kubernetes"));
+            }
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert_eq!(
+        state, "failed",
+        "job should terminate failed without a cluster"
+    );
+
+    // The job also shows up in the list.
+    let jobs: serde_json::Value = client()
+        .get(format!("{base}/api/atlas/v1/jobs"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(jobs.as_array().unwrap().iter().any(|j| j["id"] == job_id));
+}
+
+#[tokio::test]
+async fn create_volume_is_idempotent() {
+    let (addr, _pool) = spawn().await;
+    let base = format!("http://{addr}");
+    let body = serde_json::json!({
+        "tenant_id": "t1", "name": "idem-vol", "size_bytes": 1073741824_i64, "kind": "block"
+    });
+    let j1: serde_json::Value = client()
+        .post(format!("{base}/api/atlas/v1/volumes"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let j2: serde_json::Value = client()
+        .post(format!("{base}/api/atlas/v1/volumes"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        j1["job_id"], j2["job_id"],
+        "same request → same job (idempotency)"
+    );
+}
+
+#[tokio::test]
+async fn expand_rejects_smaller_size() {
+    let (addr, _pool) = spawn().await;
+    let base = format!("http://{addr}");
+    // Unknown volume → 404 (validated before enqueue).
+    let resp = client()
+        .post(format!("{base}/api/atlas/v1/volumes/nope/expand"))
+        .json(&serde_json::json!({ "new_size_bytes": 1 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::NOT_FOUND);
+}

@@ -1,0 +1,19 @@
+# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+[package]
+name = "atlas-jobs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+atlas-api-types = { workspace = true }
+atlas-inventory = { workspace = true }
+atlas-driver-k8s = { workspace = true }
+atlas-policy = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }

@@ -196,9 +196,62 @@ pub struct CreateVolumeRequest {
     pub tenant_id: String,
     pub name: String,
     pub size_bytes: i64,
+    #[serde(default = "default_block")]
     pub kind: VolumeKind,
+    /// Intent policy name (e.g. "production", "database"); resolved by atlas-policy.
     pub policy: Option<String>,
+    /// Explicit pool/StorageClass override (bypasses policy placement).
     pub pool: Option<String>,
+    /// Product ownership for the resulting volume (recorded in product_bindings).
+    #[serde(default)]
+    pub owner: Option<Owner>,
+    /// Kubernetes provisioning options (the MVP write path creates a PVC).
+    #[serde(default)]
+    pub kubernetes: Option<K8sVolumeOpts>,
+}
+
+fn default_block() -> VolumeKind {
+    VolumeKind::Block
+}
+
+/// Product ownership of a storage resource (PDF §5.3, §11 product_bindings).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Owner {
+    pub product: String,
+    pub resource_type: String,
+    pub resource_id: String,
+    #[serde(default = "default_role")]
+    pub role: String,
+}
+
+fn default_role() -> String {
+    "data_disk".into()
+}
+
+/// Kubernetes-specific volume options.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct K8sVolumeOpts {
+    pub namespace: Option<String>,
+    #[serde(default = "default_true")]
+    pub create_pvc: bool,
+    #[serde(default)]
+    pub access_modes: Vec<String>,
+    pub volume_mode: Option<String>,
+    /// Explicit StorageClass; otherwise resolved from policy.
+    pub storage_class: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// A resolved placement decision (atlas-policy output).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Placement {
+    pub intent: String,
+    pub storage_class: String,
+    pub access_mode: String,
+    pub volume_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -239,4 +292,49 @@ pub struct CloneSnapshotRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeleteSnapshotRequest {
     pub snapshot_id: String,
+}
+
+// ---------------------------------------------------------------------------
+// Jobs & snapshots (read models for slice 2).
+// ---------------------------------------------------------------------------
+
+/// Async job states (PDF §10.5).
+pub mod job_state {
+    pub const PENDING: &str = "pending";
+    pub const QUEUED: &str = "queued";
+    pub const RUNNING: &str = "running";
+    pub const VERIFYING: &str = "verifying";
+    pub const SUCCEEDED: &str = "succeeded";
+    pub const FAILED: &str = "failed";
+}
+
+/// A job record as surfaced by the API.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobRecord {
+    pub id: String,
+    pub tenant_id: String,
+    pub job_type: String,
+    pub state: String,
+    pub requested_by: String,
+    pub progress_percent: i64,
+    pub error: Option<String>,
+    #[serde(default)]
+    pub result: serde_json::Value,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+/// A snapshot record as surfaced by the API.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StorageSnapshot {
+    pub id: String,
+    pub tenant_id: String,
+    pub volume_id: String,
+    pub name: String,
+    pub backend_native_id: Option<String>,
+    pub consistency: String,
+    pub state: String,
+    pub protected: bool,
+    pub parent_snapshot_id: Option<String>,
+    pub created_at: Option<String>,
 }

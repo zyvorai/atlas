@@ -16,8 +16,10 @@ atlas-api-types = { workspace = true }
 atlas-driver-core = { workspace = true }
 atlas-driver-ceph = { workspace = true }
 atlas-driver-k8s = { workspace = true }
+atlas-policy = { workspace = true }
 atlas-inventory = { workspace = true }
 atlas-discovery = { workspace = true }
+atlas-jobs = { workspace = true }
 
 axum = { workspace = true }
 tokio = { workspace = true }

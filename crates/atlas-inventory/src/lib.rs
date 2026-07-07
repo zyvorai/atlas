@@ -17,6 +17,8 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use sqlx::{Row, SqlitePool};
 
 pub mod audit;
+pub mod jobs;
+pub mod snapshots;
 
 /// Open the SQLite pool with WAL + foreign keys, creating the file if missing.
 pub async fn connect(database_url: &str) -> Result<SqlitePool> {
@@ -129,6 +131,100 @@ pub async fn upsert_backend(pool: &SqlitePool, b: &StorageBackend) -> Result<()>
     .bind(&b.status)
     .bind(caps)
     .bind(&b.connection_ref)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Insert or update a single volume (write path). Sets tenant/policy which discovery leaves default.
+pub async fn upsert_volume(
+    pool: &SqlitePool,
+    backend_id: &str,
+    tenant_id: &str,
+    v: &StorageVolume,
+    policy_id: Option<&str>,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO storage_volumes
+            (id, tenant_id, backend_id, cluster_id, pool_id, name, kind, backend_native_id, size_bytes, used_bytes,
+             state, health, policy_id, kubernetes_namespace, pvc_name, storage_class_name, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+         ON CONFLICT(id) DO UPDATE SET
+            tenant_id=excluded.tenant_id, cluster_id=excluded.cluster_id, pool_id=excluded.pool_id,
+            name=excluded.name, kind=excluded.kind, backend_native_id=excluded.backend_native_id,
+            size_bytes=excluded.size_bytes, used_bytes=excluded.used_bytes, state=excluded.state,
+            health=excluded.health, policy_id=excluded.policy_id, kubernetes_namespace=excluded.kubernetes_namespace,
+            pvc_name=excluded.pvc_name, storage_class_name=excluded.storage_class_name, updated_at=excluded.updated_at",
+    )
+    .bind(&v.id)
+    .bind(tenant_id)
+    .bind(backend_id)
+    .bind(&v.cluster_id)
+    .bind(&v.pool_id)
+    .bind(&v.name)
+    .bind(volume_kind_str(v.kind))
+    .bind(&v.backend_native_id)
+    .bind(v.size_bytes)
+    .bind(v.used_bytes)
+    .bind(&v.state)
+    .bind(health_str(v.health))
+    .bind(policy_id)
+    .bind(&v.kubernetes_namespace)
+    .bind(&v.pvc_name)
+    .bind(&v.storage_class_name)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Update just the state of a volume (e.g. to `deleting`).
+pub async fn set_volume_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
+    sqlx::query(
+        "UPDATE storage_volumes SET state=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+    )
+    .bind(state)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Delete a volume row (after the backend resource is gone).
+pub async fn delete_volume_row(pool: &SqlitePool, id: &str) -> Result<()> {
+    sqlx::query("DELETE FROM storage_volumes WHERE id=?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Record product ownership of a storage resource (PDF §5.5 ownership mapping).
+#[allow(clippy::too_many_arguments)]
+pub async fn insert_binding(
+    pool: &SqlitePool,
+    id: &str,
+    tenant_id: &str,
+    product: &str,
+    resource_type: &str,
+    resource_id: &str,
+    storage_resource_type: &str,
+    storage_resource_id: &str,
+    role: &str,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO product_bindings
+            (id, tenant_id, product, resource_type, resource_id, storage_resource_type, storage_resource_id, role)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(product, resource_type, resource_id, storage_resource_type, storage_resource_id, role) DO NOTHING",
+    )
+    .bind(id)
+    .bind(tenant_id)
+    .bind(product)
+    .bind(resource_type)
+    .bind(resource_id)
+    .bind(storage_resource_type)
+    .bind(storage_resource_id)
+    .bind(role)
     .execute(pool)
     .await?;
     Ok(())

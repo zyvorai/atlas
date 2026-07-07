@@ -88,11 +88,15 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
         None
     };
 
+    // Start the async job engine (write path) over the same pool + k8s driver.
+    let jobs = atlas_jobs::JobEngine::start(pool.clone(), k8s.clone());
+
     let state = AppState {
         pool,
         config: Arc::new(config),
         drivers: Arc::new(registry),
         k8s,
+        jobs,
     };
 
     if opts.initial_discovery {
