@@ -49,6 +49,11 @@ enum Command {
         #[arg(long)]
         state: Option<String>,
     },
+    /// GET /api/atlas/v1/metrics/ceph (latest scraped Ceph metrics; --prefix to filter)
+    CephMetrics {
+        #[arg(long)]
+        prefix: Option<String>,
+    },
     /// GET /api/atlas/v1/policies
     Policies,
     /// GET /api/atlas/v1/jobs  (or a single job with an id)
@@ -146,6 +151,14 @@ async fn main() -> Result<()> {
             match state {
                 Some(st) => format!("/api/atlas/v1/alerts?state={st}"),
                 None => "/api/atlas/v1/alerts".to_string(),
+            },
+            None,
+        ),
+        Command::CephMetrics { prefix } => (
+            "GET",
+            match prefix {
+                Some(p) => format!("/api/atlas/v1/metrics/ceph?prefix={p}"),
+                None => "/api/atlas/v1/metrics/ceph".to_string(),
             },
             None,
         ),

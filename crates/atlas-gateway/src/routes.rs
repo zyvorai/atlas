@@ -51,6 +51,7 @@ pub fn router(state: AppState) -> Router {
         .route("/backups/{id}", get(get_backup))
         .route("/policies", get(list_policies))
         .route("/metrics/summary", get(metrics_summary))
+        .route("/metrics/ceph", get(metrics_ceph))
         .route("/alerts", get(list_alerts))
         .route("/alerts/evaluate", post(evaluate_alerts))
         .route("/jobs", get(list_jobs))
@@ -244,6 +245,21 @@ async fn get_volume(State(s): State<AppState>, Path(id): Path<String>) -> AppRes
 
 async fn metrics_summary(State(s): State<AppState>) -> AppResult<Json<Value>> {
     Ok(Json(atlas_inventory::metrics_summary(&s.pool).await?))
+}
+
+#[derive(Debug, Deserialize)]
+struct MetricQuery {
+    prefix: Option<String>,
+}
+
+/// `GET /metrics/ceph[?prefix=ceph_osd]` — latest Ceph metrics scraped from the mgr Prometheus module.
+async fn metrics_ceph(
+    State(s): State<AppState>,
+    Query(q): Query<MetricQuery>,
+) -> AppResult<Json<Value>> {
+    Ok(Json(json!(
+        atlas_inventory::metrics::list(&s.pool, q.prefix.as_deref()).await?
+    )))
 }
 
 #[derive(Debug, Deserialize)]

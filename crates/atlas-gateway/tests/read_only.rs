@@ -27,6 +27,7 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
         jwt_secret: "test-secret".into(),
         auth_required: false,
         monitor_interval_secs: 0,
+        ceph_prometheus_url: None,
     };
 
     let state = build_state(

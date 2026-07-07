@@ -21,6 +21,7 @@ pub mod audit;
 pub mod backups;
 pub mod buckets;
 pub mod jobs;
+pub mod metrics;
 pub mod snapshots;
 
 /// Open the SQLite pool with WAL + foreign keys, creating the file if missing.

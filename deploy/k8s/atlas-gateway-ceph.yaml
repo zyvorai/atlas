@@ -98,6 +98,8 @@ spec:
               value: "real"
             - name: ATLAS_AUTH_REQUIRED
               value: "0"
+            - name: ATLAS_CEPH_PROMETHEUS_URL
+              value: "http://rook-ceph-mgr.rook-ceph.svc:9283/metrics"
             - name: RUST_LOG
               value: "info,atlas_gateway=debug,atlas_driver_ceph=debug"
           ports:

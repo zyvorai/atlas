@@ -15,12 +15,20 @@ use atlas_driver_core::StorageDriver;
 use serde_json::json;
 use sqlx::SqlitePool;
 
+pub mod prometheus;
+
 /// Pool utilization thresholds (PDF §15.2).
 const POOL_WARN: f64 = 0.75;
 const POOL_CRITICAL: f64 = 0.85;
 
-/// Spawn the monitor loop. `interval_secs == 0` disables it.
-pub fn spawn(pool: SqlitePool, driver: Arc<dyn StorageDriver>, interval_secs: u64) {
+/// Spawn the monitor loop. `interval_secs == 0` disables it. `prometheus_url`, when set, is scraped
+/// each tick for Ceph capacity/latency metrics.
+pub fn spawn(
+    pool: SqlitePool,
+    driver: Arc<dyn StorageDriver>,
+    interval_secs: u64,
+    prometheus_url: Option<String>,
+) {
     if interval_secs == 0 {
         tracing::info!("monitor disabled (interval = 0)");
         return;
@@ -35,6 +43,12 @@ pub fn spawn(pool: SqlitePool, driver: Arc<dyn StorageDriver>, interval_secs: u6
             }
             if let Err(e) = evaluate(&pool).await {
                 tracing::warn!("monitor evaluate failed: {e:#}");
+            }
+            if let Some(url) = &prometheus_url {
+                match prometheus::scrape(&pool, url).await {
+                    Ok(n) => tracing::debug!("scraped {n} ceph metrics"),
+                    Err(e) => tracing::warn!("prometheus scrape failed: {e:#}"),
+                }
             }
         }
     });

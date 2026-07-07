@@ -35,6 +35,8 @@ pub struct Config {
     pub auth_required: bool,
     /// Monitor loop interval in seconds (0 disables the monitor/alerts worker).
     pub monitor_interval_secs: u64,
+    /// Ceph mgr Prometheus `/metrics` URL to scrape (None disables metric collection).
+    pub ceph_prometheus_url: Option<String>,
 }
 
 impl Config {
@@ -66,6 +68,9 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(60),
+            ceph_prometheus_url: std::env::var("ATLAS_CEPH_PROMETHEUS_URL")
+                .ok()
+                .filter(|s| !s.trim().is_empty()),
         }
     }
 
@@ -85,6 +90,7 @@ impl Default for Config {
             jwt_secret: DEV_JWT_DEFAULT.into(),
             auth_required: false,
             monitor_interval_secs: 0,
+            ceph_prometheus_url: None,
         }
     }
 }

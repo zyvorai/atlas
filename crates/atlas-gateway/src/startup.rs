@@ -115,6 +115,7 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
             state.pool.clone(),
             driver,
             state.config.monitor_interval_secs,
+            state.config.ceph_prometheus_url.clone(),
         );
     }
 
