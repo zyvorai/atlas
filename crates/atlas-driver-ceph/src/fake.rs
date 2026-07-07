@@ -1,0 +1,177 @@
+// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+//! Fake Ceph driver returning deterministic fixtures. Used for local dev, integration tests, and
+//! demos where no Ceph cluster is reachable (`ATLAS_CEPH_DRIVER_MODE=fake`).
+
+use async_trait::async_trait;
+use atlas_api_types::{
+    DiscoveryResult, Health, MetricSample, Osd, StorageCluster, StorageHealth, StoragePool,
+    StorageVolume, VolumeKind,
+};
+use atlas_driver_core::{DriverError, StorageDriver};
+
+pub struct FakeCephDriver {
+    backend_id: String,
+    cluster_id: String,
+}
+
+impl FakeCephDriver {
+    pub fn new(backend_id: impl Into<String>) -> Self {
+        let backend_id = backend_id.into();
+        Self {
+            cluster_id: "cls_fake0001".into(),
+            backend_id,
+        }
+    }
+
+    fn cluster(&self) -> StorageCluster {
+        StorageCluster {
+            id: self.cluster_id.clone(),
+            backend_id: self.backend_id.clone(),
+            name: "zyvor-ceph-lab".into(),
+            native_fsid: Some("f5100000-0000-4000-8000-000000000001".into()),
+            health: Health::Ok,
+            raw_capacity_bytes: Some(220_000_000_000_000),
+            used_capacity_bytes: Some(97_000_000_000_000),
+            available_capacity_bytes: Some(123_000_000_000_000),
+        }
+    }
+
+    fn pools(&self) -> Vec<StoragePool> {
+        vec![
+            StoragePool {
+                id: "pool_rbd_nvme_prod".into(),
+                cluster_id: self.cluster_id.clone(),
+                name: "rbd-nvme-prod".into(),
+                kind: "rbd".into(),
+                device_class: Some("nvme".into()),
+                replica_size: Some(3),
+                used_bytes: Some(40_000_000_000_000),
+                max_bytes: Some(80_000_000_000_000),
+                health: Health::Ok,
+            },
+            StoragePool {
+                id: "pool_cephfs_data0".into(),
+                cluster_id: self.cluster_id.clone(),
+                name: "cephfs-data0".into(),
+                kind: "cephfs_data".into(),
+                device_class: Some("ssd".into()),
+                replica_size: Some(3),
+                used_bytes: Some(12_000_000_000_000),
+                max_bytes: Some(60_000_000_000_000),
+                health: Health::Ok,
+            },
+            StoragePool {
+                id: "pool_rgw_root".into(),
+                cluster_id: self.cluster_id.clone(),
+                name: ".rgw.root".into(),
+                kind: "rgw".into(),
+                device_class: Some("hdd".into()),
+                replica_size: Some(3),
+                used_bytes: Some(1_000_000_000),
+                max_bytes: Some(40_000_000_000_000),
+                health: Health::Ok,
+            },
+        ]
+    }
+
+    fn osds(&self) -> Vec<Osd> {
+        (0..6)
+            .map(|id| Osd {
+                id,
+                cluster_id: self.cluster_id.clone(),
+                up: true,
+                in_cluster: true,
+                device_class: Some(if id < 3 { "nvme" } else { "ssd" }.into()),
+                host: Some(format!("node0{}", (id / 2) + 1)),
+                used_bytes: Some(16_000_000_000_000),
+                capacity_bytes: Some(36_000_000_000_000),
+            })
+            .collect()
+    }
+}
+
+#[async_trait]
+impl StorageDriver for FakeCephDriver {
+    fn backend_id(&self) -> &str {
+        &self.backend_id
+    }
+
+    async fn discover(&self) -> Result<DiscoveryResult, DriverError> {
+        Ok(DiscoveryResult {
+            cluster: self.cluster(),
+            pools: self.pools(),
+            osds: self.osds(),
+            volumes: self.list_volumes("rbd-nvme-prod").await?,
+            health: self.health().await?,
+        })
+    }
+
+    async fn health(&self) -> Result<StorageHealth, DriverError> {
+        Ok(StorageHealth {
+            status: Health::Ok,
+            summary: "HEALTH_OK".into(),
+            raw_capacity_bytes: Some(220_000_000_000_000),
+            used_capacity_bytes: Some(97_000_000_000_000),
+            available_capacity_bytes: Some(123_000_000_000_000),
+            recovering: false,
+            degraded_objects: 0,
+        })
+    }
+
+    async fn list_pools(&self) -> Result<Vec<StoragePool>, DriverError> {
+        Ok(self.pools())
+    }
+
+    async fn list_volumes(&self, pool: &str) -> Result<Vec<StorageVolume>, DriverError> {
+        // Only the block pool has RBD images in the fixture.
+        if pool != "rbd-nvme-prod" {
+            return Ok(vec![]);
+        }
+        Ok(vec![
+            StorageVolume {
+                id: "vol_rbd_nvme_prod_billing-db-01-root".into(),
+                cluster_id: Some(self.cluster_id.clone()),
+                pool_id: Some("pool_rbd_nvme_prod".into()),
+                name: "billing-db-01-root".into(),
+                kind: VolumeKind::Block,
+                backend_native_id: Some("rbd-nvme-prod/billing-db-01-root".into()),
+                size_bytes: 536_870_912_000,
+                used_bytes: Some(211_312_390_144),
+                state: "available".into(),
+                health: Health::Ok,
+                kubernetes_namespace: Some("tenant-acme".into()),
+                pvc_name: Some("pvc-billing-db-01-root".into()),
+                storage_class_name: Some("zyvor-rbd-prod".into()),
+            },
+            StorageVolume {
+                id: "vol_rbd_nvme_prod_web-01-root".into(),
+                cluster_id: Some(self.cluster_id.clone()),
+                pool_id: Some("pool_rbd_nvme_prod".into()),
+                name: "web-01-root".into(),
+                kind: VolumeKind::Block,
+                backend_native_id: Some("rbd-nvme-prod/web-01-root".into()),
+                size_bytes: 42_949_672_960,
+                used_bytes: Some(9_000_000_000),
+                state: "available".into(),
+                health: Health::Ok,
+                kubernetes_namespace: Some("tenant-acme".into()),
+                pvc_name: Some("pvc-web-01-root".into()),
+                storage_class_name: Some("zyvor-rbd-prod".into()),
+            },
+        ])
+    }
+
+    async fn metrics(&self) -> Result<Vec<MetricSample>, DriverError> {
+        let m = |name: &str, value: f64| MetricSample {
+            name: name.into(),
+            value,
+            labels: Default::default(),
+        };
+        Ok(vec![
+            m("ceph_cluster_total_bytes", 220_000_000_000_000.0),
+            m("ceph_cluster_used_bytes", 97_000_000_000_000.0),
+            m("ceph_cluster_avail_bytes", 123_000_000_000_000.0),
+            m("ceph_degraded_objects", 0.0),
+        ])
+    }
+}

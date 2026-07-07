@@ -1,0 +1,434 @@
+// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+//! SQLite-backed normalized inventory: connect/migrate, upsert-from-discovery, and read queries
+//! that power the gateway's read-only endpoints.
+//!
+//! Connect/migrate mirrors `machina/controller/src/db/mod.rs` (WAL, `create_if_missing`,
+//! `sqlx::migrate!`). Read queries return `atlas-api-types` DTOs.
+
+use std::str::FromStr;
+use std::time::Duration;
+
+use anyhow::Result;
+use atlas_api_types::{
+    BackendMode, BackendType, Capabilities, DiscoveryResult, Health, Osd, StorageBackend,
+    StorageCluster, StorageHealth, StoragePool, StorageVolume, VolumeKind,
+};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
+use sqlx::{Row, SqlitePool};
+
+pub mod audit;
+
+/// Open the SQLite pool with WAL + foreign keys, creating the file if missing.
+pub async fn connect(database_url: &str) -> Result<SqlitePool> {
+    let options = SqliteConnectOptions::from_str(database_url)?
+        .create_if_missing(true)
+        .journal_mode(SqliteJournalMode::Wal)
+        .pragma("foreign_keys", "ON")
+        .busy_timeout(Duration::from_secs(5));
+    let pool = SqlitePoolOptions::new()
+        .max_connections(4)
+        .connect_with(options)
+        .await?;
+    Ok(pool)
+}
+
+/// Run the embedded migrations (from the workspace-root `migrations/` dir).
+pub async fn migrate(pool: &SqlitePool) -> Result<()> {
+    sqlx::migrate!("../../migrations").run(pool).await?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Enum <-> TEXT helpers
+// ---------------------------------------------------------------------------
+
+fn health_str(h: Health) -> &'static str {
+    match h {
+        Health::Ok => "ok",
+        Health::Warn => "warn",
+        Health::Critical => "critical",
+        Health::Unknown => "unknown",
+    }
+}
+fn health_from(s: &str) -> Health {
+    match s {
+        "ok" => Health::Ok,
+        "warn" => Health::Warn,
+        "critical" => Health::Critical,
+        _ => Health::Unknown,
+    }
+}
+fn backend_type_str(t: BackendType) -> &'static str {
+    match t {
+        BackendType::Ceph => "ceph",
+        BackendType::Nfs => "nfs",
+        BackendType::Zfs => "zfs",
+        BackendType::San => "san",
+        BackendType::CloudBlock => "cloud_block",
+        BackendType::Kubernetes => "kubernetes",
+    }
+}
+fn backend_type_from(s: &str) -> BackendType {
+    match s {
+        "nfs" => BackendType::Nfs,
+        "zfs" => BackendType::Zfs,
+        "san" => BackendType::San,
+        "cloud_block" => BackendType::CloudBlock,
+        "kubernetes" => BackendType::Kubernetes,
+        _ => BackendType::Ceph,
+    }
+}
+fn mode_str(m: BackendMode) -> &'static str {
+    match m {
+        BackendMode::ManagedRook => "managed_rook",
+        BackendMode::External => "external",
+        BackendMode::ReadOnly => "read_only",
+    }
+}
+fn mode_from(s: &str) -> BackendMode {
+    match s {
+        "managed_rook" => BackendMode::ManagedRook,
+        "read_only" => BackendMode::ReadOnly,
+        _ => BackendMode::External,
+    }
+}
+fn volume_kind_str(k: VolumeKind) -> &'static str {
+    match k {
+        VolumeKind::Block => "block",
+        VolumeKind::Filesystem => "filesystem",
+        VolumeKind::Object => "object",
+    }
+}
+fn volume_kind_from(s: &str) -> VolumeKind {
+    match s {
+        "filesystem" => VolumeKind::Filesystem,
+        "object" => VolumeKind::Object,
+        _ => VolumeKind::Block,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Writes
+// ---------------------------------------------------------------------------
+
+/// Insert or update a backend registration row.
+pub async fn upsert_backend(pool: &SqlitePool, b: &StorageBackend) -> Result<()> {
+    let caps = serde_json::to_string(&b.capabilities)?;
+    sqlx::query(
+        "INSERT INTO storage_backends (id, name, backend_type, mode, status, capabilities, connection_ref, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+         ON CONFLICT(id) DO UPDATE SET
+            name=excluded.name, backend_type=excluded.backend_type, mode=excluded.mode,
+            status=excluded.status, capabilities=excluded.capabilities,
+            connection_ref=excluded.connection_ref, updated_at=excluded.updated_at",
+    )
+    .bind(&b.id)
+    .bind(&b.name)
+    .bind(backend_type_str(b.backend_type))
+    .bind(mode_str(b.mode))
+    .bind(&b.status)
+    .bind(caps)
+    .bind(&b.connection_ref)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Persist a full discovery pass for `backend_id`, upserting cluster, pools, osds and volumes.
+pub async fn upsert_discovery(
+    pool: &SqlitePool,
+    backend_id: &str,
+    d: &DiscoveryResult,
+) -> Result<()> {
+    let mut tx = pool.begin().await?;
+
+    // cluster
+    sqlx::query(
+        "INSERT INTO storage_clusters
+            (id, backend_id, native_fsid, name, health, raw_capacity_bytes, used_capacity_bytes, available_capacity_bytes, discovered_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+         ON CONFLICT(id) DO UPDATE SET
+            native_fsid=excluded.native_fsid, name=excluded.name, health=excluded.health,
+            raw_capacity_bytes=excluded.raw_capacity_bytes, used_capacity_bytes=excluded.used_capacity_bytes,
+            available_capacity_bytes=excluded.available_capacity_bytes, discovered_at=excluded.discovered_at",
+    )
+    .bind(&d.cluster.id)
+    .bind(backend_id)
+    .bind(&d.cluster.native_fsid)
+    .bind(&d.cluster.name)
+    .bind(health_str(d.cluster.health))
+    .bind(d.cluster.raw_capacity_bytes)
+    .bind(d.cluster.used_capacity_bytes)
+    .bind(d.cluster.available_capacity_bytes)
+    .execute(&mut *tx)
+    .await?;
+
+    for p in &d.pools {
+        sqlx::query(
+            "INSERT INTO storage_pools (id, cluster_id, name, kind, device_class, replica_size, used_bytes, max_bytes, health)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(cluster_id, name) DO UPDATE SET
+                kind=excluded.kind, device_class=excluded.device_class, replica_size=excluded.replica_size,
+                used_bytes=excluded.used_bytes, max_bytes=excluded.max_bytes, health=excluded.health",
+        )
+        .bind(&p.id)
+        .bind(&p.cluster_id)
+        .bind(&p.name)
+        .bind(&p.kind)
+        .bind(&p.device_class)
+        .bind(p.replica_size)
+        .bind(p.used_bytes)
+        .bind(p.max_bytes)
+        .bind(health_str(p.health))
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    for o in &d.osds {
+        sqlx::query(
+            "INSERT INTO storage_osds (id, cluster_id, osd_num, up, in_cluster, device_class, host, used_bytes, capacity_bytes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(cluster_id, osd_num) DO UPDATE SET
+                up=excluded.up, in_cluster=excluded.in_cluster, device_class=excluded.device_class,
+                host=excluded.host, used_bytes=excluded.used_bytes, capacity_bytes=excluded.capacity_bytes",
+        )
+        .bind(format!("osd_{}_{}", o.cluster_id, o.id))
+        .bind(&o.cluster_id)
+        .bind(o.id)
+        .bind(o.up as i64)
+        .bind(o.in_cluster as i64)
+        .bind(&o.device_class)
+        .bind(&o.host)
+        .bind(o.used_bytes)
+        .bind(o.capacity_bytes)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    for v in &d.volumes {
+        sqlx::query(
+            "INSERT INTO storage_volumes
+                (id, backend_id, cluster_id, pool_id, name, kind, backend_native_id, size_bytes, used_bytes,
+                 state, health, kubernetes_namespace, pvc_name, storage_class_name, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+             ON CONFLICT(id) DO UPDATE SET
+                cluster_id=excluded.cluster_id, pool_id=excluded.pool_id, name=excluded.name, kind=excluded.kind,
+                backend_native_id=excluded.backend_native_id, size_bytes=excluded.size_bytes, used_bytes=excluded.used_bytes,
+                state=excluded.state, health=excluded.health, kubernetes_namespace=excluded.kubernetes_namespace,
+                pvc_name=excluded.pvc_name, storage_class_name=excluded.storage_class_name, updated_at=excluded.updated_at",
+        )
+        .bind(&v.id)
+        .bind(backend_id)
+        .bind(&v.cluster_id)
+        .bind(&v.pool_id)
+        .bind(&v.name)
+        .bind(volume_kind_str(v.kind))
+        .bind(&v.backend_native_id)
+        .bind(v.size_bytes)
+        .bind(v.used_bytes)
+        .bind(&v.state)
+        .bind(health_str(v.health))
+        .bind(&v.kubernetes_namespace)
+        .bind(&v.pvc_name)
+        .bind(&v.storage_class_name)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Reads
+// ---------------------------------------------------------------------------
+
+pub async fn list_backends(pool: &SqlitePool) -> Result<Vec<StorageBackend>> {
+    let rows = sqlx::query(
+        "SELECT id, name, backend_type, mode, status, capabilities, connection_ref FROM storage_backends ORDER BY name",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let caps: Capabilities =
+                serde_json::from_str(r.get::<String, _>("capabilities").as_str())
+                    .unwrap_or_default();
+            StorageBackend {
+                id: r.get("id"),
+                name: r.get("name"),
+                backend_type: backend_type_from(r.get::<String, _>("backend_type").as_str()),
+                mode: mode_from(r.get::<String, _>("mode").as_str()),
+                status: r.get("status"),
+                capabilities: caps,
+                connection_ref: r.get("connection_ref"),
+            }
+        })
+        .collect())
+}
+
+pub async fn list_clusters(pool: &SqlitePool) -> Result<Vec<StorageCluster>> {
+    let rows = sqlx::query(
+        "SELECT id, backend_id, native_fsid, name, health, raw_capacity_bytes, used_capacity_bytes, available_capacity_bytes
+         FROM storage_clusters ORDER BY name",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(row_to_cluster).collect())
+}
+
+pub async fn get_cluster(pool: &SqlitePool, id: &str) -> Result<Option<StorageCluster>> {
+    let row = sqlx::query(
+        "SELECT id, backend_id, native_fsid, name, health, raw_capacity_bytes, used_capacity_bytes, available_capacity_bytes
+         FROM storage_clusters WHERE id = ?",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(row_to_cluster))
+}
+
+/// Derive a health snapshot for a cluster from its stored row.
+pub async fn cluster_health(pool: &SqlitePool, id: &str) -> Result<Option<StorageHealth>> {
+    Ok(get_cluster(pool, id).await?.map(|c| StorageHealth {
+        status: c.health,
+        summary: health_str(c.health).to_uppercase(),
+        raw_capacity_bytes: c.raw_capacity_bytes,
+        used_capacity_bytes: c.used_capacity_bytes,
+        available_capacity_bytes: c.available_capacity_bytes,
+        recovering: false,
+        degraded_objects: 0,
+    }))
+}
+
+fn row_to_cluster(r: sqlx::sqlite::SqliteRow) -> StorageCluster {
+    StorageCluster {
+        id: r.get("id"),
+        backend_id: r.get("backend_id"),
+        native_fsid: r.get("native_fsid"),
+        name: r.get("name"),
+        health: health_from(r.get::<String, _>("health").as_str()),
+        raw_capacity_bytes: r.get("raw_capacity_bytes"),
+        used_capacity_bytes: r.get("used_capacity_bytes"),
+        available_capacity_bytes: r.get("available_capacity_bytes"),
+    }
+}
+
+pub async fn list_pools(pool: &SqlitePool) -> Result<Vec<StoragePool>> {
+    let rows = sqlx::query(
+        "SELECT id, cluster_id, name, kind, device_class, replica_size, used_bytes, max_bytes, health
+         FROM storage_pools ORDER BY name",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| StoragePool {
+            id: r.get("id"),
+            cluster_id: r.get("cluster_id"),
+            name: r.get("name"),
+            kind: r.get("kind"),
+            device_class: r.get("device_class"),
+            replica_size: r.get("replica_size"),
+            used_bytes: r.get("used_bytes"),
+            max_bytes: r.get("max_bytes"),
+            health: health_from(
+                r.get::<Option<String>, _>("health")
+                    .unwrap_or_default()
+                    .as_str(),
+            ),
+        })
+        .collect())
+}
+
+pub async fn list_osds(pool: &SqlitePool) -> Result<Vec<Osd>> {
+    let rows = sqlx::query(
+        "SELECT cluster_id, osd_num, up, in_cluster, device_class, host, used_bytes, capacity_bytes
+         FROM storage_osds ORDER BY cluster_id, osd_num",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| Osd {
+            id: r.get("osd_num"),
+            cluster_id: r.get("cluster_id"),
+            up: r.get::<i64, _>("up") != 0,
+            in_cluster: r.get::<i64, _>("in_cluster") != 0,
+            device_class: r.get("device_class"),
+            host: r.get("host"),
+            used_bytes: r.get("used_bytes"),
+            capacity_bytes: r.get("capacity_bytes"),
+        })
+        .collect())
+}
+
+pub async fn list_volumes(pool: &SqlitePool) -> Result<Vec<StorageVolume>> {
+    let rows = sqlx::query(&volume_select("ORDER BY name"))
+        .fetch_all(pool)
+        .await?;
+    Ok(rows.into_iter().map(row_to_volume).collect())
+}
+
+pub async fn get_volume(pool: &SqlitePool, id: &str) -> Result<Option<StorageVolume>> {
+    let row = sqlx::query(&volume_select("WHERE id = ?"))
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.map(row_to_volume))
+}
+
+fn volume_select(tail: &str) -> String {
+    format!(
+        "SELECT id, cluster_id, pool_id, name, kind, backend_native_id, size_bytes, used_bytes, state, health,
+                kubernetes_namespace, pvc_name, storage_class_name
+         FROM storage_volumes {tail}"
+    )
+}
+
+fn row_to_volume(r: sqlx::sqlite::SqliteRow) -> StorageVolume {
+    StorageVolume {
+        id: r.get("id"),
+        cluster_id: r.get("cluster_id"),
+        pool_id: r.get("pool_id"),
+        name: r.get("name"),
+        kind: volume_kind_from(r.get::<String, _>("kind").as_str()),
+        backend_native_id: r.get("backend_native_id"),
+        size_bytes: r.get("size_bytes"),
+        used_bytes: r.get("used_bytes"),
+        state: r.get("state"),
+        health: health_from(r.get::<String, _>("health").as_str()),
+        kubernetes_namespace: r.get("kubernetes_namespace"),
+        pvc_name: r.get("pvc_name"),
+        storage_class_name: r.get("storage_class_name"),
+    }
+}
+
+/// Aggregate capacity summary across all clusters (PDF §13.2 overview cards).
+pub async fn metrics_summary(pool: &SqlitePool) -> Result<serde_json::Value> {
+    let row = sqlx::query(
+        "SELECT
+            COALESCE(SUM(raw_capacity_bytes),0)       AS raw,
+            COALESCE(SUM(used_capacity_bytes),0)      AS used,
+            COALESCE(SUM(available_capacity_bytes),0) AS avail,
+            COUNT(*)                                  AS clusters
+         FROM storage_clusters",
+    )
+    .fetch_one(pool)
+    .await?;
+    let volumes: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM storage_volumes")
+        .fetch_one(pool)
+        .await?;
+    let pools_n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM storage_pools")
+        .fetch_one(pool)
+        .await?;
+    Ok(serde_json::json!({
+        "raw_capacity_bytes": row.get::<i64, _>("raw"),
+        "used_capacity_bytes": row.get::<i64, _>("used"),
+        "available_capacity_bytes": row.get::<i64, _>("avail"),
+        "clusters": row.get::<i64, _>("clusters"),
+        "pools": pools_n,
+        "volumes": volumes,
+    }))
+}

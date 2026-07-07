@@ -1,0 +1,14 @@
+# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rook-ceph
+  labels:
+    zyvor.dev/component: storage
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zyvor-system
+  labels:
+    zyvor.dev/component: control-plane

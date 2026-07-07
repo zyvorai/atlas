@@ -1,0 +1,10 @@
+/target
+**/*.rs.bk
+.env
+atlas.db
+atlas.db-wal
+atlas.db-shm
+*.db
+*.db-wal
+*.db-shm
+.DS_Store

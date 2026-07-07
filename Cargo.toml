@@ -1,0 +1,72 @@
+# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+[workspace]
+members = [
+    "crates/atlas-common",
+    "crates/atlas-api-types",
+    "crates/atlas-driver-core",
+    "crates/atlas-driver-ceph",
+    "crates/atlas-driver-k8s",
+    "crates/atlas-inventory",
+    "crates/atlas-discovery",
+    "crates/atlas-gateway",
+    "crates/atlas-cli",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "LicenseRef-Zyvor-Proprietary"
+authors = ["ZyvorAI Labs Private Limited"]
+
+[workspace.dependencies]
+# Internal crates
+atlas-common = { path = "crates/atlas-common" }
+atlas-api-types = { path = "crates/atlas-api-types" }
+atlas-driver-core = { path = "crates/atlas-driver-core" }
+atlas-driver-ceph = { path = "crates/atlas-driver-ceph" }
+atlas-driver-k8s = { path = "crates/atlas-driver-k8s" }
+atlas-inventory = { path = "crates/atlas-inventory" }
+atlas-discovery = { path = "crates/atlas-discovery" }
+
+# Async / runtime
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+futures-util = "0.3"
+
+# Web
+axum = { version = "0.8", features = ["ws"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+http = "1"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+
+# Storage
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "chrono", "json", "migrate"] }
+
+# Kubernetes
+kube = { version = "0.95", features = ["runtime", "derive"] }
+k8s-openapi = { version = "0.23", features = ["v1_30"] }
+
+# Errors / logging
+anyhow = "1"
+thiserror = "2.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Auth / util
+jsonwebtoken = "9"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive", "env"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+reqwest = { version = "0.12", features = ["json"] }
+dotenvy = "0.15"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

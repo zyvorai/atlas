@@ -1,0 +1,35 @@
+# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Minimal lab CephCluster (PDF §6.1 "minimum lab profile": 3 nodes, 1 OSD/node, host failure domain).
+# For production use dedicated disks, >=5 nodes, and an odd monitor count.
+apiVersion: ceph.rook.io/v1
+kind: CephCluster
+metadata:
+  name: rook-ceph
+  namespace: rook-ceph
+spec:
+  cephVersion:
+    image: quay.io/ceph/ceph:v18.2.4
+    allowUnsupported: false
+  dataDirHostPath: /var/lib/rook
+  mon:
+    count: 3
+    allowMultiplePerNode: true   # lab convenience; disable in production
+  mgr:
+    count: 1
+    modules:
+      - name: prometheus
+        enabled: true
+  dashboard:
+    enabled: true
+    ssl: false
+  monitoring:
+    enabled: false               # enable once Prometheus Operator is present
+  network:
+    connections:
+      encryption:
+        enabled: false
+  storage:
+    useAllNodes: true
+    useAllDevices: true          # lab: consume all empty devices. Pin devices/nodes in production.
+  disruptionManagement:
+    managePodBudgets: true

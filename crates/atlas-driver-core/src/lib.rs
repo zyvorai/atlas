@@ -1,0 +1,76 @@
+// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+//! The pluggable storage-driver contract (PDF §17.2) plus the driver error type and a registry.
+//!
+//! A `StorageDriver` abstracts one storage backend (Ceph today; NFS/ZFS/SAN/cloud later). The
+//! gateway and discovery worker depend only on this trait, never on backend internals.
+
+use async_trait::async_trait;
+use atlas_api_types::{
+    CloneSnapshotRequest, CreateSnapshotRequest, CreateSnapshotResult, CreateVolumeRequest,
+    CreateVolumeResult, DeleteSnapshotRequest, DeleteVolumeRequest, DiscoveryResult,
+    ExpandVolumeRequest, MetricSample, StorageHealth, StoragePool, StorageVolume,
+};
+
+pub mod registry;
+pub use registry::DriverRegistry;
+
+#[derive(Debug, thiserror::Error)]
+pub enum DriverError {
+    /// The backend was reachable but returned an error (non-zero exit, API error).
+    #[error("backend error: {0}")]
+    Backend(String),
+    /// The backend could not be reached (network, auth, missing binary).
+    #[error("backend unreachable: {0}")]
+    Unreachable(String),
+    /// Failed to parse the backend's response.
+    #[error("parse error: {0}")]
+    Parse(String),
+    /// This operation is not implemented in the current MVP slice.
+    #[error("not implemented: {0}")]
+    NotImplemented(&'static str),
+}
+
+/// A backend storage driver. Read-only methods are live in MVP slice 1; write-path methods
+/// return `NotImplemented` until slice 2.
+#[async_trait]
+pub trait StorageDriver: Send + Sync {
+    /// Stable identifier for the backend this driver instance manages.
+    fn backend_id(&self) -> &str;
+
+    /// Full discovery pass: cluster + pools + osds + volumes + health.
+    async fn discover(&self) -> Result<DiscoveryResult, DriverError>;
+
+    async fn health(&self) -> Result<StorageHealth, DriverError>;
+    async fn list_pools(&self) -> Result<Vec<StoragePool>, DriverError>;
+    async fn list_volumes(&self, pool: &str) -> Result<Vec<StorageVolume>, DriverError>;
+    async fn metrics(&self) -> Result<Vec<MetricSample>, DriverError>;
+
+    // ---- write path (MVP slice 2) ----
+    async fn create_volume(
+        &self,
+        _req: CreateVolumeRequest,
+    ) -> Result<CreateVolumeResult, DriverError> {
+        Err(DriverError::NotImplemented("create_volume"))
+    }
+    async fn expand_volume(&self, _req: ExpandVolumeRequest) -> Result<(), DriverError> {
+        Err(DriverError::NotImplemented("expand_volume"))
+    }
+    async fn delete_volume(&self, _req: DeleteVolumeRequest) -> Result<(), DriverError> {
+        Err(DriverError::NotImplemented("delete_volume"))
+    }
+    async fn create_snapshot(
+        &self,
+        _req: CreateSnapshotRequest,
+    ) -> Result<CreateSnapshotResult, DriverError> {
+        Err(DriverError::NotImplemented("create_snapshot"))
+    }
+    async fn clone_snapshot(
+        &self,
+        _req: CloneSnapshotRequest,
+    ) -> Result<CreateVolumeResult, DriverError> {
+        Err(DriverError::NotImplemented("clone_snapshot"))
+    }
+    async fn delete_snapshot(&self, _req: DeleteSnapshotRequest) -> Result<(), DriverError> {
+        Err(DriverError::NotImplemented("delete_snapshot"))
+    }
+}

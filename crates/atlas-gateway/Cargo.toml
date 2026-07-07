@@ -1,0 +1,43 @@
+# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+[package]
+name = "atlas-gateway"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "atlas-gateway"
+path = "src/main.rs"
+
+[dependencies]
+atlas-common = { workspace = true }
+atlas-api-types = { workspace = true }
+atlas-driver-core = { workspace = true }
+atlas-driver-ceph = { workspace = true }
+atlas-driver-k8s = { workspace = true }
+atlas-inventory = { workspace = true }
+atlas-discovery = { workspace = true }
+
+axum = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+http = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+sqlx = { workspace = true }
+jsonwebtoken = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+reqwest = { workspace = true }
+atlas-common = { workspace = true }
+atlas-inventory = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
