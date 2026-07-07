@@ -147,8 +147,21 @@ Create a VolumeSnapshot from the volume's PVC (async job).
 { "name": "optional-name", "snapshot_class": "zyvor-rbd-snapclass" }
 ```
 
-### `DELETE /api/atlas/v1/snapshots/{id}`
-Delete the VolumeSnapshot + snapshot row (async job).
+### `POST /api/atlas/v1/snapshots/{id}/clone`
+Provision a new **independent** volume (PVC) populated from the snapshot (`dataSource`). `name` is
+required; `namespace`/`storage_class`/`size_bytes` default from the source volume.
+```json
+{ "name": "clone-of-demo", "namespace": "default" }
+// 202 → resource: { volume_id, from_snapshot, mode: "clone", pvc, storage_class }
+```
+
+### `POST /api/atlas/v1/snapshots/{id}/restore`
+Provision a point-in-time copy of the source volume from the snapshot. Same body as clone; `name`
+defaults to `restore-<snap-suffix>`. `resource.mode` is `"restore"`.
+
+### `DELETE /api/atlas/v1/snapshots/{id}[?force=true]`
+Delete the VolumeSnapshot + snapshot row (async job). **Blocked with `409 CONFLICT`** if any volume
+was cloned/restored from it (PDF §8.3); pass `?force=true` to override.
 
 ## Jobs, snapshots, policies
 
@@ -215,7 +228,10 @@ atlasctl metrics                    # GET /metrics/summary
 atlasctl policies                   # GET /policies
 atlasctl create-volume NAME --size-gib 5 --policy database --namespace default
 atlasctl snapshot-volume VOLUME_ID [--name NAME]
+atlasctl clone-snapshot SNAPSHOT_ID --name NAME [--namespace NS]
+atlasctl restore-snapshot SNAPSHOT_ID [--name NAME]
 atlasctl delete-volume VOLUME_ID
+atlasctl delete-snapshot SNAPSHOT_ID [--force]
 atlasctl jobs [ID]                  # GET /jobs (or a single job)
 atlasctl snapshots                  # GET /snapshots
 # global flags: --base-url (ATLAS_BASE_URL), --token (ATLAS_TOKEN)

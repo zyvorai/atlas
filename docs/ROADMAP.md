@@ -34,11 +34,17 @@ Read-only control plane + real Ceph lab.
 - **Verified end-to-end** on real k3s + Ceph: `POST /volumes` → PVC Bound on `zyvor-rbd-prod` →
   snapshot → VolumeSnapshot `readyToUse=true`, all driven through the job engine.
 
-### Slice 2 follow-ups (not yet done)
-- Snapshot **clone/restore** (`POST /snapshots/{id}/clone|restore`) + parent/clone dependency guards.
-- **Safe-by-default** deletes: production volumes require approval/confirmation (PDF §14, Rule 2).
-- WebSocket/SSE job progress for the UI.
-- Direct RBD create path (bypassing CSI) for non-Kubernetes consumers.
+### Slice 2 follow-ups
+- ✅ **Snapshot clone/restore** (`POST /snapshots/{id}/clone|restore`) — provision a new PVC from a
+  VolumeSnapshot (`dataSource`), with parent/child dependency tracking
+  (`storage_volumes.source_snapshot_id`) and a safe-delete guard (409 unless `?force=true`).
+  Verified on real Ceph.
+- ⏭ **Safe-by-default** deletes for production *volumes*: approval/confirmation (PDF §14, Rule 2).
+  (Snapshot delete already guards on dependents; volume delete does not yet require approval.)
+- ⏭ WebSocket/SSE job progress for the UI.
+- ⏭ Direct RBD create path (bypassing CSI) for non-Kubernetes consumers.
+- ⏭ Persistent gateway DB (currently an `emptyDir` in the k8s deployment — inventory resets on pod
+  restart; move to a PVC or Postgres for durability).
 
 ## ⏭ Slice 3+ — Enterprise & product integration
 
