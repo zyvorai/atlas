@@ -10,8 +10,8 @@ mod fake;
 mod real;
 
 pub use cmd::{
-    ceph_cmd, radosgw_bucket_quota, rbd_cmd, rbd_export_diff, rbd_import_diff, rbd_snap_create,
-    rbd_snap_rm,
+    ceph_cmd, radosgw_bucket_quota, rbd_cmd, rbd_export_diff, rbd_export_diff_child,
+    rbd_import_diff, rbd_import_diff_child, rbd_snap_create, rbd_snap_rm,
 };
 pub use fake::FakeCephDriver;
 pub use real::RealCephDriver;

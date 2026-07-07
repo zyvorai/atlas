@@ -585,25 +585,45 @@ async fn dispatch(
                     .await?
                     .ok_or_else(|| anyhow!("could not resolve RBD image for restored PVC"))?;
 
-                let data = read_backup_manifest(
+                // Stream the S3 data object straight into `rbd import-diff` — no in-memory buffer.
+                let s3 = build_s3_target(
                     &k8s,
                     &bucket_namespace,
                     &bucket_secret_ref,
                     &bucket_endpoint,
                     &bucket_region,
                     &bucket_name,
-                    &data_object,
                 )
-                .await
-                .context("download backup data object")?;
-                let data_verified = sha256_hex(&data) == data_checksum;
+                .await?;
+                let mut child = atlas_driver_ceph::rbd_import_diff_child(&pool_name, &image)
+                    .map_err(|e| anyhow!("{e}"))?;
+                let stdin = child
+                    .stdin
+                    .take()
+                    .ok_or_else(|| anyhow!("rbd import-diff: no stdin"))?;
+                let dl = s3.get_object_streaming(&data_object, stdin).await;
+                let (imported_bytes, streamed_checksum) = match dl {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let _ = child.kill().await;
+                        return Err(e.context(format!("stream backup data {data_object}")));
+                    }
+                };
+                // `stdin` was moved into get_object_streaming and dropped there, closing the pipe.
+                let status = child.wait().await.context("wait for rbd import-diff")?;
+                if !status.success() {
+                    let mut err = String::new();
+                    if let Some(mut se) = child.stderr.take() {
+                        use tokio::io::AsyncReadExt;
+                        let _ = se.read_to_string(&mut err).await;
+                    }
+                    anyhow::bail!("rbd import-diff into {pool_name}/{image}: {}", err.trim());
+                }
+                let data_verified = streamed_checksum == data_checksum;
                 if !data_verified {
                     tracing::warn!("backup {backup_id} data checksum mismatch");
                 }
-                let imported_bytes = data.len();
-                atlas_driver_ceph::rbd_import_diff(&pool_name, &image, data)
-                    .await
-                    .with_context(|| format!("rbd import-diff into {pool_name}/{image}"))?;
+                let imported_bytes = imported_bytes as usize;
 
                 let vol = StorageVolume {
                     id: new_volume_id.clone(),
@@ -853,7 +873,8 @@ async fn dispatch(
             let mut data_summary = serde_json::Value::Null;
             let mut record_checksum: Option<String> = None;
             if mode == "data" {
-                const CAP: usize = 512 * 1024 * 1024; // MVP: buffer up to 512 MiB in memory
+                // Stream `rbd export-diff` straight into an S3 multipart upload — no in-memory cap.
+                const PART_SIZE: usize = 16 * 1024 * 1024;
                 let (pool_name, image) = k8s
                     .resolve_rbd(&volume_namespace, &pvc_name)
                     .await?
@@ -864,18 +885,36 @@ async fn dispatch(
                 atlas_driver_ceph::rbd_snap_create(&pool_name, &image, &rbd_snap)
                     .await
                     .with_context(|| format!("rbd snap {pool_name}/{image}@{rbd_snap}"))?;
-                let data = atlas_driver_ceph::rbd_export_diff(&pool_name, &image, &rbd_snap)
-                    .await
-                    .context("rbd export-diff")?;
-                if data.len() > CAP {
-                    anyhow::bail!("rbd diff {} bytes exceeds {CAP}-byte cap", data.len());
-                }
                 let data_key = format!("{object_key}.rbd-diff");
-                let data_checksum = sha256_hex(&data);
-                let data_bytes = data.len();
-                s3.put_object(&data_key, data)
-                    .await
-                    .with_context(|| format!("PUT backup data {data_key}"))?;
+                let mut child =
+                    atlas_driver_ceph::rbd_export_diff_child(&pool_name, &image, &rbd_snap)
+                        .map_err(|e| anyhow!("{e}"))?;
+                let stdout = child
+                    .stdout
+                    .take()
+                    .ok_or_else(|| anyhow!("rbd export-diff: no stdout"))?;
+                let upload = s3
+                    .put_multipart_streaming(&data_key, PART_SIZE, stdout)
+                    .await;
+                let (data_bytes, data_checksum) = match upload {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let _ = child.kill().await;
+                        return Err(e.context(format!("stream backup data {data_key}")));
+                    }
+                };
+                let status = child.wait().await.context("wait for rbd export-diff")?;
+                if !status.success() {
+                    let mut err = String::new();
+                    if let Some(mut se) = child.stderr.take() {
+                        use tokio::io::AsyncReadExt;
+                        let _ = se.read_to_string(&mut err).await;
+                    }
+                    anyhow::bail!(
+                        "rbd export-diff {pool_name}/{image}@{rbd_snap}: {}",
+                        err.trim()
+                    );
+                }
                 data_summary = serde_json::json!({
                     "data_object": data_key, "data_bytes": data_bytes,
                     "data_checksum": data_checksum, "format": "rbd-export-diff",
@@ -918,6 +957,35 @@ fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(h.finalize())
 }
 
+/// Build an `S3Target` for a bucket, reading its credentials from the Rook OBC Secret in-cluster
+/// (the keys are never logged or returned).
+async fn build_s3_target(
+    k8s: &K8sDriver,
+    bucket_namespace: &str,
+    bucket_secret_ref: &str,
+    bucket_endpoint: &str,
+    bucket_region: &str,
+    bucket_name: &str,
+) -> Result<atlas_driver_rgw::S3Target> {
+    let secret = k8s
+        .get_secret(bucket_namespace, bucket_secret_ref)
+        .await?
+        .ok_or_else(|| anyhow!("bucket secret {bucket_secret_ref} not found"))?;
+    let access = secret
+        .get("AWS_ACCESS_KEY_ID")
+        .ok_or_else(|| anyhow!("bucket secret missing AWS_ACCESS_KEY_ID"))?;
+    let secret_key = secret
+        .get("AWS_SECRET_ACCESS_KEY")
+        .ok_or_else(|| anyhow!("bucket secret missing AWS_SECRET_ACCESS_KEY"))?;
+    atlas_driver_rgw::S3Target::new(
+        bucket_endpoint,
+        bucket_region,
+        bucket_name,
+        access,
+        secret_key,
+    )
+}
+
 /// Read a backup manifest object back from RGW (used by restore to verify integrity).
 #[allow(clippy::too_many_arguments)]
 async fn read_backup_manifest(
@@ -929,23 +997,15 @@ async fn read_backup_manifest(
     bucket_name: &str,
     object_key: &str,
 ) -> Result<Vec<u8>> {
-    let secret = k8s
-        .get_secret(bucket_namespace, bucket_secret_ref)
-        .await?
-        .ok_or_else(|| anyhow!("bucket secret {bucket_secret_ref} not found"))?;
-    let access = secret
-        .get("AWS_ACCESS_KEY_ID")
-        .ok_or_else(|| anyhow!("bucket secret missing AWS_ACCESS_KEY_ID"))?;
-    let secret_key = secret
-        .get("AWS_SECRET_ACCESS_KEY")
-        .ok_or_else(|| anyhow!("bucket secret missing AWS_SECRET_ACCESS_KEY"))?;
-    let s3 = atlas_driver_rgw::S3Target::new(
+    let s3 = build_s3_target(
+        k8s,
+        bucket_namespace,
+        bucket_secret_ref,
         bucket_endpoint,
         bucket_region,
         bucket_name,
-        access,
-        secret_key,
-    )?;
+    )
+    .await?;
     s3.get_object(object_key).await
 }
 

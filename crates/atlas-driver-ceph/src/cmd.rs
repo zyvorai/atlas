@@ -117,6 +117,39 @@ pub async fn rbd_export_diff(pool: &str, image: &str, snap: &str) -> Result<Vec<
     Ok(output.stdout)
 }
 
+/// Spawn `rbd export-diff pool/image@snap -` with stdout piped, for streaming the diff elsewhere
+/// (e.g. straight into an S3 multipart upload) without buffering it in memory. The caller takes
+/// `child.stdout`, streams it, then `wait()`s and checks the exit status.
+pub fn rbd_export_diff_child(
+    pool: &str,
+    image: &str,
+    snap: &str,
+) -> Result<tokio::process::Child, DriverError> {
+    let spec = format!("{pool}/{image}@{snap}");
+    tokio::process::Command::new("rbd")
+        .args(["export-diff", &spec, "-"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))
+}
+
+/// Spawn `rbd import-diff - pool/image` with stdin piped, for streaming a diff into it (e.g. from
+/// an S3 download) without buffering. The caller writes to `child.stdin`, drops it, then `wait()`s.
+pub fn rbd_import_diff_child(
+    pool: &str,
+    image: &str,
+) -> Result<tokio::process::Child, DriverError> {
+    let spec = format!("{pool}/{image}");
+    tokio::process::Command::new("rbd")
+        .args(["import-diff", "-", &spec])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))
+}
+
 /// Apply an RBD diff stream (from `rbd export-diff`) into an existing image via stdin
 /// (`rbd import-diff - pool/image`). Used by restore-from-data.
 pub async fn rbd_import_diff(pool: &str, image: &str, data: Vec<u8>) -> Result<(), DriverError> {
