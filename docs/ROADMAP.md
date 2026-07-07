@@ -67,9 +67,18 @@ Read-only control plane + real Ceph lab.
   a new PVC from the backup's VolumeSnapshot (PDF §16, DR-2). Verified on real Ceph.
 - Bucket lifecycle policies, quotas, delete; presigned download URLs for exports.
 
-## ⏭ Slice 3+ — Enterprise & product integration
+## ✅ gRPC edge (done, verified)
 
-- **gRPC edge** on the gateway (typed internal contracts).
+- `tonic` 0.12 service `atlas.v1.AtlasStorage` served alongside REST on `ATLAS_GRPC_ADDR` (default
+  `:5111`): `Health`, `ListClusters/Pools/Volumes`, `GetVolume`, `CreateVolume` (→ job), `GetJob`,
+  `ListAlerts`. Server **reflection** enabled (grpcurl works without the proto).
+- proto at `crates/atlas-gateway/proto/atlas.proto`; built with system `protoc` (installed in the
+  Docker builders). Integration test drives the server with the generated client.
+- **Verified** on the cluster with `grpcurl` (NodePort 30512): `ListPools` returned the real Ceph
+  pools over gRPC via reflection.
+- Follow-ups: JWT auth on the gRPC edge; streaming job-progress RPC; gRPC clients in the products.
+
+## ⏭ Slice 3+ — Enterprise & product integration
 - Product integrations: Veyron (VM datastores), Hyper2KVM (direct-to-RBD migration), GuestKit
   (read-only snapshot inspection), PacketWolf (VM→OSD network/storage RCA), Ragnarok (AI storage
   facts), Aether (intent YAML), Machina (RGW/CephFS artifacts), HyperSDK (install/onboard CLI).
