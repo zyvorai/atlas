@@ -3,7 +3,9 @@
 
 > Atlas also exposes a **gRPC edge** (`tonic`) on `ATLAS_GRPC_ADDR` (default `:5111`, NodePort 30512
 > in the ceph deployment): service `atlas.v1.AtlasStorage` with `Health`, `ListClusters/Pools/Volumes`,
-> `GetVolume`, `CreateVolume` (→ job), `GetJob`, `ListAlerts`. Server reflection is enabled, so:
+> `GetVolume`, `CreateVolume` (→ job), `GetJob`, `WatchJob` (server-streaming job updates),
+> `ListAlerts`. Auth: HS256 JWT in `authorization` metadata when `ATLAS_AUTH_REQUIRED=1`, with the
+> same role hierarchy as REST. Server reflection is enabled, so:
 > `grpcurl -plaintext <host>:5111 list` and `grpcurl -plaintext <host>:5111 atlas.v1.AtlasStorage/ListPools`.
 > The proto is at `crates/atlas-gateway/proto/atlas.proto`.
 

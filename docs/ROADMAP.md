@@ -82,7 +82,9 @@ Read-only control plane + real Ceph lab.
 - ✅ **RBAC** — role hierarchy `viewer < operator < admin` (PDF §14.2; `product.service.*` = operator).
   Enforced on both edges (only when `auth_required`): writes need operator; delete-volume /
   create-backend / force-snapshot-delete need admin. Verified live (401/403/202/admin-gated).
-- Follow-ups: streaming job-progress RPC; gRPC clients in the products.
+- ✅ **WatchJob** server-streaming RPC — emits the job on each state change until terminal (verified
+  live: `CreateVolume` → `WatchJob` streamed to `succeeded`).
+- Follow-ups: REST SSE job progress; gRPC clients in the products.
 
 ## ⏭ Slice 3+ — Enterprise & product integration
 - Product integrations: Veyron (VM datastores), Hyper2KVM (direct-to-RBD migration), GuestKit
