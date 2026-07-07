@@ -76,8 +76,12 @@ Read-only control plane + real Ceph lab.
 - ✅ **Monitor worker** (`atlas-monitor`): periodic discovery + alert rules (cluster unhealthy,
   pool near-full 75/85%, OSD down) → real `GET /alerts?state=`, `POST /alerts/evaluate`. Deterministic
   alert ids upsert on recurrence and resolve when conditions clear. Verified on real Ceph
-  (`HEALTH_WARN` → one open cluster alert). Follow-up: scrape Ceph mgr Prometheus for latency/IOPS
-  metrics + latency/recovery alerts.
+  (`HEALTH_WARN` → one open cluster alert).
+- ✅ **Ceph mgr Prometheus scrape**: each tick scrapes `rook-ceph-mgr:9283/metrics`, keeps a curated
+  whitelist (capacity, OSD up/in/latency, pool usage, pg, health) into `storage_metrics`, and raises a
+  high-OSD-latency alert (100ms warn / 1000ms critical). `GET /metrics/ceph?prefix=`. Verified on real
+  Ceph (44 metrics incl. real capacity + `osd.0` apply latency). Follow-up: client IOPS/throughput
+  metrics + recovery/backfill alerts.
 - **Zeus OS UI** — Storage Center. Note two known collisions to resolve first:
   - `atlas` is already a Zeus OS module codename ("Machine Finder") in `v9s`.
   - A `ZeusStorageCenter.tsx` + `web/src/routes/storage.rs` already ship — decide whether Atlas's

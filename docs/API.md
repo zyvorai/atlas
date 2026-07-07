@@ -106,6 +106,14 @@ Aggregate capacity across clusters (PDF §13.2 overview cards).
   "available_capacity_bytes": 1000177254400, "clusters": 1, "pools": 1, "volumes": 1 }
 ```
 
+### `GET /api/atlas/v1/metrics/ceph[?prefix=ceph_osd]`
+Latest Ceph metrics scraped from the mgr Prometheus module (PDF §15.1). A curated whitelist
+(capacity, OSD up/in/latency, pool usage, pg, health), latest value per (name, labels).
+```json
+[{ "name": "ceph_cluster_total_bytes", "value": 1000204886016.0, "labels": {} },
+ { "name": "ceph_osd_apply_latency_ms", "value": 11.0, "labels": { "ceph_daemon": "osd.0" } }]
+```
+
 ### `GET /api/atlas/v1/alerts[?state=open]`
 Alerts produced by the monitor worker (PDF §15.2): cluster unhealthy, pool near-full (75/85%),
 OSD down. Filter by `state` (`open`/`resolved`).
