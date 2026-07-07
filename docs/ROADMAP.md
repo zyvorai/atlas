@@ -85,6 +85,9 @@ Read-only control plane + real Ceph lab.
 - ✅ **Presigned download** (`GET /backups/{id}/download?what=data|manifest`) — returns a time-limited
   SigV4 URL signed with the bucket's in-cluster credentials (never exposed), so a client pulls the
   object straight from RGW. Verified live (credential-free download → 200, real `rbd diff v1` bytes).
+- ✅ **Off-cluster downloads** — `ATLAS_RGW_PUBLIC_ENDPOINT` makes the gateway sign presigned URLs
+  against a public RGW host (exposed via the `atlas-rgw-public` NodePort, 30513) so they resolve
+  outside the cluster. Verified live (URL host = node:30513, credential-free GET → 200, `rbd diff v1`).
 - ✅ **Bucket quotas** — `POST /buckets` accepts `max_objects`/`max_size`; the job sets the OBC
   `additionalConfig` and enforces the RGW per-bucket quota directly via `radosgw-admin`
   (`quota set`+`enable`). Verified live (`enabled: true, max_objects: 100, max_size: 1 GiB`).

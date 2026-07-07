@@ -265,6 +265,9 @@ credentials (read in-cluster, never returned). The client downloads straight fro
   "expires_in_secs": 900 }
 ```
 `what` = `manifest` (default) or `data` (the `.rbd-diff` object). Needs a reachable cluster (`502` otherwise).
+When `ATLAS_RGW_PUBLIC_ENDPOINT` is set the URL is signed against that public host (e.g.
+`http://<node-ip>:30513/...`) so it resolves off-cluster; otherwise the bucket's in-cluster endpoint
+is used. The signature binds to the host, so the client must connect to the endpoint in the URL.
 
 ### `GET /api/atlas/v1/backups` · `GET /api/atlas/v1/backups/{id}`
 ```json
