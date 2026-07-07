@@ -235,11 +235,12 @@ data: {"id":"job_...","state":"succeeded","progress_percent":100,...}
 Restore a volume from a backup (PDF §16, DR-2): the job reads + checksum-verifies the backup
 manifest from RGW, then provisions a **new PVC from the backup's VolumeSnapshot**.
 ```json
-{ "backup_id": "bkp_915f18cde6e7f0cf", "name": "restored-vol", "storage_class": "zyvor-rbd-prod" }
+{ "backup_id": "bkp_915f18cde6e7f0cf", "name": "restored-vol", "mode": "snapshot" }
 // 202 → resource: { volume_id, from_backup, namespace, pvc }
-// job result: { manifest_verified: true, phase: "Bound", bound: true, volume_id }
 ```
-`404` if the backup is unknown; the restored volume is namespaced to the backup snapshot's namespace.
+`mode` (default `snapshot`) restores from the CSI VolumeSnapshot; `data` reconstructs the volume from
+the RBD diff in S3 (creates an empty PVC → downloads + checksum-verifies the diff → `rbd import-diff`).
+`404` if the backup is unknown.
 
 ### `GET /api/atlas/v1/backups` · `GET /api/atlas/v1/backups/{id}`
 ```json

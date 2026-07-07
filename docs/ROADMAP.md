@@ -65,7 +65,11 @@ Read-only control plane + real Ceph lab.
 - ✅ Full **data** backup (`POST /backup-jobs {"mode":"data"}`) — resolves the PVC's real RBD image
   (PV csi attributes), `rbd snap create` + `rbd export-diff` (capped 512 MiB), uploads the diff to
   RGW alongside the manifest. Verified on real Ceph (data object present, checksum recorded).
-  Follow-ups: multipart streaming for large images; `rbd import-diff` restore-from-data.
+- ✅ **Restore-from-data** (`POST /restore-jobs {"mode":"data"}`) — creates an empty PVC, resolves its
+  RBD image, downloads the diff from S3 (checksum-verified), and `rbd import-diff`s it into the new
+  image. **Verified byte-for-byte on real Ceph**: wrote a file to volume A → data backup → restore to
+  a new volume B → mounted B → the file read back identical.
+  Follow-ups: multipart streaming for large images (current cap 512 MiB in memory).
 - ✅ `POST /restore-jobs` — reads + checksum-verifies the backup manifest from RGW, then provisions
   a new PVC from the backup's VolumeSnapshot (PDF §16, DR-2). Verified on real Ceph.
 - Bucket lifecycle policies, quotas, delete; presigned download URLs for exports.
