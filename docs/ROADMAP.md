@@ -136,6 +136,11 @@ Read-only control plane + real Ceph lab.
   high-OSD-latency alert (100ms warn / 1000ms critical). `GET /metrics/ceph?prefix=`. Verified on real
   Ceph (44 metrics incl. real capacity + `osd.0` apply latency). Follow-up: client IOPS/throughput
   metrics + recovery/backfill alerts.
+- ✅ **CephFS shared volumes (RWX)**: `POST /volumes {"policy":"shared"}` provisions a
+  **ReadWriteMany** CephFS volume (`zyvor-cephfs-shared`) that multiple pods mount at once — for ISO
+  libraries, templates, and multi-writer product data (GuestKit, Machina). Single-node CephFS
+  filesystem + StorageClass manifest at `deploy/rook-ceph-lab/single-node/cephfs-sc.yaml`. Verified
+  live on real Ceph: two pods mounted the same volume concurrently and saw each other's writes.
 - **Zeus OS UI** — Storage Center. Note two known collisions to resolve first:
   - `atlas` is already a Zeus OS module codename ("Machine Finder") in `v9s`.
   - A `ZeusStorageCenter.tsx` + `web/src/routes/storage.rs` already ship — decide whether Atlas's
