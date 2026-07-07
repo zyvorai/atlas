@@ -210,6 +210,10 @@ Provision an RGW bucket via an ObjectBucketClaim (async job).
 ```
 `secret_ref` is the Kubernetes Secret name holding the S3 credentials — the keys are never returned.
 
+### `DELETE /api/atlas/v1/buckets/{id}[?force=true]`
+Delete the bucket: removes its ObjectBucketClaim (Rook releases the bucket) + row (async job).
+**Blocked with `409`** if backups still reference the bucket; `?force=true` overrides. Requires operator.
+
 ### `POST /api/atlas/v1/backup-jobs`
 Snapshot a volume and write a backup manifest to a (bound) bucket over S3, verifying the write.
 ```json

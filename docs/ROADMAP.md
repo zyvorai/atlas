@@ -76,7 +76,10 @@ Read-only control plane + real Ceph lab.
   (idempotent) and the RBD snapshot (best-effort), then the row. Verified live (RGW objects → 0, row 404).
 - ✅ **Retention** — `ATLAS_BACKUP_KEEP` (0=unlimited) + per-request `keep`; on backup create, prunes
   backups beyond the keep count (most-recent-first) via delete jobs. Verified live (3 backups, keep=2 → 2).
-- Bucket lifecycle policies, quotas, delete; presigned download URLs; time-based retention.
+- ✅ **Bucket delete** (`DELETE /buckets/{id}`) — deletes the OBC (Rook releases the bucket) + row;
+  blocked with `409` if backups still reference the bucket, unless `?force=true`. Verified live
+  (OBC NotFound, row 404).
+- Bucket quotas + lifecycle policies; presigned download URLs; time-based backup retention.
 
 ## ✅ gRPC edge (done, verified)
 
