@@ -43,8 +43,10 @@ Read-only control plane + real Ceph lab.
   (Snapshot delete already guards on dependents; volume delete does not yet require approval.)
 - ⏭ WebSocket/SSE job progress for the UI.
 - ⏭ Direct RBD create path (bypassing CSI) for non-Kubernetes consumers.
-- ⏭ Persistent gateway DB (currently an `emptyDir` in the k8s deployment — inventory resets on pod
-  restart; move to a PVC or Postgres for durability).
+- ✅ **Durable gateway DB** — the SQLite file is now backed by a `ReadWriteOnce` PVC (`Recreate`
+  strategy). The real-mode gateway dogfoods `zyvor-rbd-prod` (Ceph); the fake-mode gateway uses the
+  cluster default StorageClass so it still deploys without Ceph. Verified: inventory survives a pod
+  restart. (For multi-replica HA, move to Postgres — the sqlx layer already abstracts this.)
 
 ## ⏭ Slice 3+ — Enterprise & product integration
 

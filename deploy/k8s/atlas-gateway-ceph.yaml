@@ -30,6 +30,9 @@ metadata:
     app: atlas-gateway-ceph
 spec:
   replicas: 1
+  # Recreate: the SQLite PVC is ReadWriteOnce; old pod must release it before the new one mounts.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: atlas-gateway-ceph
@@ -113,9 +116,23 @@ spec:
               mountPath: /var/lib/atlas
       volumes:
         - name: ceph-config
-          emptyDir: {}
+          emptyDir: {}                     # ceph.conf/keyring regenerated each start; not durable state
         - name: data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: atlas-gateway-ceph-data
+---
+# Durable SQLite storage on the platform's own Ceph class (dogfooding zyvor-rbd-prod).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: atlas-gateway-ceph-data
+  namespace: rook-ceph
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: zyvor-rbd-prod
+  resources:
+    requests:
+      storage: 1Gi
 ---
 apiVersion: v1
 kind: Service

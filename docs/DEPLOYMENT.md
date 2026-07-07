@@ -120,6 +120,26 @@ A verified run returned the real fsid `5ace73d1-…`, pool `rbd-nvme-prod`, `osd
 `csi-vol-…` RBD image created for the `atlas-rbd-smoke` PVC — closing the loop
 PVC → CSI → RBD → Atlas discovery.
 
+## Durable database
+
+The gateway's SQLite DB is backed by a **ReadWriteOnce PVC** (not `emptyDir`), so inventory/jobs
+survive pod restarts. The Deployments use `strategy: Recreate` because RWO requires the old pod to
+release the volume before the new one mounts it.
+
+- `deploy/k8s/atlas-gateway.yaml` → PVC `atlas-gateway-data` on the **cluster default** StorageClass
+  (deploys even without Ceph, e.g. k3s `local-path`).
+- `deploy/k8s/atlas-gateway-ceph.yaml` → PVC `atlas-gateway-ceph-data` on **`zyvor-rbd-prod`**
+  (dogfoods the platform's own Ceph).
+
+Verify durability:
+```bash
+curl -s http://<host>:30511/api/atlas/v1/volumes | grep -o '"name":"[^"]*"'
+kubectl -n rook-ceph rollout restart deploy/atlas-gateway-ceph
+kubectl -n rook-ceph rollout status deploy/atlas-gateway-ceph
+curl -s http://<host>:30511/api/atlas/v1/volumes | grep -o '"name":"[^"]*"'   # same rows persist
+```
+For multi-replica HA, switch `ATLAS_DATABASE_URL` to Postgres (the `sqlx` layer abstracts the driver).
+
 ## Image name note
 
 `podman save` preserves the `localhost/` prefix, so k3s imports the image as

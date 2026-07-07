@@ -56,6 +56,10 @@ metadata:
     app: atlas-gateway
 spec:
   replicas: 1
+  # Recreate (not RollingUpdate): the SQLite PVC is ReadWriteOnce, so the old pod must release it
+  # before the new one mounts it.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: atlas-gateway
@@ -66,7 +70,7 @@ spec:
     spec:
       serviceAccountName: atlas-gateway
       securityContext:
-        # Image runs as uid/gid 10001; fsGroup makes the emptyDir writable for the SQLite file.
+        # Image runs as uid/gid 10001; fsGroup makes the mounted volume writable for the SQLite file.
         runAsUser: 10001
         runAsGroup: 10001
         fsGroup: 10001
@@ -98,7 +102,22 @@ spec:
               mountPath: /var/lib/atlas
       volumes:
         - name: data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: atlas-gateway-data
+---
+# Durable SQLite storage. Uses the cluster's DEFAULT StorageClass (omit storageClassName) so this
+# deploys on any cluster — including one without Ceph yet (e.g. k3s local-path). The real-mode
+# gateway (atlas-gateway-ceph.yaml) dogfoods the Ceph class instead.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: atlas-gateway-data
+  namespace: zyvor-system
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
 ---
 apiVersion: v1
 kind: Service
