@@ -306,6 +306,19 @@ The built-in intent → placement catalog (PDF §12.3).
    "description": "Databases — RBD NVMe, hourly snapshots, daily backup" }]
 ```
 
+### `GET /api/atlas/v1/tenants/{id}/quota` · `PUT .../quota`
+Per-tenant storage quota + live usage (PDF §14 multi-tenancy). `PUT` (admin) sets the limits.
+```json
+// PUT body — 0 means unlimited for that dimension
+{ "max_bytes": 1610612736, "max_volumes": 10 }
+// GET/PUT reply
+{ "tenant_id": "acme", "max_bytes": 1610612736, "max_volumes": 10,
+  "used_bytes": 1073741824, "volume_count": 1 }
+```
+`POST /volumes` (and gRPC `CreateVolume`) rejects a create that would exceed either limit with `409`
+(`resource_exhausted` on gRPC) *before* enqueueing the job. Usage is computed live from the tenant's
+volume rows.
+
 ## Live Kubernetes (served straight from the cluster)
 
 ### `GET /api/atlas/v1/storage-classes`

@@ -146,7 +146,12 @@ Read-only control plane + real Ceph lab.
   - A `ZeusStorageCenter.tsx` + `web/src/routes/storage.rs` already ship — decide whether Atlas's
     Storage Center *absorbs*, *replaces*, or *sits beside* them.
 - Additional drivers behind the same trait: NFS, ZFS, SAN, cloud block, external Ceph import.
-- Multi-tenancy: quotas, per-tenant policies, per-product service accounts (PDF §14).
+- ✅ **Multi-tenancy quotas**: per-tenant `max_bytes` + `max_volumes` (`storage_tenant_quotas`,
+  0 = unlimited). `PUT /tenants/{id}/quota` (admin) sets them; `GET` returns limits + live usage.
+  `POST /volumes` (REST + gRPC `CreateVolume`) rejects an over-quota create (409 / `resource_exhausted`)
+  before enqueueing. `atlasctl quota|set-quota`. Verified live: byte + count limits both enforced,
+  raising the limit admits the create, usage tracked from live volume rows.
+- Multi-tenancy (remaining): per-tenant policies, per-product service accounts (PDF §14).
 - DR: RBD mirroring, secondary-cluster restore, one-click failover runbook (PDF §16.3).
 
 ## Known limitations (slice 1)
