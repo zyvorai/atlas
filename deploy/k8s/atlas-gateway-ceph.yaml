@@ -102,6 +102,10 @@ spec:
               value: "0"
             - name: ATLAS_CEPH_PROMETHEUS_URL
               value: "http://rook-ceph-mgr.rook-ceph.svc:9283/metrics"
+            # Public RGW endpoint so presigned backup-download URLs are reachable off-cluster.
+            # Signature binds to this host, so clients must connect to the same node:port.
+            - name: ATLAS_RGW_PUBLIC_ENDPOINT
+              value: "http://212.8.248.187:30513"
             - name: RUST_LOG
               value: "info,atlas_gateway=debug,atlas_driver_ceph=debug"
           ports:
@@ -159,3 +163,23 @@ spec:
       port: 5111
       targetPort: 5111
       nodePort: 30512
+---
+# Expose the Rook RGW off-cluster so presigned backup-download URLs (signed against
+# ATLAS_RGW_PUBLIC_ENDPOINT) are reachable from outside the cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlas-rgw-public
+  namespace: rook-ceph
+  labels:
+    app: atlas-rgw-public
+spec:
+  type: NodePort
+  selector:
+    app: rook-ceph-rgw
+    rook_object_store: zyvor-rgw
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      nodePort: 30513

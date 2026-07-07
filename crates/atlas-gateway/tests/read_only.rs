@@ -31,6 +31,7 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
         ceph_prometheus_url: None,
         backup_keep: 0,
         backup_max_age_secs: 0,
+        rgw_public_endpoint: None,
     };
 
     let state = build_state(
@@ -103,6 +104,7 @@ async fn spawn_auth(secret: &str) -> String {
         ceph_prometheus_url: None,
         backup_keep: 0,
         backup_max_age_secs: 0,
+        rgw_public_endpoint: None,
     };
     let state = build_state(
         config,

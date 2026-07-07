@@ -43,6 +43,9 @@ pub struct Config {
     pub backup_keep: i64,
     /// Default max backup age in seconds (0 = no age limit); overridable per request.
     pub backup_max_age_secs: i64,
+    /// Public RGW endpoint (`http://host:port`) used to sign presigned download URLs so they are
+    /// reachable off-cluster. When None, the bucket's in-cluster endpoint is used.
+    pub rgw_public_endpoint: Option<String>,
 }
 
 impl Config {
@@ -86,6 +89,9 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(0),
+            rgw_public_endpoint: std::env::var("ATLAS_RGW_PUBLIC_ENDPOINT")
+                .ok()
+                .filter(|s| !s.trim().is_empty()),
         }
     }
 
@@ -109,6 +115,7 @@ impl Default for Config {
             ceph_prometheus_url: None,
             backup_keep: 0,
             backup_max_age_secs: 0,
+            rgw_public_endpoint: None,
         }
     }
 }

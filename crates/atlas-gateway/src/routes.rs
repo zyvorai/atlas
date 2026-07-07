@@ -1087,8 +1087,16 @@ async fn download_backup(
         .get("AWS_SECRET_ACCESS_KEY")
         .ok_or_else(|| AppError::Internal("bucket secret missing AWS_SECRET_ACCESS_KEY".into()))?;
 
+    // Prefer the configured public RGW endpoint so the presigned URL is reachable off-cluster;
+    // the signature binds to this host, so the client must connect to the same endpoint.
+    let endpoint = s
+        .config
+        .rgw_public_endpoint
+        .clone()
+        .or(bucket.endpoint)
+        .unwrap_or_default();
     let s3 = atlas_driver_rgw::S3Target::new(
-        &bucket.endpoint.unwrap_or_default(),
+        &endpoint,
         &bucket.region.unwrap_or_else(|| "us-east-1".into()),
         &bucket.bucket_name.unwrap_or_default(),
         access,
