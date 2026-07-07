@@ -11,6 +11,10 @@ service AtlasStorage {
   rpc ListVolumes(Empty) returns (ListVolumesReply);
   rpc GetVolume(GetVolumeRequest) returns (Volume);
   rpc CreateVolume(CreateVolumeRequest) returns (CreateVolumeReply);
+  rpc DeleteVolume(DeleteVolumeRequest) returns (JobReply);
+  rpc CreateSnapshot(CreateSnapshotRequest) returns (JobReply);
+  // Product-scoped: list only the volumes a product owns (via product_bindings).
+  rpc ListVolumesByOwner(ListVolumesByOwnerRequest) returns (ListVolumesReply);
   rpc GetJob(GetJobRequest) returns (Job);
   // Server-streaming: emit the job on each state change until it reaches a terminal state.
   rpc WatchJob(GetJobRequest) returns (stream Job);
@@ -58,17 +62,44 @@ message Volume {
 message ListVolumesReply { repeated Volume volumes = 1; }
 message GetVolumeRequest { string id = 1; }
 
+// Product ownership recorded in product_bindings so a product can later enumerate/guard its volumes.
+message Owner {
+  string product = 1;        // e.g. "veyron", "hyper2kvm"
+  string resource_type = 2;  // e.g. "vm", "datastore"
+  string resource_id = 3;    // the product-side resource id
+  string role = 4;           // e.g. "owner", "consumer" (defaults to "owner")
+}
+
 message CreateVolumeRequest {
   string tenant_id = 1;
   string name = 2;
   int64 size_bytes = 3;
   string policy = 4;
   string namespace = 5;
+  Owner owner = 6;
 }
 message CreateVolumeReply {
   string job_id = 1;
   string volume_id = 2;
   string state = 3;
+}
+
+// Generic job-accepted reply for async operations (delete/snapshot).
+message JobReply {
+  string job_id = 1;
+  string state = 2;
+}
+
+message DeleteVolumeRequest { string id = 1; }
+
+message CreateSnapshotRequest {
+  string volume_id = 1;
+  string name = 2;  // optional; defaults to snap-<suffix>
+}
+
+message ListVolumesByOwnerRequest {
+  string product = 1;
+  string resource_id = 2;  // optional; empty = all of the product's volumes
 }
 
 message GetJobRequest { string id = 1; }

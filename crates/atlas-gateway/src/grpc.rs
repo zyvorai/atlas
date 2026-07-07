@@ -15,9 +15,10 @@ use atlas_api_types::VolumeKind;
 use crate::auth::Claims;
 use crate::proto::atlas_storage_server::{AtlasStorage, AtlasStorageServer};
 use crate::proto::{
-    Alert, Cluster, CreateVolumeReply, CreateVolumeRequest, Empty, GetJobRequest, GetVolumeRequest,
-    HealthReply, HealthRequest, Job, ListAlertsReply, ListAlertsRequest, ListClustersReply,
-    ListPoolsReply, ListVolumesReply, Pool, Volume,
+    Alert, Cluster, CreateSnapshotRequest, CreateVolumeReply, CreateVolumeRequest,
+    DeleteVolumeRequest, Empty, GetJobRequest, GetVolumeRequest, HealthReply, HealthRequest, Job,
+    JobReply, ListAlertsReply, ListAlertsRequest, ListClustersReply, ListPoolsReply,
+    ListVolumesByOwnerRequest, ListVolumesReply, Pool, Volume,
 };
 use crate::state::AppState;
 
@@ -83,6 +84,26 @@ pub struct GrpcService {
 
 fn internal(e: impl std::fmt::Display) -> Status {
     Status::internal(e.to_string())
+}
+
+impl GrpcService {
+    /// Resolve the request actor and enforce a minimum role (only when auth is enabled). Returns the
+    /// actor id to attribute the job to, or `permission_denied`. Mirrors the REST `require_role`.
+    #[allow(clippy::result_large_err)]
+    fn require_role<T>(&self, req: &Request<T>, min_role: u8) -> Result<String, Status> {
+        let ga = req.extensions().get::<GrpcActor>().cloned();
+        let actor = ga
+            .as_ref()
+            .map(|a| a.id.clone())
+            .unwrap_or_else(|| "grpc".into());
+        if self.state.config.auth_required {
+            let role = ga.as_ref().map(|a| a.role.as_str()).unwrap_or("viewer");
+            if crate::auth::role_level(role) < min_role {
+                return Err(Status::permission_denied("insufficient role"));
+            }
+        }
+        Ok(actor)
+    }
 }
 
 fn kind_str(k: VolumeKind) -> String {
@@ -213,6 +234,20 @@ impl AtlasStorage for GrpcService {
             "idem",
             &format!("{}|{}|{}|volume.create", tenant_id, r.name, r.size_bytes),
         );
+        let owner =
+            r.owner
+                .as_ref()
+                .filter(|o| !o.product.is_empty())
+                .map(|o| atlas_jobs::OwnerRef {
+                    product: o.product.clone(),
+                    resource_type: o.resource_type.clone(),
+                    resource_id: o.resource_id.clone(),
+                    role: if o.role.is_empty() {
+                        "owner".into()
+                    } else {
+                        o.role.clone()
+                    },
+                });
         let spec = atlas_jobs::JobSpec::VolumeCreate {
             volume_id: volume_id.clone(),
             backend_id: CEPH_BACKEND_ID.into(),
@@ -224,7 +259,7 @@ impl AtlasStorage for GrpcService {
             size_bytes: r.size_bytes,
             kind: "block".into(),
             policy: Some(placement.intent),
-            owner: None,
+            owner,
         };
         let job = self
             .state
@@ -237,6 +272,105 @@ impl AtlasStorage for GrpcService {
             volume_id,
             state: job.state,
         }))
+    }
+
+    async fn delete_volume(
+        &self,
+        req: Request<DeleteVolumeRequest>,
+    ) -> Result<Response<JobReply>, Status> {
+        let actor = self.require_role(&req, crate::auth::ROLE_ADMIN)?;
+        let id = req.into_inner().id;
+        let vol = atlas_inventory::get_volume(&self.state.pool, &id)
+            .await
+            .map_err(internal)?
+            .ok_or_else(|| Status::not_found(format!("volume {id}")))?;
+        let namespace = vol
+            .kubernetes_namespace
+            .ok_or_else(|| Status::failed_precondition("volume has no kubernetes namespace"))?;
+        let pvc_name = vol
+            .pvc_name
+            .ok_or_else(|| Status::failed_precondition("volume has no pvc"))?;
+        let job_id = atlas_common::ids::job_id();
+        let spec = atlas_jobs::JobSpec::VolumeDelete {
+            volume_id: id.clone(),
+            namespace,
+            pvc_name,
+        };
+        let job = self
+            .state
+            .jobs
+            .enqueue(&job_id, "global", &actor, spec, None)
+            .await
+            .map_err(internal)?;
+        Ok(Response::new(JobReply {
+            job_id: job.id,
+            state: job.state,
+        }))
+    }
+
+    async fn create_snapshot(
+        &self,
+        req: Request<CreateSnapshotRequest>,
+    ) -> Result<Response<JobReply>, Status> {
+        let actor = self.require_role(&req, crate::auth::ROLE_OPERATOR)?;
+        let r = req.into_inner();
+        if r.volume_id.trim().is_empty() {
+            return Err(Status::invalid_argument("volume_id is required"));
+        }
+        let vol = atlas_inventory::get_volume(&self.state.pool, &r.volume_id)
+            .await
+            .map_err(internal)?
+            .ok_or_else(|| Status::not_found(format!("volume {}", r.volume_id)))?;
+        let namespace = vol
+            .kubernetes_namespace
+            .ok_or_else(|| Status::failed_precondition("volume has no kubernetes namespace"))?;
+        let pvc_name = vol
+            .pvc_name
+            .ok_or_else(|| Status::failed_precondition("volume has no pvc"))?;
+        let snapshot_id = atlas_common::ids::snapshot_id();
+        let name = if r.name.trim().is_empty() {
+            format!("{}-{}", vol.name, &snapshot_id[5..])
+        } else {
+            r.name
+        };
+        let job_id = atlas_common::ids::job_id();
+        let spec = atlas_jobs::JobSpec::SnapshotCreate {
+            snapshot_id,
+            volume_id: r.volume_id,
+            name,
+            namespace,
+            pvc_name,
+            snapshot_class: "zyvor-rbd-snapclass".into(),
+        };
+        let job = self
+            .state
+            .jobs
+            .enqueue(&job_id, "global", &actor, spec, None)
+            .await
+            .map_err(internal)?;
+        Ok(Response::new(JobReply {
+            job_id: job.id,
+            state: job.state,
+        }))
+    }
+
+    async fn list_volumes_by_owner(
+        &self,
+        req: Request<ListVolumesByOwnerRequest>,
+    ) -> Result<Response<ListVolumesReply>, Status> {
+        let r = req.into_inner();
+        if r.product.trim().is_empty() {
+            return Err(Status::invalid_argument("product is required"));
+        }
+        let resource_id = (!r.resource_id.trim().is_empty()).then_some(r.resource_id.as_str());
+        let volumes =
+            atlas_inventory::list_volumes_by_owner(&self.state.pool, &r.product, resource_id)
+                .await
+                .map_err(internal)?
+                .into_iter()
+                .map(volume_to_proto)
+                .collect();
+        Ok(Response::new(ListVolumesReply { volumes }))
     }
 
     async fn get_job(&self, req: Request<GetJobRequest>) -> Result<Response<Job>, Status> {

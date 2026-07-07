@@ -511,6 +511,30 @@ fn volume_select(tail: &str) -> String {
     )
 }
 
+/// List volumes owned by a product (via `product_bindings`), optionally scoped to a single owning
+/// resource id. Used by the gRPC edge so a product can enumerate only the volumes it owns.
+pub async fn list_volumes_by_owner(
+    pool: &SqlitePool,
+    product: &str,
+    resource_id: Option<&str>,
+) -> Result<Vec<StorageVolume>> {
+    let sql = "SELECT DISTINCT v.id, v.cluster_id, v.pool_id, v.name, v.kind, v.backend_native_id,
+                      v.size_bytes, v.used_bytes, v.state, v.health, v.kubernetes_namespace,
+                      v.pvc_name, v.storage_class_name
+               FROM storage_volumes v
+               JOIN product_bindings b
+                 ON b.storage_resource_type = 'volume' AND b.storage_resource_id = v.id
+               WHERE b.product = ? AND (? IS NULL OR b.resource_id = ?)
+               ORDER BY v.name";
+    let rows = sqlx::query(sql)
+        .bind(product)
+        .bind(resource_id)
+        .bind(resource_id)
+        .fetch_all(pool)
+        .await?;
+    Ok(rows.into_iter().map(row_to_volume).collect())
+}
+
 fn row_to_volume(r: sqlx::sqlite::SqliteRow) -> StorageVolume {
     StorageVolume {
         id: r.get("id"),

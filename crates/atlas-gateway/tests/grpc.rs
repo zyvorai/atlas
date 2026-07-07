@@ -71,6 +71,7 @@ async fn grpc_edge_health_create_and_list() {
             size_bytes: 1_073_741_824,
             policy: "database".into(),
             namespace: "default".into(),
+            owner: None,
         })
         .await
         .unwrap()
