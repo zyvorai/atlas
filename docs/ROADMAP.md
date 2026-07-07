@@ -79,7 +79,10 @@ Read-only control plane + real Ceph lab.
 - ✅ **Bucket delete** (`DELETE /buckets/{id}`) — deletes the OBC (Rook releases the bucket) + row;
   blocked with `409` if backups still reference the bucket, unless `?force=true`. Verified live
   (OBC NotFound, row 404).
-- Bucket quotas + lifecycle policies; presigned download URLs; time-based backup retention.
+- ✅ **Presigned download** (`GET /backups/{id}/download?what=data|manifest`) — returns a time-limited
+  SigV4 URL signed with the bucket's in-cluster credentials (never exposed), so a client pulls the
+  object straight from RGW. Verified live (credential-free download → 200, real `rbd diff v1` bytes).
+- Bucket quotas + lifecycle policies; time-based backup retention; external RGW ingress for downloads.
 
 ## ✅ gRPC edge (done, verified)
 

@@ -252,6 +252,15 @@ the RBD diff in S3 (creates an empty PVC → downloads + checksum-verifies the d
 Remove a backup: deletes its S3 manifest + `.rbd-diff` data objects (idempotent) and the RBD
 snapshot (best-effort), then the row (async job). `202 + job id`. Requires operator.
 
+### `GET /api/atlas/v1/backups/{id}/download?what=data|manifest`
+Returns a **time-limited presigned S3 URL** for the backup object, signed with the bucket's
+credentials (read in-cluster, never returned). The client downloads straight from RGW.
+```json
+{ "url": "http://rook-ceph-rgw-...svc/<bucket>/<key>?X-Amz-...", "object_key": "backups/.../....rbd-diff",
+  "expires_in_secs": 900 }
+```
+`what` = `manifest` (default) or `data` (the `.rbd-diff` object). Needs a reachable cluster (`502` otherwise).
+
 ### `GET /api/atlas/v1/backups` · `GET /api/atlas/v1/backups/{id}`
 ```json
 [{ "id": "bkp_691e0b1e464b604c", "tenant_id": "global", "volume_id": "vol_cfe1c97958f3",
