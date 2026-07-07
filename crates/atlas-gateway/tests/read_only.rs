@@ -54,6 +54,28 @@ fn client() -> reqwest::Client {
     reqwest::Client::new()
 }
 
+/// Insert a minimal source volume so snapshots can FK-reference it.
+async fn seed_volume(pool: &sqlx::SqlitePool, id: &str, name: &str) {
+    let v = atlas_api_types::StorageVolume {
+        id: id.into(),
+        cluster_id: None,
+        pool_id: None,
+        name: name.into(),
+        kind: atlas_api_types::VolumeKind::Block,
+        backend_native_id: None,
+        size_bytes: 1073741824,
+        used_bytes: None,
+        state: "bound".into(),
+        health: atlas_api_types::Health::Ok,
+        kubernetes_namespace: Some("default".into()),
+        pvc_name: Some(name.into()),
+        storage_class_name: Some("zyvor-rbd-prod".into()),
+    };
+    atlas_inventory::upsert_volume(pool, "bkd_ceph_lab", "t1", &v, None)
+        .await
+        .unwrap();
+}
+
 #[tokio::test]
 async fn health_and_version() {
     let (addr, _pool) = spawn().await;
@@ -336,4 +358,104 @@ async fn expand_rejects_smaller_size() {
         .await
         .unwrap();
     assert_eq!(resp.status(), reqwest::StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn clone_requires_name_and_enqueues() {
+    let (addr, pool) = spawn().await;
+    let base = format!("http://{addr}");
+
+    // Seed a source volume + snapshot (snapshots FK-reference their volume).
+    seed_volume(&pool, "vol_src", "src-vol").await;
+    atlas_inventory::snapshots::insert_snapshot(
+        &pool,
+        "snap_x",
+        "t1",
+        "vol_src",
+        "snap-x-obj",
+        None,
+        "crash",
+        "ready",
+    )
+    .await
+    .unwrap();
+
+    // Missing name → 400.
+    let bad = client()
+        .post(format!("{base}/api/atlas/v1/snapshots/snap_x/clone"))
+        .json(&serde_json::json!({ "size_bytes": 1073741824_i64 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bad.status(), reqwest::StatusCode::BAD_REQUEST);
+
+    // With a name + size → 202 (job runs, fails without k8s, but the contract holds).
+    let ok = client()
+        .post(format!("{base}/api/atlas/v1/snapshots/snap_x/clone"))
+        .json(&serde_json::json!({ "name": "clone-1", "size_bytes": 1073741824_i64 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), reqwest::StatusCode::ACCEPTED);
+    let body: serde_json::Value = ok.json().await.unwrap();
+    assert_eq!(body["resource"]["mode"], "clone");
+    assert_eq!(body["resource"]["from_snapshot"], "snap_x");
+}
+
+#[tokio::test]
+async fn snapshot_delete_blocked_by_dependents() {
+    let (addr, pool) = spawn().await;
+    let base = format!("http://{addr}");
+
+    // A snapshot with a dependent volume (as clone/restore would create).
+    seed_volume(&pool, "vol_src", "src-vol").await;
+    atlas_inventory::snapshots::insert_snapshot(
+        &pool,
+        "snap_dep",
+        "t1",
+        "vol_src",
+        "snap-dep-obj",
+        None,
+        "crash",
+        "ready",
+    )
+    .await
+    .unwrap();
+    let dependent = atlas_api_types::StorageVolume {
+        id: "vol_clone".into(),
+        cluster_id: None,
+        pool_id: None,
+        name: "clone-vol".into(),
+        kind: atlas_api_types::VolumeKind::Block,
+        backend_native_id: None,
+        size_bytes: 1073741824,
+        used_bytes: None,
+        state: "bound".into(),
+        health: atlas_api_types::Health::Ok,
+        kubernetes_namespace: Some("default".into()),
+        pvc_name: Some("clone-vol".into()),
+        storage_class_name: Some("zyvor-rbd-prod".into()),
+    };
+    atlas_inventory::upsert_volume(&pool, "bkd_ceph_lab", "t1", &dependent, None)
+        .await
+        .unwrap();
+    atlas_inventory::set_volume_source_snapshot(&pool, "vol_clone", "snap_dep")
+        .await
+        .unwrap();
+
+    // Delete without force → 409 Conflict.
+    let blocked = client()
+        .delete(format!("{base}/api/atlas/v1/snapshots/snap_dep"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(blocked.status(), reqwest::StatusCode::CONFLICT);
+
+    // Delete with force → 202 Accepted.
+    let forced = client()
+        .delete(format!("{base}/api/atlas/v1/snapshots/snap_dep?force=true"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(forced.status(), reqwest::StatusCode::ACCEPTED);
 }

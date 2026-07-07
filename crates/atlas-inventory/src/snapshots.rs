@@ -42,6 +42,16 @@ pub async fn set_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
     Ok(())
 }
 
+/// Mark a snapshot protected (has dependent clones) or not.
+pub async fn set_protected(pool: &SqlitePool, id: &str, protected: bool) -> Result<()> {
+    sqlx::query("UPDATE storage_snapshots SET protected=? WHERE id=?")
+        .bind(protected as i64)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn get_snapshot(pool: &SqlitePool, id: &str) -> Result<Option<StorageSnapshot>> {
     let row = sqlx::query(&select("WHERE id = ?"))
         .bind(id)

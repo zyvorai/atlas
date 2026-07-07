@@ -9,7 +9,8 @@
 
 use atlas_api_types::StorageClassInfo;
 use k8s_openapi::api::core::v1::{
-    PersistentVolume, PersistentVolumeClaim, PersistentVolumeClaimSpec, VolumeResourceRequirements,
+    PersistentVolume, PersistentVolumeClaim, PersistentVolumeClaimSpec, TypedLocalObjectReference,
+    VolumeResourceRequirements,
 };
 use k8s_openapi::api::storage::v1::StorageClass;
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
@@ -29,6 +30,8 @@ pub struct PvcCreateSpec {
     pub access_modes: Vec<String>,
     pub volume_mode: Option<String>,
     pub labels: BTreeMap<String, String>,
+    /// When set, the PVC is populated from this VolumeSnapshot (clone/restore).
+    pub data_source_snapshot: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -135,6 +138,14 @@ impl K8sDriver {
                 resources: Some(VolumeResourceRequirements {
                     requests: Some(requests),
                     ..Default::default()
+                }),
+                // Clone/restore: populate from a VolumeSnapshot.
+                data_source: spec.data_source_snapshot.as_ref().map(|snap| {
+                    TypedLocalObjectReference {
+                        api_group: Some("snapshot.storage.k8s.io".to_string()),
+                        kind: "VolumeSnapshot".to_string(),
+                        name: snap.clone(),
+                    }
                 }),
                 ..Default::default()
             }),

@@ -3,7 +3,7 @@
 //! (volume create/expand/delete, snapshots) — write ops return `202 Accepted` with a job id.
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     middleware,
     routing::{get, post},
@@ -13,7 +13,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use atlas_api_types::{
-    BackendMode, BackendType, Capabilities, CreateVolumeRequest, StorageBackend, StorageClassInfo,
+    BackendMode, BackendType, Capabilities, CreateVolumeRequest, Owner, StorageBackend,
+    StorageClassInfo,
 };
 use atlas_common::{ids, AppError, AppResult};
 use atlas_jobs::{JobSpec, OwnerRef};
@@ -40,6 +41,8 @@ pub fn router(state: AppState) -> Router {
         .route("/volumes/{id}/snapshots", post(create_snapshot))
         .route("/snapshots", get(list_snapshots))
         .route("/snapshots/{id}", axum::routing::delete(delete_snapshot))
+        .route("/snapshots/{id}/clone", post(clone_snapshot))
+        .route("/snapshots/{id}/restore", post(restore_snapshot))
         .route("/policies", get(list_policies))
         .route("/metrics/summary", get(metrics_summary))
         .route("/alerts", get(list_alerts))
@@ -538,15 +541,31 @@ async fn create_snapshot(
     ))
 }
 
-/// `DELETE /snapshots/{id}`
+#[derive(Debug, Deserialize)]
+struct ForceParams {
+    #[serde(default)]
+    force: bool,
+}
+
+/// `DELETE /snapshots/{id}[?force=true]` — blocked if the snapshot has dependent clones (PDF §8.3).
 async fn delete_snapshot(
     State(s): State<AppState>,
     Extension(actor): Extension<Actor>,
     Path(id): Path<String>,
+    Query(q): Query<ForceParams>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
     let snap = atlas_inventory::snapshots::get_snapshot(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("snapshot {id}")))?;
+
+    // Safe-by-default: refuse to delete a snapshot that still has clones/restores derived from it.
+    let deps = atlas_inventory::count_snapshot_dependents(&s.pool, &id).await?;
+    if deps > 0 && !q.force {
+        return Err(AppError::Conflict(format!(
+            "snapshot {id} has {deps} dependent volume(s); delete them first or pass ?force=true"
+        )));
+    }
+
     // The VolumeSnapshot lives in the source volume's namespace.
     let vol = atlas_inventory::get_volume(&s.pool, &snap.volume_id).await?;
     let namespace = vol
@@ -564,7 +583,130 @@ async fn delete_snapshot(
         .enqueue(&job_id, &snap.tenant_id, &actor.id, spec, None)
         .await
         .map_err(AppError::from)?;
-    Ok(accepted(&job, json!({ "snapshot_id": id })))
+    Ok(accepted(
+        &job,
+        json!({ "snapshot_id": id, "forced": q.force }),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+struct CloneBody {
+    /// New volume/PVC name (required for clone; optional for restore).
+    name: Option<String>,
+    namespace: Option<String>,
+    storage_class: Option<String>,
+    size_bytes: Option<i64>,
+    #[serde(default)]
+    owner: Option<Owner>,
+}
+
+/// `POST /snapshots/{id}/clone` — provision a new independent volume from a snapshot (PDF §8.3).
+async fn clone_snapshot(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+    Json(body): Json<CloneBody>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    let name = body
+        .name
+        .clone()
+        .filter(|n| !n.trim().is_empty())
+        .ok_or_else(|| AppError::Validation("name is required for clone".into()))?;
+    enqueue_clone(&s, &actor, &id, "clone", name, body).await
+}
+
+/// `POST /snapshots/{id}/restore` — provision a point-in-time copy of the source volume (PDF §8.3).
+async fn restore_snapshot(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+    Json(body): Json<CloneBody>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    // Default restore name derives from the snapshot id when not supplied.
+    let name = body
+        .name
+        .clone()
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or_else(|| format!("restore-{}", &id[5..]));
+    enqueue_clone(&s, &actor, &id, "restore", name, body).await
+}
+
+async fn enqueue_clone(
+    s: &AppState,
+    actor: &Actor,
+    snapshot_id: &str,
+    mode: &str,
+    new_name: String,
+    body: CloneBody,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    let snap = atlas_inventory::snapshots::get_snapshot(&s.pool, snapshot_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("snapshot {snapshot_id}")))?;
+    // Defaults come from the source volume.
+    let src = atlas_inventory::get_volume(&s.pool, &snap.volume_id).await?;
+    let namespace = body
+        .namespace
+        .or_else(|| src.as_ref().and_then(|v| v.kubernetes_namespace.clone()))
+        .unwrap_or_else(|| "default".into());
+    let storage_class = body
+        .storage_class
+        .or_else(|| src.as_ref().and_then(|v| v.storage_class_name.clone()))
+        .unwrap_or_else(|| atlas_policy::DEFAULT_BLOCK_SC.to_string());
+    let size_bytes = body
+        .size_bytes
+        .or_else(|| src.as_ref().map(|v| v.size_bytes))
+        .ok_or_else(|| {
+            AppError::Validation("size_bytes is required (source volume unknown)".into())
+        })?;
+
+    let new_volume_id = ids::volume_id();
+    let job_id = ids::job_id();
+    let owner = body.owner.map(|o| OwnerRef {
+        product: o.product,
+        resource_type: o.resource_type,
+        resource_id: o.resource_id,
+        role: o.role,
+    });
+
+    let spec = JobSpec::SnapshotClone {
+        mode: mode.into(),
+        new_volume_id: new_volume_id.clone(),
+        backend_id: CEPH_BACKEND_ID.into(),
+        snapshot_id: snapshot_id.to_string(),
+        snapshot_k8s_name: snap.name.clone(),
+        new_name: new_name.clone(),
+        namespace: namespace.clone(),
+        storage_class: storage_class.clone(),
+        size_bytes,
+        access_mode: "ReadWriteOnce".into(),
+        volume_mode: "Filesystem".into(),
+        owner,
+    };
+    let job = s
+        .jobs
+        .enqueue(&job_id, &snap.tenant_id, &actor.id, spec, None)
+        .await
+        .map_err(AppError::from)?;
+
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        &format!("snapshot.{mode}.requested"),
+        "snapshot",
+        snapshot_id,
+        "accepted",
+        Some(json!({ "new_volume_id": new_volume_id, "new_name": new_name })),
+        None,
+    )
+    .await;
+
+    Ok(accepted(
+        &job,
+        json!({ "volume_id": new_volume_id, "from_snapshot": snapshot_id,
+                "mode": mode, "namespace": namespace, "pvc": new_name,
+                "storage_class": storage_class }),
+    ))
 }
 
 // ---- live Kubernetes ----

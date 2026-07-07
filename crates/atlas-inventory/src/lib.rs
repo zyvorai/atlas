@@ -177,6 +177,30 @@ pub async fn upsert_volume(
     Ok(())
 }
 
+/// Link a volume to the snapshot it was cloned/restored from (dependency tracking).
+pub async fn set_volume_source_snapshot(
+    pool: &SqlitePool,
+    volume_id: &str,
+    snapshot_id: &str,
+) -> Result<()> {
+    sqlx::query("UPDATE storage_volumes SET source_snapshot_id=? WHERE id=?")
+        .bind(snapshot_id)
+        .bind(volume_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// How many volumes were cloned/restored from a snapshot (blocks unsafe snapshot deletion).
+pub async fn count_snapshot_dependents(pool: &SqlitePool, snapshot_id: &str) -> Result<i64> {
+    let n: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM storage_volumes WHERE source_snapshot_id=?")
+            .bind(snapshot_id)
+            .fetch_one(pool)
+            .await?;
+    Ok(n)
+}
+
 /// Update just the state of a volume (e.g. to `deleting`).
 pub async fn set_volume_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
     sqlx::query(

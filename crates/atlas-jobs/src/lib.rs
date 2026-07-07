@@ -78,6 +78,23 @@ pub enum JobSpec {
         namespace: String,
         name: String,
     },
+    /// Clone or restore: provision a new volume (PVC) populated from a VolumeSnapshot.
+    #[serde(rename = "snapshot.clone")]
+    SnapshotClone {
+        /// "clone" (new independent volume) or "restore" (point-in-time copy of the source).
+        mode: String,
+        new_volume_id: String,
+        backend_id: String,
+        snapshot_id: String,
+        snapshot_k8s_name: String,
+        new_name: String,
+        namespace: String,
+        storage_class: String,
+        size_bytes: i64,
+        access_mode: String,
+        volume_mode: String,
+        owner: Option<OwnerRef>,
+    },
 }
 
 impl JobSpec {
@@ -88,6 +105,8 @@ impl JobSpec {
             JobSpec::VolumeExpand { .. } => "volume.expand",
             JobSpec::SnapshotCreate { .. } => "snapshot.create",
             JobSpec::SnapshotDelete { .. } => "snapshot.delete",
+            JobSpec::SnapshotClone { mode, .. } if mode == "restore" => "snapshot.restore",
+            JobSpec::SnapshotClone { .. } => "snapshot.clone",
         }
     }
 }
@@ -219,6 +238,7 @@ async fn dispatch(
                 access_modes: vec![access_mode],
                 volume_mode: Some(volume_mode),
                 labels,
+                data_source_snapshot: None,
             };
             k8s.create_pvc(&create)
                 .await
@@ -350,6 +370,91 @@ async fn dispatch(
             }
             atlas_inventory::snapshots::delete_snapshot_row(pool, &snapshot_id).await?;
             Ok(serde_json::json!({ "snapshot_id": snapshot_id, "deleted": true }))
+        }
+
+        JobSpec::SnapshotClone {
+            mode,
+            new_volume_id,
+            backend_id,
+            snapshot_id,
+            snapshot_k8s_name,
+            new_name,
+            namespace,
+            storage_class,
+            size_bytes,
+            access_mode,
+            volume_mode,
+            owner,
+        } => {
+            let k8s = require_k8s(k8s)?;
+            let mut labels = std::collections::BTreeMap::new();
+            labels.insert("zyvor.dev/volume-id".to_string(), new_volume_id.clone());
+            labels.insert("zyvor.dev/from-snapshot".to_string(), snapshot_id.clone());
+            labels.insert("zyvor.dev/provenance".to_string(), mode.clone());
+            if let Some(o) = &owner {
+                labels.insert("zyvor.dev/owner-product".to_string(), o.product.clone());
+            }
+            let create = PvcCreateSpec {
+                name: new_name.clone(),
+                namespace: namespace.clone(),
+                storage_class: storage_class.clone(),
+                size_bytes,
+                access_modes: vec![access_mode],
+                volume_mode: Some(volume_mode),
+                labels,
+                data_source_snapshot: Some(snapshot_k8s_name),
+            };
+            k8s.create_pvc(&create)
+                .await
+                .with_context(|| format!("{mode} PVC {namespace}/{new_name} from snapshot"))?;
+
+            let phase = poll_pvc_phase(&k8s, &namespace, &new_name).await;
+            let vol = StorageVolume {
+                id: new_volume_id.clone(),
+                cluster_id: None,
+                pool_id: None,
+                name: new_name.clone(),
+                kind: VolumeKind::Block,
+                backend_native_id: Some(format!("pvc/{namespace}/{new_name}")),
+                size_bytes,
+                used_bytes: None,
+                state: phase
+                    .clone()
+                    .unwrap_or_else(|| "provisioning".into())
+                    .to_lowercase(),
+                health: if phase.as_deref() == Some("Bound") {
+                    Health::Ok
+                } else {
+                    Health::Unknown
+                },
+                kubernetes_namespace: Some(namespace.clone()),
+                pvc_name: Some(new_name.clone()),
+                storage_class_name: Some(storage_class),
+            };
+            atlas_inventory::upsert_volume(pool, &backend_id, tenant_id, &vol, None).await?;
+            // Track the parent/child dependency and protect the source snapshot from deletion.
+            atlas_inventory::set_volume_source_snapshot(pool, &new_volume_id, &snapshot_id).await?;
+            atlas_inventory::snapshots::set_protected(pool, &snapshot_id, true).await?;
+
+            if let Some(o) = owner {
+                atlas_inventory::insert_binding(
+                    pool,
+                    &format!("bind_{new_volume_id}"),
+                    tenant_id,
+                    &o.product,
+                    &o.resource_type,
+                    &o.resource_id,
+                    "volume",
+                    &new_volume_id,
+                    &o.role,
+                )
+                .await?;
+            }
+            Ok(serde_json::json!({
+                "volume_id": new_volume_id, "from_snapshot": snapshot_id, "mode": mode,
+                "pvc": format!("{namespace}/{new_name}"),
+                "phase": phase, "bound": phase.as_deref() == Some("Bound")
+            }))
         }
     }
 }

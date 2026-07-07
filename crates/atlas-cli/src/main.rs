@@ -71,6 +71,26 @@ enum Command {
     },
     /// DELETE /api/atlas/v1/volumes/{id}
     DeleteVolume { id: String },
+    /// POST /api/atlas/v1/snapshots/{id}/clone
+    CloneSnapshot {
+        snapshot_id: String,
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        namespace: Option<String>,
+    },
+    /// POST /api/atlas/v1/snapshots/{id}/restore
+    RestoreSnapshot {
+        snapshot_id: String,
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// DELETE /api/atlas/v1/snapshots/{id}  (use --force if it has dependents)
+    DeleteSnapshot {
+        id: String,
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 #[tokio::main]
@@ -124,6 +144,25 @@ async fn main() -> Result<()> {
             Some(serde_json::json!({ "name": name })),
         ),
         Command::DeleteVolume { id } => ("DELETE", format!("/api/atlas/v1/volumes/{id}"), None),
+        Command::CloneSnapshot {
+            snapshot_id,
+            name,
+            namespace,
+        } => (
+            "POST",
+            format!("/api/atlas/v1/snapshots/{snapshot_id}/clone"),
+            Some(serde_json::json!({ "name": name, "namespace": namespace })),
+        ),
+        Command::RestoreSnapshot { snapshot_id, name } => (
+            "POST",
+            format!("/api/atlas/v1/snapshots/{snapshot_id}/restore"),
+            Some(serde_json::json!({ "name": name })),
+        ),
+        Command::DeleteSnapshot { id, force } => (
+            "DELETE",
+            format!("/api/atlas/v1/snapshots/{id}?force={force}"),
+            None,
+        ),
     };
 
     let url = format!("{base}{path}");
