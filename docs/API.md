@@ -189,6 +189,16 @@ Snapshot a volume and write a backup manifest to a (bound) bucket over S3, verif
 ```
 `400` if the bucket is not `bound`; `404` if the volume/bucket is unknown.
 
+### `POST /api/atlas/v1/restore-jobs`
+Restore a volume from a backup (PDF §16, DR-2): the job reads + checksum-verifies the backup
+manifest from RGW, then provisions a **new PVC from the backup's VolumeSnapshot**.
+```json
+{ "backup_id": "bkp_915f18cde6e7f0cf", "name": "restored-vol", "storage_class": "zyvor-rbd-prod" }
+// 202 → resource: { volume_id, from_backup, namespace, pvc }
+// job result: { manifest_verified: true, phase: "Bound", bound: true, volume_id }
+```
+`404` if the backup is unknown; the restored volume is namespaced to the backup snapshot's namespace.
+
 ### `GET /api/atlas/v1/backups` · `GET /api/atlas/v1/backups/{id}`
 ```json
 [{ "id": "bkp_691e0b1e464b604c", "tenant_id": "global", "volume_id": "vol_cfe1c97958f3",
@@ -269,6 +279,7 @@ atlasctl delete-snapshot SNAPSHOT_ID [--force]
 atlasctl create-bucket NAME [--namespace rook-ceph]
 atlasctl buckets
 atlasctl backup-volume VOLUME_ID --bucket-id BUCKET_ID
+atlasctl restore-backup BACKUP_ID [--name NAME]
 atlasctl backups
 atlasctl jobs [ID]                  # GET /jobs (or a single job)
 atlasctl snapshots                  # GET /snapshots

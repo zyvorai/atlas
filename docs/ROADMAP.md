@@ -63,7 +63,8 @@ Read-only control plane + real Ceph lab.
 
 ### RGW/backup follow-ups
 - Full **data** backup (`rbd export-diff` streamed to S3), not just the manifest.
-- `POST /restore-jobs` from a backup manifest; restore verification job (PDF §16).
+- ✅ `POST /restore-jobs` — reads + checksum-verifies the backup manifest from RGW, then provisions
+  a new PVC from the backup's VolumeSnapshot (PDF §16, DR-2). Verified on real Ceph.
 - Bucket lifecycle policies, quotas, delete; presigned download URLs for exports.
 
 ## ⏭ Slice 3+ — Enterprise & product integration
