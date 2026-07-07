@@ -1065,6 +1065,9 @@ struct CreateRestoreBody {
     /// New volume/PVC name; defaults to `restore-<backup-suffix>`.
     name: Option<String>,
     storage_class: Option<String>,
+    /// "snapshot" (default) or "data" (reconstruct from the RBD diff in S3).
+    #[serde(default)]
+    mode: Option<String>,
 }
 
 /// `POST /restore-jobs` — restore a volume from a backup: verify the manifest in RGW, then
@@ -1131,6 +1134,7 @@ async fn create_restore(
         bucket_endpoint,
         bucket_name,
         bucket_region,
+        mode: body.mode.clone().unwrap_or_else(|| "snapshot".into()),
     };
     let job = s
         .jobs

@@ -144,6 +144,10 @@ pub enum JobSpec {
         bucket_endpoint: String,
         bucket_name: String,
         bucket_region: String,
+        /// "snapshot" (default) restores from the CSI VolumeSnapshot; "data" reconstructs the
+        /// volume from the RBD diff in S3 (`rbd import-diff`).
+        #[serde(default)]
+        mode: String,
     },
 }
 
@@ -482,10 +486,11 @@ async fn dispatch(
             bucket_endpoint,
             bucket_name,
             bucket_region,
+            mode,
         } => {
             let k8s = require_k8s(k8s)?;
             // 1. Read the backup manifest back from RGW and verify its checksum (integrity check).
-            let manifest_verified = match read_backup_manifest(
+            let manifest_bytes = read_backup_manifest(
                 &k8s,
                 &bucket_namespace,
                 &bucket_secret_ref,
@@ -495,21 +500,106 @@ async fn dispatch(
                 &object_key,
             )
             .await
-            {
-                Ok(bytes) => {
-                    let ok = sha256_hex(&bytes) == expected_checksum;
-                    if !ok {
-                        tracing::warn!("backup {backup_id} manifest checksum mismatch");
-                    }
-                    ok
-                }
-                Err(e) => {
-                    tracing::warn!("backup {backup_id} manifest unreadable: {e:#}");
-                    false
-                }
-            };
+            .ok();
+            let manifest_verified = manifest_bytes
+                .as_ref()
+                .map(|b| sha256_hex(b) == expected_checksum)
+                .unwrap_or(false);
+            if !manifest_verified {
+                tracing::warn!("backup {backup_id} manifest checksum mismatch/unreadable");
+            }
+            let manifest: serde_json::Value = manifest_bytes
+                .as_ref()
+                .and_then(|b| serde_json::from_slice(b).ok())
+                .unwrap_or_else(|| serde_json::json!({}));
 
-            // 2. Provision a new volume from the backup's VolumeSnapshot.
+            // 2a. Data restore: create an empty PVC and apply the RBD diff from S3.
+            if mode == "data" {
+                let data_object = manifest
+                    .pointer("/data/data_object")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        anyhow!("backup {backup_id} has no data object (not a data-mode backup)")
+                    })?
+                    .to_string();
+                let data_checksum = manifest
+                    .pointer("/data/data_checksum")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+
+                let mut labels = std::collections::BTreeMap::new();
+                labels.insert("zyvor.dev/volume-id".to_string(), new_volume_id.clone());
+                labels.insert("zyvor.dev/restored-from".to_string(), backup_id.clone());
+                let create = PvcCreateSpec {
+                    name: new_name.clone(),
+                    namespace: namespace.clone(),
+                    storage_class: storage_class.clone(),
+                    size_bytes,
+                    access_modes: vec!["ReadWriteOnce".into()],
+                    volume_mode: Some("Filesystem".into()),
+                    labels,
+                    data_source_snapshot: None,
+                };
+                k8s.create_pvc(&create)
+                    .await
+                    .with_context(|| format!("create restore PVC {namespace}/{new_name}"))?;
+                let phase = poll_pvc_phase(&k8s, &namespace, &new_name).await;
+                if phase.as_deref() != Some("Bound") {
+                    anyhow::bail!(
+                        "restore PVC {namespace}/{new_name} did not bind (phase {phase:?})"
+                    );
+                }
+                let (pool_name, image) = k8s
+                    .resolve_rbd(&namespace, &new_name)
+                    .await?
+                    .ok_or_else(|| anyhow!("could not resolve RBD image for restored PVC"))?;
+
+                let data = read_backup_manifest(
+                    &k8s,
+                    &bucket_namespace,
+                    &bucket_secret_ref,
+                    &bucket_endpoint,
+                    &bucket_region,
+                    &bucket_name,
+                    &data_object,
+                )
+                .await
+                .context("download backup data object")?;
+                let data_verified = sha256_hex(&data) == data_checksum;
+                if !data_verified {
+                    tracing::warn!("backup {backup_id} data checksum mismatch");
+                }
+                let imported_bytes = data.len();
+                atlas_driver_ceph::rbd_import_diff(&pool_name, &image, data)
+                    .await
+                    .with_context(|| format!("rbd import-diff into {pool_name}/{image}"))?;
+
+                let vol = StorageVolume {
+                    id: new_volume_id.clone(),
+                    cluster_id: None,
+                    pool_id: None,
+                    name: new_name.clone(),
+                    kind: VolumeKind::Block,
+                    backend_native_id: Some(format!("pvc/{namespace}/{new_name}")),
+                    size_bytes,
+                    used_bytes: None,
+                    state: "bound".into(),
+                    health: Health::Ok,
+                    kubernetes_namespace: Some(namespace.clone()),
+                    pvc_name: Some(new_name.clone()),
+                    storage_class_name: Some(storage_class.clone()),
+                };
+                atlas_inventory::upsert_volume(pool, &backend_id, tenant_id, &vol, None).await?;
+                return Ok(serde_json::json!({
+                    "volume_id": new_volume_id, "from_backup": backup_id, "mode": "data",
+                    "manifest_verified": manifest_verified, "data_verified": data_verified,
+                    "imported_bytes": imported_bytes, "rbd": format!("{pool_name}/{image}"),
+                    "pvc": format!("{namespace}/{new_name}"), "bound": true
+                }));
+            }
+
+            // 2b. Snapshot restore (default): provision a new volume from the backup's VolumeSnapshot.
             let phase = provision_from_snapshot(
                 pool,
                 &k8s,
@@ -529,7 +619,7 @@ async fn dispatch(
             )
             .await?;
             Ok(serde_json::json!({
-                "volume_id": new_volume_id, "from_backup": backup_id,
+                "volume_id": new_volume_id, "from_backup": backup_id, "mode": "snapshot",
                 "manifest_verified": manifest_verified,
                 "pvc": format!("{namespace}/{new_name}"),
                 "phase": phase, "bound": phase.as_deref() == Some("Bound")

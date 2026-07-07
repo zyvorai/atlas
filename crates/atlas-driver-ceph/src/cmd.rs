@@ -51,6 +51,42 @@ pub async fn rbd_export_diff(pool: &str, image: &str, snap: &str) -> Result<Vec<
     Ok(output.stdout)
 }
 
+/// Apply an RBD diff stream (from `rbd export-diff`) into an existing image via stdin
+/// (`rbd import-diff - pool/image`). Used by restore-from-data.
+pub async fn rbd_import_diff(pool: &str, image: &str, data: Vec<u8>) -> Result<(), DriverError> {
+    use tokio::io::AsyncWriteExt;
+    let spec = format!("{pool}/{image}");
+    let mut child = tokio::process::Command::new("rbd")
+        .args(["import-diff", "-", &spec])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
+    {
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| DriverError::Backend("rbd import-diff: no stdin".into()))?;
+        stdin
+            .write_all(&data)
+            .await
+            .map_err(|e| DriverError::Backend(format!("rbd import-diff write: {e}")))?;
+        let _ = stdin.shutdown().await;
+    }
+    let output = child
+        .wait_with_output()
+        .await
+        .map_err(|e| DriverError::Backend(format!("rbd import-diff wait: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(DriverError::Backend(format!(
+            "rbd import-diff {spec}: {stderr}"
+        )));
+    }
+    Ok(())
+}
+
 async fn run_json(bin: &str, args: &[&str]) -> Result<serde_json::Value, DriverError> {
     let output = tokio::process::Command::new(bin)
         .args(args)

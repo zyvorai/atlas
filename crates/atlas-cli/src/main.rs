@@ -125,6 +125,9 @@ enum Command {
         backup_id: String,
         #[arg(long)]
         name: Option<String>,
+        /// "snapshot" (default) or "data" (reconstruct from the RBD diff in S3).
+        #[arg(long, default_value = "snapshot")]
+        mode: String,
     },
 }
 
@@ -232,10 +235,14 @@ async fn main() -> Result<()> {
             ),
         ),
         Command::Backups => ("GET", "/api/atlas/v1/backups".to_string(), None),
-        Command::RestoreBackup { backup_id, name } => (
+        Command::RestoreBackup {
+            backup_id,
+            name,
+            mode,
+        } => (
             "POST",
             "/api/atlas/v1/restore-jobs".to_string(),
-            Some(serde_json::json!({ "backup_id": backup_id, "name": name })),
+            Some(serde_json::json!({ "backup_id": backup_id, "name": name, "mode": mode })),
         ),
     };
 
