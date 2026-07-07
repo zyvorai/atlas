@@ -324,6 +324,20 @@ pub struct JobRecord {
     pub updated_at: Option<String>,
 }
 
+/// A per-tenant storage quota plus current usage (PDF §14 multi-tenancy). `0` limits = unlimited.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TenantQuota {
+    pub tenant_id: String,
+    /// Max total provisioned volume bytes for the tenant (0 = unlimited).
+    pub max_bytes: i64,
+    /// Max number of volumes for the tenant (0 = unlimited).
+    pub max_volumes: i64,
+    /// Current total provisioned bytes across the tenant's volumes.
+    pub used_bytes: i64,
+    /// Current number of the tenant's volumes.
+    pub volume_count: i64,
+}
+
 /// An object-storage bucket (RGW/S3) as surfaced by the API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorageBucket {

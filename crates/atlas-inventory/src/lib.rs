@@ -23,6 +23,7 @@ pub mod buckets;
 pub mod jobs;
 pub mod metrics;
 pub mod snapshots;
+pub mod tenants;
 
 /// Open the SQLite pool with WAL + foreign keys, creating the file if missing.
 pub async fn connect(database_url: &str) -> Result<SqlitePool> {

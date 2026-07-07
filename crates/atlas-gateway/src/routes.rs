@@ -51,6 +51,10 @@ pub fn router(state: AppState) -> Router {
         .route("/backups/{id}", get(get_backup).delete(delete_backup))
         .route("/backups/{id}/download", get(download_backup))
         .route("/policies", get(list_policies))
+        .route(
+            "/tenants/{id}/quota",
+            get(get_tenant_quota).put(put_tenant_quota),
+        )
         .route("/metrics/summary", get(metrics_summary))
         .route("/metrics/ceph", get(metrics_ceph))
         .route("/alerts", get(list_alerts))
@@ -359,6 +363,53 @@ async fn list_policies() -> Json<Value> {
     Json(json!(items))
 }
 
+/// `GET /tenants/{id}/quota` — the tenant's quota + current usage (unlimited 0/0 if unset).
+async fn get_tenant_quota(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
+    let q = atlas_inventory::tenants::get_quota(&s.pool, &id).await?;
+    Ok(Json(json!(q)))
+}
+
+#[derive(Debug, Deserialize)]
+struct TenantQuotaBody {
+    /// Max total provisioned volume bytes (0 = unlimited).
+    #[serde(default)]
+    max_bytes: i64,
+    /// Max number of volumes (0 = unlimited).
+    #[serde(default)]
+    max_volumes: i64,
+}
+
+/// `PUT /tenants/{id}/quota` — set the tenant's quota (admin).
+async fn put_tenant_quota(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+    Json(body): Json<TenantQuotaBody>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    if body.max_bytes < 0 || body.max_volumes < 0 {
+        return Err(AppError::Validation("quota limits must be >= 0".into()));
+    }
+    atlas_inventory::tenants::set_quota(&s.pool, &id, body.max_bytes, body.max_volumes).await?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "tenant.quota.set",
+        "tenant",
+        &id,
+        "ok",
+        Some(json!({ "max_bytes": body.max_bytes, "max_volumes": body.max_volumes })),
+        None,
+    )
+    .await;
+    let q = atlas_inventory::tenants::get_quota(&s.pool, &id).await?;
+    Ok(Json(json!(q)))
+}
+
 // ---- snapshots (read) ----
 
 async fn list_snapshots(State(s): State<AppState>) -> AppResult<Json<Value>> {
@@ -395,6 +446,25 @@ async fn create_volume(
     }
     if body.size_bytes <= 0 {
         return Err(AppError::Validation("size_bytes must be > 0".into()));
+    }
+
+    // Tenant quota admission (PDF §14): reject a create that would exceed the tenant's limits.
+    match atlas_inventory::tenants::check_admission(&s.pool, &body.tenant_id, body.size_bytes)
+        .await?
+    {
+        atlas_inventory::tenants::QuotaCheck::Ok => {}
+        atlas_inventory::tenants::QuotaCheck::Bytes { limit, would_be } => {
+            return Err(AppError::Conflict(format!(
+                "tenant {} byte quota exceeded: {would_be} > {limit}",
+                body.tenant_id
+            )));
+        }
+        atlas_inventory::tenants::QuotaCheck::Count { limit, current } => {
+            return Err(AppError::Conflict(format!(
+                "tenant {} volume-count quota exceeded: {current} already at limit {limit}",
+                body.tenant_id
+            )));
+        }
     }
 
     let k8s_opts = body.kubernetes.clone();

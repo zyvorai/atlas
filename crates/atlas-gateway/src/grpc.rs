@@ -228,6 +228,23 @@ impl AtlasStorage for GrpcService {
         } else {
             r.tenant_id
         };
+        // Tenant quota admission (PDF §14): reject a create that would exceed the tenant's limits.
+        match atlas_inventory::tenants::check_admission(&self.state.pool, &tenant_id, r.size_bytes)
+            .await
+            .map_err(internal)?
+        {
+            atlas_inventory::tenants::QuotaCheck::Ok => {}
+            atlas_inventory::tenants::QuotaCheck::Bytes { limit, would_be } => {
+                return Err(Status::resource_exhausted(format!(
+                    "tenant {tenant_id} byte quota exceeded: {would_be} > {limit}"
+                )));
+            }
+            atlas_inventory::tenants::QuotaCheck::Count { limit, current } => {
+                return Err(Status::resource_exhausted(format!(
+                    "tenant {tenant_id} volume-count quota exceeded: {current} already at limit {limit}"
+                )));
+            }
+        }
         let volume_id = atlas_common::ids::volume_id();
         let job_id = atlas_common::ids::job_id();
         let idem = atlas_common::ids::stable_id(

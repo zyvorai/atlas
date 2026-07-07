@@ -56,6 +56,16 @@ enum Command {
     },
     /// GET /api/atlas/v1/policies
     Policies,
+    /// GET /api/atlas/v1/tenants/{id}/quota — a tenant's quota + usage
+    Quota { tenant_id: String },
+    /// PUT /api/atlas/v1/tenants/{id}/quota — set a tenant's quota (0 = unlimited)
+    SetQuota {
+        tenant_id: String,
+        #[arg(long, default_value_t = 0)]
+        max_bytes: i64,
+        #[arg(long, default_value_t = 0)]
+        max_volumes: i64,
+    },
     /// GET /api/atlas/v1/jobs  (or a single job with an id)
     Jobs { id: Option<String> },
     /// GET /api/atlas/v1/snapshots
@@ -195,6 +205,20 @@ async fn main() -> Result<()> {
             None,
         ),
         Command::Policies => ("GET", "/api/atlas/v1/policies".to_string(), None),
+        Command::Quota { tenant_id } => (
+            "GET",
+            format!("/api/atlas/v1/tenants/{tenant_id}/quota"),
+            None,
+        ),
+        Command::SetQuota {
+            tenant_id,
+            max_bytes,
+            max_volumes,
+        } => (
+            "PUT",
+            format!("/api/atlas/v1/tenants/{tenant_id}/quota"),
+            Some(serde_json::json!({ "max_bytes": max_bytes, "max_volumes": max_volumes })),
+        ),
         Command::Jobs { id } => match id {
             Some(id) => ("GET", format!("/api/atlas/v1/jobs/{id}"), None),
             None => ("GET", "/api/atlas/v1/jobs".to_string(), None),
@@ -297,6 +321,7 @@ async fn main() -> Result<()> {
     let url = format!("{base}{path}");
     let mut req = match method {
         "POST" => client.post(&url),
+        "PUT" => client.put(&url),
         "DELETE" => client.delete(&url),
         _ => client.get(&url),
     };
