@@ -89,6 +89,14 @@ impl S3Target {
         self.get_object(key).await.is_ok()
     }
 
+    /// A time-limited presigned GET URL for `key` (client can download without credentials).
+    pub fn presigned_get(&self, key: &str, ttl_secs: u64) -> String {
+        self.bucket
+            .get_object(Some(&self.creds), key)
+            .sign(Duration::from_secs(ttl_secs))
+            .to_string()
+    }
+
     /// DELETE an object. S3 delete is idempotent (deleting a missing key returns success).
     pub async fn delete_object(&self, key: &str) -> Result<()> {
         let action = self.bucket.delete_object(Some(&self.creds), key);

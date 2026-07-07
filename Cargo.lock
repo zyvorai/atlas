@@ -251,6 +251,7 @@ dependencies = [
  "atlas-driver-ceph",
  "atlas-driver-core",
  "atlas-driver-k8s",
+ "atlas-driver-rgw",
  "atlas-inventory",
  "atlas-jobs",
  "atlas-monitor",

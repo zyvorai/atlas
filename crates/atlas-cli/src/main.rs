@@ -131,6 +131,12 @@ enum Command {
     Backups,
     /// DELETE /api/atlas/v1/backups/{id}
     DeleteBackup { id: String },
+    /// GET /api/atlas/v1/backups/{id}/download — presigned URL (--what data|manifest)
+    BackupDownload {
+        id: String,
+        #[arg(long, default_value = "manifest")]
+        what: String,
+    },
     /// POST /api/atlas/v1/restore-jobs — restore a volume from a backup
     RestoreBackup {
         backup_id: String,
@@ -253,6 +259,11 @@ async fn main() -> Result<()> {
         ),
         Command::Backups => ("GET", "/api/atlas/v1/backups".to_string(), None),
         Command::DeleteBackup { id } => ("DELETE", format!("/api/atlas/v1/backups/{id}"), None),
+        Command::BackupDownload { id, what } => (
+            "GET",
+            format!("/api/atlas/v1/backups/{id}/download?what={what}"),
+            None,
+        ),
         Command::RestoreBackup {
             backup_id,
             name,

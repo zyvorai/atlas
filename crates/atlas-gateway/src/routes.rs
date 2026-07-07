@@ -49,6 +49,7 @@ pub fn router(state: AppState) -> Router {
         .route("/restore-jobs", post(create_restore))
         .route("/backups", get(list_backups))
         .route("/backups/{id}", get(get_backup).delete(delete_backup))
+        .route("/backups/{id}/download", get(download_backup))
         .route("/policies", get(list_policies))
         .route("/metrics/summary", get(metrics_summary))
         .route("/metrics/ceph", get(metrics_ceph))
@@ -1018,6 +1019,73 @@ async fn delete_backup(
     )
     .await;
     Ok(accepted(&job, json!({ "backup_id": id })))
+}
+
+#[derive(Debug, Deserialize)]
+struct DownloadQuery {
+    /// "manifest" (default) or "data" (the `.rbd-diff` object).
+    what: Option<String>,
+}
+
+/// `GET /backups/{id}/download?what=data|manifest` — a time-limited presigned S3 URL for the
+/// backup object, so a client downloads it straight from RGW (no proxy, no credentials).
+async fn download_backup(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<DownloadQuery>,
+) -> AppResult<Json<Value>> {
+    let backup = atlas_inventory::backups::get_backup(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("backup {id}")))?;
+    let bucket = atlas_inventory::buckets::get_bucket(&s.pool, &backup.bucket_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("bucket {}", backup.bucket_id)))?;
+    if bucket.state != "bound" {
+        return Err(AppError::Validation("bucket is not bound".into()));
+    }
+    let key = match q.what.as_deref() {
+        Some("data") => format!("{}.rbd-diff", backup.object_key),
+        _ => backup.object_key.clone(),
+    };
+
+    // Sign with the bucket's credentials, read in-cluster (never returned to the caller).
+    let k8s = s
+        .k8s
+        .as_ref()
+        .ok_or_else(|| AppError::Driver("no reachable Kubernetes cluster".into()))?;
+    let ns = bucket
+        .namespace
+        .clone()
+        .unwrap_or_else(|| "rook-ceph".into());
+    let secret_ref = bucket
+        .secret_ref
+        .clone()
+        .ok_or_else(|| AppError::Validation("bucket has no secret".into()))?;
+    let secret = k8s
+        .get_secret(&ns, &secret_ref)
+        .await
+        .map_err(|e| AppError::Driver(e.to_string()))?
+        .ok_or_else(|| AppError::NotFound(format!("bucket secret {secret_ref}")))?;
+    let access = secret
+        .get("AWS_ACCESS_KEY_ID")
+        .ok_or_else(|| AppError::Internal("bucket secret missing AWS_ACCESS_KEY_ID".into()))?;
+    let secret_key = secret
+        .get("AWS_SECRET_ACCESS_KEY")
+        .ok_or_else(|| AppError::Internal("bucket secret missing AWS_SECRET_ACCESS_KEY".into()))?;
+
+    let s3 = atlas_driver_rgw::S3Target::new(
+        &bucket.endpoint.unwrap_or_default(),
+        &bucket.region.unwrap_or_else(|| "us-east-1".into()),
+        &bucket.bucket_name.unwrap_or_default(),
+        access,
+        secret_key,
+    )
+    .map_err(|e| AppError::Driver(e.to_string()))?;
+    let ttl_secs = 900;
+    let url = s3.presigned_get(&key, ttl_secs);
+    Ok(Json(json!({
+        "url": url, "object_key": key, "expires_in_secs": ttl_secs
+    })))
 }
 
 /// Build a `BackupDelete` job spec for a backup + its bucket.
