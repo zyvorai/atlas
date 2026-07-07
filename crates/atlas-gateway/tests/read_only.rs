@@ -99,7 +99,9 @@ async fn discovery_populates_inventory_and_audit() {
 
     // Trigger discovery.
     let resp = client()
-        .post(format!("{base}/api/atlas/v1/backends/bkd_ceph_lab/discover"))
+        .post(format!(
+            "{base}/api/atlas/v1/backends/bkd_ceph_lab/discover"
+        ))
         .send()
         .await
         .unwrap();
@@ -142,9 +144,7 @@ async fn discovery_populates_inventory_and_audit() {
 
     // Cluster health + capabilities resolve.
     let health: serde_json::Value = client()
-        .get(format!(
-            "{base}/api/atlas/v1/clusters/{cluster_id}/health"
-        ))
+        .get(format!("{base}/api/atlas/v1/clusters/{cluster_id}/health"))
         .send()
         .await
         .unwrap()

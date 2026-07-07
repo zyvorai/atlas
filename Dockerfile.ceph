@@ -1,0 +1,26 @@
+# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# atlas-gateway image WITH the Ceph Reef client (ceph/rbd CLIs) for ATLAS_CEPH_DRIVER_MODE=real.
+# The runtime installs ceph-common from the upstream Reef apt repo so the client matches the
+# cluster major (v18) and the glibc lines up with the debian-bookworm-built binary.
+# ---- builder ----
+FROM rust:1.88-bookworm AS builder
+WORKDIR /build
+COPY . .
+RUN cargo build --release -p atlas-gateway -p atlas-cli
+
+# ---- runtime (debian + ceph reef client) ----
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+    && curl -fsSL https://download.ceph.com/keys/release.asc | gpg --dearmor -o /usr/share/keyrings/ceph.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/ceph.gpg] https://download.ceph.com/debian-reef/ bookworm main" > /etc/apt/sources.list.d/ceph.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends ceph-common \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /build/target/release/atlas-gateway /usr/local/bin/atlas-gateway
+COPY --from=builder /build/target/release/atlasctl /usr/local/bin/atlasctl
+COPY --from=builder /build/migrations /usr/local/share/atlas/migrations
+ENV ATLAS_BIND_ADDR=0.0.0.0:5110 \
+    ATLAS_DATABASE_URL=sqlite:///var/lib/atlas/atlas.db?mode=rwc
+EXPOSE 5110
+ENTRYPOINT ["/usr/local/bin/atlas-gateway"]

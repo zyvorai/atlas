@@ -164,10 +164,16 @@ impl StorageDriver for RealCephDriver {
         let pools = self.pools_for(&cluster.id).await?;
         let osds = self.osds_for(&cluster.id).await?;
 
-        // Enumerate RBD images in each rbd-kind pool.
+        // Enumerate RBD images in each rbd-kind pool, reconciling each volume's foreign keys to
+        // the pool/cluster ids the inventory will store (list_volumes only knows the pool *name*).
         let mut volumes = Vec::new();
         for pool in pools.iter().filter(|p| p.kind == "rbd") {
-            volumes.extend(self.list_volumes(&pool.name).await.unwrap_or_default());
+            let mut vols = self.list_volumes(&pool.name).await.unwrap_or_default();
+            for v in &mut vols {
+                v.pool_id = Some(pool.id.clone());
+                v.cluster_id = Some(cluster.id.clone());
+            }
+            volumes.extend(vols);
         }
 
         Ok(DiscoveryResult {
