@@ -132,6 +132,9 @@ enum Command {
         /// Retain only the most recent N backups for this volume (0 = config default).
         #[arg(long, default_value_t = 0)]
         keep: i64,
+        /// Prune backups older than this many seconds (0 = config default).
+        #[arg(long, default_value_t = 0)]
+        max_age_secs: i64,
     },
     /// GET /api/atlas/v1/backups
     Backups,
@@ -264,11 +267,13 @@ async fn main() -> Result<()> {
             bucket_id,
             mode,
             keep,
+            max_age_secs,
         } => (
             "POST",
             "/api/atlas/v1/backup-jobs".to_string(),
             Some(serde_json::json!({
-                "volume_id": volume_id, "bucket_id": bucket_id, "mode": mode, "keep": keep
+                "volume_id": volume_id, "bucket_id": bucket_id, "mode": mode,
+                "keep": keep, "max_age_secs": max_age_secs
             })),
         ),
         Command::Backups => ("GET", "/api/atlas/v1/backups".to_string(), None),

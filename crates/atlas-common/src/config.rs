@@ -41,6 +41,8 @@ pub struct Config {
     pub ceph_prometheus_url: Option<String>,
     /// Default backups to retain per volume (0 = unlimited); overridable per request.
     pub backup_keep: i64,
+    /// Default max backup age in seconds (0 = no age limit); overridable per request.
+    pub backup_max_age_secs: i64,
 }
 
 impl Config {
@@ -80,6 +82,10 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(0),
+            backup_max_age_secs: std::env::var("ATLAS_BACKUP_MAX_AGE_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0),
         }
     }
 
@@ -102,6 +108,7 @@ impl Default for Config {
             monitor_interval_secs: 0,
             ceph_prometheus_url: None,
             backup_keep: 0,
+            backup_max_age_secs: 0,
         }
     }
 }

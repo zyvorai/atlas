@@ -1116,6 +1116,29 @@ fn make_backup_delete_spec(
     }
 }
 
+/// Enqueue a backup-delete job for one backup (resolves its bucket + volume placement first).
+/// No-op if the bucket is gone/unbound.
+async fn enqueue_backup_delete(s: &AppState, actor_id: &str, old: &atlas_api_types::BackupRecord) {
+    let bucket = match atlas_inventory::buckets::get_bucket(&s.pool, &old.bucket_id).await {
+        Ok(Some(b)) if b.state == "bound" => b,
+        _ => return,
+    };
+    let vol = atlas_inventory::get_volume(&s.pool, &old.volume_id)
+        .await
+        .ok()
+        .flatten();
+    let ns = vol
+        .as_ref()
+        .and_then(|v| v.kubernetes_namespace.clone())
+        .unwrap_or_default();
+    let pvc = vol.and_then(|v| v.pvc_name).unwrap_or_default();
+    let spec = make_backup_delete_spec(old, bucket, ns, pvc);
+    let _ = s
+        .jobs
+        .enqueue(&ids::job_id(), &old.tenant_id, actor_id, spec, None)
+        .await;
+}
+
 /// Retention: prune backups for a volume beyond the `keep` most recent (enqueues delete jobs).
 async fn prune_backups(s: &AppState, actor_id: &str, volume_id: &str, keep: i64) {
     if keep <= 0 {
@@ -1126,24 +1149,24 @@ async fn prune_backups(s: &AppState, actor_id: &str, volume_id: &str, keep: i64)
         Err(_) => return,
     };
     for old in all.into_iter().skip(keep as usize) {
-        let bucket = match atlas_inventory::buckets::get_bucket(&s.pool, &old.bucket_id).await {
-            Ok(Some(b)) if b.state == "bound" => b,
-            _ => continue,
-        };
-        let vol = atlas_inventory::get_volume(&s.pool, &old.volume_id)
-            .await
-            .ok()
-            .flatten();
-        let ns = vol
-            .as_ref()
-            .and_then(|v| v.kubernetes_namespace.clone())
-            .unwrap_or_default();
-        let pvc = vol.and_then(|v| v.pvc_name).unwrap_or_default();
-        let spec = make_backup_delete_spec(&old, bucket, ns, pvc);
-        let _ = s
-            .jobs
-            .enqueue(&ids::job_id(), &old.tenant_id, actor_id, spec, None)
-            .await;
+        enqueue_backup_delete(s, actor_id, &old).await;
+    }
+}
+
+/// Retention: prune backups for a volume older than `max_age_secs` (enqueues delete jobs).
+async fn prune_backups_by_age(s: &AppState, actor_id: &str, volume_id: &str, max_age_secs: i64) {
+    if max_age_secs <= 0 {
+        return;
+    }
+    let cutoff = (chrono::Utc::now() - chrono::Duration::seconds(max_age_secs))
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string();
+    let old = match atlas_inventory::backups::list_older_than(&s.pool, volume_id, &cutoff).await {
+        Ok(o) => o,
+        Err(_) => return,
+    };
+    for b in &old {
+        enqueue_backup_delete(s, actor_id, b).await;
     }
 }
 
@@ -1157,6 +1180,9 @@ struct CreateBackupBody {
     /// Retain only the most recent `keep` backups for this volume (0/absent = config default).
     #[serde(default)]
     keep: Option<i64>,
+    /// Prune backups older than this many seconds (0/absent = config default).
+    #[serde(default)]
+    max_age_secs: Option<i64>,
 }
 
 /// `POST /backup-jobs` — snapshot a volume and write a backup manifest to an RGW bucket (PDF §16).
@@ -1274,9 +1300,11 @@ async fn create_backup(
     )
     .await;
 
-    // Retention: prune older backups for this volume beyond the keep count.
+    // Retention: prune older backups for this volume beyond the keep count and/or past max age.
     let keep = body.keep.unwrap_or(s.config.backup_keep);
     prune_backups(&s, &actor.id, &body.volume_id, keep).await;
+    let max_age = body.max_age_secs.unwrap_or(s.config.backup_max_age_secs);
+    prune_backups_by_age(&s, &actor.id, &body.volume_id, max_age).await;
 
     Ok(accepted(
         &job,
