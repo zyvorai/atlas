@@ -952,19 +952,7 @@ async fn delete_backup(
         .unwrap_or_default();
     let pvc_name = vol.and_then(|v| v.pvc_name).unwrap_or_default();
 
-    let spec = JobSpec::BackupDelete {
-        backup_id: id.clone(),
-        manifest_key: backup.object_key.clone(),
-        data_key: format!("{}.rbd-diff", backup.object_key),
-        volume_namespace,
-        pvc_name,
-        rbd_snap: format!("atlasbkp-{}", &id[4..]),
-        bucket_namespace: bucket.namespace.unwrap_or_else(|| "rook-ceph".into()),
-        bucket_secret_ref: bucket.secret_ref.unwrap_or_default(),
-        bucket_endpoint: bucket.endpoint.unwrap_or_default(),
-        bucket_name: bucket.bucket_name.unwrap_or_default(),
-        bucket_region: bucket.region.unwrap_or_else(|| "us-east-1".into()),
-    };
+    let spec = make_backup_delete_spec(&backup, bucket, volume_namespace, pvc_name);
     let job_id = ids::job_id();
     let job = s
         .jobs
@@ -986,6 +974,59 @@ async fn delete_backup(
     Ok(accepted(&job, json!({ "backup_id": id })))
 }
 
+/// Build a `BackupDelete` job spec for a backup + its bucket.
+fn make_backup_delete_spec(
+    backup: &atlas_api_types::BackupRecord,
+    bucket: atlas_api_types::StorageBucket,
+    volume_namespace: String,
+    pvc_name: String,
+) -> JobSpec {
+    JobSpec::BackupDelete {
+        backup_id: backup.id.clone(),
+        manifest_key: backup.object_key.clone(),
+        data_key: format!("{}.rbd-diff", backup.object_key),
+        volume_namespace,
+        pvc_name,
+        rbd_snap: format!("atlasbkp-{}", &backup.id[4..]),
+        bucket_namespace: bucket.namespace.unwrap_or_else(|| "rook-ceph".into()),
+        bucket_secret_ref: bucket.secret_ref.unwrap_or_default(),
+        bucket_endpoint: bucket.endpoint.unwrap_or_default(),
+        bucket_name: bucket.bucket_name.unwrap_or_default(),
+        bucket_region: bucket.region.unwrap_or_else(|| "us-east-1".into()),
+    }
+}
+
+/// Retention: prune backups for a volume beyond the `keep` most recent (enqueues delete jobs).
+async fn prune_backups(s: &AppState, actor_id: &str, volume_id: &str, keep: i64) {
+    if keep <= 0 {
+        return;
+    }
+    let all = match atlas_inventory::backups::list_backups(&s.pool, Some(volume_id)).await {
+        Ok(a) => a,
+        Err(_) => return,
+    };
+    for old in all.into_iter().skip(keep as usize) {
+        let bucket = match atlas_inventory::buckets::get_bucket(&s.pool, &old.bucket_id).await {
+            Ok(Some(b)) if b.state == "bound" => b,
+            _ => continue,
+        };
+        let vol = atlas_inventory::get_volume(&s.pool, &old.volume_id)
+            .await
+            .ok()
+            .flatten();
+        let ns = vol
+            .as_ref()
+            .and_then(|v| v.kubernetes_namespace.clone())
+            .unwrap_or_default();
+        let pvc = vol.and_then(|v| v.pvc_name).unwrap_or_default();
+        let spec = make_backup_delete_spec(&old, bucket, ns, pvc);
+        let _ = s
+            .jobs
+            .enqueue(&ids::job_id(), &old.tenant_id, actor_id, spec, None)
+            .await;
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct CreateBackupBody {
     volume_id: String,
@@ -993,6 +1034,9 @@ struct CreateBackupBody {
     /// "manifest" (default) or "data" (also exports the RBD image data to S3).
     #[serde(default)]
     mode: Option<String>,
+    /// Retain only the most recent `keep` backups for this volume (0/absent = config default).
+    #[serde(default)]
+    keep: Option<i64>,
 }
 
 /// `POST /backup-jobs` — snapshot a volume and write a backup manifest to an RGW bucket (PDF §16).
@@ -1109,6 +1153,11 @@ async fn create_backup(
         None,
     )
     .await;
+
+    // Retention: prune older backups for this volume beyond the keep count.
+    let keep = body.keep.unwrap_or(s.config.backup_keep);
+    prune_backups(&s, &actor.id, &body.volume_id, keep).await;
+
     Ok(accepted(
         &job,
         json!({ "backup_id": backup_id, "object_key": object_key, "bucket_id": body.bucket_id }),

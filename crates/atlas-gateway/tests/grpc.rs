@@ -26,6 +26,7 @@ async fn grpc_edge_health_create_and_list() {
         auth_required: false,
         monitor_interval_secs: 0,
         ceph_prometheus_url: None,
+        backup_keep: 0,
     };
     let state = build_state(
         config,
@@ -117,6 +118,7 @@ async fn grpc_enforces_jwt_when_auth_required() {
         auth_required: true,
         monitor_interval_secs: 0,
         ceph_prometheus_url: None,
+        backup_keep: 0,
     };
     let state = build_state(
         config,

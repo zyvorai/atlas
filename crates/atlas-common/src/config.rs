@@ -39,6 +39,8 @@ pub struct Config {
     pub monitor_interval_secs: u64,
     /// Ceph mgr Prometheus `/metrics` URL to scrape (None disables metric collection).
     pub ceph_prometheus_url: Option<String>,
+    /// Default backups to retain per volume (0 = unlimited); overridable per request.
+    pub backup_keep: i64,
 }
 
 impl Config {
@@ -74,6 +76,10 @@ impl Config {
             ceph_prometheus_url: std::env::var("ATLAS_CEPH_PROMETHEUS_URL")
                 .ok()
                 .filter(|s| !s.trim().is_empty()),
+            backup_keep: std::env::var("ATLAS_BACKUP_KEEP")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0),
         }
     }
 
@@ -95,6 +101,7 @@ impl Default for Config {
             auth_required: false,
             monitor_interval_secs: 0,
             ceph_prometheus_url: None,
+            backup_keep: 0,
         }
     }
 }

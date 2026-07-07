@@ -117,6 +117,9 @@ enum Command {
         /// "manifest" (default) or "data" (also exports RBD image data to S3).
         #[arg(long, default_value = "manifest")]
         mode: String,
+        /// Retain only the most recent N backups for this volume (0 = config default).
+        #[arg(long, default_value_t = 0)]
+        keep: i64,
     },
     /// GET /api/atlas/v1/backups
     Backups,
@@ -229,12 +232,13 @@ async fn main() -> Result<()> {
             volume_id,
             bucket_id,
             mode,
+            keep,
         } => (
             "POST",
             "/api/atlas/v1/backup-jobs".to_string(),
-            Some(
-                serde_json::json!({ "volume_id": volume_id, "bucket_id": bucket_id, "mode": mode }),
-            ),
+            Some(serde_json::json!({
+                "volume_id": volume_id, "bucket_id": bucket_id, "mode": mode, "keep": keep
+            })),
         ),
         Command::Backups => ("GET", "/api/atlas/v1/backups".to_string(), None),
         Command::DeleteBackup { id } => ("DELETE", format!("/api/atlas/v1/backups/{id}"), None),

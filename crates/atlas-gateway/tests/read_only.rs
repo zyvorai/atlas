@@ -29,6 +29,7 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
         auth_required: false,
         monitor_interval_secs: 0,
         ceph_prometheus_url: None,
+        backup_keep: 0,
     };
 
     let state = build_state(
@@ -99,6 +100,7 @@ async fn spawn_auth(secret: &str) -> String {
         auth_required: true,
         monitor_interval_secs: 0,
         ceph_prometheus_url: None,
+        backup_keep: 0,
     };
     let state = build_state(
         config,
@@ -870,6 +872,63 @@ async fn backup_delete_enqueues() {
     assert_eq!(r.status(), reqwest::StatusCode::ACCEPTED);
     let body: serde_json::Value = r.json().await.unwrap();
     assert_eq!(body["resource"]["backup_id"], "bkp_bd");
+}
+
+#[tokio::test]
+async fn backup_retention_prunes_old() {
+    let (addr, pool) = spawn().await;
+    let base = format!("http://{addr}");
+    seed_volume(&pool, "vol_ret", "vol-ret").await;
+    atlas_inventory::buckets::insert_bucket(&pool, "bkt_ret", "t1", "b", "rook-ceph", "b")
+        .await
+        .unwrap();
+    atlas_inventory::buckets::set_bound(&pool, "bkt_ret", "b-1", "http://rgw:80", "us-east-1", "b")
+        .await
+        .unwrap();
+    // Three pre-existing backups for the volume.
+    for n in 0..3 {
+        atlas_inventory::backups::insert_backup(
+            &pool,
+            &format!("bkp_ret{n}"),
+            "t1",
+            "vol_ret",
+            None,
+            "bkt_ret",
+            &format!("backups/vol_ret/bkp_ret{n}.manifest.json"),
+            "manifest-v1",
+            &serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+    }
+
+    // New backup with keep=2 → prune the 2 oldest (of the 4 total) via delete jobs.
+    let r = client()
+        .post(format!("{base}/api/atlas/v1/backup-jobs"))
+        .json(&serde_json::json!({
+            "volume_id": "vol_ret", "bucket_id": "bkt_ret", "keep": 2
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), reqwest::StatusCode::ACCEPTED);
+
+    let jobs: serde_json::Value = client()
+        .get(format!("{base}/api/atlas/v1/jobs"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let deletes = jobs
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|j| j["job_type"] == "backup.delete")
+        .count();
+    assert_eq!(deletes, 2, "keep=2 with 4 backups should enqueue 2 deletes");
 }
 
 #[tokio::test]
