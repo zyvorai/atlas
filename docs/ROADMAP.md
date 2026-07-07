@@ -79,7 +79,10 @@ Read-only control plane + real Ceph lab.
 - ✅ **JWT auth** — a tonic interceptor gated by `ATLAS_AUTH_REQUIRED` verifies an HS256 Bearer token
   in the `authorization` metadata with the shared secret (mirrors REST) and injects the actor.
   Verified live: no token → `Unauthenticated`, valid token → OK.
-- Follow-ups: streaming job-progress RPC; gRPC clients in the products; RBAC roles on RPCs.
+- ✅ **RBAC** — role hierarchy `viewer < operator < admin` (PDF §14.2; `product.service.*` = operator).
+  Enforced on both edges (only when `auth_required`): writes need operator; delete-volume /
+  create-backend / force-snapshot-delete need admin. Verified live (401/403/202/admin-gated).
+- Follow-ups: streaming job-progress RPC; gRPC clients in the products.
 
 ## ⏭ Slice 3+ — Enterprise & product integration
 - Product integrations: Veyron (VM datastores), Hyper2KVM (direct-to-RBD migration), GuestKit
