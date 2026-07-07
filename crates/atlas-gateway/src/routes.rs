@@ -46,6 +46,7 @@ pub fn router(state: AppState) -> Router {
         .route("/buckets", get(list_buckets).post(create_bucket))
         .route("/buckets/{id}", get(get_bucket))
         .route("/backup-jobs", post(create_backup))
+        .route("/restore-jobs", post(create_restore))
         .route("/backups", get(list_backups))
         .route("/backups/{id}", get(get_backup))
         .route("/policies", get(list_policies))
@@ -962,6 +963,102 @@ async fn create_backup(
     Ok(accepted(
         &job,
         json!({ "backup_id": backup_id, "object_key": object_key, "bucket_id": body.bucket_id }),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateRestoreBody {
+    backup_id: String,
+    /// New volume/PVC name; defaults to `restore-<backup-suffix>`.
+    name: Option<String>,
+    storage_class: Option<String>,
+}
+
+/// `POST /restore-jobs` — restore a volume from a backup: verify the manifest in RGW, then
+/// provision a new PVC from the backup's snapshot (PDF §16, DR-2).
+async fn create_restore(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Json(body): Json<CreateRestoreBody>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    let backup = atlas_inventory::backups::get_backup(&s.pool, &body.backup_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("backup {}", body.backup_id)))?;
+    let snapshot_id = backup
+        .snapshot_id
+        .clone()
+        .ok_or_else(|| AppError::Validation("backup has no snapshot to restore from".into()))?;
+    // The backup's VolumeSnapshot (k8s object) + its namespace come from the snapshot's source volume.
+    let snap = atlas_inventory::snapshots::get_snapshot(&s.pool, &snapshot_id)
+        .await?
+        .ok_or_else(|| AppError::Validation("backup snapshot no longer exists".into()))?;
+    let src = atlas_inventory::get_volume(&s.pool, &snap.volume_id).await?;
+    let namespace = src
+        .as_ref()
+        .and_then(|v| v.kubernetes_namespace.clone())
+        .unwrap_or_else(|| "default".into());
+    let storage_class = body
+        .storage_class
+        .or_else(|| src.as_ref().and_then(|v| v.storage_class_name.clone()))
+        .unwrap_or_else(|| atlas_policy::DEFAULT_BLOCK_SC.to_string());
+    let size_bytes = src.as_ref().map(|v| v.size_bytes).unwrap_or(1_073_741_824);
+
+    // Bucket details to read + verify the manifest.
+    let bucket = atlas_inventory::buckets::get_bucket(&s.pool, &backup.bucket_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("bucket {}", backup.bucket_id)))?;
+    let bucket_endpoint = bucket.endpoint.unwrap_or_default();
+    let bucket_name = bucket.bucket_name.unwrap_or_default();
+    let bucket_secret_ref = bucket.secret_ref.unwrap_or_default();
+    let bucket_namespace = bucket.namespace.unwrap_or_else(|| "rook-ceph".into());
+    let bucket_region = bucket.region.unwrap_or_else(|| "us-east-1".into());
+
+    let new_volume_id = ids::volume_id();
+    let new_name = body
+        .name
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or_else(|| format!("restore-{}", &backup.id[4..]));
+    let job_id = ids::job_id();
+
+    let spec = JobSpec::RestoreBackup {
+        backup_id: backup.id.clone(),
+        new_volume_id: new_volume_id.clone(),
+        backend_id: CEPH_BACKEND_ID.into(),
+        snapshot_id,
+        snapshot_k8s_name: snap.name,
+        new_name: new_name.clone(),
+        namespace: namespace.clone(),
+        storage_class,
+        size_bytes,
+        object_key: backup.object_key.clone(),
+        expected_checksum: backup.checksum.unwrap_or_default(),
+        bucket_namespace,
+        bucket_secret_ref,
+        bucket_endpoint,
+        bucket_name,
+        bucket_region,
+    };
+    let job = s
+        .jobs
+        .enqueue(&job_id, &backup.tenant_id, &actor.id, spec, None)
+        .await
+        .map_err(AppError::from)?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "backup.restore.requested",
+        "backup",
+        &backup.id,
+        "accepted",
+        Some(json!({ "new_volume_id": new_volume_id })),
+        None,
+    )
+    .await;
+    Ok(accepted(
+        &job,
+        json!({ "volume_id": new_volume_id, "from_backup": backup.id,
+                "namespace": namespace, "pvc": new_name }),
     ))
 }
 

@@ -482,6 +482,66 @@ async fn backup_requires_known_volume_and_bound_bucket() {
 }
 
 #[tokio::test]
+async fn restore_from_backup_enqueues() {
+    let (addr, pool) = spawn().await;
+    let base = format!("http://{addr}");
+
+    // Unknown backup → 404.
+    let r404 = client()
+        .post(format!("{base}/api/atlas/v1/restore-jobs"))
+        .json(&serde_json::json!({ "backup_id": "nope" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r404.status(), reqwest::StatusCode::NOT_FOUND);
+
+    // Seed volume → snapshot → bound bucket → backup, then restore → 202.
+    seed_volume(&pool, "vol_r", "vol-r").await;
+    atlas_inventory::snapshots::insert_snapshot(
+        &pool,
+        "snap_r",
+        "t1",
+        "vol_r",
+        "snap-r-obj",
+        None,
+        "app",
+        "ready",
+    )
+    .await
+    .unwrap();
+    atlas_inventory::buckets::insert_bucket(&pool, "bkt_r", "t1", "b", "rook-ceph", "b")
+        .await
+        .unwrap();
+    atlas_inventory::buckets::set_bound(&pool, "bkt_r", "b-1", "http://rgw:80", "us-east-1", "b")
+        .await
+        .unwrap();
+    atlas_inventory::backups::insert_backup(
+        &pool,
+        "bkp_r",
+        "t1",
+        "vol_r",
+        Some("snap_r"),
+        "bkt_r",
+        "backups/vol_r/bkp_r.manifest.json",
+        "manifest-v1",
+        &serde_json::json!({ "backup_id": "bkp_r" }),
+    )
+    .await
+    .unwrap();
+
+    let r202 = client()
+        .post(format!("{base}/api/atlas/v1/restore-jobs"))
+        .json(&serde_json::json!({ "backup_id": "bkp_r", "name": "restored-vol" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r202.status(), reqwest::StatusCode::ACCEPTED);
+    let body: serde_json::Value = r202.json().await.unwrap();
+    assert_eq!(body["resource"]["from_backup"], "bkp_r");
+    assert_eq!(body["resource"]["pvc"], "restored-vol");
+}
+
+#[tokio::test]
 async fn snapshot_delete_blocked_by_dependents() {
     let (addr, pool) = spawn().await;
     let base = format!("http://{addr}");

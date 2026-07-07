@@ -107,6 +107,12 @@ enum Command {
     },
     /// GET /api/atlas/v1/backups
     Backups,
+    /// POST /api/atlas/v1/restore-jobs — restore a volume from a backup
+    RestoreBackup {
+        backup_id: String,
+        #[arg(long)]
+        name: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -194,6 +200,11 @@ async fn main() -> Result<()> {
             Some(serde_json::json!({ "volume_id": volume_id, "bucket_id": bucket_id })),
         ),
         Command::Backups => ("GET", "/api/atlas/v1/backups".to_string(), None),
+        Command::RestoreBackup { backup_id, name } => (
+            "POST",
+            "/api/atlas/v1/restore-jobs".to_string(),
+            Some(serde_json::json!({ "backup_id": backup_id, "name": name })),
+        ),
     };
 
     let url = format!("{base}{path}");
