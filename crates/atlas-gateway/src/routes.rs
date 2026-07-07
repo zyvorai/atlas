@@ -56,6 +56,7 @@ pub fn router(state: AppState) -> Router {
         .route("/alerts/evaluate", post(evaluate_alerts))
         .route("/jobs", get(list_jobs))
         .route("/jobs/{id}", get(get_job))
+        .route("/jobs/{id}/watch", get(watch_job_sse))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
@@ -299,6 +300,46 @@ async fn get_job(State(s): State<AppState>, Path(id): Path<String>) -> AppResult
         .await?
         .ok_or_else(|| AppError::NotFound(format!("job {id}")))?;
     Ok(Json(json!(job)))
+}
+
+/// `GET /jobs/{id}/watch` — Server-Sent Events; emits the job on each state change until terminal
+/// (REST parity with the gRPC `WatchJob` stream).
+async fn watch_job_sse(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> axum::response::sse::Sse<
+    impl tokio_stream::Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>,
+> {
+    use axum::response::sse::{Event, KeepAlive, Sse};
+    let pool = s.pool.clone();
+    let stream = async_stream::stream! {
+        let mut last = String::new();
+        for _ in 0..240 {
+            match atlas_inventory::jobs::get_job(&pool, &id).await {
+                Ok(Some(j)) => {
+                    let terminal = j.state == "succeeded" || j.state == "failed";
+                    if j.state != last {
+                        last = j.state.clone();
+                        let data = serde_json::to_string(&j).unwrap_or_default();
+                        yield Ok(Event::default().event("job").data(data));
+                    }
+                    if terminal {
+                        break;
+                    }
+                }
+                Ok(None) => {
+                    yield Ok(Event::default().event("error").data(format!("job {id} not found")));
+                    break;
+                }
+                Err(e) => {
+                    yield Ok(Event::default().event("error").data(e.to_string()));
+                    break;
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+    };
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
 // ---- policies ----
@@ -893,6 +934,9 @@ async fn get_backup(State(s): State<AppState>, Path(id): Path<String>) -> AppRes
 struct CreateBackupBody {
     volume_id: String,
     bucket_id: String,
+    /// "manifest" (default) or "data" (also exports the RBD image data to S3).
+    #[serde(default)]
+    mode: Option<String>,
 }
 
 /// `POST /backup-jobs` — snapshot a volume and write a backup manifest to an RGW bucket (PDF §16).
@@ -990,6 +1034,7 @@ async fn create_backup(
         bucket_endpoint,
         bucket_name,
         bucket_region,
+        mode: body.mode.unwrap_or_else(|| "manifest".into()),
     };
     let job = s
         .jobs

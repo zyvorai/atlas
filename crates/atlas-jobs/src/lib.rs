@@ -102,6 +102,10 @@ pub enum JobSpec {
         bucket_endpoint: String,
         bucket_name: String,
         bucket_region: String,
+        /// "manifest" (default) writes only the metadata manifest; "data" also exports the RBD
+        /// image data (`rbd export-diff`) to S3.
+        #[serde(default)]
+        mode: String,
     },
     /// Clone or restore: provision a new volume (PVC) populated from a VolumeSnapshot.
     #[serde(rename = "snapshot.clone")]
@@ -588,9 +592,10 @@ async fn dispatch(
             bucket_endpoint,
             bucket_name,
             bucket_region,
+            mode,
         } => {
             let k8s = require_k8s(k8s)?;
-            // 1. point-in-time snapshot of the source volume.
+            // 1. point-in-time CSI snapshot of the source volume.
             k8s.create_volume_snapshot(
                 &volume_namespace,
                 &snapshot_name,
@@ -618,8 +623,6 @@ async fn dispatch(
             let secret_key = secret
                 .get("AWS_SECRET_ACCESS_KEY")
                 .ok_or_else(|| anyhow!("bucket secret missing AWS_SECRET_ACCESS_KEY"))?;
-
-            // 3. write the manifest object to RGW over S3, then read it back to verify.
             let s3 = atlas_driver_rgw::S3Target::new(
                 &bucket_endpoint,
                 &bucket_region,
@@ -627,18 +630,55 @@ async fn dispatch(
                 access,
                 secret_key,
             )?;
-            let bytes = manifest_json.into_bytes();
-            let checksum = sha256_hex(&bytes);
-            s3.put_object(&object_key, bytes.clone())
+
+            // 3. (data mode) export the RBD image data and upload it to S3.
+            let mut manifest: serde_json::Value =
+                serde_json::from_str(&manifest_json).unwrap_or_else(|_| serde_json::json!({}));
+            let mut data_summary = serde_json::Value::Null;
+            let mut record_checksum: Option<String> = None;
+            if mode == "data" {
+                const CAP: usize = 512 * 1024 * 1024; // MVP: buffer up to 512 MiB in memory
+                let (pool_name, image) = k8s
+                    .resolve_rbd(&volume_namespace, &pvc_name)
+                    .await?
+                    .ok_or_else(|| {
+                        anyhow!("could not resolve RBD image for {volume_namespace}/{pvc_name}")
+                    })?;
+                let rbd_snap = format!("atlasbkp-{}", &backup_id[4..]);
+                atlas_driver_ceph::rbd_snap_create(&pool_name, &image, &rbd_snap)
+                    .await
+                    .with_context(|| format!("rbd snap {pool_name}/{image}@{rbd_snap}"))?;
+                let data = atlas_driver_ceph::rbd_export_diff(&pool_name, &image, &rbd_snap)
+                    .await
+                    .context("rbd export-diff")?;
+                if data.len() > CAP {
+                    anyhow::bail!("rbd diff {} bytes exceeds {CAP}-byte cap", data.len());
+                }
+                let data_key = format!("{object_key}.rbd-diff");
+                let data_checksum = sha256_hex(&data);
+                let data_bytes = data.len();
+                s3.put_object(&data_key, data)
+                    .await
+                    .with_context(|| format!("PUT backup data {data_key}"))?;
+                data_summary = serde_json::json!({
+                    "data_object": data_key, "data_bytes": data_bytes,
+                    "data_checksum": data_checksum, "format": "rbd-export-diff",
+                    "rbd": format!("{pool_name}/{image}@{rbd_snap}")
+                });
+                manifest["data"] = data_summary.clone();
+                manifest["format"] = serde_json::json!("rbd-export-diff");
+                record_checksum = Some(data_checksum);
+            }
+
+            // 4. write the manifest object to RGW, then read it back to verify.
+            let manifest_bytes = serde_json::to_vec(&manifest)?;
+            let manifest_checksum = sha256_hex(&manifest_bytes);
+            s3.put_object(&object_key, manifest_bytes.clone())
                 .await
                 .with_context(|| format!("PUT backup manifest {object_key}"))?;
-            let verified = match s3.get_object(&object_key).await {
-                Ok(got) => got == bytes,
-                Err(e) => {
-                    tracing::warn!("backup verify GET failed: {e}");
-                    false
-                }
-            };
+            let verified =
+                matches!(s3.get_object(&object_key).await, Ok(got) if got == manifest_bytes);
+            let checksum = record_checksum.unwrap_or(manifest_checksum);
             atlas_inventory::backups::set_state(
                 pool,
                 &backup_id,
@@ -647,8 +687,9 @@ async fn dispatch(
             )
             .await?;
             Ok(serde_json::json!({
-                "backup_id": backup_id, "object_key": object_key,
-                "checksum": checksum, "verified": verified, "snapshot_ready": ready
+                "backup_id": backup_id, "object_key": object_key, "mode": mode,
+                "checksum": checksum, "verified": verified, "snapshot_ready": ready,
+                "data": data_summary
             }))
         }
     }

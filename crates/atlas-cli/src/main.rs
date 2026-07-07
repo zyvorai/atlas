@@ -114,6 +114,9 @@ enum Command {
         volume_id: String,
         #[arg(long)]
         bucket_id: String,
+        /// "manifest" (default) or "data" (also exports RBD image data to S3).
+        #[arg(long, default_value = "manifest")]
+        mode: String,
     },
     /// GET /api/atlas/v1/backups
     Backups,
@@ -220,10 +223,13 @@ async fn main() -> Result<()> {
         Command::BackupVolume {
             volume_id,
             bucket_id,
+            mode,
         } => (
             "POST",
             "/api/atlas/v1/backup-jobs".to_string(),
-            Some(serde_json::json!({ "volume_id": volume_id, "bucket_id": bucket_id })),
+            Some(
+                serde_json::json!({ "volume_id": volume_id, "bucket_id": bucket_id, "mode": mode }),
+            ),
         ),
         Command::Backups => ("GET", "/api/atlas/v1/backups".to_string(), None),
         Command::RestoreBackup { backup_id, name } => (

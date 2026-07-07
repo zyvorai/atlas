@@ -11,6 +11,7 @@ atlas-api-types = { workspace = true }
 atlas-inventory = { workspace = true }
 atlas-driver-k8s = { workspace = true }
 atlas-driver-rgw = { workspace = true }
+atlas-driver-ceph = { workspace = true }
 atlas-policy = { workspace = true }
 sqlx = { workspace = true }
 tokio = { workspace = true }

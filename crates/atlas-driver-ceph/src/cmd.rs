@@ -16,6 +16,41 @@ pub async fn rbd_cmd(args: &[&str]) -> Result<serde_json::Value, DriverError> {
     run_json("rbd", args).await
 }
 
+/// Create an RBD snapshot `pool/image@snap` (idempotent-ish; errors if it already exists).
+pub async fn rbd_snap_create(pool: &str, image: &str, snap: &str) -> Result<(), DriverError> {
+    let spec = format!("{pool}/{image}@{snap}");
+    let output = tokio::process::Command::new("rbd")
+        .args(["snap", "create", &spec])
+        .output()
+        .await
+        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(DriverError::Backend(format!(
+            "rbd snap create {spec}: {stderr}"
+        )));
+    }
+    Ok(())
+}
+
+/// Export an RBD snapshot as an incremental diff stream (`rbd export-diff pool/image@snap -`).
+/// For a fresh/sparse image this is small; the caller must cap the size it buffers.
+pub async fn rbd_export_diff(pool: &str, image: &str, snap: &str) -> Result<Vec<u8>, DriverError> {
+    let spec = format!("{pool}/{image}@{snap}");
+    let output = tokio::process::Command::new("rbd")
+        .args(["export-diff", &spec, "-"])
+        .output()
+        .await
+        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(DriverError::Backend(format!(
+            "rbd export-diff {spec}: {stderr}"
+        )));
+    }
+    Ok(output.stdout)
+}
+
 async fn run_json(bin: &str, args: &[&str]) -> Result<serde_json::Value, DriverError> {
     let output = tokio::process::Command::new(bin)
         .args(args)

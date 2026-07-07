@@ -562,6 +562,46 @@ async fn create_volume_enqueues_job_and_reaches_terminal_state() {
 }
 
 #[tokio::test]
+async fn sse_job_watch_streams_to_terminal() {
+    let (addr, _pool) = spawn().await;
+    let base = format!("http://{addr}");
+    // Create a job (fails without a cluster) and watch it via SSE.
+    let created: serde_json::Value = client()
+        .post(format!("{base}/api/atlas/v1/volumes"))
+        .json(&serde_json::json!({
+            "tenant_id": "t", "name": "sse-vol", "size_bytes": 1073741824_i64, "kind": "block"
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let job_id = created["job_id"].as_str().unwrap();
+
+    let resp = client()
+        .get(format!("{base}/api/atlas/v1/jobs/{job_id}/watch"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+    assert!(resp
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .starts_with("text/event-stream"));
+    // The stream closes once the job is terminal; the body carries the SSE frames.
+    let body = resp.text().await.unwrap();
+    assert!(body.contains("event:job") || body.contains("event: job"));
+    assert!(
+        body.contains("failed"),
+        "expected terminal 'failed' in SSE body: {body}"
+    );
+}
+
+#[tokio::test]
 async fn create_volume_is_idempotent() {
     let (addr, _pool) = spawn().await;
     let base = format!("http://{addr}");

@@ -298,6 +298,34 @@ impl K8sDriver {
             .map(|d| d.into_iter().collect()))
     }
 
+    /// Resolve a PVC to its backing Ceph RBD `(pool, image)` via the bound PV's CSI attributes.
+    /// Returns None if the PVC/PV isn't (yet) a ceph-csi RBD volume.
+    pub async fn resolve_rbd(
+        &self,
+        pvc_ns: &str,
+        pvc_name: &str,
+    ) -> Result<Option<(String, String)>, K8sError> {
+        let Some(pvc) = self.pvc_api(pvc_ns).get_opt(pvc_name).await? else {
+            return Ok(None);
+        };
+        let Some(vol_name) = pvc.spec.and_then(|s| s.volume_name) else {
+            return Ok(None);
+        };
+        let pv_api: Api<PersistentVolume> = Api::all(self.client.clone());
+        let Some(pv) = pv_api.get_opt(&vol_name).await? else {
+            return Ok(None);
+        };
+        let attrs = pv
+            .spec
+            .and_then(|s| s.csi)
+            .and_then(|c| c.volume_attributes)
+            .unwrap_or_default();
+        match (attrs.get("pool"), attrs.get("imageName")) {
+            (Some(pool), Some(image)) => Ok(Some((pool.clone(), image.clone()))),
+            _ => Ok(None),
+        }
+    }
+
     /// Read a Secret's `data`, base64-decoded to strings. Credentials stay in this process; the
     /// caller must not log them.
     pub async fn get_secret(
