@@ -169,6 +169,14 @@ Read-only control plane + real Ceph lab.
   clamped to `[60s, 90d]` and issuance is audited. `atlasctl issue-token`. Verified: minted operator
   token creates volumes, viewer is `403`, no token `401`, and a non-admin cannot mint (test); live
   the endpoint returns a valid JWT with the expected claims.
+- ✅ **Audit-log query API**: `GET /audit` (operator) returns the compliance trail newest-first with
+  `actor`/`action`/`resource_type`/`resource_id` filters + bounded `limit`. Verified live.
+- ✅ **Enriched `/metrics/summary`**: capacity-used %, snapshot/bucket/backup counts, client-I/O
+  rollups (`ceph_pool_rd/wr[_bytes]`) and recovery status. Verified live.
+- ✅ **gRPC parity**: `ExpandVolume` + `ListSnapshots` added to the edge (verified via grpcurl).
+- ✅ **Volume ownership + labels**: `GET /volumes/{id}/bindings` lists product ownership;
+  `GET`/`PUT /volumes/{id}/labels` reads/merges user labels into volume metadata. Verified live.
+- ✅ **`GET /tenants`**: overview of every tenant with volumes/quota (usage + limits). Verified live.
 - ✅ **Per-tenant policies**: `PUT /tenants/{id}/policies/{intent}` (admin) remaps an intent to a
   specific StorageClass + access/volume mode for one tenant; `create_volume` applies it (precedence:
   request-pinned SC › tenant override › built-in catalog). `GET`/`DELETE` too; `atlasctl
