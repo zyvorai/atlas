@@ -324,6 +324,20 @@ pub struct JobRecord {
     pub updated_at: Option<String>,
 }
 
+/// A protection schedule: snapshot a volume every `interval_secs`, retaining the newest `keep`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotSchedule {
+    pub id: String,
+    pub tenant_id: String,
+    pub volume_id: String,
+    pub interval_secs: i64,
+    pub keep: i64,
+    pub enabled: bool,
+    pub last_run_at: Option<String>,
+    pub next_run_at: String,
+    pub created_at: Option<String>,
+}
+
 /// A per-tenant storage quota plus current usage (PDF §14 multi-tenancy). `0` limits = unlimited.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TenantQuota {

@@ -22,6 +22,7 @@ pub mod backups;
 pub mod buckets;
 pub mod jobs;
 pub mod metrics;
+pub mod schedules;
 pub mod snapshots;
 pub mod tenants;
 
@@ -494,6 +495,16 @@ pub async fn list_volumes(pool: &SqlitePool) -> Result<Vec<StorageVolume>> {
         .fetch_all(pool)
         .await?;
     Ok(rows.into_iter().map(row_to_volume).collect())
+}
+
+/// The owning tenant of a volume (the DTO omits it); defaults to `global` if the volume is gone.
+pub async fn volume_tenant(pool: &SqlitePool, id: &str) -> Result<String> {
+    let t: Option<String> =
+        sqlx::query_scalar("SELECT tenant_id FROM storage_volumes WHERE id = ?")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(t.unwrap_or_else(|| "global".into()))
 }
 
 pub async fn get_volume(pool: &SqlitePool, id: &str) -> Result<Option<StorageVolume>> {

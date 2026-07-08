@@ -56,6 +56,21 @@ enum Command {
     },
     /// GET /api/atlas/v1/policies
     Policies,
+    /// POST /api/atlas/v1/volumes/{id}/schedule — periodic snapshots for a volume
+    ScheduleSnapshots {
+        volume_id: String,
+        #[arg(long)]
+        interval_secs: i64,
+        #[arg(long, default_value_t = 0)]
+        keep: i64,
+    },
+    /// GET /api/atlas/v1/schedules (optionally --volume-id)
+    Schedules {
+        #[arg(long)]
+        volume_id: Option<String>,
+    },
+    /// DELETE /api/atlas/v1/schedules/{id}
+    DeleteSchedule { id: String },
     /// GET /api/atlas/v1/tenants/{id}/quota — a tenant's quota + usage
     Quota { tenant_id: String },
     /// PUT /api/atlas/v1/tenants/{id}/quota — set a tenant's quota (0 = unlimited)
@@ -205,6 +220,24 @@ async fn main() -> Result<()> {
             None,
         ),
         Command::Policies => ("GET", "/api/atlas/v1/policies".to_string(), None),
+        Command::ScheduleSnapshots {
+            volume_id,
+            interval_secs,
+            keep,
+        } => (
+            "POST",
+            format!("/api/atlas/v1/volumes/{volume_id}/schedule"),
+            Some(serde_json::json!({ "interval_secs": interval_secs, "keep": keep })),
+        ),
+        Command::Schedules { volume_id } => (
+            "GET",
+            match volume_id {
+                Some(v) => format!("/api/atlas/v1/schedules?volume_id={v}"),
+                None => "/api/atlas/v1/schedules".to_string(),
+            },
+            None,
+        ),
+        Command::DeleteSchedule { id } => ("DELETE", format!("/api/atlas/v1/schedules/{id}"), None),
         Command::Quota { tenant_id } => (
             "GET",
             format!("/api/atlas/v1/tenants/{tenant_id}/quota"),

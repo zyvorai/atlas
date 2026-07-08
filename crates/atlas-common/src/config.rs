@@ -46,6 +46,9 @@ pub struct Config {
     /// Public RGW endpoint (`http://host:port`) used to sign presigned download URLs so they are
     /// reachable off-cluster. When None, the bucket's in-cluster endpoint is used.
     pub rgw_public_endpoint: Option<String>,
+    /// How often (seconds) the protection-schedule worker checks for due snapshot schedules
+    /// (0 disables it).
+    pub snapshot_tick_secs: u64,
 }
 
 impl Config {
@@ -92,6 +95,10 @@ impl Config {
             rgw_public_endpoint: std::env::var("ATLAS_RGW_PUBLIC_ENDPOINT")
                 .ok()
                 .filter(|s| !s.trim().is_empty()),
+            snapshot_tick_secs: std::env::var("ATLAS_SNAPSHOT_TICK_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(60),
         }
     }
 
@@ -116,6 +123,7 @@ impl Default for Config {
             backup_keep: 0,
             backup_max_age_secs: 0,
             rgw_public_endpoint: None,
+            snapshot_tick_secs: 0,
         }
     }
 }

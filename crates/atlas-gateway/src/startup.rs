@@ -117,6 +117,12 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
             state.config.monitor_interval_secs,
             state.config.ceph_prometheus_url.clone(),
         );
+        // Protection-schedule worker: periodic snapshots + retention (shares the job engine).
+        atlas_jobs::spawn_scheduler(
+            state.pool.clone(),
+            state.jobs.clone(),
+            state.config.snapshot_tick_secs,
+        );
     }
 
     Ok(state)

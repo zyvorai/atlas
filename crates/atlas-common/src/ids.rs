@@ -39,6 +39,9 @@ pub fn job_id() -> String {
 pub fn binding_id() -> String {
     prefixed("bind")
 }
+pub fn schedule_id() -> String {
+    prefixed("sched")
+}
 
 /// Deterministic id derived from a stable natural key, so re-discovering the same backend
 /// resource yields the same id (idempotent upserts). Uses a 64-bit FNV-1a hash — not cryptographic.

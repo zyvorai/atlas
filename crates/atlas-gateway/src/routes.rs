@@ -43,6 +43,9 @@ pub fn router(state: AppState) -> Router {
         .route("/snapshots/{id}", axum::routing::delete(delete_snapshot))
         .route("/snapshots/{id}/clone", post(clone_snapshot))
         .route("/snapshots/{id}/restore", post(restore_snapshot))
+        .route("/volumes/{id}/schedule", post(create_schedule))
+        .route("/schedules", get(list_schedules))
+        .route("/schedules/{id}", axum::routing::delete(delete_schedule))
         .route("/buckets", get(list_buckets).post(create_bucket))
         .route("/buckets/{id}", get(get_bucket).delete(delete_bucket))
         .route("/backup-jobs", post(create_backup))
@@ -361,6 +364,68 @@ async fn list_policies() -> Json<Value> {
         })
         .collect();
     Json(json!(items))
+}
+
+#[derive(Debug, Deserialize)]
+struct ScheduleBody {
+    /// Snapshot cadence in seconds.
+    interval_secs: i64,
+    /// Retain the newest N scheduled snapshots (0 = keep all).
+    #[serde(default)]
+    keep: i64,
+}
+
+/// `POST /volumes/{id}/schedule` — create a protection schedule for a volume (operator).
+async fn create_schedule(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+    Json(body): Json<ScheduleBody>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    if body.interval_secs <= 0 {
+        return Err(AppError::Validation("interval_secs must be > 0".into()));
+    }
+    if body.keep < 0 {
+        return Err(AppError::Validation("keep must be >= 0".into()));
+    }
+    atlas_inventory::get_volume(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("volume {id}")))?;
+    let tenant_id = atlas_inventory::volume_tenant(&s.pool, &id).await?;
+    let sched = atlas_inventory::schedules::insert(
+        &s.pool,
+        &ids::schedule_id(),
+        &tenant_id,
+        &id,
+        body.interval_secs,
+        body.keep,
+    )
+    .await?;
+    Ok((StatusCode::CREATED, Json(json!(sched))))
+}
+
+/// `GET /schedules` (optionally `?volume_id=`).
+async fn list_schedules(
+    State(s): State<AppState>,
+    Query(q): Query<ListBackupsQuery>,
+) -> AppResult<Json<Value>> {
+    let items = atlas_inventory::schedules::list(&s.pool, q.volume_id.as_deref()).await?;
+    Ok(Json(json!(items)))
+}
+
+/// `DELETE /schedules/{id}` (operator).
+async fn delete_schedule(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let removed = atlas_inventory::schedules::delete(&s.pool, &id).await?;
+    if !removed {
+        return Err(AppError::NotFound(format!("schedule {id}")));
+    }
+    Ok(Json(json!({ "deleted": id })))
 }
 
 /// `GET /tenants/{id}/quota` — the tenant's quota + current usage (unlimited 0/0 if unset).

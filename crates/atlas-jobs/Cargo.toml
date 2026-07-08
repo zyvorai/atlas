@@ -8,6 +8,7 @@ authors.workspace = true
 
 [dependencies]
 atlas-api-types = { workspace = true }
+atlas-common = { workspace = true }
 atlas-inventory = { workspace = true }
 atlas-driver-k8s = { workspace = true }
 atlas-driver-rgw = { workspace = true }

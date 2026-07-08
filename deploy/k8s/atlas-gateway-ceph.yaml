@@ -106,6 +106,9 @@ spec:
             # Signature binds to this host, so clients must connect to the same node:port.
             - name: ATLAS_RGW_PUBLIC_ENDPOINT
               value: "http://212.8.248.187:30513"
+            # Protection-schedule worker: check for due snapshot schedules this often (seconds).
+            - name: ATLAS_SNAPSHOT_TICK_SECS
+              value: "15"
             - name: RUST_LOG
               value: "info,atlas_gateway=debug,atlas_driver_ceph=debug"
           ports:

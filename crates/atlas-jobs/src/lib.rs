@@ -1158,3 +1158,105 @@ fn parse_kind(s: &str) -> VolumeKind {
         _ => VolumeKind::Block,
     }
 }
+
+/// Spawn the protection-schedule worker: every `tick_secs`, run any due `snapshot_schedules` by
+/// enqueueing a snapshot job for their volume, advance `next_run_at`, and prune the volume's
+/// scheduled snapshots to the schedule's `keep`. `tick_secs == 0` disables it.
+pub fn spawn_scheduler(pool: SqlitePool, jobs: JobEngine, tick_secs: u64) {
+    if tick_secs == 0 {
+        tracing::info!("snapshot scheduler disabled (tick = 0)");
+        return;
+    }
+    tokio::spawn(async move {
+        tracing::info!(tick_secs, "snapshot scheduler started");
+        let mut tick = tokio::time::interval(Duration::from_secs(tick_secs));
+        loop {
+            tick.tick().await;
+            if let Err(e) = run_due_schedules(&pool, &jobs).await {
+                tracing::warn!("snapshot scheduler tick failed: {e:#}");
+            }
+        }
+    });
+}
+
+/// Marker embedded in scheduled snapshot names so retention only prunes scheduler-created snapshots.
+const SCHED_MARKER: &str = "-sched-";
+
+async fn run_due_schedules(pool: &SqlitePool, jobs: &JobEngine) -> Result<()> {
+    let due = atlas_inventory::schedules::due(pool).await?;
+    for sched in due {
+        // Advance the clock first so a slow/failed run doesn't hot-loop this schedule.
+        if let Err(e) = atlas_inventory::schedules::mark_ran(pool, &sched.id).await {
+            tracing::warn!("schedule {}: mark_ran failed: {e:#}", sched.id);
+            continue;
+        }
+        let vol = match atlas_inventory::get_volume(pool, &sched.volume_id).await {
+            Ok(Some(v)) => v,
+            _ => {
+                tracing::warn!("schedule {}: volume {} gone", sched.id, sched.volume_id);
+                continue;
+            }
+        };
+        let (Some(namespace), Some(pvc_name)) = (vol.kubernetes_namespace, vol.pvc_name) else {
+            continue;
+        };
+        let snapshot_id = atlas_common::ids::snapshot_id();
+        let name = format!("{}{SCHED_MARKER}{}", vol.name, &snapshot_id[5..]);
+        let spec = JobSpec::SnapshotCreate {
+            snapshot_id,
+            volume_id: sched.volume_id.clone(),
+            name,
+            namespace,
+            pvc_name,
+            snapshot_class: "zyvor-rbd-snapclass".into(),
+        };
+        let job_id = atlas_common::ids::job_id();
+        if let Err(e) = jobs
+            .enqueue(&job_id, &sched.tenant_id, "scheduler", spec, None)
+            .await
+        {
+            tracing::warn!("schedule {}: enqueue snapshot failed: {e:#}", sched.id);
+            continue;
+        }
+        prune_scheduled_snapshots(pool, jobs, &sched.volume_id, sched.keep).await;
+    }
+    Ok(())
+}
+
+/// Delete the volume's scheduler-created snapshots beyond the newest `keep` (enqueues delete jobs).
+async fn prune_scheduled_snapshots(
+    pool: &SqlitePool,
+    jobs: &JobEngine,
+    volume_id: &str,
+    keep: i64,
+) {
+    if keep <= 0 {
+        return;
+    }
+    let snaps = match atlas_inventory::snapshots::list_snapshots(pool, Some(volume_id)).await {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    let namespace = atlas_inventory::get_volume(pool, volume_id)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|v| v.kubernetes_namespace)
+        .unwrap_or_else(|| "default".into());
+    // Newest-first; keep the first `keep` scheduled ones, delete the rest.
+    let scheduled: Vec<_> = snaps
+        .into_iter()
+        .filter(|s| s.name.contains(SCHED_MARKER))
+        .collect();
+    for old in scheduled.into_iter().skip(keep as usize) {
+        let spec = JobSpec::SnapshotDelete {
+            snapshot_id: old.id.clone(),
+            namespace: namespace.clone(),
+            name: old.name,
+        };
+        let job_id = atlas_common::ids::job_id();
+        let _ = jobs
+            .enqueue(&job_id, &old.tenant_id, "scheduler", spec, None)
+            .await;
+    }
+}

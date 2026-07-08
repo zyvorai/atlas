@@ -29,6 +29,7 @@ async fn grpc_edge_health_create_and_list() {
         backup_keep: 0,
         backup_max_age_secs: 0,
         rgw_public_endpoint: None,
+        snapshot_tick_secs: 0,
     };
     let state = build_state(
         config,
@@ -124,6 +125,7 @@ async fn grpc_enforces_jwt_when_auth_required() {
         backup_keep: 0,
         backup_max_age_secs: 0,
         rgw_public_endpoint: None,
+        snapshot_tick_secs: 0,
     };
     let state = build_state(
         config,
