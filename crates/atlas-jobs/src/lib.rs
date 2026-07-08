@@ -1243,12 +1243,15 @@ async fn prune_scheduled_snapshots(
         .flatten()
         .and_then(|v| v.kubernetes_namespace)
         .unwrap_or_else(|| "default".into());
-    // Newest-first; keep the first `keep` scheduled ones, delete the rest.
+    // Newest-first. This runs right after enqueuing a new snapshot that isn't persisted yet, so we
+    // retain `keep - 1` already-stored snapshots; together with the in-flight one the steady state
+    // is exactly `keep`.
     let scheduled: Vec<_> = snaps
         .into_iter()
         .filter(|s| s.name.contains(SCHED_MARKER))
         .collect();
-    for old in scheduled.into_iter().skip(keep as usize) {
+    let retain = (keep - 1).max(0) as usize;
+    for old in scheduled.into_iter().skip(retain) {
         let spec = JobSpec::SnapshotDelete {
             snapshot_id: old.id.clone(),
             namespace: namespace.clone(),
