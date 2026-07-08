@@ -24,7 +24,9 @@ pub async fn upsert_open(
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open')
          ON CONFLICT(id) DO UPDATE SET
             severity=excluded.severity, title=excluded.title, description=excluded.description,
-            evidence=excluded.evidence, state='open', resolved_at=NULL",
+            evidence=excluded.evidence, state='open', resolved_at=NULL,
+            -- re-arm the webhook only when a *resolved* alert re-opens; leave it set while still open.
+            notified_at=CASE WHEN state='resolved' THEN NULL ELSE notified_at END",
     )
     .bind(id)
     .bind(severity)
@@ -66,6 +68,27 @@ pub async fn list(pool: &SqlitePool, state: Option<&str>) -> Result<Vec<AlertRec
         }
     };
     Ok(rows.into_iter().map(row_to_alert).collect())
+}
+
+/// Open alerts that have not yet been pushed to the webhook (drives the notifier).
+pub async fn list_unnotified_open(pool: &SqlitePool) -> Result<Vec<AlertRecord>> {
+    let rows = sqlx::query(&select(
+        "WHERE state='open' AND notified_at IS NULL ORDER BY created_at ASC",
+    ))
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(row_to_alert).collect())
+}
+
+/// Stamp an alert as notified so it isn't pushed again while it stays open.
+pub async fn mark_notified(pool: &SqlitePool, id: &str) -> Result<()> {
+    sqlx::query(
+        "UPDATE storage_alerts SET notified_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+    )
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 pub async fn count_open(pool: &SqlitePool) -> Result<i64> {

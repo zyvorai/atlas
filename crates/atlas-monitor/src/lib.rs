@@ -15,6 +15,7 @@ use atlas_driver_core::StorageDriver;
 use serde_json::json;
 use sqlx::SqlitePool;
 
+pub mod notify;
 pub mod prometheus;
 
 /// Pool utilization thresholds (PDF §15.2).
@@ -28,6 +29,7 @@ pub fn spawn(
     driver: Arc<dyn StorageDriver>,
     interval_secs: u64,
     prometheus_url: Option<String>,
+    webhook_url: Option<String>,
 ) {
     if interval_secs == 0 {
         tracing::info!("monitor disabled (interval = 0)");
@@ -48,6 +50,15 @@ pub fn spawn(
                 match prometheus::scrape(&pool, url).await {
                     Ok(n) => tracing::debug!("scraped {n} ceph metrics"),
                     Err(e) => tracing::warn!("prometheus scrape failed: {e:#}"),
+                }
+            }
+            // Push newly-fired alerts to the webhook (after evaluate + scrape so it sees this
+            // tick's alerts). Evaluate runs again next tick, so a failed post retries then.
+            if let Some(url) = &webhook_url {
+                match notify::dispatch(&pool, url).await {
+                    Ok(n) if n > 0 => tracing::info!("pushed {n} alert notification(s)"),
+                    Ok(_) => {}
+                    Err(e) => tracing::warn!("alert notify failed: {e:#}"),
                 }
             }
         }

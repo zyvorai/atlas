@@ -39,6 +39,8 @@ pub struct Config {
     pub monitor_interval_secs: u64,
     /// Ceph mgr Prometheus `/metrics` URL to scrape (None disables metric collection).
     pub ceph_prometheus_url: Option<String>,
+    /// Optional webhook URL (Slack-compatible JSON) notified when an alert fires/resolves.
+    pub alert_webhook_url: Option<String>,
     /// Default backups to retain per volume (0 = unlimited); overridable per request.
     pub backup_keep: i64,
     /// Default max backup age in seconds (0 = no age limit); overridable per request.
@@ -89,6 +91,9 @@ impl Config {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(60),
             ceph_prometheus_url: std::env::var("ATLAS_CEPH_PROMETHEUS_URL")
+                .ok()
+                .filter(|s| !s.trim().is_empty()),
+            alert_webhook_url: std::env::var("ATLAS_ALERT_WEBHOOK_URL")
                 .ok()
                 .filter(|s| !s.trim().is_empty()),
             backup_keep: std::env::var("ATLAS_BACKUP_KEEP")
@@ -142,6 +147,7 @@ impl Default for Config {
             auth_required: false,
             monitor_interval_secs: 0,
             ceph_prometheus_url: None,
+            alert_webhook_url: None,
             backup_keep: 0,
             backup_max_age_secs: 0,
             rgw_public_endpoint: None,
