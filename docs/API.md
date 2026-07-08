@@ -345,6 +345,15 @@ Per-tenant storage quota + live usage (PDF §14 multi-tenancy). `PUT` (admin) se
 (`resource_exhausted` on gRPC) *before* enqueueing the job. Usage is computed live from the tenant's
 volume rows.
 
+### `GET /api/atlas/v1/tenants/{id}/policies` · `PUT|DELETE .../policies/{intent}`
+Per-tenant policy overrides: remap an intent to a specific placement for one tenant (admin to set).
+```json
+// PUT body
+{ "storage_class": "zyvor-cephfs-shared", "access_mode": "ReadWriteMany", "volume_mode": "Filesystem" }
+```
+When a create names an intent (`policy`) and the tenant has an override, it wins over the built-in
+catalog — precedence: request-pinned `kubernetes.storage_class` › tenant override › catalog.
+
 ## Live Kubernetes (served straight from the cluster)
 
 ### `GET /api/atlas/v1/storage-classes`

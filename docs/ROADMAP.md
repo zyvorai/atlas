@@ -169,7 +169,12 @@ Read-only control plane + real Ceph lab.
   clamped to `[60s, 90d]` and issuance is audited. `atlasctl issue-token`. Verified: minted operator
   token creates volumes, viewer is `403`, no token `401`, and a non-admin cannot mint (test); live
   the endpoint returns a valid JWT with the expected claims.
-- Multi-tenancy (remaining): per-tenant policies (PDF §14).
+- ✅ **Per-tenant policies**: `PUT /tenants/{id}/policies/{intent}` (admin) remaps an intent to a
+  specific StorageClass + access/volume mode for one tenant; `create_volume` applies it (precedence:
+  request-pinned SC › tenant override › built-in catalog). `GET`/`DELETE` too; `atlasctl
+  set-tenant-policy`. Verified live: `acme/database` → CephFS RWX while `globex/database` stayed on
+  RBD RWO, and deleting the override reverted `acme` to the catalog.
+- Multi-tenancy: **complete** (quotas + service accounts + per-tenant policies, PDF §14).
 - DR: RBD mirroring, secondary-cluster restore, one-click failover runbook (PDF §16.3).
 
 ## Known limitations (slice 1)
