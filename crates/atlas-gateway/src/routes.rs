@@ -49,7 +49,17 @@ pub fn router(state: AppState) -> Router {
             "/rbd-images/{pool}/{image}/flatten",
             post(flatten_rbd_image),
         )
+        .route(
+            "/rbd-images/{pool}/{image}/snapshots",
+            get(list_rbd_snaps).post(create_rbd_snap),
+        )
+        .route(
+            "/rbd-images/{pool}/{image}/rollback",
+            post(rollback_rbd_image),
+        )
         .route("/rbd-usage/refresh", post(refresh_rbd_usage))
+        .route("/buckets/{id}/stats", get(bucket_stats))
+        .route("/buckets/{id}/objects", get(bucket_objects))
         .route("/volumes/{id}/bindings", get(list_volume_bindings))
         .route(
             "/volumes/{id}/labels",
@@ -797,6 +807,78 @@ async fn flatten_rbd_image(
     ))
 }
 
+/// `GET /rbd-images/{pool}/{image}/snapshots` — list a raw image's snapshots (from Ceph).
+async fn list_rbd_snaps(
+    State(s): State<AppState>,
+    Path((pool_name, image)): Path<(String, String)>,
+) -> AppResult<Json<Value>> {
+    let _ = &s;
+    let snaps = atlas_driver_ceph::rbd_snap_list(&pool_name, &image)
+        .await
+        .map_err(|e| AppError::Driver(e.to_string()))?;
+    Ok(Json(
+        json!({ "rbd": format!("{pool_name}/{image}"), "snapshots": snaps }),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+struct RbdSnapBody {
+    name: String,
+}
+
+/// `POST /rbd-images/{pool}/{image}/snapshots` — snapshot a raw RBD image (operator).
+async fn create_rbd_snap(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path((pool_name, image)): Path<(String, String)>,
+    Json(body): Json<RbdSnapBody>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    if body.name.trim().is_empty() {
+        return Err(AppError::Validation("name is required".into()));
+    }
+    let job_id = ids::job_id();
+    let spec = JobSpec::RbdSnapshot {
+        pool: pool_name.clone(),
+        image: image.clone(),
+        snap: body.name.clone(),
+    };
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, spec, None)
+        .await
+        .map_err(AppError::from)?;
+    Ok(accepted(
+        &job,
+        json!({ "snapshot": format!("{pool_name}/{image}@{}", body.name) }),
+    ))
+}
+
+/// `POST /rbd-images/{pool}/{image}/rollback` — roll a raw image back to a snapshot (admin).
+async fn rollback_rbd_image(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path((pool_name, image)): Path<(String, String)>,
+    Json(body): Json<RbdSnapBody>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    let job_id = ids::job_id();
+    let spec = JobSpec::RbdRollback {
+        pool: pool_name.clone(),
+        image: image.clone(),
+        snap: body.name.clone(),
+    };
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, spec, None)
+        .await
+        .map_err(AppError::from)?;
+    Ok(accepted(
+        &job,
+        json!({ "rbd": format!("{pool_name}/{image}"), "rollback_to": body.name }),
+    ))
+}
+
 #[derive(Debug, Deserialize)]
 struct RbdListQuery {
     pool: Option<String>,
@@ -1531,6 +1613,94 @@ async fn get_bucket(State(s): State<AppState>, Path(id): Path<String>) -> AppRes
         .await?
         .ok_or_else(|| AppError::NotFound(format!("bucket {id}")))?;
     Ok(Json(json!(b)))
+}
+
+/// `GET /buckets/{id}/stats` — RGW usage + quota for the bucket (via `radosgw-admin bucket stats`).
+async fn bucket_stats(State(s): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
+    let b = atlas_inventory::buckets::get_bucket(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("bucket {id}")))?;
+    let name = b
+        .bucket_name
+        .ok_or_else(|| AppError::Validation("bucket has no bucket_name".into()))?;
+    let stats = atlas_driver_ceph::radosgw_admin_json(&["bucket", "stats", "--bucket", &name])
+        .await
+        .map_err(|e| AppError::Driver(e.to_string()))?;
+    let main = stats
+        .get("usage")
+        .and_then(|u| u.get("rgw.main"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    Ok(Json(json!({
+        "bucket_id": id, "bucket": name,
+        "num_objects": main.get("num_objects").cloned().unwrap_or(json!(0)),
+        "size_bytes": main.get("size_actual").cloned().unwrap_or(json!(0)),
+        "quota": stats.get("bucket_quota").cloned().unwrap_or(Value::Null)
+    })))
+}
+
+#[derive(Debug, Deserialize)]
+struct PrefixQuery {
+    prefix: Option<String>,
+}
+
+/// `GET /buckets/{id}/objects[?prefix=]` — list objects in the bucket over S3 (creds in-cluster).
+async fn bucket_objects(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<PrefixQuery>,
+) -> AppResult<Json<Value>> {
+    let b = atlas_inventory::buckets::get_bucket(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("bucket {id}")))?;
+    if b.state != "bound" {
+        return Err(AppError::Validation("bucket is not bound".into()));
+    }
+    let k8s = s
+        .k8s
+        .as_ref()
+        .ok_or_else(|| AppError::Driver("no reachable Kubernetes cluster".into()))?;
+    let ns = b.namespace.clone().unwrap_or_else(|| "rook-ceph".into());
+    let secret_ref = b
+        .secret_ref
+        .clone()
+        .ok_or_else(|| AppError::Validation("bucket has no secret".into()))?;
+    let secret = k8s
+        .get_secret(&ns, &secret_ref)
+        .await
+        .map_err(|e| AppError::Driver(e.to_string()))?
+        .ok_or_else(|| AppError::NotFound(format!("bucket secret {secret_ref}")))?;
+    let access = secret
+        .get("AWS_ACCESS_KEY_ID")
+        .ok_or_else(|| AppError::Internal("bucket secret missing AWS_ACCESS_KEY_ID".into()))?;
+    let secret_key = secret
+        .get("AWS_SECRET_ACCESS_KEY")
+        .ok_or_else(|| AppError::Internal("bucket secret missing AWS_SECRET_ACCESS_KEY".into()))?;
+    let endpoint = s
+        .config
+        .rgw_public_endpoint
+        .clone()
+        .or(b.endpoint)
+        .unwrap_or_default();
+    let s3 = atlas_driver_rgw::S3Target::new(
+        &endpoint,
+        &b.region.unwrap_or_else(|| "us-east-1".into()),
+        &b.bucket_name.unwrap_or_default(),
+        access,
+        secret_key,
+    )
+    .map_err(|e| AppError::Driver(e.to_string()))?;
+    let objects = s3
+        .list_objects(q.prefix.as_deref())
+        .await
+        .map_err(|e| AppError::Driver(e.to_string()))?;
+    let items: Vec<Value> = objects
+        .into_iter()
+        .map(|(key, size)| json!({ "key": key, "size_bytes": size }))
+        .collect();
+    Ok(Json(
+        json!({ "bucket_id": id, "count": items.len(), "objects": items }),
+    ))
 }
 
 /// `DELETE /buckets/{id}[?force=true]` — delete the OBC + row; blocked if backups reference it.

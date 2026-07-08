@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use futures_util::StreamExt;
-use rusty_s3::actions::CreateMultipartUpload;
+use rusty_s3::actions::{CreateMultipartUpload, ListObjectsV2};
 use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -286,6 +286,30 @@ impl S3Target {
         }
         sink.flush().await.ok();
         Ok((total, hex::encode(hasher.finalize())))
+    }
+
+    /// List objects in the bucket (optionally under `prefix`) as `(key, size_bytes)` pairs.
+    pub async fn list_objects(&self, prefix: Option<&str>) -> Result<Vec<(String, u64)>> {
+        let mut action = self.bucket.list_objects_v2(Some(&self.creds));
+        if let Some(p) = prefix {
+            action.query_mut().insert("prefix", p.to_owned());
+        }
+        let resp = self
+            .http
+            .get(action.sign(SIGN_TTL))
+            .send()
+            .await
+            .context("list objects")?;
+        if !resp.status().is_success() {
+            anyhow::bail!("list objects failed: HTTP {}", resp.status());
+        }
+        let body = resp.text().await?;
+        let parsed = ListObjectsV2::parse_response(&body).context("parse list objects")?;
+        Ok(parsed
+            .contents
+            .into_iter()
+            .map(|c| (c.key, c.size))
+            .collect())
     }
 
     /// DELETE an object. S3 delete is idempotent (deleting a missing key returns success).

@@ -62,6 +62,56 @@ pub async fn radosgw_bucket_quota(
     Ok(())
 }
 
+/// Run `radosgw-admin <args...> --format json` and parse stdout (e.g. `bucket stats`).
+pub async fn radosgw_admin_json(args: &[&str]) -> Result<serde_json::Value, DriverError> {
+    let output = tokio::process::Command::new("radosgw-admin")
+        .args(args)
+        .arg("--format")
+        .arg("json")
+        .output()
+        .await
+        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `radosgw-admin`: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(DriverError::Backend(format!(
+            "radosgw-admin {}: {stderr}",
+            args.join(" ")
+        )));
+    }
+    serde_json::from_slice(&output.stdout)
+        .map_err(|e| DriverError::Parse(format!("radosgw-admin json: {e}")))
+}
+
+/// List an RBD image's snapshot names (`rbd snap ls pool/image --format json`).
+pub async fn rbd_snap_list(pool: &str, image: &str) -> Result<Vec<String>, DriverError> {
+    let spec = format!("{pool}/{image}");
+    let v = rbd_cmd(&["snap", "ls", &spec]).await?;
+    Ok(v.as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.get("name").and_then(|n| n.as_str()).map(String::from))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+/// Roll an RBD image back to a snapshot (`rbd snap rollback pool/image@snap`). Destructive.
+pub async fn rbd_snap_rollback(pool: &str, image: &str, snap: &str) -> Result<(), DriverError> {
+    let spec = format!("{pool}/{image}@{snap}");
+    let output = tokio::process::Command::new("rbd")
+        .args(["snap", "rollback", &spec])
+        .output()
+        .await
+        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(DriverError::Backend(format!(
+            "rbd snap rollback {spec}: {stderr}"
+        )));
+    }
+    Ok(())
+}
+
 async fn radosgw_admin(args: &[&str]) -> Result<(), DriverError> {
     let output = tokio::process::Command::new("radosgw-admin")
         .args(args)

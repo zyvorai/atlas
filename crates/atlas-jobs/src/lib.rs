@@ -192,6 +192,20 @@ pub enum JobSpec {
     /// Flatten a cloned RBD image so it no longer depends on its parent (`rbd flatten`).
     #[serde(rename = "rbd.flatten")]
     RbdFlatten { pool: String, image: String },
+    /// Snapshot a raw RBD image (`rbd snap create`).
+    #[serde(rename = "rbd.snapshot")]
+    RbdSnapshot {
+        pool: String,
+        image: String,
+        snap: String,
+    },
+    /// Roll a raw RBD image back to a snapshot (`rbd snap rollback`). Destructive.
+    #[serde(rename = "rbd.rollback")]
+    RbdRollback {
+        pool: String,
+        image: String,
+        snap: String,
+    },
     /// Delete an RGW bucket: remove its ObjectBucketClaim (Rook releases the bucket) and the row.
     #[serde(rename = "bucket.delete")]
     BucketDelete {
@@ -236,6 +250,8 @@ impl JobSpec {
             JobSpec::RbdClone { .. } => "rbd.clone",
             JobSpec::RbdResize { .. } => "rbd.resize",
             JobSpec::RbdFlatten { .. } => "rbd.flatten",
+            JobSpec::RbdSnapshot { .. } => "rbd.snapshot",
+            JobSpec::RbdRollback { .. } => "rbd.rollback",
         }
     }
 }
@@ -449,6 +465,28 @@ async fn dispatch(
                 .await
                 .with_context(|| format!("rbd flatten {rbd_pool}/{image}"))?;
             Ok(serde_json::json!({ "rbd": format!("{rbd_pool}/{image}"), "flattened": true }))
+        }
+        JobSpec::RbdSnapshot {
+            pool: rbd_pool,
+            image,
+            snap,
+        } => {
+            atlas_driver_ceph::rbd_snap_create(&rbd_pool, &image, &snap)
+                .await
+                .with_context(|| format!("rbd snap create {rbd_pool}/{image}@{snap}"))?;
+            Ok(serde_json::json!({ "snapshot": format!("{rbd_pool}/{image}@{snap}") }))
+        }
+        JobSpec::RbdRollback {
+            pool: rbd_pool,
+            image,
+            snap,
+        } => {
+            atlas_driver_ceph::rbd_snap_rollback(&rbd_pool, &image, &snap)
+                .await
+                .with_context(|| format!("rbd snap rollback {rbd_pool}/{image}@{snap}"))?;
+            Ok(serde_json::json!({
+                "rbd": format!("{rbd_pool}/{image}"), "rolled_back_to": snap
+            }))
         }
         JobSpec::VolumeCreate {
             volume_id,

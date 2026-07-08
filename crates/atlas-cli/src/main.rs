@@ -126,6 +126,28 @@ enum Command {
     },
     /// POST /api/atlas/v1/rbd-images/{pool}/{image}/flatten — detach a clone from its parent
     FlattenRbdImage { pool: String, image: String },
+    /// GET/POST /api/atlas/v1/rbd-images/{pool}/{image}/snapshots (--name to create)
+    RbdSnaps {
+        pool: String,
+        image: String,
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// POST /api/atlas/v1/rbd-images/{pool}/{image}/rollback — roll back to a snapshot
+    RollbackRbdImage {
+        pool: String,
+        image: String,
+        #[arg(long)]
+        snap: String,
+    },
+    /// GET /api/atlas/v1/buckets/{id}/stats — RGW usage + quota
+    BucketStats { id: String },
+    /// GET /api/atlas/v1/buckets/{id}/objects (optional --prefix)
+    BucketObjects {
+        id: String,
+        #[arg(long)]
+        prefix: Option<String>,
+    },
     /// GET /api/atlas/v1/tenants — overview of tenants (usage + quota)
     Tenants,
     /// GET /api/atlas/v1/volumes/{id}/bindings — product ownership for a volume
@@ -403,6 +425,32 @@ async fn main() -> Result<()> {
         Command::FlattenRbdImage { pool, image } => (
             "POST",
             format!("/api/atlas/v1/rbd-images/{pool}/{image}/flatten"),
+            None,
+        ),
+        Command::RbdSnaps { pool, image, name } => match name {
+            Some(n) => (
+                "POST",
+                format!("/api/atlas/v1/rbd-images/{pool}/{image}/snapshots"),
+                Some(serde_json::json!({ "name": n })),
+            ),
+            None => (
+                "GET",
+                format!("/api/atlas/v1/rbd-images/{pool}/{image}/snapshots"),
+                None,
+            ),
+        },
+        Command::RollbackRbdImage { pool, image, snap } => (
+            "POST",
+            format!("/api/atlas/v1/rbd-images/{pool}/{image}/rollback"),
+            Some(serde_json::json!({ "name": snap })),
+        ),
+        Command::BucketStats { id } => ("GET", format!("/api/atlas/v1/buckets/{id}/stats"), None),
+        Command::BucketObjects { id, prefix } => (
+            "GET",
+            match prefix {
+                Some(p) => format!("/api/atlas/v1/buckets/{id}/objects?prefix={p}"),
+                None => format!("/api/atlas/v1/buckets/{id}/objects"),
+            },
             None,
         ),
         Command::Tenants => ("GET", "/api/atlas/v1/tenants".to_string(), None),
