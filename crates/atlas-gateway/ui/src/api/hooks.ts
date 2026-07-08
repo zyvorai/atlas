@@ -29,12 +29,14 @@ export const useClusters = () => q<StorageCluster[]>(["clusters"], "/clusters", 
 export const usePools = () => q<StoragePool[]>(["pools"], "/pools", 10000);
 export const useOsds = () => q<Osd[]>(["osds"], "/osds", 10000);
 export const useNodes = () => q<{ host: string }[]>(["nodes"], "/nodes", 15000);
-export const useVolumes = (state?: string, tenant?: string) => {
+export const useVolumes = (state?: string, tenant?: string, backend?: string, kind?: string) => {
   const qs = new URLSearchParams();
   if (state) qs.set("state", state);
   if (tenant) qs.set("tenant", tenant);
+  if (backend) qs.set("backend", backend);
+  if (kind) qs.set("kind", kind);
   const s = qs.toString();
-  return q<StorageVolume[]>(["volumes", state, tenant], `/volumes${s ? "?" + s : ""}`, 6000);
+  return q<StorageVolume[]>(["volumes", state, tenant, backend, kind], `/volumes${s ? "?" + s : ""}`, 6000);
 };
 export const useSnapshots = () => q<StorageSnapshot[]>(["snapshots"], "/snapshots", 6000);
 export const useSchedules = (volumeId?: string) =>

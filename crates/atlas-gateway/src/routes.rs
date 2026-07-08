@@ -476,15 +476,24 @@ async fn list_pools(State(s): State<AppState>) -> AppResult<Json<Value>> {
 struct VolumeQuery {
     state: Option<String>,
     tenant: Option<String>,
+    backend: Option<String>,
+    kind: Option<String>,
 }
 
 async fn list_volumes(
     State(s): State<AppState>,
     Query(q): Query<VolumeQuery>,
 ) -> AppResult<Json<Value>> {
-    let vols = if q.state.is_some() || q.tenant.is_some() {
-        atlas_inventory::list_volumes_filtered(&s.pool, q.state.as_deref(), q.tenant.as_deref())
-            .await?
+    let vols = if q.state.is_some() || q.tenant.is_some() || q.backend.is_some() || q.kind.is_some()
+    {
+        atlas_inventory::list_volumes_filtered(
+            &s.pool,
+            q.state.as_deref(),
+            q.tenant.as_deref(),
+            q.backend.as_deref(),
+            q.kind.as_deref(),
+        )
+        .await?
     } else {
         atlas_inventory::list_volumes(&s.pool).await?
     };

@@ -99,6 +99,7 @@ Storage nodes (derived from distinct OSD hosts in the MVP): `[{ "host": "node01"
 `kind` ∈ `rbd|cephfs_data|cephfs_metadata|rgw|other`.
 
 ### `GET /api/atlas/v1/volumes` · `GET /api/atlas/v1/volumes/{id}`
+Filters: `?state=&tenant=&backend=&kind=` (kind in block|filesystem|object).
 ```json
 [{ "id": "vol_rbd-nvme-prod_csi-vol-fe4aa484-...", "cluster_id": "cls_5ace73d1-...",
    "pool_id": "pool_1", "name": "csi-vol-fe4aa484-...", "kind": "block",

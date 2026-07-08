@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { HardDrive, Plus, RefreshCw } from "lucide-react";
 import { submit, submitJob } from "../api/client";
-import { useBuckets, useInvalidate, useVolumes } from "../api/hooks";
+import { useBackends, useBuckets, useInvalidate, useVolumes } from "../api/hooks";
 import { http } from "../api/client";
 import type { StorageVolume } from "../api/types";
 import { Badge, Button, FormModal, GlassSection, PageHeader, Select, SlideOver } from "../ui/kit";
@@ -16,7 +16,10 @@ const POLICIES = ["database", "production", "development", "shared", "ai"];
 export default function Volumes() {
   const [state, setState] = useState("");
   const [tenant, setTenant] = useState("");
-  const { data: vols } = useVolumes(state || undefined, tenant || undefined);
+  const [backend, setBackend] = useState("");
+  const [kind, setKind] = useState("");
+  const { data: vols } = useVolumes(state || undefined, tenant || undefined, backend || undefined, kind || undefined);
+  const { data: backends } = useBackends();
   const inv = useInvalidate();
   const refetch = () => inv("volumes", "summary");
   const [createOpen, setCreateOpen] = useState(false);
@@ -66,6 +69,14 @@ export default function Volumes() {
         <Select value={state} onChange={(e) => setState(e.target.value)} className="w-40">
           <option value="">All states</option>
           {["bound", "available", "creating", "deleting", "failed"].map((s) => <option key={s}>{s}</option>)}
+        </Select>
+        <Select value={backend} onChange={(e) => setBackend(e.target.value)} className="w-44">
+          <option value="">All backends</option>
+          {(backends || []).map((b) => <option key={b.id} value={b.id}>{b.name} ({b.backend_type})</option>)}
+        </Select>
+        <Select value={kind} onChange={(e) => setKind(e.target.value)} className="w-40">
+          <option value="">All kinds</option>
+          {["block", "filesystem", "object"].map((k) => <option key={k}>{k}</option>)}
         </Select>
         <input className="field w-48" placeholder="Filter tenant…" value={tenant} onChange={(e) => setTenant(e.target.value)} />
       </div>

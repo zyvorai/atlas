@@ -614,14 +614,21 @@ pub async fn list_volumes_filtered(
     pool: &SqlitePool,
     state: Option<&str>,
     tenant_id: Option<&str>,
+    backend_id: Option<&str>,
+    kind: Option<&str>,
 ) -> Result<Vec<StorageVolume>> {
     let rows = sqlx::query(&volume_select(
-        "WHERE (? IS NULL OR state = ?) AND (? IS NULL OR tenant_id = ?) ORDER BY name",
+        "WHERE (? IS NULL OR state = ?) AND (? IS NULL OR tenant_id = ?)
+           AND (? IS NULL OR backend_id = ?) AND (? IS NULL OR kind = ?) ORDER BY name",
     ))
     .bind(state)
     .bind(state)
     .bind(tenant_id)
     .bind(tenant_id)
+    .bind(backend_id)
+    .bind(backend_id)
+    .bind(kind)
+    .bind(kind)
     .fetch_all(pool)
     .await?;
     Ok(rows.into_iter().map(row_to_volume).collect())
