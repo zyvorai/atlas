@@ -155,6 +155,22 @@ pub enum JobSpec {
         #[serde(default)]
         mode: String,
     },
+    /// Provision a raw RBD image directly (bypassing CSI) for non-Kubernetes consumers.
+    #[serde(rename = "rbd.create")]
+    RbdCreate {
+        volume_id: String,
+        backend_id: String,
+        pool: String,
+        image: String,
+        size_bytes: i64,
+    },
+    /// Delete a raw RBD image created via `rbd.create`.
+    #[serde(rename = "rbd.delete")]
+    RbdDelete {
+        volume_id: String,
+        pool: String,
+        image: String,
+    },
     /// Delete an RGW bucket: remove its ObjectBucketClaim (Rook releases the bucket) and the row.
     #[serde(rename = "bucket.delete")]
     BucketDelete {
@@ -194,6 +210,8 @@ impl JobSpec {
             JobSpec::RestoreBackup { .. } => "backup.restore",
             JobSpec::BackupDelete { .. } => "backup.delete",
             JobSpec::BucketDelete { .. } => "bucket.delete",
+            JobSpec::RbdCreate { .. } => "rbd.create",
+            JobSpec::RbdDelete { .. } => "rbd.delete",
         }
     }
 }
@@ -298,6 +316,50 @@ async fn dispatch(
     spec: JobSpec,
 ) -> Result<serde_json::Value> {
     match spec {
+        JobSpec::RbdCreate {
+            volume_id,
+            backend_id,
+            pool: rbd_pool,
+            image,
+            size_bytes,
+        } => {
+            atlas_driver_ceph::rbd_create(&rbd_pool, &image, size_bytes)
+                .await
+                .with_context(|| format!("rbd create {rbd_pool}/{image}"))?;
+            let vol = StorageVolume {
+                id: volume_id.clone(),
+                cluster_id: None,
+                pool_id: None,
+                name: image.clone(),
+                kind: VolumeKind::Block,
+                backend_native_id: Some(format!("rbd:{rbd_pool}/{image}")),
+                size_bytes,
+                used_bytes: None,
+                state: "available".into(),
+                health: Health::Ok,
+                kubernetes_namespace: None,
+                pvc_name: None,
+                storage_class_name: None,
+            };
+            atlas_inventory::upsert_volume(pool, &backend_id, tenant_id, &vol, None).await?;
+            Ok(serde_json::json!({
+                "volume_id": volume_id, "rbd": format!("{rbd_pool}/{image}"),
+                "size_bytes": size_bytes, "state": "available"
+            }))
+        }
+        JobSpec::RbdDelete {
+            volume_id,
+            pool: rbd_pool,
+            image,
+        } => {
+            atlas_driver_ceph::rbd_remove(&rbd_pool, &image)
+                .await
+                .with_context(|| format!("rbd rm {rbd_pool}/{image}"))?;
+            atlas_inventory::delete_volume_row(pool, &volume_id).await?;
+            Ok(serde_json::json!({
+                "volume_id": volume_id, "rbd": format!("{rbd_pool}/{image}"), "deleted": true
+            }))
+        }
         JobSpec::VolumeCreate {
             volume_id,
             backend_id,

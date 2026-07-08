@@ -38,6 +38,11 @@ pub fn router(state: AppState) -> Router {
         .route("/volumes", get(list_volumes).post(create_volume))
         .route("/volumes/{id}", get(get_volume).delete(delete_volume))
         .route("/volumes/{id}/expand", post(expand_volume))
+        .route("/rbd-images", get(list_rbd_images).post(create_rbd_image))
+        .route(
+            "/rbd-images/{pool}/{image}",
+            axum::routing::delete(delete_rbd_image),
+        )
         .route("/volumes/{id}/bindings", get(list_volume_bindings))
         .route(
             "/volumes/{id}/labels",
@@ -531,6 +536,109 @@ struct AuditQuery {
     resource_type: Option<String>,
     resource_id: Option<String>,
     limit: Option<i64>,
+}
+
+const DEFAULT_RBD_POOL: &str = "rbd-nvme-prod";
+
+#[derive(Debug, Deserialize)]
+struct CreateRbdBody {
+    /// Image name.
+    name: String,
+    size_bytes: i64,
+    /// RBD pool (defaults to the platform block pool).
+    #[serde(default)]
+    pool: Option<String>,
+    #[serde(default)]
+    tenant_id: Option<String>,
+}
+
+/// `POST /rbd-images` — provision a raw RBD image directly (bypassing CSI) for non-K8s consumers.
+async fn create_rbd_image(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Json(body): Json<CreateRbdBody>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    if body.name.trim().is_empty() {
+        return Err(AppError::Validation("name is required".into()));
+    }
+    if body.size_bytes <= 0 {
+        return Err(AppError::Validation("size_bytes must be > 0".into()));
+    }
+    let pool_name = body.pool.unwrap_or_else(|| DEFAULT_RBD_POOL.into());
+    let tenant_id = body.tenant_id.unwrap_or_else(|| "global".into());
+    let volume_id = ids::volume_id();
+    let job_id = ids::job_id();
+    let spec = JobSpec::RbdCreate {
+        volume_id: volume_id.clone(),
+        backend_id: CEPH_BACKEND_ID.into(),
+        pool: pool_name.clone(),
+        image: body.name.clone(),
+        size_bytes: body.size_bytes,
+    };
+    let job = s
+        .jobs
+        .enqueue(&job_id, &tenant_id, &actor.id, spec, None)
+        .await
+        .map_err(AppError::from)?;
+    Ok(accepted(
+        &job,
+        json!({ "volume_id": volume_id, "rbd": format!("{pool_name}/{}", body.name) }),
+    ))
+}
+
+/// `DELETE /rbd-images/{pool}/{image}` — delete a raw RBD image (admin).
+async fn delete_rbd_image(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path((pool_name, image)): Path<(String, String)>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    // Best-effort: resolve the recorded volume row (by native id) so we clean up inventory too.
+    let native = format!("rbd:{pool_name}/{image}");
+    let volume_id = atlas_inventory::list_volumes(&s.pool)
+        .await?
+        .into_iter()
+        .find(|v| v.backend_native_id.as_deref() == Some(native.as_str()))
+        .map(|v| v.id)
+        .unwrap_or_default();
+    let job_id = ids::job_id();
+    let spec = JobSpec::RbdDelete {
+        volume_id,
+        pool: pool_name.clone(),
+        image: image.clone(),
+    };
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, spec, None)
+        .await
+        .map_err(AppError::from)?;
+    Ok(accepted(
+        &job,
+        json!({ "rbd": format!("{pool_name}/{image}") }),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+struct RbdListQuery {
+    pool: Option<String>,
+}
+
+/// `GET /rbd-images?pool=` — list RBD image names in a pool, straight from Ceph.
+async fn list_rbd_images(
+    State(s): State<AppState>,
+    Query(q): Query<RbdListQuery>,
+) -> AppResult<Json<Value>> {
+    let pool_name = q.pool.unwrap_or_else(|| DEFAULT_RBD_POOL.into());
+    let driver = s
+        .driver_for(CEPH_BACKEND_ID)
+        .ok_or_else(|| AppError::Driver("no ceph driver".into()))?;
+    // The image list comes from the live cluster; the fake driver has no RBD CLI, so guard on real.
+    let _ = driver;
+    let images = atlas_driver_ceph::rbd_list(&pool_name)
+        .await
+        .map_err(|e| AppError::Driver(e.to_string()))?;
+    Ok(Json(json!({ "pool": pool_name, "images": images })))
 }
 
 /// `GET /volumes/{id}/bindings` — product ownership records for a volume.

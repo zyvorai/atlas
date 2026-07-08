@@ -78,6 +78,55 @@ async fn radosgw_admin(args: &[&str]) -> Result<(), DriverError> {
     Ok(())
 }
 
+/// Create an RBD image directly (`rbd create pool/image --size <MiB>`) for non-CSI consumers.
+pub async fn rbd_create(pool: &str, image: &str, size_bytes: i64) -> Result<(), DriverError> {
+    let spec = format!("{pool}/{image}");
+    let mib = std::cmp::max(1, size_bytes / (1024 * 1024)).to_string();
+    let output = tokio::process::Command::new("rbd")
+        .args(["create", &spec, "--size", &mib])
+        .output()
+        .await
+        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(DriverError::Backend(format!("rbd create {spec}: {stderr}")));
+    }
+    Ok(())
+}
+
+/// Remove an RBD image directly (`rbd rm pool/image`; idempotent on "not found").
+pub async fn rbd_remove(pool: &str, image: &str) -> Result<(), DriverError> {
+    let spec = format!("{pool}/{image}");
+    let output = tokio::process::Command::new("rbd")
+        .args(["rm", &spec])
+        .output()
+        .await
+        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("No such file") || stderr.contains("does not exist") {
+            return Ok(());
+        }
+        return Err(DriverError::Backend(format!(
+            "rbd rm {spec}: {}",
+            stderr.trim()
+        )));
+    }
+    Ok(())
+}
+
+/// List RBD image names in a pool (`rbd ls pool --format json`).
+pub async fn rbd_list(pool: &str) -> Result<Vec<String>, DriverError> {
+    let v = rbd_cmd(&["ls", pool]).await?;
+    Ok(v.as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
 /// Remove an RBD snapshot `pool/image@snap` (best-effort; ignores "not found").
 pub async fn rbd_snap_rm(pool: &str, image: &str, snap: &str) -> Result<(), DriverError> {
     let spec = format!("{pool}/{image}@{snap}");

@@ -91,6 +91,21 @@ enum Command {
         #[arg(long, default_value_t = 3600)]
         ttl_secs: u64,
     },
+    /// GET /api/atlas/v1/rbd-images?pool= — list raw RBD images in a pool
+    RbdImages {
+        #[arg(long)]
+        pool: Option<String>,
+    },
+    /// POST /api/atlas/v1/rbd-images — provision a raw RBD image (bypassing CSI)
+    CreateRbdImage {
+        name: String,
+        #[arg(long, default_value_t = 1)]
+        size_gib: i64,
+        #[arg(long)]
+        pool: Option<String>,
+    },
+    /// DELETE /api/atlas/v1/rbd-images/{pool}/{image}
+    DeleteRbdImage { pool: String, image: String },
     /// GET /api/atlas/v1/tenants — overview of tenants (usage + quota)
     Tenants,
     /// GET /api/atlas/v1/volumes/{id}/bindings — product ownership for a volume
@@ -320,6 +335,30 @@ async fn main() -> Result<()> {
             "POST",
             "/api/atlas/v1/auth/tokens".to_string(),
             Some(serde_json::json!({ "subject": subject, "role": role, "ttl_secs": ttl_secs })),
+        ),
+        Command::RbdImages { pool } => (
+            "GET",
+            match pool {
+                Some(p) => format!("/api/atlas/v1/rbd-images?pool={p}"),
+                None => "/api/atlas/v1/rbd-images".to_string(),
+            },
+            None,
+        ),
+        Command::CreateRbdImage {
+            name,
+            size_gib,
+            pool,
+        } => (
+            "POST",
+            "/api/atlas/v1/rbd-images".to_string(),
+            Some(serde_json::json!({
+                "name": name, "size_bytes": size_gib * 1024 * 1024 * 1024, "pool": pool
+            })),
+        ),
+        Command::DeleteRbdImage { pool, image } => (
+            "DELETE",
+            format!("/api/atlas/v1/rbd-images/{pool}/{image}"),
+            None,
         ),
         Command::Tenants => ("GET", "/api/atlas/v1/tenants".to_string(), None),
         Command::VolumeBindings { id } => {
