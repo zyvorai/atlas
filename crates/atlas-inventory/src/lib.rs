@@ -207,6 +207,18 @@ pub async fn count_snapshot_dependents(pool: &SqlitePool, snapshot_id: &str) -> 
     Ok(n)
 }
 
+/// Update a volume's provisioned size (after an expand/resize).
+pub async fn set_volume_size(pool: &SqlitePool, id: &str, size_bytes: i64) -> Result<()> {
+    sqlx::query(
+        "UPDATE storage_volumes SET size_bytes=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+    )
+    .bind(size_bytes)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Update a volume's actual used (allocated) bytes.
 pub async fn set_volume_used(pool: &SqlitePool, id: &str, used_bytes: i64) -> Result<()> {
     sqlx::query(
@@ -594,6 +606,24 @@ pub async fn volume_tenant(pool: &SqlitePool, id: &str) -> Result<String> {
             .fetch_optional(pool)
             .await?;
     Ok(t.unwrap_or_else(|| "global".into()))
+}
+
+/// List volumes with optional `state` / `tenant_id` equality filters.
+pub async fn list_volumes_filtered(
+    pool: &SqlitePool,
+    state: Option<&str>,
+    tenant_id: Option<&str>,
+) -> Result<Vec<StorageVolume>> {
+    let rows = sqlx::query(&volume_select(
+        "WHERE (? IS NULL OR state = ?) AND (? IS NULL OR tenant_id = ?) ORDER BY name",
+    ))
+    .bind(state)
+    .bind(state)
+    .bind(tenant_id)
+    .bind(tenant_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(row_to_volume).collect())
 }
 
 pub async fn get_volume(pool: &SqlitePool, id: &str) -> Result<Option<StorageVolume>> {

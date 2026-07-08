@@ -117,6 +117,15 @@ enum Command {
         #[arg(long)]
         snap: Option<String>,
     },
+    /// POST /api/atlas/v1/rbd-images/{pool}/{image}/resize — grow a raw RBD image
+    ResizeRbdImage {
+        pool: String,
+        image: String,
+        #[arg(long)]
+        size_gib: i64,
+    },
+    /// POST /api/atlas/v1/rbd-images/{pool}/{image}/flatten — detach a clone from its parent
+    FlattenRbdImage { pool: String, image: String },
     /// GET /api/atlas/v1/tenants — overview of tenants (usage + quota)
     Tenants,
     /// GET /api/atlas/v1/volumes/{id}/bindings — product ownership for a volume
@@ -381,6 +390,20 @@ async fn main() -> Result<()> {
             "POST",
             format!("/api/atlas/v1/rbd-images/{pool}/{image}/clone"),
             Some(serde_json::json!({ "name": name, "snap": snap })),
+        ),
+        Command::ResizeRbdImage {
+            pool,
+            image,
+            size_gib,
+        } => (
+            "POST",
+            format!("/api/atlas/v1/rbd-images/{pool}/{image}/resize"),
+            Some(serde_json::json!({ "size_bytes": size_gib * 1024 * 1024 * 1024 })),
+        ),
+        Command::FlattenRbdImage { pool, image } => (
+            "POST",
+            format!("/api/atlas/v1/rbd-images/{pool}/{image}/flatten"),
+            None,
         ),
         Command::Tenants => ("GET", "/api/atlas/v1/tenants".to_string(), None),
         Command::VolumeBindings { id } => {

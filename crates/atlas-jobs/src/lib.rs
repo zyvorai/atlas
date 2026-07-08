@@ -181,6 +181,17 @@ pub enum JobSpec {
         snap: String,
         clone_image: String,
     },
+    /// Grow a raw RBD image (`rbd resize`).
+    #[serde(rename = "rbd.resize")]
+    RbdResize {
+        volume_id: String,
+        pool: String,
+        image: String,
+        new_size_bytes: i64,
+    },
+    /// Flatten a cloned RBD image so it no longer depends on its parent (`rbd flatten`).
+    #[serde(rename = "rbd.flatten")]
+    RbdFlatten { pool: String, image: String },
     /// Delete an RGW bucket: remove its ObjectBucketClaim (Rook releases the bucket) and the row.
     #[serde(rename = "bucket.delete")]
     BucketDelete {
@@ -223,6 +234,8 @@ impl JobSpec {
             JobSpec::RbdCreate { .. } => "rbd.create",
             JobSpec::RbdDelete { .. } => "rbd.delete",
             JobSpec::RbdClone { .. } => "rbd.clone",
+            JobSpec::RbdResize { .. } => "rbd.resize",
+            JobSpec::RbdFlatten { .. } => "rbd.flatten",
         }
     }
 }
@@ -412,6 +425,30 @@ async fn dispatch(
                 "volume_id": volume_id, "clone": format!("{rbd_pool}/{clone_image}"),
                 "parent": format!("{rbd_pool}/{image}@{snap}"), "size_bytes": size_bytes
             }))
+        }
+        JobSpec::RbdResize {
+            volume_id,
+            pool: rbd_pool,
+            image,
+            new_size_bytes,
+        } => {
+            atlas_driver_ceph::rbd_resize(&rbd_pool, &image, new_size_bytes)
+                .await
+                .with_context(|| format!("rbd resize {rbd_pool}/{image}"))?;
+            atlas_inventory::set_volume_size(pool, &volume_id, new_size_bytes).await?;
+            Ok(serde_json::json!({
+                "volume_id": volume_id, "rbd": format!("{rbd_pool}/{image}"),
+                "new_size_bytes": new_size_bytes
+            }))
+        }
+        JobSpec::RbdFlatten {
+            pool: rbd_pool,
+            image,
+        } => {
+            atlas_driver_ceph::rbd_flatten(&rbd_pool, &image)
+                .await
+                .with_context(|| format!("rbd flatten {rbd_pool}/{image}"))?;
+            Ok(serde_json::json!({ "rbd": format!("{rbd_pool}/{image}"), "flattened": true }))
         }
         JobSpec::VolumeCreate {
             volume_id,

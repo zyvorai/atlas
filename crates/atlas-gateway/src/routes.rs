@@ -44,6 +44,11 @@ pub fn router(state: AppState) -> Router {
             axum::routing::delete(delete_rbd_image),
         )
         .route("/rbd-images/{pool}/{image}/clone", post(clone_rbd_image))
+        .route("/rbd-images/{pool}/{image}/resize", post(resize_rbd_image))
+        .route(
+            "/rbd-images/{pool}/{image}/flatten",
+            post(flatten_rbd_image),
+        )
         .route("/rbd-usage/refresh", post(refresh_rbd_usage))
         .route("/volumes/{id}/bindings", get(list_volume_bindings))
         .route(
@@ -263,8 +268,23 @@ async fn list_pools(State(s): State<AppState>) -> AppResult<Json<Value>> {
     Ok(Json(json!(atlas_inventory::list_pools(&s.pool).await?)))
 }
 
-async fn list_volumes(State(s): State<AppState>) -> AppResult<Json<Value>> {
-    Ok(Json(json!(atlas_inventory::list_volumes(&s.pool).await?)))
+#[derive(Debug, Deserialize)]
+struct VolumeQuery {
+    state: Option<String>,
+    tenant: Option<String>,
+}
+
+async fn list_volumes(
+    State(s): State<AppState>,
+    Query(q): Query<VolumeQuery>,
+) -> AppResult<Json<Value>> {
+    let vols = if q.state.is_some() || q.tenant.is_some() {
+        atlas_inventory::list_volumes_filtered(&s.pool, q.state.as_deref(), q.tenant.as_deref())
+            .await?
+    } else {
+        atlas_inventory::list_volumes(&s.pool).await?
+    };
+    Ok(Json(json!(vols)))
 }
 
 async fn get_volume(State(s): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
@@ -710,6 +730,70 @@ async fn clone_rbd_image(
         &job,
         json!({ "volume_id": volume_id, "clone": format!("{pool_name}/{}", body.name),
                 "parent": format!("{pool_name}/{image}@{snap}") }),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+struct ResizeRbdBody {
+    size_bytes: i64,
+}
+
+/// `POST /rbd-images/{pool}/{image}/resize` — grow a raw RBD image (operator).
+async fn resize_rbd_image(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path((pool_name, image)): Path<(String, String)>,
+    Json(body): Json<ResizeRbdBody>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    if body.size_bytes <= 0 {
+        return Err(AppError::Validation("size_bytes must be > 0".into()));
+    }
+    let native = format!("rbd:{pool_name}/{image}");
+    let volume_id = atlas_inventory::list_volumes(&s.pool)
+        .await?
+        .into_iter()
+        .find(|v| v.backend_native_id.as_deref() == Some(native.as_str()))
+        .map(|v| v.id)
+        .unwrap_or_default();
+    let job_id = ids::job_id();
+    let spec = JobSpec::RbdResize {
+        volume_id,
+        pool: pool_name.clone(),
+        image: image.clone(),
+        new_size_bytes: body.size_bytes,
+    };
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, spec, None)
+        .await
+        .map_err(AppError::from)?;
+    Ok(accepted(
+        &job,
+        json!({ "rbd": format!("{pool_name}/{image}"), "new_size_bytes": body.size_bytes }),
+    ))
+}
+
+/// `POST /rbd-images/{pool}/{image}/flatten` — detach a COW clone from its parent (operator).
+async fn flatten_rbd_image(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path((pool_name, image)): Path<(String, String)>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let job_id = ids::job_id();
+    let spec = JobSpec::RbdFlatten {
+        pool: pool_name.clone(),
+        image: image.clone(),
+    };
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, spec, None)
+        .await
+        .map_err(AppError::from)?;
+    Ok(accepted(
+        &job,
+        json!({ "rbd": format!("{pool_name}/{image}") }),
     ))
 }
 

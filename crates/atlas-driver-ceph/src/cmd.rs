@@ -115,6 +115,39 @@ pub async fn rbd_remove(pool: &str, image: &str) -> Result<(), DriverError> {
     Ok(())
 }
 
+/// Grow an RBD image (`rbd resize pool/image --size <MiB>`; grow-only, no shrink).
+pub async fn rbd_resize(pool: &str, image: &str, size_bytes: i64) -> Result<(), DriverError> {
+    let spec = format!("{pool}/{image}");
+    let mib = std::cmp::max(1, size_bytes / (1024 * 1024)).to_string();
+    let output = tokio::process::Command::new("rbd")
+        .args(["resize", &spec, "--size", &mib])
+        .output()
+        .await
+        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(DriverError::Backend(format!("rbd resize {spec}: {stderr}")));
+    }
+    Ok(())
+}
+
+/// Flatten a cloned image so it no longer depends on its parent snapshot (`rbd flatten`).
+pub async fn rbd_flatten(pool: &str, image: &str) -> Result<(), DriverError> {
+    let spec = format!("{pool}/{image}");
+    let output = tokio::process::Command::new("rbd")
+        .args(["flatten", &spec])
+        .output()
+        .await
+        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(DriverError::Backend(format!(
+            "rbd flatten {spec}: {stderr}"
+        )));
+    }
+    Ok(())
+}
+
 /// Total provisioned size of an RBD image in bytes (`rbd info pool/image --format json`).
 pub async fn rbd_info_size(pool: &str, image: &str) -> Result<i64, DriverError> {
     let spec = format!("{pool}/{image}");
