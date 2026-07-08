@@ -59,6 +59,11 @@ pub fn router(state: AppState) -> Router {
             "/tenants/{id}/quota",
             get(get_tenant_quota).put(put_tenant_quota),
         )
+        .route("/tenants/{id}/policies", get(list_tenant_policies))
+        .route(
+            "/tenants/{id}/policies/{intent}",
+            axum::routing::put(put_tenant_policy).delete(delete_tenant_policy),
+        )
         .route("/metrics/summary", get(metrics_summary))
         .route("/metrics/ceph", get(metrics_ceph))
         .route("/alerts", get(list_alerts))
@@ -512,6 +517,80 @@ async fn issue_token(
     ))
 }
 
+/// `GET /tenants/{id}/policies` — the tenant's intent→placement overrides.
+async fn list_tenant_policies(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
+    let items = atlas_inventory::tenants::list_policies(&s.pool, &id).await?;
+    Ok(Json(json!(items)))
+}
+
+#[derive(Debug, Deserialize)]
+struct TenantPolicyBody {
+    storage_class: String,
+    #[serde(default)]
+    access_mode: Option<String>,
+    #[serde(default)]
+    volume_mode: Option<String>,
+}
+
+/// `PUT /tenants/{id}/policies/{intent}` — override an intent's placement for a tenant (admin).
+async fn put_tenant_policy(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path((id, intent)): Path<(String, String)>,
+    Json(body): Json<TenantPolicyBody>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    if body.storage_class.trim().is_empty() {
+        return Err(AppError::Validation("storage_class is required".into()));
+    }
+    let access_mode = body.access_mode.unwrap_or_else(|| "ReadWriteOnce".into());
+    let volume_mode = body.volume_mode.unwrap_or_else(|| "Filesystem".into());
+    atlas_inventory::tenants::set_policy(
+        &s.pool,
+        &id,
+        &intent,
+        &body.storage_class,
+        &access_mode,
+        &volume_mode,
+    )
+    .await?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "tenant.policy.set",
+        "tenant",
+        &id,
+        "ok",
+        Some(json!({ "intent": intent, "storage_class": body.storage_class })),
+        None,
+    )
+    .await;
+    let p = atlas_inventory::tenants::get_policy(&s.pool, &id, &intent).await?;
+    Ok(Json(json!(p)))
+}
+
+/// `DELETE /tenants/{id}/policies/{intent}` (admin).
+async fn delete_tenant_policy(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path((id, intent)): Path<(String, String)>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    let removed = atlas_inventory::tenants::delete_policy(&s.pool, &id, &intent).await?;
+    if !removed {
+        return Err(AppError::NotFound(format!(
+            "tenant {id} has no override for intent {intent}"
+        )));
+    }
+    Ok(Json(
+        json!({ "deleted": { "tenant_id": id, "intent": intent } }),
+    ))
+}
+
 /// `GET /tenants/{id}/quota` — the tenant's quota + current usage (unlimited 0/0 if unset).
 async fn get_tenant_quota(
     State(s): State<AppState>,
@@ -622,8 +701,21 @@ async fn create_volume(
         .and_then(|k| k.namespace.clone())
         .unwrap_or_else(|| "default".into());
     let sc_override = k8s_opts.as_ref().and_then(|k| k.storage_class.clone());
-    let placement =
+    let mut placement =
         atlas_policy::resolve(body.policy.as_deref(), body.kind, sc_override.as_deref());
+    // Per-tenant policy override (PDF §14): unless the request pins an explicit StorageClass, a
+    // tenant's override for this intent wins over the built-in catalog.
+    if sc_override.is_none() {
+        if let Some(intent) = body.policy.as_deref() {
+            if let Some(tp) =
+                atlas_inventory::tenants::get_policy(&s.pool, &body.tenant_id, intent).await?
+            {
+                placement.storage_class = tp.storage_class;
+                placement.access_mode = tp.access_mode;
+                placement.volume_mode = tp.volume_mode;
+            }
+        }
+    }
     let access_modes = k8s_opts
         .as_ref()
         .map(|k| k.access_modes.clone())

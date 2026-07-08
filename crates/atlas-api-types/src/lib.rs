@@ -344,6 +344,16 @@ pub struct SnapshotSchedule {
     pub created_at: Option<String>,
 }
 
+/// A per-tenant policy override: remaps an intent to a specific placement (PDF §14).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TenantPolicy {
+    pub tenant_id: String,
+    pub intent: String,
+    pub storage_class: String,
+    pub access_mode: String,
+    pub volume_mode: String,
+}
+
 /// A per-tenant storage quota plus current usage (PDF §14 multi-tenancy). `0` limits = unlimited.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TenantQuota {

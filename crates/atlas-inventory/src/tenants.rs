@@ -3,7 +3,7 @@
 //! `storage_volumes` rows for the tenant, so it always reflects what is currently provisioned.
 
 use anyhow::Result;
-use atlas_api_types::TenantQuota;
+use atlas_api_types::{TenantPolicy, TenantQuota};
 use sqlx::{Row, SqlitePool};
 
 /// Current usage for a tenant: total provisioned volume bytes and volume count.
@@ -60,6 +60,83 @@ pub async fn set_quota(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+fn row_to_policy(r: sqlx::sqlite::SqliteRow) -> TenantPolicy {
+    TenantPolicy {
+        tenant_id: r.get("tenant_id"),
+        intent: r.get("intent"),
+        storage_class: r.get("storage_class"),
+        access_mode: r.get("access_mode"),
+        volume_mode: r.get("volume_mode"),
+    }
+}
+
+/// Fetch a tenant's override for one intent, if any.
+pub async fn get_policy(
+    pool: &SqlitePool,
+    tenant_id: &str,
+    intent: &str,
+) -> Result<Option<TenantPolicy>> {
+    let row = sqlx::query(
+        "SELECT tenant_id, intent, storage_class, access_mode, volume_mode
+         FROM tenant_policies WHERE tenant_id = ? AND intent = ?",
+    )
+    .bind(tenant_id)
+    .bind(intent)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(row_to_policy))
+}
+
+/// List all of a tenant's policy overrides.
+pub async fn list_policies(pool: &SqlitePool, tenant_id: &str) -> Result<Vec<TenantPolicy>> {
+    let rows = sqlx::query(
+        "SELECT tenant_id, intent, storage_class, access_mode, volume_mode
+         FROM tenant_policies WHERE tenant_id = ? ORDER BY intent",
+    )
+    .bind(tenant_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(row_to_policy).collect())
+}
+
+/// Upsert a tenant's override for an intent.
+pub async fn set_policy(
+    pool: &SqlitePool,
+    tenant_id: &str,
+    intent: &str,
+    storage_class: &str,
+    access_mode: &str,
+    volume_mode: &str,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO tenant_policies (tenant_id, intent, storage_class, access_mode, volume_mode)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(tenant_id, intent) DO UPDATE SET
+            storage_class = excluded.storage_class,
+            access_mode = excluded.access_mode,
+            volume_mode = excluded.volume_mode,
+            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')",
+    )
+    .bind(tenant_id)
+    .bind(intent)
+    .bind(storage_class)
+    .bind(access_mode)
+    .bind(volume_mode)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Delete a tenant's override for an intent. Returns whether a row was removed.
+pub async fn delete_policy(pool: &SqlitePool, tenant_id: &str, intent: &str) -> Result<bool> {
+    let res = sqlx::query("DELETE FROM tenant_policies WHERE tenant_id = ? AND intent = ?")
+        .bind(tenant_id)
+        .bind(intent)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected() > 0)
 }
 
 /// Result of a quota admission check.

@@ -91,6 +91,19 @@ enum Command {
         #[arg(long, default_value_t = 3600)]
         ttl_secs: u64,
     },
+    /// GET /api/atlas/v1/tenants/{id}/policies — a tenant's intent overrides
+    TenantPolicies { tenant_id: String },
+    /// PUT /api/atlas/v1/tenants/{id}/policies/{intent} — override an intent's placement (admin)
+    SetTenantPolicy {
+        tenant_id: String,
+        intent: String,
+        #[arg(long)]
+        storage_class: String,
+        #[arg(long, default_value = "ReadWriteOnce")]
+        access_mode: String,
+        #[arg(long, default_value = "Filesystem")]
+        volume_mode: String,
+    },
     /// GET /api/atlas/v1/tenants/{id}/quota — a tenant's quota + usage
     Quota { tenant_id: String },
     /// PUT /api/atlas/v1/tenants/{id}/quota — set a tenant's quota (0 = unlimited)
@@ -280,6 +293,24 @@ async fn main() -> Result<()> {
             "POST",
             "/api/atlas/v1/auth/tokens".to_string(),
             Some(serde_json::json!({ "subject": subject, "role": role, "ttl_secs": ttl_secs })),
+        ),
+        Command::TenantPolicies { tenant_id } => (
+            "GET",
+            format!("/api/atlas/v1/tenants/{tenant_id}/policies"),
+            None,
+        ),
+        Command::SetTenantPolicy {
+            tenant_id,
+            intent,
+            storage_class,
+            access_mode,
+            volume_mode,
+        } => (
+            "PUT",
+            format!("/api/atlas/v1/tenants/{tenant_id}/policies/{intent}"),
+            Some(serde_json::json!({
+                "storage_class": storage_class, "access_mode": access_mode, "volume_mode": volume_mode
+            })),
         ),
         Command::Quota { tenant_id } => (
             "GET",
