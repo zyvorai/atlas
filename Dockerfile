@@ -1,9 +1,18 @@
 # Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# ---- UI builder (React Storage Center → dist) ----
+FROM node:22-alpine AS ui
+WORKDIR /ui
+COPY crates/atlas-gateway/ui/package.json crates/atlas-gateway/ui/package-lock.json ./
+RUN npm ci
+COPY crates/atlas-gateway/ui/ ./
+RUN npm run build
+
 # ---- builder ----
 FROM rust:1.88-bookworm AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 COPY . .
+COPY --from=ui /ui/dist crates/atlas-gateway/ui/dist
 RUN cargo build --release -p atlas-gateway -p atlas-cli
 
 # ---- runtime ----

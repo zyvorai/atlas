@@ -109,17 +109,41 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/version", get(version))
-        .route("/", get(dashboard))
-        .route("/ui", get(dashboard))
         .nest("/api/atlas/v1", api)
+        // Any other path serves the embedded Storage Center SPA (client-side routing).
+        .fallback(get(spa_handler))
         .with_state(state)
 }
 
-/// The self-contained web dashboard (same-origin SPA over the REST API).
-const DASHBOARD_HTML: &str = include_str!("ui.html");
+/// The compiled Storage Center SPA (`crates/atlas-gateway/ui/dist`), embedded into the binary.
+#[derive(rust_embed::Embed)]
+#[folder = "ui/dist"]
+struct Ui;
 
-async fn dashboard() -> axum::response::Html<&'static str> {
-    axum::response::Html(DASHBOARD_HTML)
+/// Serve an embedded UI asset by path; fall back to `index.html` for client-side routes.
+async fn spa_handler(uri: axum::http::Uri) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let path = uri.path().trim_start_matches('/');
+    let path = if path.is_empty() { "index.html" } else { path };
+    let (body, file) = match Ui::get(path) {
+        Some(f) => (f.data, path.to_string()),
+        None => match Ui::get("index.html") {
+            Some(f) => (f.data, "index.html".to_string()),
+            None => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    "UI not built — run `make ui` (or build the Docker image)",
+                )
+                    .into_response()
+            }
+        },
+    };
+    let mime = mime_guess::from_path(&file).first_or_octet_stream();
+    (
+        [(axum::http::header::CONTENT_TYPE, mime.as_ref())],
+        body.into_owned(),
+    )
+        .into_response()
 }
 
 // ---- meta ----

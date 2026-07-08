@@ -2,11 +2,21 @@
 # atlas-gateway image WITH the Ceph Reef client (ceph/rbd CLIs) for ATLAS_CEPH_DRIVER_MODE=real.
 # The runtime installs ceph-common from the upstream Reef apt repo so the client matches the
 # cluster major (v18) and the glibc lines up with the debian-bookworm-built binary.
+# ---- UI builder (React Storage Center → dist) ----
+FROM node:22-alpine AS ui
+WORKDIR /ui
+COPY crates/atlas-gateway/ui/package.json crates/atlas-gateway/ui/package-lock.json ./
+RUN npm ci
+COPY crates/atlas-gateway/ui/ ./
+RUN npm run build
+
 # ---- builder ----
 FROM rust:1.88-bookworm AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 COPY . .
+# Embed the freshly built UI (rust-embed reads crates/atlas-gateway/ui/dist at compile time).
+COPY --from=ui /ui/dist crates/atlas-gateway/ui/dist
 RUN cargo build --release -p atlas-gateway -p atlas-cli
 
 # ---- runtime (debian + ceph reef client) ----
