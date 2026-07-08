@@ -82,6 +82,17 @@ snapshots list/create/rollback, usage refresh); **Snapshots**, **Schedules**, **
 **Policies**, **Backends**, **Kubernetes**, **Cluster**. Write actions thread `202 → SSE watch →
 toast → refetch`. Replaces the earlier vanilla-JS `ui.html`. This standalone console sidesteps the
 Zeus OS `atlas`/`ZeusStorageCenter.tsx` collisions; Zeus OS can later embed it or call the same API.
+
+**UX polish**: a **branded login gate** (Zyvor hexagon mark, animated gradient orbs, optional
+service-account token, live gateway health/version) with a session gate + sign-out; a **theme toggle**
+(dark ↔ **Aurora** neon variant); confirm dialogs on destructive actions; loading/empty states with
+CTAs; a running-jobs popover; ⌘K spotlight with arrow-nav; copy-to-clipboard IDs; a capacity radial +
+per-pool utilization bars on the Command Deck; per-page titles, hexagon favicon, responsive sidebar.
+
+**HTTPS**: an optional TLS listener (`ATLAS_HTTPS_ADDR` + `ATLAS_TLS_CERT`/`ATLAS_TLS_KEY` PEM), served
+alongside HTTP via `axum-server` + rustls (ring provider — no cmake in the build). The ceph deployment
+mounts a self-signed `atlas-tls` Secret and exposes NodePort **30543** (`https://<node>:30543/`; a real
+cert/ingress gives trusted TLS).
 - ✅ **Durable gateway DB** — the SQLite file is now backed by a `ReadWriteOnce` PVC (`Recreate`
   strategy). The real-mode gateway dogfoods `zyvor-rbd-prod` (Ceph); the fake-mode gateway uses the
   cluster default StorageClass so it still deploys without Ceph. Verified: inventory survives a pod
