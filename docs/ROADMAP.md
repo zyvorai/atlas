@@ -53,6 +53,10 @@ Read-only control plane + real Ceph lab.
 - ✅ **Real usage stats**: `POST /rbd-usage/refresh` recomputes each volume's `used_bytes` via
   `rbd du` (resolving the image from the `rbd:` id or the PVC→PV for CSI volumes). Verified live:
   a fresh volume's image resolved and `used_bytes` written. `atlasctl refresh-usage`.
+- ✅ **RBD resize + flatten**: `POST /rbd-images/{pool}/{image}/resize {size_bytes}` grows an image
+  (updates inventory size); `.../flatten` detaches a COW clone from its parent snapshot. Verified
+  live: base 1→3 GiB, clone flattened to independent. `atlasctl resize-rbd-image/flatten-rbd-image`.
+- ✅ **Volume list filters**: `GET /volumes?state=&tenant=`. Verified live.
 - ✅ **Durable gateway DB** — the SQLite file is now backed by a `ReadWriteOnce` PVC (`Recreate`
   strategy). The real-mode gateway dogfoods `zyvor-rbd-prod` (Ceph); the fake-mode gateway uses the
   cluster default StorageClass so it still deploys without Ceph. Verified: inventory survives a pod
