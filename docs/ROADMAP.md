@@ -146,6 +146,11 @@ Read-only control plane + real Ceph lab.
   - A `ZeusStorageCenter.tsx` + `web/src/routes/storage.rs` already ship — decide whether Atlas's
     Storage Center *absorbs*, *replaces*, or *sits beside* them.
 - Additional drivers behind the same trait: NFS, ZFS, SAN, cloud block, external Ceph import.
+- ✅ **Scheduled snapshots (protection schedules)**: `POST /volumes/{id}/schedule {interval_secs, keep}`
+  registers a schedule (`snapshot_schedules`); a background worker (`ATLAS_SNAPSHOT_TICK_SECS`) snapshots
+  the volume on cadence and prunes its scheduler-created snapshots to `keep`. `GET /schedules`,
+  `DELETE /schedules/{id}`, `atlasctl schedule-snapshots`. Verified live: snapshots appear on interval
+  and retention holds steady at `keep` (delivers the policy catalog's "hourly snapshots").
 - ✅ **Multi-tenancy quotas**: per-tenant `max_bytes` + `max_volumes` (`storage_tenant_quotas`,
   0 = unlimited). `PUT /tenants/{id}/quota` (admin) sets them; `GET` returns limits + live usage.
   `POST /volumes` (REST + gRPC `CreateVolume`) rejects an over-quota create (409 / `resource_exhausted`)

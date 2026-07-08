@@ -306,6 +306,18 @@ The built-in intent → placement catalog (PDF §12.3).
    "description": "Databases — RBD NVMe, hourly snapshots, daily backup" }]
 ```
 
+### `POST /api/atlas/v1/volumes/{id}/schedule` · `GET /schedules` · `DELETE /schedules/{id}`
+Protection schedules: a background worker snapshots the volume every `interval_secs` and prunes its
+scheduler-created snapshots to `keep`.
+```json
+// POST body (operator)
+{ "interval_secs": 3600, "keep": 24 }
+// 201 → { "id": "sched_...", "volume_id": "vol_...", "interval_secs": 3600, "keep": 24,
+//         "enabled": true, "next_run_at": "..." }
+```
+Worker cadence is `ATLAS_SNAPSHOT_TICK_SECS` (0 disables). Scheduled snapshots are named
+`<volume>-sched-<id>`; retention only prunes those, never manual snapshots.
+
 ### `GET /api/atlas/v1/tenants/{id}/quota` · `PUT .../quota`
 Per-tenant storage quota + live usage (PDF §14 multi-tenancy). `PUT` (admin) sets the limits.
 ```json
