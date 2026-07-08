@@ -71,6 +71,7 @@ pub fn router(state: AppState) -> Router {
         .route("/jobs", get(list_jobs))
         .route("/jobs/{id}", get(get_job))
         .route("/jobs/{id}/watch", get(watch_job_sse))
+        .route("/audit", get(list_audit))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
@@ -515,6 +516,35 @@ async fn issue_token(
             "level": crate::auth::role_level(&role), "expires_at": exp, "ttl_secs": ttl_secs
         })),
     ))
+}
+
+#[derive(Debug, Deserialize)]
+struct AuditQuery {
+    actor: Option<String>,
+    action: Option<String>,
+    resource_type: Option<String>,
+    resource_id: Option<String>,
+    limit: Option<i64>,
+}
+
+/// `GET /audit` — query the audit trail (operator), newest first. Filters: `actor`, `action`,
+/// `resource_type`, `resource_id`; `limit` (default 100, max 1000).
+async fn list_audit(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Query(q): Query<AuditQuery>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let rows = atlas_inventory::audit::list(
+        &s.pool,
+        q.actor.as_deref(),
+        q.action.as_deref(),
+        q.resource_type.as_deref(),
+        q.resource_id.as_deref(),
+        q.limit.unwrap_or(100),
+    )
+    .await?;
+    Ok(Json(json!(rows)))
 }
 
 /// `GET /tenants/{id}/policies` — the tenant's intent→placement overrides.

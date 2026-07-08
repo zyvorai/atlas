@@ -91,6 +91,19 @@ enum Command {
         #[arg(long, default_value_t = 3600)]
         ttl_secs: u64,
     },
+    /// GET /api/atlas/v1/audit — query the audit trail (filters + --limit)
+    Audit {
+        #[arg(long)]
+        actor: Option<String>,
+        #[arg(long)]
+        action: Option<String>,
+        #[arg(long)]
+        resource_type: Option<String>,
+        #[arg(long)]
+        resource_id: Option<String>,
+        #[arg(long, default_value_t = 100)]
+        limit: i64,
+    },
     /// GET /api/atlas/v1/tenants/{id}/policies — a tenant's intent overrides
     TenantPolicies { tenant_id: String },
     /// PUT /api/atlas/v1/tenants/{id}/policies/{intent} — override an intent's placement (admin)
@@ -294,6 +307,28 @@ async fn main() -> Result<()> {
             "/api/atlas/v1/auth/tokens".to_string(),
             Some(serde_json::json!({ "subject": subject, "role": role, "ttl_secs": ttl_secs })),
         ),
+        Command::Audit {
+            actor,
+            action,
+            resource_type,
+            resource_id,
+            limit,
+        } => {
+            let mut qs = vec![format!("limit={limit}")];
+            if let Some(a) = actor {
+                qs.push(format!("actor={a}"));
+            }
+            if let Some(a) = action {
+                qs.push(format!("action={a}"));
+            }
+            if let Some(t) = resource_type {
+                qs.push(format!("resource_type={t}"));
+            }
+            if let Some(r) = resource_id {
+                qs.push(format!("resource_id={r}"));
+            }
+            ("GET", format!("/api/atlas/v1/audit?{}", qs.join("&")), None)
+        }
         Command::TenantPolicies { tenant_id } => (
             "GET",
             format!("/api/atlas/v1/tenants/{tenant_id}/policies"),

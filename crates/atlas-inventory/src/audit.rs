@@ -2,7 +2,7 @@
 //! Audit-log writes (PDF §14.3). Every state-changing or sensitive action should append here.
 
 use anyhow::Result;
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 
 /// Append an audit record. `request`/`result` are optional JSON blobs.
 #[allow(clippy::too_many_arguments)]
@@ -33,6 +33,62 @@ pub async fn record(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// Query the audit trail, newest first, with optional equality filters and a bounded limit.
+pub async fn list(
+    pool: &SqlitePool,
+    actor: Option<&str>,
+    action: Option<&str>,
+    resource_type: Option<&str>,
+    resource_id: Option<&str>,
+    limit: i64,
+) -> Result<Vec<serde_json::Value>> {
+    let limit = limit.clamp(1, 1000);
+    let rows = sqlx::query(
+        "SELECT id, tenant_id, actor_id, action, resource_type, resource_id, status,
+                request, result, created_at
+         FROM storage_audit_logs
+         WHERE (? IS NULL OR actor_id = ?)
+           AND (? IS NULL OR action = ?)
+           AND (? IS NULL OR resource_type = ?)
+           AND (? IS NULL OR resource_id = ?)
+         ORDER BY id DESC
+         LIMIT ?",
+    )
+    .bind(actor)
+    .bind(actor)
+    .bind(action)
+    .bind(action)
+    .bind(resource_type)
+    .bind(resource_type)
+    .bind(resource_id)
+    .bind(resource_id)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+
+    let parse = |s: Option<String>| -> serde_json::Value {
+        s.and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or(serde_json::Value::Null)
+    };
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.get::<i64, _>("id"),
+                "tenant_id": r.get::<Option<String>, _>("tenant_id"),
+                "actor_id": r.get::<String, _>("actor_id"),
+                "action": r.get::<String, _>("action"),
+                "resource_type": r.get::<String, _>("resource_type"),
+                "resource_id": r.get::<String, _>("resource_id"),
+                "status": r.get::<String, _>("status"),
+                "request": parse(r.get::<Option<String>, _>("request")),
+                "result": parse(r.get::<Option<String>, _>("result")),
+                "created_at": r.get::<String, _>("created_at"),
+            })
+        })
+        .collect())
 }
 
 /// Count audit rows for a given action — handy for tests.
