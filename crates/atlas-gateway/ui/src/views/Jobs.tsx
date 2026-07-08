@@ -41,11 +41,11 @@ export default function Jobs() {
           rowKey={(j) => j.id}
           cols={[
             { h: "ID", f: (j) => <Copyable text={j.id} />, mono: true },
-            { h: "Type", f: (j) => j.job_type, mono: true },
-            { h: "State", f: (j) => <Badge kind={stateKind(j.state)} dot>{j.state}</Badge> },
+            { h: "Type", f: (j) => j.job_type, mono: true, sortKey: (j) => j.job_type },
+            { h: "State", f: (j) => <Badge kind={stateKind(j.state)} dot>{j.state}</Badge>, sortKey: (j) => j.state },
             { h: "Progress", f: (j) => <Bar pct={j.progress_percent} kind={j.state} /> },
             { h: "Error", f: (j) => <span className="text-danger">{j.error || ""}</span> },
-            { h: "When", f: (j) => <span className="text-muted-foreground">{timeAgo(j.updated_at || j.created_at)}</span> },
+            { h: "When", f: (j) => <span className="text-muted-foreground">{timeAgo(j.updated_at || j.created_at)}</span>, sortKey: (j) => j.updated_at || j.created_at || "" },
           ]}
         />
       </GlassSection>

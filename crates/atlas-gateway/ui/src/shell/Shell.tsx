@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  ChevronLeft, ChevronRight, Hexagon, KeyRound, Loader2, LogOut, Moon, Search, Sparkles, Wifi,
+  Bell, ChevronLeft, ChevronRight, Hexagon, KeyRound, Loader2, LogOut, Moon, Search, Sparkles, Wifi,
 } from "lucide-react";
 import { MODULES, SECTIONS } from "../nav/modules";
-import { useClusters, useJobs } from "../api/hooks";
+import { useAlerts, useClusters, useJobs } from "../api/hooks";
 import { useUi } from "../store/ui";
 import { cx, healthKind, stateKind } from "../lib/format";
 import { Badge, Button, Field, Modal } from "../ui/kit";
@@ -23,10 +23,13 @@ function Clock() {
 function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
   const { data: clusters } = useClusters();
   const { data: jobs } = useJobs();
+  const { data: openAlerts } = useAlerts("open");
   const runningJobs = (jobs || []).filter((j) => ["running", "queued", "verifying", "pending"].includes(j.state));
+  const recentDone = (jobs || []).filter((j) => ["succeeded", "failed"].includes(j.state)).slice(0, 5);
   const h = clusters?.[0]?.health || "unknown";
   const [tokenOpen, setTokenOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
   const token = useUi((s) => s.token);
   const setToken = useUi((s) => s.setToken);
   const theme = useUi((s) => s.theme);
@@ -71,6 +74,39 @@ function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
           )}
         </div>
       )}
+      <div className="relative">
+        <button className="btn btn-ghost btn-sm relative" title="Notifications" onClick={() => setBellOpen((v) => !v)}>
+          <Bell size={13} />
+          {(openAlerts?.length || 0) > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-danger text-white text-[9px] grid place-items-center">{openAlerts!.length}</span>
+          )}
+        </button>
+        {bellOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setBellOpen(false)} />
+            <div className="absolute right-0 top-9 z-50 w-80 glass-card p-2 animate-fade-in max-h-[70vh] overflow-auto">
+              <div className="section-label px-1.5 pb-1">Open alerts</div>
+              {openAlerts?.length ? openAlerts.slice(0, 6).map((a) => (
+                <button key={a.id} className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-white/[0.06]" onClick={() => { setBellOpen(false); nav("/alerts"); }}>
+                  <div className="flex items-center gap-2">
+                    <Badge kind={stateKind(a.severity)}>{a.severity}</Badge>
+                    <span className="flex-1 truncate text-xs">{a.title}</span>
+                  </div>
+                </button>
+              )) : <div className="px-2 py-2 text-xs text-muted-foreground">No open alerts.</div>}
+              <div className="section-label px-1.5 pt-2 pb-1">Recent jobs</div>
+              {recentDone.length ? recentDone.map((j) => (
+                <button key={j.id} className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-white/[0.06]" onClick={() => { setBellOpen(false); nav("/jobs"); }}>
+                  <div className="flex items-center gap-2">
+                    <Badge kind={stateKind(j.state)}>{j.state}</Badge>
+                    <span className="flex-1 truncate mono text-[11px]">{j.job_type}</span>
+                  </div>
+                </button>
+              )) : <div className="px-2 py-2 text-xs text-muted-foreground">No recent jobs.</div>}
+            </div>
+          </>
+        )}
+      </div>
       <button
         className="btn btn-ghost btn-sm"
         title={theme === "aurora" ? "Switch to dark" : "Switch to Aurora"}

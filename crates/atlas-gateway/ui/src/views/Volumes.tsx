@@ -53,11 +53,11 @@ export default function Volumes() {
           empty="No volumes yet."
           emptyCta={<Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>Create volume</Button>}
           cols={[
-            { h: "Name", f: (v) => v.name, mono: true },
-            { h: "Kind", f: (v) => v.kind },
-            { h: "Size", f: (v) => fmtBytes(v.size_bytes) },
-            { h: "Used", f: (v) => (v.used_bytes != null ? fmtBytes(v.used_bytes) : "—") },
-            { h: "State", f: (v) => <Badge kind={stateKind(v.state)} dot>{v.state}</Badge> },
+            { h: "Name", f: (v) => v.name, mono: true, sortKey: (v) => v.name },
+            { h: "Kind", f: (v) => v.kind, sortKey: (v) => v.kind },
+            { h: "Size", f: (v) => fmtBytes(v.size_bytes), sortKey: (v) => v.size_bytes },
+            { h: "Used", f: (v) => (v.used_bytes != null ? fmtBytes(v.used_bytes) : "—"), sortKey: (v) => v.used_bytes ?? -1 },
+            { h: "State", f: (v) => <Badge kind={stateKind(v.state)} dot>{v.state}</Badge>, sortKey: (v) => v.state },
             { h: "Class", f: (v) => v.storage_class_name || "—", mono: true },
             { h: "PVC / RBD", f: (v) => <span className="mono text-muted-foreground">{v.pvc_name || v.backend_native_id || "—"}</span> },
           ]}

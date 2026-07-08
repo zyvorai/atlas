@@ -1,7 +1,9 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+import { useEffect, useState } from "react";
 import { AlertTriangle, LayoutDashboard } from "lucide-react";
-import { Area, AreaChart, ResponsiveContainer } from "recharts";
+import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useAlerts, useClusters, useOsds, usePools, useSummary } from "../api/hooks";
+import { history, onHistory, recordSummary } from "../store/history";
 import { Badge, Card, GlassSection, PageHeader, RadialGauge, StatCard } from "../ui/kit";
 import { Table } from "../ui/Table";
 import { fmtBytes, healthKind, num, stateKind } from "../lib/format";
@@ -15,6 +17,10 @@ export default function Overview() {
   const io = s?.client_io;
   const rc = s?.recovery;
   const recovering = (rc?.pg_recovering || 0) + (rc?.pg_backfilling || 0);
+  const [, setTick] = useState(0);
+  useEffect(() => onHistory(() => setTick((t) => t + 1)), []);
+  useEffect(() => { if (s) recordSummary(s); }, [s]);
+  const hist = history().map((h) => ({ ...h, ts: new Date(h.t).toLocaleTimeString([], { minute: "2-digit", second: "2-digit" }) }));
   // Synthetic sparkline seed from the read/write totals (visual only).
   const spark = io
     ? Array.from({ length: 16 }, (_, i) => ({ v: (io.read_ops_total % 1000) + Math.sin(i / 2) * 120 + i * 8 }))
@@ -88,6 +94,44 @@ export default function Overview() {
           {pools && !pools.length && <div className="text-sm text-muted-foreground">No pools.</div>}
         </div>
       </GlassSection>
+
+      {hist.length > 2 && (
+        <div className="grid lg:grid-cols-2 gap-4 mb-4">
+          <GlassSection title="Capacity trend (session)">
+            <div className="p-3 h-40">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={hist} margin={{ top: 6, right: 8, left: -18, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="cap" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#38BDF8" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="#38BDF8" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="ts" tick={{ fontSize: 10, fill: "#8aa0bd" }} minTickGap={40} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "#8aa0bd" }} width={34} unit="%" />
+                  <Tooltip contentStyle={{ background: "#0b1220", border: "1px solid #1f2a3a", borderRadius: 8, fontSize: 12 }} />
+                  <Area type="monotone" dataKey="usedPct" name="used %" stroke="#38BDF8" strokeWidth={1.6} fill="url(#cap)" isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </GlassSection>
+          <GlassSection title="Client IOPS (session)">
+            <div className="p-3 h-40">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={hist} margin={{ top: 6, right: 8, left: -18, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="ts" tick={{ fontSize: 10, fill: "#8aa0bd" }} minTickGap={40} />
+                  <YAxis tick={{ fontSize: 10, fill: "#8aa0bd" }} width={34} />
+                  <Tooltip contentStyle={{ background: "#0b1220", border: "1px solid #1f2a3a", borderRadius: 8, fontSize: 12 }} />
+                  <Line type="monotone" dataKey="readIops" name="read" stroke="#38BDF8" strokeWidth={1.6} dot={false} isAnimationActive={false} />
+                  <Line type="monotone" dataKey="writeIops" name="write" stroke="#a78bfa" strokeWidth={1.6} dot={false} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </GlassSection>
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-2 gap-4">
         <GlassSection title={<span className="flex items-center gap-2">Clusters <Badge kind="neutral">{clusters?.length || 0}</Badge></span>}>
