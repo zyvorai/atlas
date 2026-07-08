@@ -390,6 +390,10 @@ atlasctl discover [backend]         # POST /backends/{backend}/discover  (defaul
 atlasctl clusters | pools | osds | volumes
 atlasctl storage-classes            # GET /storage-classes (live k8s)
 atlasctl metrics                    # GET /metrics/summary
+atlasctl ceph-metrics [--prefix P]  # GET /metrics/ceph
+atlasctl history [--minutes 60]     # GET /metrics/history (persisted time-series)
+atlasctl forecast [--minutes 1440]  # GET /metrics/forecast (days-until-full projection)
+atlasctl self-metrics               # GET /metrics (Prometheus text-exposition)
 # write path (slice 2):
 atlasctl policies                   # GET /policies
 atlasctl create-volume NAME --size-gib 5 --policy database --namespace default

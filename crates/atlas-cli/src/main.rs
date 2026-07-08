@@ -54,6 +54,18 @@ enum Command {
         #[arg(long)]
         prefix: Option<String>,
     },
+    /// GET /api/atlas/v1/metrics/history — persisted capacity/IO/job time-series (--minutes)
+    History {
+        #[arg(long, default_value_t = 60)]
+        minutes: i64,
+    },
+    /// GET /api/atlas/v1/metrics/forecast — least-squares days-until-full projection (--minutes)
+    Forecast {
+        #[arg(long, default_value_t = 1440)]
+        minutes: i64,
+    },
+    /// GET /metrics — Atlas's own state in Prometheus text-exposition format
+    SelfMetrics,
     /// GET /api/atlas/v1/policies
     Policies,
     /// POST /api/atlas/v1/volumes/{id}/schedule — periodic snapshots for a volume
@@ -336,6 +348,17 @@ async fn main() -> Result<()> {
             },
             None,
         ),
+        Command::History { minutes } => (
+            "GET",
+            format!("/api/atlas/v1/metrics/history?minutes={minutes}"),
+            None,
+        ),
+        Command::Forecast { minutes } => (
+            "GET",
+            format!("/api/atlas/v1/metrics/forecast?minutes={minutes}"),
+            None,
+        ),
+        Command::SelfMetrics => ("GET", "/metrics".to_string(), None),
         Command::Policies => ("GET", "/api/atlas/v1/policies".to_string(), None),
         Command::ScheduleSnapshots {
             volume_id,
