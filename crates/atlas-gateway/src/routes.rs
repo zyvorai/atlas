@@ -109,8 +109,17 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/version", get(version))
+        .route("/", get(dashboard))
+        .route("/ui", get(dashboard))
         .nest("/api/atlas/v1", api)
         .with_state(state)
+}
+
+/// The self-contained web dashboard (same-origin SPA over the REST API).
+const DASHBOARD_HTML: &str = include_str!("ui.html");
+
+async fn dashboard() -> axum::response::Html<&'static str> {
+    axum::response::Html(DASHBOARD_HTML)
 }
 
 // ---- meta ----

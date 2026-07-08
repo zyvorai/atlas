@@ -1,0 +1,292 @@
+<!doctype html>
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved. -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Atlas — Storage Control Plane</title>
+<style>
+  :root{
+    --bg:#0b0f17; --panel:#131a26; --panel2:#0f1520; --line:#1f2a3a; --txt:#e6edf6;
+    --muted:#8aa0bd; --accent:#4f9cff; --accent2:#7c5cff; --ok:#2ecc71; --warn:#f5a623;
+    --crit:#ff5c5c; --chip:#1a2434;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  a{color:var(--accent);text-decoration:none}
+  header{display:flex;align-items:center;gap:14px;padding:12px 18px;background:linear-gradient(90deg,#0f1726,#0b0f17);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+  .logo{font-weight:800;letter-spacing:.5px;font-size:17px}
+  .logo b{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--muted);font-size:12px}
+  .grow{flex:1}
+  .badge{padding:3px 9px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid var(--line);background:var(--chip)}
+  .badge.ok{color:var(--ok);border-color:#1e5c39}
+  .badge.warn{color:var(--warn);border-color:#5c4519}
+  .badge.crit{color:var(--crit);border-color:#5c1f1f}
+  button{background:var(--chip);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:linear-gradient(90deg,var(--accent),var(--accent2));border:none;font-weight:600}
+  button.sm{padding:4px 8px;font-size:12px}
+  button.danger:hover{border-color:var(--crit);color:var(--crit)}
+  .wrap{display:flex;min-height:calc(100vh - 52px)}
+  nav{width:190px;border-right:1px solid var(--line);padding:10px;background:var(--panel2);flex-shrink:0}
+  nav a{display:block;padding:9px 12px;border-radius:8px;color:var(--muted);font-weight:600;cursor:pointer;margin-bottom:2px}
+  nav a:hover{background:var(--chip);color:var(--txt)}
+  nav a.active{background:var(--chip);color:var(--txt);box-shadow:inset 3px 0 0 var(--accent)}
+  main{flex:1;padding:18px;overflow:auto}
+  h2{margin:2px 0 14px;font-size:18px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;margin-bottom:18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .card .k{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+  .card .v{font-size:22px;font-weight:700;margin-top:6px}
+  .card .v small{font-size:13px;color:var(--muted);font-weight:500}
+  .bar{height:7px;border-radius:6px;background:var(--chip);margin-top:9px;overflow:hidden}
+  .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:16px;overflow:hidden}
+  .panel h3{margin:0;padding:11px 14px;font-size:13px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  .panel h3 .grow{flex:1}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);font-size:13px;white-space:nowrap}
+  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+  tbody tr:hover{background:#0e1826}
+  td.mono,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+  .pill{padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:var(--chip);border:1px solid var(--line)}
+  .pill.ok{color:var(--ok)} .pill.warn{color:var(--warn)} .pill.crit{color:var(--crit)}
+  .pill.run{color:var(--accent)}
+  .scroll{overflow-x:auto}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  input,select{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 9px;font-size:13px}
+  input::placeholder{color:#54627a}
+  .toast{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:50}
+  .toast>div{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);padding:10px 14px;border-radius:8px;min-width:240px;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+  .toast>div.ok{border-left-color:var(--ok)} .toast>div.err{border-left-color:var(--crit)}
+  .modal-bg{position:fixed;inset:0;background:rgba(3,6,12,.66);display:none;align-items:center;justify-content:center;z-index:40}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;width:min(460px,92vw)}
+  .modal h3{margin:0 0 12px}
+  .modal label{display:block;color:var(--muted);font-size:12px;margin:10px 0 4px}
+  .modal input,.modal select{width:100%}
+  .empty{padding:22px;color:var(--muted);text-align:center}
+  .muted{color:var(--muted)}
+  code.k{background:var(--chip);padding:1px 6px;border-radius:6px}
+  @media(max-width:720px){nav{width:56px}nav a{font-size:0;padding:12px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">⬡ <b>ATLAS</b></div>
+  <div class="sub">Zyvor Storage Control Plane</div>
+  <span id="health" class="badge">…</span>
+  <div class="grow"></div>
+  <label class="sub"><input type="checkbox" id="auto" checked style="width:auto"> auto</label>
+  <button class="sm" onclick="refresh()">↻ Refresh</button>
+  <span id="ver" class="sub"></span>
+</header>
+<div class="wrap">
+  <nav id="nav"></nav>
+  <main id="main"><div class="empty">Loading…</div></main>
+</div>
+<div class="toast" id="toast"></div>
+<div class="modal-bg" id="modalbg"><div class="modal" id="modal"></div></div>
+
+<script>
+const API = location.origin + "/api/atlas/v1";
+const TABS = ["Overview","Volumes","RBD Images","Snapshots","Backups","Buckets","Jobs","Alerts","Tenants","Audit"];
+let TAB = "Overview", timer=null;
+
+// ---------- helpers ----------
+const el=(t,a={},...k)=>{const e=document.createElement(t);for(const[x,v]of Object.entries(a)){if(x=="html")e.innerHTML=v;else if(x.startsWith("on"))e[x]=v;else e.setAttribute(x,v)}k.flat().forEach(c=>e.append(c&&c.nodeType?c:document.createTextNode(c??"")));return e};
+const fmtB=n=>{n=+n||0;const u=["B","KiB","MiB","GiB","TiB","PiB"];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return (i?n.toFixed(1):n)+" "+u[i]};
+const num=n=>(+n||0).toLocaleString();
+async function jget(p){const r=await fetch(API+p);if(!r.ok)throw new Error(p+" → "+r.status);return r.json()}
+async function jreq(m,p,b){const r=await fetch(API+p,{method:m,headers:b?{"content-type":"application/json"}:{},body:b?JSON.stringify(b):undefined});const t=await r.text();let d;try{d=JSON.parse(t)}catch{d=t};if(!r.ok)throw new Error((d&&d.error&&d.error.message)||t||r.status);return d}
+function toast(msg,kind=""){const t=el("div",{class:kind},msg);document.getElementById("toast").append(t);setTimeout(()=>t.remove(),4200)}
+function pill(s){const m={succeeded:"ok",verified:"ok",bound:"ok",available:"ok",ok:"ok",completed:"ok",open:"crit",failed:"crit",critical:"crit",warn:"warn",warning:"warn",running:"run",queued:"run",pending:"run",verifying:"run"};return el("span",{class:"pill "+(m[s]||"")},s||"—")}
+async function watchJob(id,label){toast((label||"job")+" queued…");for(let i=0;i<60;i++){await new Promise(r=>setTimeout(r,1500));try{const j=await jget("/jobs/"+id);if(j.state=="succeeded"){toast((label||"job")+" ✓ succeeded","ok");refresh();return}if(j.state=="failed"){toast((label||"job")+" ✗ "+(j.error||"failed"),"err");refresh();return}}catch{}}}
+function closeModal(){document.getElementById("modalbg").style.display="none"}
+function modal(title,fields,onSubmit,submitLabel="Create"){
+  const m=document.getElementById("modal");m.innerHTML="";
+  m.append(el("h3",{},title));
+  const inputs={};
+  for(const f of fields){
+    m.append(el("label",{},f.label));
+    let i;
+    if(f.type=="select"){i=el("select",{});f.options.forEach(o=>i.append(el("option",{value:o.value??o},o.label??o)))}
+    else i=el("input",{type:f.type||"text",placeholder:f.ph||"",value:f.value??""});
+    inputs[f.name]=i;m.append(i);
+  }
+  const bar=el("div",{class:"row",style:"margin-top:16px;justify-content:flex-end"},
+    el("button",{onclick:closeModal},"Cancel"),
+    el("button",{class:"primary",onclick:async()=>{const vals={};for(const k in inputs)vals[k]=inputs[k].value;try{await onSubmit(vals);closeModal()}catch(e){toast(e.message,"err")}}},submitLabel));
+  m.append(bar);
+  document.getElementById("modalbg").style.display="flex";
+}
+function confirmDo(msg,fn){if(confirm(msg))fn().catch(e=>toast(e.message,"err"))}
+
+// ---------- panels ----------
+function panel(title,...kids){const p=el("div",{class:"panel"});p.append(el("h3",{},...(Array.isArray(title)?title:[title])));kids.flat().forEach(k=>p.append(k));return p}
+function tableFrom(cols,rows,rowActions){
+  if(!rows||!rows.length)return el("div",{class:"empty"},"Nothing here yet.");
+  const t=el("table"),thead=el("tr");cols.forEach(c=>thead.append(el("th",{},c.h)));if(rowActions)thead.append(el("th",{},""));
+  t.append(el("thead",{},thead));const tb=el("tbody");
+  rows.forEach(r=>{const tr=el("tr");cols.forEach(c=>{const v=c.f(r);tr.append(el("td",{class:c.mono?"mono":""},v&&v.nodeType?v:(v??"—")))});if(rowActions){const td=el("td",{class:"row"});rowActions(r).forEach(a=>td.append(a));tr.append(td)}tb.append(tr)});
+  t.append(tb);return el("div",{class:"scroll"},t);
+}
+const actBtn=(t,fn,cls="sm")=>el("button",{class:cls,onclick:fn},t);
+
+// ---------- views ----------
+async function vOverview(m){
+  const [s,cl,pools,osds,al]=await Promise.all([jget("/metrics/summary"),jget("/clusters"),jget("/pools"),jget("/osds"),jget("/alerts?state=open")]);
+  const pct=s.used_capacity_percent||0;
+  const cards=el("div",{class:"cards"});
+  const card=(k,v,extra)=>{const c=el("div",{class:"card"},el("div",{class:"k"},k),el("div",{class:"v",html:v}));if(extra)c.append(extra);return c};
+  const bar=el("div",{class:"bar"},el("i",{style:`width:${Math.min(100,pct)}%`}));
+  cards.append(card("Capacity used",`${fmtB(s.used_capacity_bytes)} <small>/ ${fmtB(s.raw_capacity_bytes)}</small>`,bar));
+  cards.append(card("Volumes",num(s.volumes)));
+  cards.append(card("Snapshots",num(s.snapshots)));
+  cards.append(card("Buckets / Backups",`${num(s.buckets)} <small>/ ${num(s.backups)}</small>`));
+  const io=s.client_io||{};cards.append(card("Client I/O (total)",`${num(io.read_ops_total)}r <small>/</small> ${num(io.write_ops_total)}w`, el("div",{class:"sub",style:"margin-top:6px"},`${fmtB(io.read_bytes_total)} read · ${fmtB(io.write_bytes_total)} write`)));
+  const rc=s.recovery||{};cards.append(card("Recovery",`${num(rc.pg_recovering+rc.pg_backfilling)} PG`, el("div",{class:"sub",style:"margin-top:6px"},`${num(rc.objects_degraded)} degraded · ${num(rc.objects_unfound)} unfound`)));
+  m.append(cards);
+  m.append(panel([el("span",{class:"grow"},"Clusters"),`${cl.length} backend(s)`],
+    tableFrom([{h:"Name",f:c=>c.name,mono:1},{h:"Health",f:c=>pill(c.health)},{h:"Raw",f:c=>fmtB(c.raw_capacity_bytes)},{h:"Used",f:c=>fmtB(c.used_capacity_bytes)},{h:"Avail",f:c=>fmtB(c.available_capacity_bytes)}],cl)));
+  m.append(panel([el("span",{class:"grow"},"Open alerts"),pill(al.length?"crit":"ok")],
+    tableFrom([{h:"Severity",f:a=>pill(a.severity)},{h:"Title",f:a=>a.title},{h:"Detail",f:a=>el("span",{class:"muted"},a.description)},{h:"Resource",f:a=>a.resource_id,mono:1}],al)));
+  m.append(panel("Pools",tableFrom([{h:"Name",f:p=>p.name,mono:1},{h:"Kind",f:p=>p.kind},{h:"Used",f:p=>fmtB(p.used_bytes)},{h:"Max",f:p=>fmtB(p.max_bytes)},{h:"Health",f:p=>pill(p.health)}],pools)));
+  m.append(panel("OSDs",tableFrom([{h:"OSD",f:o=>"osd."+o.osd_num,mono:1},{h:"Host",f:o=>o.host},{h:"Up",f:o=>pill(o.up?"ok":"crit")},{h:"In",f:o=>o.in_cluster?"in":"out"},{h:"Used",f:o=>fmtB(o.used_bytes)},{h:"Cap",f:o=>fmtB(o.capacity_bytes)}],osds)));
+}
+
+async function vVolumes(m){
+  const vols=await jget("/volumes");
+  m.append(panel([el("span",{class:"grow"},"Volumes"),
+    actBtn("+ Volume",()=>modal("Create volume",[
+      {name:"name",label:"Name",ph:"my-vol"},{name:"tenant_id",label:"Tenant",value:"default"},
+      {name:"size_gib",label:"Size (GiB)",type:"number",value:"1"},
+      {name:"policy",label:"Policy",type:"select",options:["database","production","development","shared","ai"]},
+      {name:"namespace",label:"Namespace",value:"rook-ceph"}],
+      async v=>{const r=await jreq("POST","/volumes",{tenant_id:v.tenant_id,name:v.name,size_bytes:(+v.size_gib)*1073741824,policy:v.policy,kubernetes:{namespace:v.namespace}});watchJob(r.job_id||(r.resource&&r.resource.job_id),"create "+v.name)}),"primary")],
+    tableFrom([
+      {h:"Name",f:v=>v.name,mono:1},{h:"Kind",f:v=>v.kind},{h:"Size",f:v=>fmtB(v.size_bytes)},
+      {h:"Used",f:v=>v.used_bytes!=null?fmtB(v.used_bytes):"—"},{h:"State",f:v=>pill(v.state)},
+      {h:"Class",f:v=>v.storage_class_name||"—",mono:1},{h:"PVC / RBD",f:v=>el("span",{class:"muted mono"},v.pvc_name||v.backend_native_id||"—")}],vols,
+      v=>[
+        actBtn("snap",()=>modal("Snapshot "+v.name,[{name:"name",label:"Snapshot name (optional)"}],async x=>{const r=await jreq("POST",`/volumes/${v.id}/snapshots`,{name:x.name||undefined});watchJob(r.job_id,"snapshot")})),
+        actBtn("del",()=>confirmDo("Delete volume "+v.name+"?",async()=>{const r=await jreq("DELETE",`/volumes/${v.id}?force=true`);watchJob(r.job_id,"delete "+v.name)}),"sm danger")
+      ])));
+}
+
+async function vRbd(m){
+  let pool="rbd-nvme-prod",data={images:[]};
+  try{data=await jget("/rbd-images?pool="+pool)}catch(e){}
+  m.append(panel([el("span",{class:"grow"},"Raw RBD images — "+pool),
+    actBtn("+ Image",()=>modal("Create RBD image",[{name:"name",label:"Name"},{name:"size_gib",label:"Size (GiB)",type:"number",value:"1"}],async v=>{const r=await jreq("POST","/rbd-images",{name:v.name,size_bytes:(+v.size_gib)*1073741824});watchJob(r.job_id,"rbd create")}),"primary")],
+    tableFrom([{h:"Image",f:i=>i,mono:1}],data.images.map(i=>({v:i})).map(x=>x.v)?data.images:[],),
+    tableFrom([{h:"Image",f:i=>i,mono:1}],data.images,
+      i=>[
+        actBtn("clone",()=>modal("Clone "+i,[{name:"name",label:"Clone name"},{name:"snap",label:"Snapshot",value:"base"}],async v=>{const r=await jreq("POST",`/rbd-images/${pool}/${i}/clone`,{name:v.name,snap:v.snap});watchJob(r.job_id,"clone")})),
+        actBtn("resize",()=>modal("Resize "+i,[{name:"size_gib",label:"New size (GiB)",type:"number"}],async v=>{const r=await jreq("POST",`/rbd-images/${pool}/${i}/resize`,{size_bytes:(+v.size_gib)*1073741824});watchJob(r.job_id,"resize")})),
+        actBtn("flatten",()=>confirmDo("Flatten "+i+"?",async()=>{const r=await jreq("POST",`/rbd-images/${pool}/${i}/flatten`,{});watchJob(r.job_id,"flatten")})),
+        actBtn("del",()=>confirmDo("Delete image "+i+"?",async()=>{const r=await jreq("DELETE",`/rbd-images/${pool}/${i}`);watchJob(r.job_id,"rbd delete")}),"sm danger")
+      ])));
+}
+
+async function vSnapshots(m){
+  const s=await jget("/snapshots");
+  m.append(panel("Snapshots",tableFrom([
+    {h:"Name",f:x=>x.name,mono:1},{h:"Volume",f:x=>x.volume_id,mono:1},{h:"State",f:x=>pill(x.state)},
+    {h:"Protected",f:x=>x.protected?"yes":"no"},{h:"Created",f:x=>el("span",{class:"muted"},x.created_at||"—")}],s,
+    x=>[
+      actBtn("clone",()=>modal("Clone snapshot",[{name:"name",label:"New volume name"},{name:"namespace",label:"Namespace",value:"rook-ceph"}],async v=>{const r=await jreq("POST",`/snapshots/${x.id}/clone`,{name:v.name,namespace:v.namespace});watchJob(r.job_id,"clone")})),
+      actBtn("restore",()=>modal("Restore snapshot",[{name:"name",label:"New volume name"},{name:"namespace",label:"Namespace",value:"rook-ceph"}],async v=>{const r=await jreq("POST",`/snapshots/${x.id}/restore`,{name:v.name,namespace:v.namespace});watchJob(r.job_id,"restore")})),
+      actBtn("del",()=>confirmDo("Delete snapshot?",async()=>{const r=await jreq("DELETE",`/snapshots/${x.id}?force=true`);watchJob(r.job_id,"snap delete")}),"sm danger")
+    ])));
+}
+
+async function vBackups(m){
+  const [b,vols,bk]=await Promise.all([jget("/backups"),jget("/volumes"),jget("/buckets")]);
+  m.append(panel([el("span",{class:"grow"},"Backups"),
+    actBtn("+ Backup",()=>modal("Back up a volume",[
+      {name:"volume_id",label:"Volume",type:"select",options:vols.map(v=>({value:v.id,label:v.name}))},
+      {name:"bucket_id",label:"Bucket",type:"select",options:bk.filter(x=>x.state=="bound").map(x=>({value:x.id,label:x.bucket_name||x.id}))},
+      {name:"mode",label:"Mode",type:"select",options:["manifest","data"]},
+      {name:"keep",label:"Keep (0=all)",type:"number",value:"0"}],
+      async v=>{const r=await jreq("POST","/backup-jobs",{volume_id:v.volume_id,bucket_id:v.bucket_id,mode:v.mode,keep:+v.keep});watchJob(r.job_id,"backup")}),"primary")],
+    tableFrom([
+      {h:"ID",f:x=>x.id,mono:1},{h:"Volume",f:x=>x.volume_id,mono:1},{h:"Format",f:x=>x.format},
+      {h:"State",f:x=>pill(x.state)},{h:"Checksum",f:x=>el("span",{class:"muted mono"},(x.checksum||"").slice(0,12)||"—")},
+      {h:"Created",f:x=>el("span",{class:"muted"},x.created_at||"—")}],b,
+      x=>[
+        actBtn("restore",()=>modal("Restore backup",[{name:"name",label:"New volume name (optional)"},{name:"mode",label:"Mode",type:"select",options:["snapshot","data"]}],async v=>{const r=await jreq("POST","/restore-jobs",{backup_id:x.id,name:v.name||undefined,mode:v.mode});watchJob(r.job_id,"restore")})),
+        actBtn("dl",async()=>{try{const r=await jget(`/backups/${x.id}/download?what=data`);window.open(r.url,"_blank")}catch(e){toast(e.message,"err")}}),
+        actBtn("del",()=>confirmDo("Delete backup?",async()=>{const r=await jreq("DELETE",`/backups/${x.id}`);watchJob(r.job_id,"backup delete")}),"sm danger")
+      ])));
+}
+
+async function vBuckets(m){
+  const bk=await jget("/buckets");
+  m.append(panel([el("span",{class:"grow"},"Buckets"),
+    actBtn("+ Bucket",()=>modal("Create bucket",[{name:"name",label:"Name"},{name:"namespace",label:"Namespace",value:"rook-ceph"},{name:"max_objects",label:"Max objects (optional)",type:"number"},{name:"max_size",label:"Max size (e.g. 2G, optional)"}],
+      async v=>{const b={name:v.name,namespace:v.namespace};if(v.max_objects)b.max_objects=+v.max_objects;if(v.max_size)b.max_size=v.max_size;const r=await jreq("POST","/buckets",b);watchJob(r.job_id,"bucket")}),"primary")],
+    tableFrom([
+      {h:"Name",f:x=>x.bucket_name||x.id,mono:1},{h:"State",f:x=>pill(x.state)},
+      {h:"Namespace",f:x=>x.namespace},{h:"Endpoint",f:x=>el("span",{class:"muted mono"},x.endpoint||"—")}],bk,
+      x=>[
+        actBtn("stats",async()=>{try{const s=await jget(`/buckets/${x.id}/stats`);toast(`${s.bucket}: ${num(s.num_objects)} objs, ${fmtB(s.size_bytes)}`,"ok")}catch(e){toast(e.message,"err")}}),
+        actBtn("objects",async()=>{try{const o=await jget(`/buckets/${x.id}/objects`);showObjects(x,o)}catch(e){toast(e.message,"err")}}),
+        actBtn("del",()=>confirmDo("Delete bucket?",async()=>{const r=await jreq("DELETE",`/buckets/${x.id}?force=true`);watchJob(r.job_id,"bucket delete")}),"sm danger")
+      ])));
+}
+function showObjects(b,o){const m=document.getElementById("modal");m.innerHTML="";m.append(el("h3",{},"Objects — "+(b.bucket_name||b.id)+" ("+o.count+")"));
+  m.append(tableFrom([{h:"Key",f:x=>x.key,mono:1},{h:"Size",f:x=>fmtB(x.size_bytes)}],o.objects));
+  m.append(el("div",{class:"row",style:"margin-top:12px;justify-content:flex-end"},el("button",{onclick:closeModal},"Close")));
+  document.getElementById("modalbg").style.display="flex";}
+
+async function vJobs(m){
+  const jobs=await jget("/jobs");
+  m.append(panel("Recent jobs",tableFrom([
+    {h:"ID",f:j=>j.id,mono:1},{h:"Type",f:j=>j.job_type},{h:"State",f:j=>pill(j.state)},
+    {h:"Progress",f:j=>el("div",{class:"bar",style:"width:120px"},el("i",{style:`width:${j.progress_percent||0}%`}))},
+    {h:"Error",f:j=>el("span",{class:"muted"},j.error||"")},{h:"Created",f:j=>el("span",{class:"muted"},j.created_at||"")}],jobs)));
+}
+
+async function vAlerts(m){
+  const a=await jget("/alerts");
+  m.append(panel([el("span",{class:"grow"},"Alerts"),actBtn("evaluate",async()=>{await jreq("POST","/alerts/evaluate");toast("evaluated","ok");refresh()})],
+    tableFrom([{h:"Severity",f:x=>pill(x.severity)},{h:"State",f:x=>pill(x.state)},{h:"Title",f:x=>x.title},{h:"Detail",f:x=>el("span",{class:"muted"},x.description)},{h:"Resource",f:x=>x.resource_id,mono:1}],a)));
+}
+
+async function vTenants(m){
+  const t=await jget("/tenants");
+  m.append(panel("Tenants",tableFrom([
+    {h:"Tenant",f:x=>x.tenant_id,mono:1},{h:"Used",f:x=>fmtB(x.used_bytes)},{h:"Volumes",f:x=>num(x.volume_count)},
+    {h:"Max bytes",f:x=>x.max_bytes?fmtB(x.max_bytes):"∞"},{h:"Max volumes",f:x=>x.max_volumes||"∞"}],t,
+    x=>[actBtn("quota",()=>modal("Set quota — "+x.tenant_id,[{name:"max_bytes",label:"Max bytes (0=∞)",type:"number",value:x.max_bytes},{name:"max_volumes",label:"Max volumes (0=∞)",type:"number",value:x.max_volumes}],async v=>{await jreq("PUT",`/tenants/${x.tenant_id}/quota`,{max_bytes:+v.max_bytes,max_volumes:+v.max_volumes});toast("quota set","ok");refresh()},"Save")])));
+}
+
+async function vAudit(m){
+  const a=await jget("/audit?limit=60");
+  m.append(panel("Audit trail",tableFrom([
+    {h:"Time",f:x=>el("span",{class:"muted"},x.created_at)},{h:"Actor",f:x=>x.actor_id,mono:1},
+    {h:"Action",f:x=>x.action,mono:1},{h:"Resource",f:x=>el("span",{class:"mono"},x.resource_type+"/"+x.resource_id)},
+    {h:"Status",f:x=>pill(x.status)}],a)));
+}
+
+const VIEWS={"Overview":vOverview,"Volumes":vVolumes,"RBD Images":vRbd,"Snapshots":vSnapshots,"Backups":vBackups,"Buckets":vBuckets,"Jobs":vJobs,"Alerts":vAlerts,"Tenants":vTenants,"Audit":vAudit};
+
+// ---------- shell ----------
+function buildNav(){const n=document.getElementById("nav");n.innerHTML="";TABS.forEach(t=>n.append(el("a",{class:t==TAB?"active":"",onclick:()=>{TAB=t;buildNav();refresh()}},t)))}
+async function refresh(){
+  const m=document.getElementById("main");
+  try{const nm=el("div");nm.append(el("h2",{},TAB));await VIEWS[TAB](nm);m.innerHTML="";m.append(...nm.childNodes)}
+  catch(e){m.innerHTML="";m.append(el("h2",{},TAB),el("div",{class:"empty"},"⚠ "+e.message))}
+}
+async function pollHealth(){
+  try{const v=await (await fetch(location.origin+"/version")).json();document.getElementById("ver").textContent="v"+v.version}catch{}
+  try{const cl=await jget("/clusters");const h=cl[0]?cl[0].health:"unknown";const b=document.getElementById("health");b.textContent="● "+h;b.className="badge "+(h=="ok"?"ok":h=="warn"?"warn":h=="critical"?"crit":"")}catch{}
+}
+document.getElementById("modalbg").onclick=e=>{if(e.target.id=="modalbg")closeModal()};
+document.getElementById("auto").onchange=e=>{if(e.target.checked)start();else clearInterval(timer)};
+function start(){clearInterval(timer);timer=setInterval(()=>{if(document.getElementById("auto").checked){refresh();pollHealth()}},6000)}
+buildNav();refresh();pollHealth();start();
+</script>
+</body>
+</html>
