@@ -67,6 +67,10 @@ cargo run -p atlas-cli -- pools
 cargo run -p atlas-cli -- volumes
 ```
 
+Then open the **Storage Center dashboard** in a browser at **http://127.0.0.1:5110/ui** (or
+`http://<node>:30511/ui` on the cluster) — a self-contained UI over the REST API with live inventory,
+job progress, alerts, metrics, and write actions.
+
 Full local walkthrough: **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)**.
 
 ## Documentation

@@ -57,6 +57,21 @@ Read-only control plane + real Ceph lab.
   (updates inventory size); `.../flatten` detaches a COW clone from its parent snapshot. Verified
   live: base 1→3 GiB, clone flattened to independent. `atlasctl resize-rbd-image/flatten-rbd-image`.
 - ✅ **Volume list filters**: `GET /volumes?state=&tenant=`. Verified live.
+- ✅ **Raw-RBD snapshots**: `GET`/`POST /rbd-images/{pool}/{image}/snapshots`, `POST .../rollback`
+  (point-in-time restore, admin). Verified live (create → list `[pit1]` → rollback).
+- ✅ **Object-storage observability**: `GET /buckets/{id}/stats` (`radosgw-admin bucket stats` —
+  object count, size, quota) and `GET /buckets/{id}/objects[?prefix=]` (S3 `ListObjectsV2`). Verified.
+
+## ✅ Web dashboard (Storage Center UI)
+
+A **self-contained single-file SPA** (`crates/atlas-gateway/src/ui.html`, vanilla JS, no external
+deps — CSP-safe) served by the gateway at **`/`** and **`/ui`**, same-origin over the REST API.
+Open it at `http://<node>:30511/ui`. Tabs: Overview (capacity/health/pools/OSDs/alerts/client-I/O/
+recovery), Volumes, RBD Images, Snapshots, Backups, Buckets, Jobs, Alerts, Tenants, Audit — with
+**write actions** (create/delete/snapshot volume, RBD create/clone/resize/flatten, snapshot
+clone/restore, backup create/restore/download, bucket create/stats/objects, tenant quota) and live
+job polling. This sidesteps the Zeus OS `atlas`/`ZeusStorageCenter.tsx` collisions; Zeus OS can later
+embed it or call the same API.
 - ✅ **Durable gateway DB** — the SQLite file is now backed by a `ReadWriteOnce` PVC (`Recreate`
   strategy). The real-mode gateway dogfoods `zyvor-rbd-prod` (Ceph); the fake-mode gateway uses the
   cluster default StorageClass so it still deploys without Ceph. Verified: inventory survives a pod
