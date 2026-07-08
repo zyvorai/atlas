@@ -150,8 +150,55 @@ export function PageHeader({
   );
 }
 
-export function EmptyState({ msg }: { msg: string }) {
-  return <div className="py-10 text-center text-sm text-muted-foreground">{msg}</div>;
+export function EmptyState({ msg, cta }: { msg: string; cta?: React.ReactNode }) {
+  return (
+    <div className="py-10 text-center text-sm text-muted-foreground">
+      <div>{msg}</div>
+      {cta && <div className="mt-3 flex justify-center">{cta}</div>}
+    </div>
+  );
+}
+
+/** Monospace text that copies to the clipboard on click. */
+export function Copyable({ text, className }: { text: string; className?: string }) {
+  const [ok, setOk] = useState(false);
+  return (
+    <button
+      className={cx("mono hover:text-sky-300 transition text-left", className)}
+      title="Click to copy"
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard?.writeText(text);
+        setOk(true);
+        setTimeout(() => setOk(false), 1000);
+      }}
+    >
+      {ok ? "copied ✓" : text}
+    </button>
+  );
+}
+
+/** SVG radial capacity gauge, colored by threshold. */
+export function RadialGauge({ pct, size = 120, label }: { pct: number; size?: number; label?: string }) {
+  const r = size / 2 - 10;
+  const c = 2 * Math.PI * r;
+  const p = Math.max(0, Math.min(100, pct));
+  const color = p >= 90 ? "#E23B3B" : p >= 75 ? "#FBBF24" : "#38BDF8";
+  return (
+    <div className="relative grid place-items-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={9} />
+        <circle
+          cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={9} strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c - (p / 100) * c} style={{ transition: "stroke-dashoffset .6s ease" }}
+        />
+      </svg>
+      <div className="absolute text-center">
+        <div className="text-2xl font-bold" style={{ color }}>{p.toFixed(0)}%</div>
+        {label && <div className="text-[11px] text-muted-foreground">{label}</div>}
+      </div>
+    </div>
+  );
 }
 export function Spinner() {
   return (

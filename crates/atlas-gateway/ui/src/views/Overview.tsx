@@ -1,18 +1,10 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-import { LayoutDashboard } from "lucide-react";
+import { AlertTriangle, LayoutDashboard } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
 import { useAlerts, useClusters, useOsds, usePools, useSummary } from "../api/hooks";
-import { Badge, Card, GlassSection, PageHeader, StatCard } from "../ui/kit";
+import { Badge, Card, GlassSection, PageHeader, RadialGauge, StatCard } from "../ui/kit";
 import { Table } from "../ui/Table";
 import { fmtBytes, healthKind, num, stateKind } from "../lib/format";
-
-function Gauge({ pct }: { pct: number }) {
-  return (
-    <div className="h-2 rounded-full bg-white/5 overflow-hidden mt-3">
-      <div className="h-full rounded-full bg-gradient-to-r from-sky-400 to-blue-600" style={{ width: `${Math.min(100, pct)}%` }} />
-    </div>
-  );
-}
 
 export default function Overview() {
   const { data: s } = useSummary();
@@ -22,6 +14,7 @@ export default function Overview() {
   const { data: alerts } = useAlerts("open");
   const io = s?.client_io;
   const rc = s?.recovery;
+  const recovering = (rc?.pg_recovering || 0) + (rc?.pg_backfilling || 0);
   // Synthetic sparkline seed from the read/write totals (visual only).
   const spark = io
     ? Array.from({ length: 16 }, (_, i) => ({ v: (io.read_ops_total % 1000) + Math.sin(i / 2) * 120 + i * 8 }))
@@ -31,19 +24,25 @@ export default function Overview() {
     <div>
       <PageHeader icon={LayoutDashboard} title="Command Deck" subtitle="Live storage health, capacity, and activity" />
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-        <StatCard
-          label="Capacity used"
-          value={<>{fmtBytes(s?.used_capacity_bytes)} <span className="text-sm text-muted-foreground font-normal">/ {fmtBytes(s?.raw_capacity_bytes)}</span></>}
-        >
-          <Gauge pct={s?.used_capacity_percent || 0} />
-        </StatCard>
-        <StatCard label="Volumes" value={num(s?.volumes)} />
-        <StatCard label="Snapshots" value={num(s?.snapshots)} />
-        <StatCard label="Buckets / Backups" value={<>{num(s?.buckets)} <span className="text-sm text-muted-foreground font-normal">/ {num(s?.backups)}</span></>} />
+      {recovering > 0 && (
+        <div className="glass-card p-3 mb-4 flex items-center gap-3 border-l-2" style={{ borderLeftColor: "#FBBF24" }}>
+          <AlertTriangle size={18} className="text-warning" />
+          <span className="text-sm">Recovery in progress — <b>{num(recovering)}</b> PG(s), {num(rc?.objects_degraded)} degraded objects.</span>
+        </div>
+      )}
+
+      <div className="grid lg:grid-cols-4 gap-3 mb-4">
+        <Card hoverable className="p-4 flex items-center gap-4 lg:col-span-1">
+          <RadialGauge pct={s?.used_capacity_percent || 0} label="used" />
+          <div className="min-w-0">
+            <div className="section-label">Capacity</div>
+            <div className="text-lg font-bold mt-1">{fmtBytes(s?.used_capacity_bytes)}</div>
+            <div className="text-xs text-muted-foreground">of {fmtBytes(s?.raw_capacity_bytes)} · {fmtBytes(s?.available_capacity_bytes)} free</div>
+          </div>
+        </Card>
         <StatCard label="Client I/O" value={<>{num(io?.read_ops_total)}<span className="text-sm text-muted-foreground font-normal">r</span> {num(io?.write_ops_total)}<span className="text-sm text-muted-foreground font-normal">w</span></>} sub={`${fmtBytes(io?.read_bytes_total)} read · ${fmtBytes(io?.write_bytes_total)} write`}>
           {spark.length > 0 && (
-            <div className="h-8 -mx-1 mt-1">
+            <div className="h-9 -mx-1 mt-1">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={spark}>
                   <defs>
@@ -58,8 +57,37 @@ export default function Overview() {
             </div>
           )}
         </StatCard>
-        <StatCard label="Recovery" value={`${num((rc?.pg_recovering || 0) + (rc?.pg_backfilling || 0))} PG`} sub={`${num(rc?.objects_degraded)} degraded · ${num(rc?.objects_unfound)} unfound`} />
+        <div className="grid grid-cols-2 gap-3 lg:col-span-2">
+          <StatCard label="Volumes" value={num(s?.volumes)} />
+          <StatCard label="Snapshots" value={num(s?.snapshots)} />
+          <StatCard label="Buckets / Backups" value={<>{num(s?.buckets)} <span className="text-sm text-muted-foreground font-normal">/ {num(s?.backups)}</span></>} />
+          <StatCard label="Recovery" value={`${num(recovering)} PG`} sub={`${num(rc?.objects_degraded)} degraded · ${num(rc?.objects_unfound)} unfound`} />
+        </div>
       </div>
+
+      <GlassSection title="Pool utilization" className="mb-4">
+        <div className="p-4 space-y-3">
+          {(pools || []).map((p) => {
+            const used = p.used_bytes || 0;
+            const max = (p.max_bytes || 0) + used;
+            const pct = max > 0 ? (used / max) * 100 : 0;
+            const color = pct >= 85 ? "#E23B3B" : pct >= 75 ? "#FBBF24" : "#38BDF8";
+            return (
+              <div key={p.id}>
+                <div className="flex items-center gap-2 text-xs mb-1">
+                  <span className="mono flex-1">{p.name}</span>
+                  <span className="text-muted-foreground">{fmtBytes(used)} / {fmtBytes(max)}</span>
+                  <span className="tabular-nums w-10 text-right" style={{ color }}>{pct.toFixed(0)}%</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${Math.min(100, pct)}%`, background: color }} />
+                </div>
+              </div>
+            );
+          })}
+          {pools && !pools.length && <div className="text-sm text-muted-foreground">No pools.</div>}
+        </div>
+      </GlassSection>
 
       <div className="grid lg:grid-cols-2 gap-4">
         <GlassSection title={<span className="flex items-center gap-2">Clusters <Badge kind="neutral">{clusters?.length || 0}</Badge></span>}>

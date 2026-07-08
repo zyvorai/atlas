@@ -200,8 +200,12 @@ function Dock() {
 function Spotlight({ open, onClose }: { open: boolean; onClose: () => void }) {
   const nav = useNavigate();
   const [q, setQ] = useState("");
+  const [sel, setSel] = useState(0);
   const results = MODULES.filter((m) => !q || m.label.toLowerCase().includes(q.toLowerCase()) || m.codename.includes(q.toLowerCase()));
+  useEffect(() => { if (open) { setQ(""); setSel(0); } }, [open]);
+  useEffect(() => { setSel(0); }, [q]);
   if (!open) return null;
+  const go = (i: number) => { const m = results[i]; if (m) { nav(m.path); onClose(); } };
   return (
     <div className="fixed inset-0 z-[70] pt-[14vh] px-4 flex justify-center" onMouseDown={onClose}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
@@ -215,26 +219,27 @@ function Spotlight({ open, onClose }: { open: boolean; onClose: () => void }) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && results[0]) {
-                nav(results[0].path);
-                onClose();
-              }
-              if (e.key === "Escape") onClose();
+              if (e.key === "ArrowDown") { e.preventDefault(); setSel((i) => Math.min(results.length - 1, i + 1)); }
+              else if (e.key === "ArrowUp") { e.preventDefault(); setSel((i) => Math.max(0, i - 1)); }
+              else if (e.key === "Enter") go(sel);
+              else if (e.key === "Escape") onClose();
             }}
           />
         </div>
         <div className="max-h-[46vh] overflow-auto p-1.5">
-          {results.map((m) => (
+          {results.map((m, i) => (
             <button
               key={m.id}
-              onClick={() => { nav(m.path); onClose(); }}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left hover:bg-white/[0.06]"
+              onMouseEnter={() => setSel(i)}
+              onClick={() => go(i)}
+              className={cx("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left", i === sel ? "bg-white/[0.08]" : "hover:bg-white/[0.06]")}
             >
               <m.icon size={16} className="text-sky-400" />
               <span className="flex-1 text-sm">{m.label}</span>
               <span className="text-[11px] text-muted-foreground/60">{m.section.toLowerCase()}</span>
             </button>
           ))}
+          {!results.length && <div className="px-3 py-6 text-center text-sm text-muted-foreground">No matches.</div>}
         </div>
       </div>
     </div>

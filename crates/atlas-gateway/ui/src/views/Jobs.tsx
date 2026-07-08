@@ -2,7 +2,7 @@
 import { Clock } from "lucide-react";
 import { useJobs } from "../api/hooks";
 import { useUi } from "../store/ui";
-import { Badge, GlassSection, PageHeader } from "../ui/kit";
+import { Badge, Copyable, GlassSection, PageHeader } from "../ui/kit";
 import { Table } from "../ui/Table";
 import { stateKind, timeAgo } from "../lib/format";
 
@@ -40,7 +40,7 @@ export default function Jobs() {
           rows={data}
           rowKey={(j) => j.id}
           cols={[
-            { h: "ID", f: (j) => j.id, mono: true },
+            { h: "ID", f: (j) => <Copyable text={j.id} />, mono: true },
             { h: "Type", f: (j) => j.job_type, mono: true },
             { h: "State", f: (j) => <Badge kind={stateKind(j.state)} dot>{j.state}</Badge> },
             { h: "Progress", f: (j) => <Bar pct={j.progress_percent} kind={j.state} /> },
