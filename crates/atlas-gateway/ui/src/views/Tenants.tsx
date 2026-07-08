@@ -5,6 +5,7 @@ import { http, submit } from "../api/client";
 import { useInvalidate, useTenantPolicies, useTenants } from "../api/hooks";
 import type { TenantQuota } from "../api/types";
 import { Badge, Button, FormModal, GlassSection, PageHeader, SlideOver } from "../ui/kit";
+import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
 import { fmtBytes, num } from "../lib/format";
 
@@ -67,7 +68,7 @@ function PolicyDrawer({ tenant, onClose }: { tenant: TenantQuota | null; onClose
           { h: "Access", f: (p) => p.access_mode },
         ]}
         actions={(p) => (
-          <Button size="sm" variant="danger" onClick={async () => { await submit("delete", `/tenants/${id}/policies/${p.intent}`, null, "delete override"); refetch(); }}>Del</Button>
+          <Button size="sm" variant="danger" onClick={() => del(`override ${p.intent}`, async () => { await submit("delete", `/tenants/${id}/policies/${p.intent}`, null, "delete override"); refetch(); })}>Del</Button>
         )}
         empty="No overrides — falls back to the built-in catalog."
       />

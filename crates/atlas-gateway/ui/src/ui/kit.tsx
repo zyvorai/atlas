@@ -5,6 +5,16 @@ import { createPortal } from "react-dom";
 import { Loader2, X } from "lucide-react";
 import { cx } from "../lib/format";
 
+/** Close an overlay on Escape. */
+function useEscape(active: boolean, onClose: () => void) {
+  useEffect(() => {
+    if (!active) return;
+    const h = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [active, onClose]);
+}
+
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 const VAR: Record<Variant, string> = {
   primary: "btn-primary",
@@ -183,6 +193,7 @@ export function SlideOver({
   children: React.ReactNode;
   width?: number;
 }) {
+  useEscape(open, onClose);
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-50" onMouseDown={onClose}>
@@ -218,6 +229,7 @@ export function Modal({
   children: React.ReactNode;
   footer?: React.ReactNode;
 }) {
+  useEscape(open, onClose);
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center p-4" onMouseDown={onClose}>

@@ -5,6 +5,7 @@ import { submitJob } from "../api/client";
 import { useInvalidate, useSnapshots } from "../api/hooks";
 import type { StorageSnapshot } from "../api/types";
 import { Badge, Button, FormModal, GlassSection, PageHeader } from "../ui/kit";
+import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
 import { stateKind, timeAgo } from "../lib/format";
 
@@ -31,7 +32,7 @@ export default function Snapshots() {
             <>
               <Button size="sm" onClick={() => setModal({ s, kind: "clone" })}>Clone</Button>
               <Button size="sm" onClick={() => setModal({ s, kind: "restore" })}>Restore</Button>
-              <Button size="sm" variant="danger" onClick={() => submitJob("delete", `/snapshots/${s.id}?force=true`, null, "delete snapshot", refetch)}>Del</Button>
+              <Button size="sm" variant="danger" onClick={() => del(`snapshot ${s.name}`, () => submitJob("delete", `/snapshots/${s.id}?force=true`, null, "delete snapshot", refetch))}>Del</Button>
             </>
           )}
         />

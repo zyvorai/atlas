@@ -3,6 +3,7 @@ import { Timer } from "lucide-react";
 import { submit } from "../api/client";
 import { useInvalidate, useSchedules } from "../api/hooks";
 import { Badge, Button, GlassSection, PageHeader } from "../ui/kit";
+import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
 import { timeAgo } from "../lib/format";
 
@@ -26,7 +27,7 @@ export default function Schedules() {
             { h: "Next run", f: (s) => <span className="text-muted-foreground">{timeAgo(s.next_run_at)}</span> },
           ]}
           actions={(s) => (
-            <Button size="sm" variant="danger" onClick={() => submit("delete", `/schedules/${s.id}`, null, "delete schedule", () => inv("schedules"))}>Del</Button>
+            <Button size="sm" variant="danger" onClick={() => del("schedule", () => submit("delete", `/schedules/${s.id}`, null, "delete schedule", () => inv("schedules")))}>Del</Button>
           )}
         />
       </GlassSection>

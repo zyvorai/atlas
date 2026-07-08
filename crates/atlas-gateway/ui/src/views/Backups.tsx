@@ -5,6 +5,7 @@ import { http, submitJob, toast } from "../api/client";
 import { useBackups, useBuckets, useInvalidate, useVolumes } from "../api/hooks";
 import type { BackupRecord } from "../api/types";
 import { Badge, Button, FormModal, GlassSection, PageHeader } from "../ui/kit";
+import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
 import { stateKind, timeAgo } from "../lib/format";
 
@@ -40,7 +41,7 @@ export default function Backups() {
                 try { const r = await http.get(`/backups/${b.id}/download?what=data`); window.open(r.data.url, "_blank"); }
                 catch { const r = await http.get(`/backups/${b.id}/download?what=manifest`).catch(() => null); if (r) window.open(r.data.url, "_blank"); else toast("no download", "err"); }
               }}>Download</Button>
-              <Button size="sm" variant="danger" onClick={() => submitJob("delete", `/backups/${b.id}`, null, "delete backup", refetch)}>Del</Button>
+              <Button size="sm" variant="danger" onClick={() => del(`backup ${b.id}`, () => submitJob("delete", `/backups/${b.id}`, null, "delete backup", refetch))}>Del</Button>
             </>
           )}
         />

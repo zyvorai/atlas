@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { Toaster } from "./ui/Toaster";
+import { ConfirmHost } from "./ui/confirm";
 import "./index.css";
 
 const qc = new QueryClient({
@@ -17,6 +18,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <BrowserRouter>
         <App />
         <Toaster />
+        <ConfirmHost />
       </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>,

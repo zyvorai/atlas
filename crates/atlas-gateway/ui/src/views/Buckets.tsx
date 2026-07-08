@@ -5,6 +5,7 @@ import { http, submitJob } from "../api/client";
 import { useBuckets, useInvalidate } from "../api/hooks";
 import type { StorageBucket } from "../api/types";
 import { Badge, Button, FormModal, GlassSection, PageHeader, SlideOver } from "../ui/kit";
+import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
 import { fmtBytes, num } from "../lib/format";
 
@@ -37,7 +38,7 @@ export default function Buckets() {
                 } catch (e) { (await import("../api/client")).toast(String(e), "err"); }
               }}>Stats</Button>
               <Button size="sm" onClick={() => setObjBucket(b)}>Objects</Button>
-              <Button size="sm" variant="danger" onClick={() => submitJob("delete", `/buckets/${b.id}?force=true`, null, "delete bucket", refetch)}>Del</Button>
+              <Button size="sm" variant="danger" onClick={() => del(`bucket ${b.bucket_name || b.id}`, () => submitJob("delete", `/buckets/${b.id}?force=true`, null, "delete bucket", refetch))}>Del</Button>
             </>
           )}
         />

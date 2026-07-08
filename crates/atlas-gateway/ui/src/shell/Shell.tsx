@@ -3,12 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  ChevronLeft, ChevronRight, Hexagon, KeyRound, Loader2, Search, Wifi,
+  ChevronLeft, ChevronRight, Hexagon, KeyRound, Loader2, Moon, Search, Sparkles, Wifi,
 } from "lucide-react";
 import { MODULES, SECTIONS } from "../nav/modules";
 import { useClusters, useJobs } from "../api/hooks";
 import { useUi } from "../store/ui";
-import { cx, healthKind } from "../lib/format";
+import { cx, healthKind, stateKind } from "../lib/format";
 import { Badge, Button, Field, Modal } from "../ui/kit";
 
 function Clock() {
@@ -23,12 +23,16 @@ function Clock() {
 function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
   const { data: clusters } = useClusters();
   const { data: jobs } = useJobs();
-  const running = (jobs || []).filter((j) => ["running", "queued", "verifying", "pending"].includes(j.state)).length;
+  const runningJobs = (jobs || []).filter((j) => ["running", "queued", "verifying", "pending"].includes(j.state));
   const h = clusters?.[0]?.health || "unknown";
   const [tokenOpen, setTokenOpen] = useState(false);
+  const [jobsOpen, setJobsOpen] = useState(false);
   const token = useUi((s) => s.token);
   const setToken = useUi((s) => s.setToken);
+  const theme = useUi((s) => s.theme);
+  const setTheme = useUi((s) => s.setTheme);
   const [draft, setDraft] = useState(token);
+  const nav = useNavigate();
   return (
     <div className="h-9 shrink-0 flex items-center gap-3 px-3 glass border-b border-white/[0.06] text-[13px]">
       <div className="flex items-center gap-1.5 font-bold">
@@ -41,11 +45,39 @@ function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
         <Search size={13} /> <span className="hidden md:inline">Search</span>
         <kbd className="hidden md:inline text-[10px] px-1 rounded bg-white/10">⌘K</kbd>
       </button>
-      {running > 0 && (
-        <span className="flex items-center gap-1.5 text-xs text-sky-300">
-          <Loader2 size={13} className="animate-spin" /> {running} running
-        </span>
+      {runningJobs.length > 0 && (
+        <div className="relative">
+          <button className="flex items-center gap-1.5 text-xs text-sky-300 btn btn-ghost btn-sm" onClick={() => setJobsOpen((v) => !v)}>
+            <Loader2 size={13} className="animate-spin" /> {runningJobs.length} running
+          </button>
+          {jobsOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setJobsOpen(false)} />
+              <div className="absolute right-0 top-9 z-50 w-72 glass-card p-2 animate-fade-in">
+                <div className="section-label px-1.5 pb-1.5">Running jobs</div>
+                {runningJobs.slice(0, 8).map((j) => (
+                  <button key={j.id} className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-white/[0.06]" onClick={() => { setJobsOpen(false); nav("/jobs"); }}>
+                    <div className="flex items-center gap-2">
+                      <span className="flex-1 truncate mono text-xs">{j.job_type}</span>
+                      <Badge kind={stateKind(j.state)}>{j.state}</Badge>
+                    </div>
+                    <div className="w-full h-1 rounded-full bg-white/5 mt-1 overflow-hidden">
+                      <div className="h-full rounded-full bg-sky-400" style={{ width: `${j.progress_percent || 0}%` }} />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       )}
+      <button
+        className="btn btn-ghost btn-sm"
+        title={theme === "aurora" ? "Switch to dark" : "Switch to Aurora"}
+        onClick={() => setTheme(theme === "aurora" ? "dark" : "aurora")}
+      >
+        {theme === "aurora" ? <Sparkles size={13} className="text-cyan-300" /> : <Moon size={13} />}
+      </button>
       <Badge kind={healthKind(h)} dot>
         {h}
       </Badge>

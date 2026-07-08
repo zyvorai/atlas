@@ -4,6 +4,7 @@ import { Layers, Plus, RefreshCw } from "lucide-react";
 import { http, submit, submitJob } from "../api/client";
 import { useInvalidate, useRbdImages } from "../api/hooks";
 import { Badge, Button, FormModal, GlassSection, PageHeader, SlideOver } from "../ui/kit";
+import { confirmThen, del } from "../ui/confirm";
 import { Table } from "../ui/Table";
 import { gib } from "../lib/format";
 
@@ -40,8 +41,8 @@ export default function Rbd() {
               <Button size="sm" onClick={() => setSnapImg(img)}>Snaps</Button>
               <Button size="sm" onClick={() => setModal({ img, kind: "clone" })}>Clone</Button>
               <Button size="sm" onClick={() => setModal({ img, kind: "resize" })}>Resize</Button>
-              <Button size="sm" onClick={() => submitJob("post", `/rbd-images/${pool}/${img}/flatten`, {}, `flatten ${img}`, refetch)}>Flatten</Button>
-              <Button size="sm" variant="danger" onClick={() => submitJob("delete", `/rbd-images/${pool}/${img}`, null, `delete ${img}`, refetch)}>Del</Button>
+              <Button size="sm" onClick={() => confirmThen({ title: `Flatten ${img}?`, message: "Detaches the clone from its parent (copies all data).", confirmLabel: "Flatten" }, () => submitJob("post", `/rbd-images/${pool}/${img}/flatten`, {}, `flatten ${img}`, refetch))}>Flatten</Button>
+              <Button size="sm" variant="danger" onClick={() => del(`image ${img}`, () => submitJob("delete", `/rbd-images/${pool}/${img}`, null, `delete ${img}`, refetch))}>Del</Button>
             </>
           )}
         />
@@ -85,7 +86,7 @@ function RbdSnaps({ pool, img, onClose }: { pool: string; img: string | null; on
         rowKey={(s) => s}
         cols={[{ h: "Snapshot", f: (s) => s, mono: true }]}
         actions={(s) => (
-          <Button size="sm" variant="danger" onClick={() => submitJob("post", `/rbd-images/${pool}/${img}/rollback`, { name: s }, `rollback to ${s}`)}>Rollback</Button>
+          <Button size="sm" variant="danger" onClick={() => confirmThen({ title: `Roll back to ${s}?`, message: "Destructive: reverts the image to this snapshot's contents.", confirmLabel: "Roll back", danger: true }, () => submitJob("post", `/rbd-images/${pool}/${img}/rollback`, { name: s }, `rollback to ${s}`))}>Rollback</Button>
         )}
       />
     </SlideOver>

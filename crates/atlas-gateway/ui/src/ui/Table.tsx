@@ -1,6 +1,6 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import React from "react";
-import { EmptyState } from "./kit";
+import { EmptyState, Spinner } from "./kit";
 
 export type Col<T> = { h: string; f: (r: T) => React.ReactNode; mono?: boolean };
 
@@ -19,7 +19,7 @@ export function Table<T>({
   empty?: string;
   rowKey?: (r: T, i: number) => string;
 }) {
-  if (!rows) return null;
+  if (!rows) return <Spinner />; // undefined = still loading
   if (!rows.length) return <EmptyState msg={empty} />;
   return (
     <div className="overflow-x-auto">

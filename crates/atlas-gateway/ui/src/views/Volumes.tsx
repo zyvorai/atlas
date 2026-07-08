@@ -6,6 +6,7 @@ import { useBuckets, useInvalidate, useVolumes } from "../api/hooks";
 import { http } from "../api/client";
 import type { StorageVolume } from "../api/types";
 import { Badge, Button, FormModal, GlassSection, PageHeader, Select, SlideOver } from "../ui/kit";
+import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
 import { fmtBytes, gib, stateKind } from "../lib/format";
 
@@ -63,7 +64,7 @@ export default function Volumes() {
               <Button size="sm" onClick={() => setModal({ v, kind: "snapshot" })}>Snap</Button>
               <Button size="sm" onClick={() => setModal({ v, kind: "expand" })}>Expand</Button>
               <Button size="sm" onClick={() => setModal({ v, kind: "schedule" })}>Schedule</Button>
-              <Button size="sm" variant="danger" onClick={() => submitJob("delete", `/volumes/${v.id}?force=true`, null, `delete ${v.name}`, refetch)}>Del</Button>
+              <Button size="sm" variant="danger" onClick={() => del(`volume ${v.name}`, () => submitJob("delete", `/volumes/${v.id}?force=true`, null, `delete ${v.name}`, refetch))}>Del</Button>
             </>
           )}
         />
@@ -170,7 +171,7 @@ function VolumeDrawer({ vol, onClose, refetch }: { vol: StorageVolume | null; on
         </div>
 
         <div className="flex gap-2 pt-2">
-          <Button variant="danger" onClick={() => { submitJob("delete", `/volumes/${vol.id}?force=true`, null, `delete ${vol.name}`, refetch); close(); }}>Delete volume</Button>
+          <Button variant="danger" onClick={() => del(`volume ${vol.name}`, () => { submitJob("delete", `/volumes/${vol.id}?force=true`, null, `delete ${vol.name}`, refetch); close(); })}>Delete volume</Button>
         </div>
       </div>
     </SlideOver>

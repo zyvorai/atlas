@@ -11,9 +11,13 @@ interface TrackedJob {
   error?: string | null;
 }
 
+export type Theme = "dark" | "aurora";
+
 interface UiState {
   token: string;
   setToken: (t: string) => void;
+  theme: Theme;
+  setTheme: (t: Theme) => void;
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
   spotlightOpen: boolean;
@@ -24,13 +28,26 @@ interface UiState {
   clearDoneJobs: () => void;
 }
 
-const savedToken = typeof localStorage !== "undefined" ? localStorage.getItem("atlas.token") || "" : "";
+const ls = typeof localStorage !== "undefined" ? localStorage : null;
+const savedToken = ls?.getItem("atlas.token") || "";
+const savedTheme = (ls?.getItem("atlas.theme") as Theme) || "dark";
+
+function applyTheme(t: Theme) {
+  if (typeof document !== "undefined") document.documentElement.dataset.uiShell = t;
+}
+applyTheme(savedTheme);
 
 export const useUi = create<UiState>((set) => ({
   token: savedToken,
   setToken: (t) => {
-    if (typeof localStorage !== "undefined") localStorage.setItem("atlas.token", t);
+    ls?.setItem("atlas.token", t);
     set({ token: t });
+  },
+  theme: savedTheme,
+  setTheme: (t) => {
+    ls?.setItem("atlas.theme", t);
+    applyTheme(t);
+    set({ theme: t });
   },
   sidebarCollapsed: false,
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
