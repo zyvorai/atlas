@@ -50,6 +50,8 @@ export default function Volumes() {
           rows={vols}
           onRow={setSel}
           rowKey={(v) => v.id}
+          empty="No volumes yet."
+          emptyCta={<Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>Create volume</Button>}
           cols={[
             { h: "Name", f: (v) => v.name, mono: true },
             { h: "Kind", f: (v) => v.kind },

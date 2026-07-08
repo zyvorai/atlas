@@ -24,6 +24,8 @@ export default function Buckets() {
         <Table
           rows={data}
           rowKey={(b) => b.id}
+          empty="No buckets yet."
+          emptyCta={<Button variant="primary" icon={Plus} onClick={() => setCreate(true)}>Create bucket</Button>}
           cols={[
             { h: "Name", f: (b) => b.bucket_name || b.id, mono: true },
             { h: "State", f: (b) => <Badge kind={b.state === "bound" ? "success" : "warning"} dot>{b.state}</Badge> },

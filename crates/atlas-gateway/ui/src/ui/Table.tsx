@@ -10,6 +10,7 @@ export function Table<T>({
   actions,
   onRow,
   empty = "Nothing here yet.",
+  emptyCta,
   rowKey,
 }: {
   cols: Col<T>[];
@@ -17,10 +18,11 @@ export function Table<T>({
   actions?: (r: T) => React.ReactNode;
   onRow?: (r: T) => void;
   empty?: string;
+  emptyCta?: React.ReactNode;
   rowKey?: (r: T, i: number) => string;
 }) {
   if (!rows) return <Spinner />; // undefined = still loading
-  if (!rows.length) return <EmptyState msg={empty} />;
+  if (!rows.length) return <EmptyState msg={empty} cta={emptyCta} />;
   return (
     <div className="overflow-x-auto">
       <table className="ztable">

@@ -26,6 +26,8 @@ export default function Backups() {
         <Table
           rows={data}
           rowKey={(b) => b.id}
+          empty="No backups yet."
+          emptyCta={<Button variant="primary" icon={Plus} onClick={() => setCreate(true)}>Back up a volume</Button>}
           cols={[
             { h: "ID", f: (b) => b.id, mono: true },
             { h: "Volume", f: (b) => b.volume_id, mono: true },

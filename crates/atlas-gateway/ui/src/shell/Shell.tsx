@@ -261,6 +261,8 @@ function Spotlight({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
+let welcomed = false;
+
 export function Shell() {
   const spotOpen = useUi((s) => s.spotlightOpen);
   const setSpot = useUi((s) => s.setSpotlight);
@@ -275,6 +277,24 @@ export function Shell() {
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, [setSpot]);
+  // Per-page document title.
+  useEffect(() => {
+    const m = MODULES.find((x) => (x.path === "/" ? loc.pathname === "/" : loc.pathname.startsWith(x.path)));
+    document.title = m ? `Atlas · ${m.label}` : "Atlas — Storage Center";
+  }, [loc.pathname]);
+  // Welcome once per session; auto-collapse sidebar on narrow viewports.
+  useEffect(() => {
+    if (!welcomed) {
+      welcomed = true;
+      import("../api/client").then((c) => c.toast("Welcome to Atlas Storage Center", "ok"));
+    }
+    const onResize = () => {
+      if (window.innerWidth < 900 && !useUi.getState().sidebarCollapsed) useUi.getState().toggleSidebar();
+    };
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <MenuBar onSpotlight={() => setSpot(true)} />
