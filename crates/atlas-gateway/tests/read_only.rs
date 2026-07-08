@@ -58,6 +58,81 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
 
 static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// Minted service-account tokens enforce RBAC end-to-end: an admin issues scoped tokens; an
+/// operator token can create a volume, a viewer token cannot, and no token is rejected.
+#[tokio::test]
+async fn issued_tokens_enforce_rbac() {
+    let secret = "auth-issue-test-secret-key";
+    let base = format!("{}/api/atlas/v1", spawn_auth(secret).await);
+    let c = client();
+
+    // Bootstrap admin token (as the platform operator would mint offline with the shared secret).
+    let (admin, _) = atlas_gateway::auth::mint_token(secret, "bootstrap", "admin", 3600).unwrap();
+
+    // Admin issues an operator token for a product service account.
+    let issue = |role: &str| {
+        c.post(format!("{base}/auth/tokens"))
+            .bearer_auth(&admin)
+            .json(&serde_json::json!({ "subject": "veyron", "role": role, "ttl_secs": 600 }))
+            .send()
+    };
+    let op_resp = issue("operator").await.unwrap();
+    assert_eq!(op_resp.status(), 201);
+    let op_body: serde_json::Value = op_resp.json().await.unwrap();
+    let op_token = op_body["token"].as_str().unwrap().to_string();
+    assert_eq!(op_body["level"], 1);
+
+    let vw_resp = issue("viewer").await.unwrap();
+    let vw_token = vw_resp.json::<serde_json::Value>().await.unwrap()["token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let create = serde_json::json!({
+        "tenant_id": "t", "name": "veyron-disk", "size_bytes": 1_073_741_824i64,
+        "policy": "database", "kubernetes": { "namespace": "default" }
+    });
+
+    // Operator token → volume create accepted.
+    let ok = c
+        .post(format!("{base}/volumes"))
+        .bearer_auth(&op_token)
+        .json(&create)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), 202, "operator should create volumes");
+
+    // Viewer token → forbidden.
+    let forbidden = c
+        .post(format!("{base}/volumes"))
+        .bearer_auth(&vw_token)
+        .json(&create)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(forbidden.status(), 403, "viewer must not create volumes");
+
+    // No token → unauthorized.
+    let anon = c
+        .post(format!("{base}/volumes"))
+        .json(&create)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(anon.status(), 401, "missing token is unauthorized");
+
+    // A non-admin cannot mint tokens.
+    let denied = c
+        .post(format!("{base}/auth/tokens"))
+        .bearer_auth(&op_token)
+        .json(&serde_json::json!({ "subject": "x", "role": "admin" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), 403, "operator must not mint tokens");
+}
+
 fn client() -> reqwest::Client {
     reqwest::Client::new()
 }

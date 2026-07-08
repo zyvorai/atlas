@@ -54,6 +54,7 @@ pub fn router(state: AppState) -> Router {
         .route("/backups/{id}", get(get_backup).delete(delete_backup))
         .route("/backups/{id}/download", get(download_backup))
         .route("/policies", get(list_policies))
+        .route("/auth/tokens", post(issue_token))
         .route(
             "/tenants/{id}/quota",
             get(get_tenant_quota).put(put_tenant_quota),
@@ -459,6 +460,56 @@ async fn delete_schedule(
         return Err(AppError::NotFound(format!("schedule {id}")));
     }
     Ok(Json(json!({ "deleted": id })))
+}
+
+#[derive(Debug, Deserialize)]
+struct IssueTokenBody {
+    /// The token subject — typically the product/service-account name (goes into audit logs).
+    subject: String,
+    /// Role: `viewer`, `operator`, `admin`, or a `product.service.<name>` (→ operator). Default viewer.
+    #[serde(default)]
+    role: Option<String>,
+    /// Lifetime in seconds (default 3600, capped at 90 days).
+    #[serde(default)]
+    ttl_secs: Option<u64>,
+}
+
+/// `POST /auth/tokens` — mint a scoped service-account JWT for a product (admin). The shared secret
+/// never leaves Atlas; the caller receives only the signed token + its claims.
+async fn issue_token(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Json(body): Json<IssueTokenBody>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    if body.subject.trim().is_empty() {
+        return Err(AppError::Validation("subject is required".into()));
+    }
+    let role = body.role.unwrap_or_else(|| "viewer".into());
+    // Cap the lifetime so a leaked token has a bounded blast radius.
+    const MAX_TTL: u64 = 90 * 24 * 3600;
+    let ttl_secs = body.ttl_secs.unwrap_or(3600).clamp(60, MAX_TTL);
+    let (token, exp) =
+        crate::auth::mint_token(&s.config.jwt_secret, &body.subject, &role, ttl_secs)?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "auth.token.issued",
+        "service_account",
+        &body.subject,
+        "ok",
+        Some(json!({ "role": role, "ttl_secs": ttl_secs })),
+        None,
+    )
+    .await;
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({
+            "token": token, "subject": body.subject, "role": role,
+            "level": crate::auth::role_level(&role), "expires_at": exp, "ttl_secs": ttl_secs
+        })),
+    ))
 }
 
 /// `GET /tenants/{id}/quota` — the tenant's quota + current usage (unlimited 0/0 if unset).

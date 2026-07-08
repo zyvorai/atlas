@@ -10,7 +10,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -60,6 +60,34 @@ pub fn role_level(role: &str) -> u8 {
         r if r.starts_with("product.service.") => ROLE_OPERATOR,
         _ => ROLE_VIEWER,
     }
+}
+
+/// Mint a signed HS256 service-account token for `subject` with `role`, expiring in `ttl_secs`.
+/// Returns `(token, exp_unix_secs)`. Used by the token-issuance endpoint so products (Veyron,
+/// Hyper2KVM, …) get least-privilege credentials without the shared secret ever leaving Atlas.
+pub fn mint_token(
+    secret: &str,
+    subject: &str,
+    role: &str,
+    ttl_secs: u64,
+) -> atlas_common::AppResult<(String, usize)> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| atlas_common::AppError::Internal(e.to_string()))?
+        .as_secs();
+    let exp = (now + ttl_secs) as usize;
+    let claims = Claims {
+        sub: subject.to_string(),
+        role: role.to_string(),
+        exp,
+    };
+    let token = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .map_err(|e| atlas_common::AppError::Internal(format!("mint token: {e}")))?;
+    Ok((token, exp))
 }
 
 /// Enforce a minimum role. No-op when auth is disabled (dev), so open-dev keeps working.

@@ -83,6 +83,14 @@ enum Command {
     },
     /// DELETE /api/atlas/v1/schedules/{id}
     DeleteSchedule { id: String },
+    /// POST /api/atlas/v1/auth/tokens — mint a service-account JWT (admin)
+    IssueToken {
+        subject: String,
+        #[arg(long, default_value = "viewer")]
+        role: String,
+        #[arg(long, default_value_t = 3600)]
+        ttl_secs: u64,
+    },
     /// GET /api/atlas/v1/tenants/{id}/quota — a tenant's quota + usage
     Quota { tenant_id: String },
     /// PUT /api/atlas/v1/tenants/{id}/quota — set a tenant's quota (0 = unlimited)
@@ -264,6 +272,15 @@ async fn main() -> Result<()> {
             None,
         ),
         Command::DeleteSchedule { id } => ("DELETE", format!("/api/atlas/v1/schedules/{id}"), None),
+        Command::IssueToken {
+            subject,
+            role,
+            ttl_secs,
+        } => (
+            "POST",
+            "/api/atlas/v1/auth/tokens".to_string(),
+            Some(serde_json::json!({ "subject": subject, "role": role, "ttl_secs": ttl_secs })),
+        ),
         Command::Quota { tenant_id } => (
             "GET",
             format!("/api/atlas/v1/tenants/{tenant_id}/quota"),
