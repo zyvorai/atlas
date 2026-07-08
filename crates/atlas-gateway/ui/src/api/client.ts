@@ -96,3 +96,39 @@ export function jobIdOf(resp: unknown): string | undefined {
   const r = resp as { job_id?: string; resource?: { job_id?: string } };
   return r?.job_id || r?.resource?.job_id;
 }
+
+/** Fire a write request; if it returns a job id, watch it to completion. Toasts + invalidates. */
+export async function submitJob(
+  method: "post" | "put" | "delete",
+  path: string,
+  body: unknown,
+  label: string,
+  after?: () => void,
+) {
+  try {
+    const { data } = await http.request({ method, url: path, data: body });
+    const jid = jobIdOf(data);
+    if (jid) watchJob(jid, label, after);
+    else {
+      toast(`${label} ✓`, "ok");
+      after?.();
+    }
+    return data;
+  } catch (e) {
+    toast(`${label}: ${apiError(e)}`, "err");
+    throw e;
+  }
+}
+
+/** A plain write (no job), with toast + invalidate. */
+export async function submit(method: "post" | "put" | "delete", path: string, body: unknown, label: string, after?: () => void) {
+  try {
+    const { data } = await http.request({ method, url: path, data: body });
+    toast(`${label} ✓`, "ok");
+    after?.();
+    return data;
+  } catch (e) {
+    toast(`${label}: ${apiError(e)}`, "err");
+    throw e;
+  }
+}
