@@ -23,6 +23,8 @@ struct Cli {
 enum Command {
     /// GET /health
     Health,
+    /// GET /readyz — readiness deep-check (DB + driver + k8s)
+    Ready,
     /// GET /version
     Version,
     /// GET /api/atlas/v1/backends
@@ -319,6 +321,7 @@ async fn main() -> Result<()> {
 
     let (method, path, body): (&str, String, Option<serde_json::Value>) = match &cli.command {
         Command::Health => ("GET", "/health".to_string(), None),
+        Command::Ready => ("GET", "/readyz".to_string(), None),
         Command::Version => ("GET", "/version".to_string(), None),
         Command::Backends => ("GET", "/api/atlas/v1/backends".to_string(), None),
         Command::Discover { backend } => (

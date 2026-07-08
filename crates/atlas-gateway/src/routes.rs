@@ -111,6 +111,7 @@ pub fn router(state: AppState) -> Router {
 
     Router::new()
         .route("/health", get(health))
+        .route("/readyz", get(readyz))
         .route("/version", get(version))
         .route("/metrics", get(prometheus_metrics))
         .nest("/api/atlas/v1", api)
@@ -222,6 +223,49 @@ async fn spa_handler(uri: axum::http::Uri) -> axum::response::Response {
 
 async fn health() -> Json<Value> {
     Json(json!({ "status": "ok" }))
+}
+
+/// `GET /readyz` — readiness deep-check: probes the DB, confirms migrations/inventory are readable,
+/// and reports driver + Kubernetes attachment. Returns 200 when ready, 503 when not (for k8s probes).
+/// `/health` stays a cheap liveness signal (process is up); this checks dependencies.
+async fn readyz(State(s): State<AppState>) -> (StatusCode, Json<Value>) {
+    use atlas_common::config::CephDriverMode;
+
+    // DB reachable + migrated (a readable backend row proves both).
+    let (db_ok, db_detail) =
+        match sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM storage_backends")
+            .fetch_one(&s.pool)
+            .await
+        {
+            Ok(n) => (true, format!("{n} backend(s)")),
+            Err(e) => (false, format!("query failed: {e}")),
+        };
+
+    let driver_mode = match s.config.ceph_driver_mode {
+        CephDriverMode::Real => "real",
+        CephDriverMode::Fake => "fake",
+    };
+    let k8s_ok = s.k8s.is_some();
+
+    // Readiness gates on the DB only; k8s/driver are reported but a fake-mode or k8s-less lab
+    // is still "ready" to serve the read/inventory API.
+    let ready = db_ok;
+    let code = if ready {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+    (
+        code,
+        Json(json!({
+            "status": if ready { "ready" } else { "not_ready" },
+            "components": {
+                "database": { "ok": db_ok, "detail": db_detail },
+                "ceph_driver": { "ok": true, "mode": driver_mode },
+                "kubernetes": { "ok": k8s_ok, "detail": if k8s_ok { "attached" } else { "not attached" } },
+            },
+        })),
+    )
 }
 
 async fn version() -> Json<Value> {

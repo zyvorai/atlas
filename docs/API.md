@@ -384,6 +384,7 @@ Live PVC/PV listings (namespace/phase/storage class/capacity/csi driver).
 
 ```bash
 atlasctl health                     # GET /health
+atlasctl ready                      # GET /readyz (DB + driver + k8s deep-check)
 atlasctl version                    # GET /version
 atlasctl backends                   # GET /backends
 atlasctl discover [backend]         # POST /backends/{backend}/discover  (default bkd_ceph_lab)
