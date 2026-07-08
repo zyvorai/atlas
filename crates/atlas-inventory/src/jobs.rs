@@ -58,6 +58,17 @@ pub async fn list_jobs(pool: &SqlitePool, limit: i64) -> Result<Vec<JobRecord>> 
 }
 
 /// Move a job to `running` and stamp `started_at`.
+/// Count jobs grouped by state (for the Prometheus self-metrics endpoint).
+pub async fn count_by_state(pool: &SqlitePool) -> Result<Vec<(String, i64)>> {
+    let rows = sqlx::query("SELECT state, COUNT(*) AS n FROM storage_jobs GROUP BY state")
+        .fetch_all(pool)
+        .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.get::<String, _>("state"), r.get::<i64, _>("n")))
+        .collect())
+}
+
 pub async fn mark_running(pool: &SqlitePool, id: &str) -> Result<()> {
     sqlx::query(
         "UPDATE storage_jobs SET state='running', progress_percent=MAX(progress_percent,5),

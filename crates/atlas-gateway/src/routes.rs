@@ -109,10 +109,79 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/version", get(version))
+        .route("/metrics", get(prometheus_metrics))
         .nest("/api/atlas/v1", api)
         // Any other path serves the embedded Storage Center SPA (client-side routing).
         .fallback(get(spa_handler))
         .with_state(state)
+}
+
+/// `GET /metrics` — Atlas's own operational state in Prometheus text-exposition format, so a
+/// Prometheus/Grafana stack can scrape the control plane itself (unauthenticated, like `/health`).
+async fn prometheus_metrics(State(s): State<AppState>) -> impl axum::response::IntoResponse {
+    use std::fmt::Write;
+    let mut out = String::with_capacity(1024);
+    let summary = atlas_inventory::metrics_summary(&s.pool)
+        .await
+        .unwrap_or(Value::Null);
+    let g = |o: &mut String, name: &str, help: &str, v: i64| {
+        let _ = writeln!(o, "# HELP {name} {help}\n# TYPE {name} gauge\n{name} {v}");
+    };
+    let n = |k: &str| summary.get(k).and_then(|x| x.as_i64()).unwrap_or(0);
+    let _ = writeln!(
+        out,
+        "# HELP atlas_build_info Atlas gateway build info.\n# TYPE atlas_build_info gauge\natlas_build_info{{version=\"{}\"}} 1",
+        env!("CARGO_PKG_VERSION")
+    );
+    g(&mut out, "atlas_volumes", "Total volumes.", n("volumes"));
+    g(
+        &mut out,
+        "atlas_snapshots",
+        "Total snapshots.",
+        n("snapshots"),
+    );
+    g(&mut out, "atlas_buckets", "Total buckets.", n("buckets"));
+    g(&mut out, "atlas_backups", "Total backups.", n("backups"));
+    g(&mut out, "atlas_pools", "Total pools.", n("pools"));
+    g(&mut out, "atlas_clusters", "Total clusters.", n("clusters"));
+    g(
+        &mut out,
+        "atlas_capacity_raw_bytes",
+        "Raw cluster capacity (bytes).",
+        n("raw_capacity_bytes"),
+    );
+    g(
+        &mut out,
+        "atlas_capacity_used_bytes",
+        "Used cluster capacity (bytes).",
+        n("used_capacity_bytes"),
+    );
+    // Jobs by state.
+    if let Ok(states) = atlas_inventory::jobs::count_by_state(&s.pool).await {
+        let _ = writeln!(
+            out,
+            "# HELP atlas_jobs Total jobs by state.\n# TYPE atlas_jobs gauge"
+        );
+        for (state, count) in states {
+            let _ = writeln!(out, "atlas_jobs{{state=\"{state}\"}} {count}");
+        }
+    }
+    // Open alerts.
+    if let Ok(alerts) = atlas_inventory::alerts::list(&s.pool, Some("open")).await {
+        g(
+            &mut out,
+            "atlas_alerts_open",
+            "Open alerts.",
+            alerts.len() as i64,
+        );
+    }
+    (
+        [(
+            axum::http::header::CONTENT_TYPE,
+            "text/plain; version=0.0.4",
+        )],
+        out,
+    )
 }
 
 /// The compiled Storage Center SPA (`crates/atlas-gateway/ui/dist`), embedded into the binary.
