@@ -25,6 +25,7 @@ use crate::state::AppState;
 pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .route("/backends", get(list_backends).post(create_backend))
+        .route("/backends/summary", get(backends_summary))
         .route("/backends/{id}/discover", post(discover_backend))
         .route("/clusters", get(list_clusters))
         .route("/clusters/{id}/health", get(cluster_health))
@@ -179,6 +180,43 @@ async fn prometheus_metrics(State(s): State<AppState>) -> impl axum::response::I
             alerts.len() as i64,
         );
     }
+    // Per-backend breakdown (labelled by backend id + type).
+    if let Ok(backends) = atlas_inventory::backend_breakdown(&s.pool).await {
+        g(
+            &mut out,
+            "atlas_backends",
+            "Registered backends.",
+            backends.len() as i64,
+        );
+        let bn = |b: &Value, k: &str| b.get(k).and_then(|x| x.as_i64()).unwrap_or(0);
+        let bs = |b: &Value, k: &str| b.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let _ = writeln!(
+            out,
+            "# HELP atlas_backend_volumes Volumes per backend.\n# TYPE atlas_backend_volumes gauge"
+        );
+        for b in &backends {
+            let _ = writeln!(
+                out,
+                "atlas_backend_volumes{{backend=\"{}\",type=\"{}\"}} {}",
+                bs(b, "backend_id"),
+                bs(b, "backend_type"),
+                bn(b, "volumes")
+            );
+        }
+        let _ = writeln!(
+            out,
+            "# HELP atlas_backend_capacity_raw_bytes Raw capacity per backend.\n# TYPE atlas_backend_capacity_raw_bytes gauge"
+        );
+        for b in &backends {
+            let _ = writeln!(
+                out,
+                "atlas_backend_capacity_raw_bytes{{backend=\"{}\",type=\"{}\"}} {}",
+                bs(b, "backend_id"),
+                bs(b, "backend_type"),
+                bn(b, "raw_capacity_bytes")
+            );
+        }
+    }
     (
         [(
             axum::http::header::CONTENT_TYPE,
@@ -280,6 +318,13 @@ async fn version() -> Json<Value> {
 
 async fn list_backends(State(s): State<AppState>) -> AppResult<Json<Vec<StorageBackend>>> {
     Ok(Json(atlas_inventory::list_backends(&s.pool).await?))
+}
+
+/// `GET /backends/summary` — per-backend inventory breakdown (type, clusters/volumes, capacity).
+async fn backends_summary(State(s): State<AppState>) -> AppResult<Json<Value>> {
+    Ok(Json(json!(
+        atlas_inventory::backend_breakdown(&s.pool).await?
+    )))
 }
 
 #[derive(Debug, Deserialize)]

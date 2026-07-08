@@ -685,6 +685,36 @@ fn row_to_volume(r: sqlx::sqlite::SqliteRow) -> StorageVolume {
     }
 }
 
+/// Per-backend inventory breakdown (backend type, cluster/volume counts, capacity) so the
+/// multi-backend picture is distinguishable in the API and Prometheus.
+pub async fn backend_breakdown(pool: &SqlitePool) -> Result<Vec<serde_json::Value>> {
+    let rows = sqlx::query(
+        "SELECT b.id AS id, b.backend_type AS backend_type, b.mode AS mode, b.status AS status,
+                (SELECT COUNT(*) FROM storage_clusters c WHERE c.backend_id=b.id) AS clusters,
+                (SELECT COUNT(*) FROM storage_volumes v WHERE v.backend_id=b.id) AS volumes,
+                COALESCE((SELECT SUM(raw_capacity_bytes)  FROM storage_clusters c WHERE c.backend_id=b.id),0) AS raw,
+                COALESCE((SELECT SUM(used_capacity_bytes) FROM storage_clusters c WHERE c.backend_id=b.id),0) AS used
+         FROM storage_backends b ORDER BY b.id",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            serde_json::json!({
+                "backend_id": r.get::<String, _>("id"),
+                "backend_type": r.get::<String, _>("backend_type"),
+                "mode": r.get::<String, _>("mode"),
+                "status": r.get::<String, _>("status"),
+                "clusters": r.get::<i64, _>("clusters"),
+                "volumes": r.get::<i64, _>("volumes"),
+                "raw_capacity_bytes": r.get::<i64, _>("raw"),
+                "used_capacity_bytes": r.get::<i64, _>("used"),
+            })
+        })
+        .collect())
+}
+
 /// Aggregate capacity summary across all clusters (PDF §13.2 overview cards).
 pub async fn metrics_summary(pool: &SqlitePool) -> Result<serde_json::Value> {
     let row = sqlx::query(

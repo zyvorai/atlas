@@ -29,6 +29,8 @@ enum Command {
     Version,
     /// GET /api/atlas/v1/backends
     Backends,
+    /// GET /api/atlas/v1/backends/summary — per-backend breakdown (type, counts, capacity)
+    BackendsSummary,
     /// POST /api/atlas/v1/backends/{id}/discover (default backend: bkd_ceph_lab)
     Discover {
         #[arg(default_value = "bkd_ceph_lab")]
@@ -324,6 +326,7 @@ async fn main() -> Result<()> {
         Command::Ready => ("GET", "/readyz".to_string(), None),
         Command::Version => ("GET", "/version".to_string(), None),
         Command::Backends => ("GET", "/api/atlas/v1/backends".to_string(), None),
+        Command::BackendsSummary => ("GET", "/api/atlas/v1/backends/summary".to_string(), None),
         Command::Discover { backend } => (
             "POST",
             format!("/api/atlas/v1/backends/{backend}/discover"),
