@@ -1,7 +1,7 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { HardDrive, Plus, RefreshCw } from "lucide-react";
+import { Download, HardDrive, Plus, RefreshCw } from "lucide-react";
 import { submit, submitJob } from "../api/client";
 import { useBackends, useBuckets, useInvalidate, useVolumes } from "../api/hooks";
 import { http } from "../api/client";
@@ -22,6 +22,20 @@ export default function Volumes() {
   const { data: backends } = useBackends();
   const inv = useInvalidate();
   const refetch = () => inv("volumes", "summary");
+  const exportCsv = async () => {
+    const qs = new URLSearchParams();
+    if (state) qs.set("state", state);
+    if (tenant) qs.set("tenant", tenant);
+    if (backend) qs.set("backend", backend);
+    if (kind) qs.set("kind", kind);
+    const r = await http.get(`/volumes.csv${qs.toString() ? "?" + qs : ""}`, { responseType: "blob" });
+    const url = URL.createObjectURL(r.data as Blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "atlas-volumes.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
   const [createOpen, setCreateOpen] = useState(false);
   const [sel, setSel] = useState<StorageVolume | null>(null);
   const [modal, setModal] = useState<{ v: StorageVolume; kind: string } | null>(null);
@@ -60,6 +74,7 @@ export default function Volumes() {
         actions={
           <>
             <Button icon={RefreshCw} onClick={refetch}>Refresh</Button>
+            <Button icon={Download} onClick={exportCsv}>Export CSV</Button>
             <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>Volume</Button>
           </>
         }

@@ -37,6 +37,7 @@ pub fn router(state: AppState) -> Router {
         .route("/kubernetes/pvcs", get(list_pvcs))
         .route("/kubernetes/pvs", get(list_pvs))
         .route("/volumes", get(list_volumes).post(create_volume))
+        .route("/volumes.csv", get(volumes_csv))
         .route("/volumes/{id}", get(get_volume).delete(delete_volume))
         .route("/volumes/{id}/expand", post(expand_volume))
         .route("/rbd-images", get(list_rbd_images).post(create_rbd_image))
@@ -498,6 +499,72 @@ async fn list_volumes(
         atlas_inventory::list_volumes(&s.pool).await?
     };
     Ok(Json(json!(vols)))
+}
+
+/// `GET /volumes.csv[?state=&tenant=&backend=&kind=]` — the volume inventory as a downloadable CSV
+/// (honors the same filters as `/volumes`), for spreadsheets / capacity reporting.
+async fn volumes_csv(
+    State(s): State<AppState>,
+    Query(q): Query<VolumeQuery>,
+) -> impl axum::response::IntoResponse {
+    use std::fmt::Write;
+    let vols = if q.state.is_some() || q.tenant.is_some() || q.backend.is_some() || q.kind.is_some()
+    {
+        atlas_inventory::list_volumes_filtered(
+            &s.pool,
+            q.state.as_deref(),
+            q.tenant.as_deref(),
+            q.backend.as_deref(),
+            q.kind.as_deref(),
+        )
+        .await
+        .unwrap_or_default()
+    } else {
+        atlas_inventory::list_volumes(&s.pool)
+            .await
+            .unwrap_or_default()
+    };
+
+    let mut out = String::from(
+        "id,name,kind,state,size_bytes,used_bytes,cluster_id,pool_id,namespace,pvc,storage_class\n",
+    );
+    let cell = |o: &mut String, v: &str, last: bool| {
+        if v.contains([',', '"', '\n']) {
+            let _ = write!(o, "\"{}\"", v.replace('"', "\"\""));
+        } else {
+            let _ = write!(o, "{v}");
+        }
+        o.push(if last { '\n' } else { ',' });
+    };
+    for vol in &vols {
+        let val = serde_json::to_value(vol).unwrap_or(Value::Null);
+        let g = |k: &str| match val.get(k) {
+            Some(Value::String(s)) => s.clone(),
+            Some(Value::Null) | None => String::new(),
+            Some(other) => other.to_string(),
+        };
+        cell(&mut out, &g("id"), false);
+        cell(&mut out, &g("name"), false);
+        cell(&mut out, &g("kind"), false);
+        cell(&mut out, &g("state"), false);
+        cell(&mut out, &g("size_bytes"), false);
+        cell(&mut out, &g("used_bytes"), false);
+        cell(&mut out, &g("cluster_id"), false);
+        cell(&mut out, &g("pool_id"), false);
+        cell(&mut out, &g("kubernetes_namespace"), false);
+        cell(&mut out, &g("pvc_name"), false);
+        cell(&mut out, &g("storage_class_name"), true);
+    }
+    (
+        [
+            (axum::http::header::CONTENT_TYPE, "text/csv; charset=utf-8"),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                "attachment; filename=\"atlas-volumes.csv\"",
+            ),
+        ],
+        out,
+    )
 }
 
 async fn get_volume(State(s): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
