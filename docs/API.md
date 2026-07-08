@@ -321,6 +321,17 @@ scheduler-created snapshots to `keep`.
 Worker cadence is `ATLAS_SNAPSHOT_TICK_SECS` (0 disables). Scheduled snapshots are named
 `<volume>-sched-<id>`; retention only prunes scheduler-created snapshots/backups, never manual ones.
 
+### `POST /api/atlas/v1/auth/tokens`
+Mint a scoped service-account JWT for a product (admin). The shared secret never leaves Atlas.
+```json
+// body
+{ "subject": "veyron", "role": "operator", "ttl_secs": 3600 }
+// 201 → { "token": "<jwt>", "subject": "veyron", "role": "operator", "level": 1,
+//         "expires_at": 1783480966, "ttl_secs": 3600 }
+```
+`role`: `viewer` (default), `operator`, `admin`, or `product.service.<name>` (→ operator). `ttl_secs`
+is clamped to `[60, 7776000]` (90 days). The product sends the token as `Authorization: Bearer <jwt>`.
+
 ### `GET /api/atlas/v1/tenants/{id}/quota` · `PUT .../quota`
 Per-tenant storage quota + live usage (PDF §14 multi-tenancy). `PUT` (admin) sets the limits.
 ```json

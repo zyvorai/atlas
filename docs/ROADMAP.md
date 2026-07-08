@@ -159,7 +159,12 @@ Read-only control plane + real Ceph lab.
   `POST /volumes` (REST + gRPC `CreateVolume`) rejects an over-quota create (409 / `resource_exhausted`)
   before enqueueing. `atlasctl quota|set-quota`. Verified live: byte + count limits both enforced,
   raising the limit admits the create, usage tracked from live volume rows.
-- Multi-tenancy (remaining): per-tenant policies, per-product service accounts (PDF §14).
+- ✅ **Service-account tokens**: `POST /auth/tokens` (admin) mints a scoped HS256 JWT
+  (`sub`/`role`/`exp`) for a product/service account — the shared secret never leaves Atlas. TTL is
+  clamped to `[60s, 90d]` and issuance is audited. `atlasctl issue-token`. Verified: minted operator
+  token creates volumes, viewer is `403`, no token `401`, and a non-admin cannot mint (test); live
+  the endpoint returns a valid JWT with the expected claims.
+- Multi-tenancy (remaining): per-tenant policies (PDF §14).
 - DR: RBD mirroring, secondary-cluster restore, one-click failover runbook (PDF §16.3).
 
 ## Known limitations (slice 1)
