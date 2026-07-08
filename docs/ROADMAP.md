@@ -47,6 +47,9 @@ Read-only control plane + real Ceph lab.
   (native id `rbd:pool/image`, no PVC); `GET /rbd-images?pool=` lists from Ceph; `DELETE
   /rbd-images/{pool}/{image}` runs `rbd rm`. `atlasctl create-rbd-image`. Verified live: image
   created (`rbd info` 1 GiB), listed, and removed on real Ceph.
+- ✅ **Direct RBD clone (golden image)**: `POST /rbd-images/{pool}/{image}/clone {name, snap?}`
+  snapshots + protects the base and `rbd clone`s a COW copy — the machina/libvirt base-image →
+  per-VM workflow. Verified live: clone's `rbd info` shows `parent: <pool>/golden-base@v1`.
 - ✅ **Durable gateway DB** — the SQLite file is now backed by a `ReadWriteOnce` PVC (`Recreate`
   strategy). The real-mode gateway dogfoods `zyvor-rbd-prod` (Ceph); the fake-mode gateway uses the
   cluster default StorageClass so it still deploys without Ceph. Verified: inventory survives a pod
