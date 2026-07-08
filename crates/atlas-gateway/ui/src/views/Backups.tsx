@@ -17,15 +17,36 @@ export default function Backups() {
   const refetch = () => inv("backups", "summary");
   const [create, setCreate] = useState(false);
   const [restore, setRestore] = useState<BackupRecord | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const toggle = (k: string) => setPicked((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const toggleAll = (keys: string[]) => setPicked((s) => (keys.every((k) => s.has(k)) ? new Set() : new Set(keys)));
+  const bulkDelete = () => del(`${picked.size} backup(s)`, () => { const ids = [...picked]; setPicked(new Set()); ids.forEach((id) => submitJob("delete", `/backups/${id}`, null, "delete backup", refetch)); });
 
   return (
     <div>
       <PageHeader icon={Archive} title="Backups" subtitle="RBD backups to RGW (manifest + streamed data), restore & presigned download"
         actions={<Button variant="primary" icon={Plus} onClick={() => setCreate(true)}>Backup</Button>} />
-      <GlassSection title={<>Backups <Badge kind="neutral">{data?.length || 0}</Badge></>}>
+      <GlassSection
+        title={
+          <span className="flex items-center gap-2 flex-1">
+            Backups <Badge kind="neutral">{data?.length || 0}</Badge>
+            {picked.size > 0 && (
+              <span className="flex items-center gap-2 ml-2">
+                <span className="text-xs text-sky-300">{picked.size} selected</span>
+                <Button size="sm" variant="danger" onClick={bulkDelete}>Delete selected</Button>
+                <Button size="sm" onClick={() => setPicked(new Set())}>Clear</Button>
+              </span>
+            )}
+          </span>
+        }
+      >
         <Table
           rows={data}
           rowKey={(b) => b.id}
+          selectable
+          selected={picked}
+          onToggle={toggle}
+          onToggleAll={toggleAll}
           empty="No backups yet."
           emptyCta={<Button variant="primary" icon={Plus} onClick={() => setCreate(true)}>Back up a volume</Button>}
           cols={[

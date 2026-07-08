@@ -14,13 +14,34 @@ export default function Snapshots() {
   const inv = useInvalidate();
   const refetch = () => inv("snapshots", "volumes");
   const [modal, setModal] = useState<{ s: StorageSnapshot; kind: string } | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const toggle = (k: string) => setPicked((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const toggleAll = (keys: string[]) => setPicked((s) => (keys.every((k) => s.has(k)) ? new Set() : new Set(keys)));
+  const bulkDelete = () => del(`${picked.size} snapshot(s)`, () => { const ids = [...picked]; setPicked(new Set()); ids.forEach((id) => submitJob("delete", `/snapshots/${id}?force=true`, null, "delete snapshot", refetch)); });
   return (
     <div>
       <PageHeader icon={Camera} title="Snapshots" subtitle="Point-in-time VolumeSnapshots — clone or restore into new volumes" />
-      <GlassSection title={<>Snapshots <Badge kind="neutral">{data?.length || 0}</Badge></>}>
+      <GlassSection
+        title={
+          <span className="flex items-center gap-2 flex-1">
+            Snapshots <Badge kind="neutral">{data?.length || 0}</Badge>
+            {picked.size > 0 && (
+              <span className="flex items-center gap-2 ml-2">
+                <span className="text-xs text-sky-300">{picked.size} selected</span>
+                <Button size="sm" variant="danger" onClick={bulkDelete}>Delete selected</Button>
+                <Button size="sm" onClick={() => setPicked(new Set())}>Clear</Button>
+              </span>
+            )}
+          </span>
+        }
+      >
         <Table
           rows={data}
           rowKey={(s) => s.id}
+          selectable
+          selected={picked}
+          onToggle={toggle}
+          onToggleAll={toggleAll}
           cols={[
             { h: "Name", f: (s) => s.name, mono: true, sortKey: (s) => s.name },
             { h: "Volume", f: (s) => s.volume_id, mono: true, sortKey: (s) => s.volume_id },

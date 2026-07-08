@@ -12,6 +12,7 @@ interface TrackedJob {
 }
 
 export type Theme = "dark" | "aurora";
+export type Density = "comfortable" | "compact";
 
 interface UiState {
   token: string;
@@ -21,6 +22,10 @@ interface UiState {
   signOut: () => void;
   theme: Theme;
   setTheme: (t: Theme) => void;
+  density: Density;
+  setDensity: (d: Density) => void;
+  paused: boolean;
+  togglePaused: () => void;
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
   spotlightOpen: boolean;
@@ -34,11 +39,16 @@ interface UiState {
 const ls = typeof localStorage !== "undefined" ? localStorage : null;
 const savedToken = ls?.getItem("atlas.token") || "";
 const savedTheme = (ls?.getItem("atlas.theme") as Theme) || "dark";
+const savedDensity = (ls?.getItem("atlas.density") as Density) || "comfortable";
 
 function applyTheme(t: Theme) {
   if (typeof document !== "undefined") document.documentElement.dataset.uiShell = t;
 }
+function applyDensity(d: Density) {
+  if (typeof document !== "undefined") document.documentElement.dataset.density = d;
+}
 applyTheme(savedTheme);
+applyDensity(savedDensity);
 
 export const useUi = create<UiState>((set) => ({
   token: savedToken,
@@ -62,6 +72,14 @@ export const useUi = create<UiState>((set) => ({
     applyTheme(t);
     set({ theme: t });
   },
+  density: savedDensity,
+  setDensity: (d) => {
+    ls?.setItem("atlas.density", d);
+    applyDensity(d);
+    set({ density: d });
+  },
+  paused: false,
+  togglePaused: () => set((s) => ({ paused: !s.paused })),
   sidebarCollapsed: false,
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   spotlightOpen: false,

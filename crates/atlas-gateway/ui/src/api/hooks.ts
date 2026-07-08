@@ -2,6 +2,7 @@
 // react-query hooks for the Atlas API. Queries auto-refetch; write helpers live in views.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { http } from "./client";
+import { useUi } from "../store/ui";
 import type {
   AlertRecord, AuditRow, BackupRecord, JobRecord, MetricSample, MetricsSummary, Osd,
   SnapshotSchedule, StorageBucket, StorageCluster, StoragePool, StorageSnapshot, StorageVolume,
@@ -11,7 +12,12 @@ import type {
 const g = async <T,>(path: string): Promise<T> => (await http.get<T>(path)).data;
 
 function q<T>(key: unknown[], path: string, refetch = 8000) {
-  return useQuery<T>({ queryKey: key, queryFn: () => g<T>(path), refetchInterval: refetch });
+  // Pause auto-refresh globally when the user toggles it (menu bar).
+  return useQuery<T>({
+    queryKey: key,
+    queryFn: () => g<T>(path),
+    refetchInterval: () => (useUi.getState().paused ? false : refetch),
+  });
 }
 
 export const useSummary = () => q<MetricsSummary>(["summary"], "/metrics/summary", 6000);

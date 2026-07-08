@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Bell, ChevronLeft, ChevronRight, HardDrive as HardDriveIcon, Hexagon, KeyRound, Loader2, LogOut,
-  Moon, Search, Sparkles, Wifi,
+  Moon, Pause, Play, Rows2, Rows3, Search, Sparkles, Wifi,
 } from "lucide-react";
 import { MODULES, SECTIONS } from "../nav/modules";
 import { http } from "../api/client";
@@ -36,6 +36,10 @@ function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
   const setToken = useUi((s) => s.setToken);
   const theme = useUi((s) => s.theme);
   const setTheme = useUi((s) => s.setTheme);
+  const density = useUi((s) => s.density);
+  const setDensity = useUi((s) => s.setDensity);
+  const paused = useUi((s) => s.paused);
+  const togglePaused = useUi((s) => s.togglePaused);
   const [draft, setDraft] = useState(token);
   const nav = useNavigate();
   return (
@@ -109,6 +113,20 @@ function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
           </>
         )}
       </div>
+      <button
+        className={cx("btn btn-ghost btn-sm", paused && "text-warning")}
+        title={paused ? "Resume auto-refresh" : "Pause auto-refresh"}
+        onClick={togglePaused}
+      >
+        {paused ? <Play size={13} /> : <Pause size={13} />}
+      </button>
+      <button
+        className="btn btn-ghost btn-sm"
+        title={density === "compact" ? "Comfortable density" : "Compact density"}
+        onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}
+      >
+        {density === "compact" ? <Rows3 size={13} /> : <Rows2 size={13} />}
+      </button>
       <button
         className="btn btn-ghost btn-sm"
         title={theme === "aurora" ? "Switch to dark" : "Switch to Aurora"}

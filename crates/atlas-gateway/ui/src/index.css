@@ -333,6 +333,20 @@
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18) inset, 0 18px 45px -12px rgba(37, 99, 235, 0.6);
 }
 
+/* ── Compact density ── */
+:root[data-density="compact"] .ztable td {
+  padding: 0.3rem 0.7rem;
+}
+:root[data-density="compact"] .ztable th {
+  padding: 0.35rem 0.7rem;
+}
+:root[data-density="compact"] .glass-card {
+  border-radius: 0.7rem;
+}
+:root[data-density="compact"] main .p-6 {
+  padding: 1rem;
+}
+
 .animate-fade-in {
   animation: fade-in 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
