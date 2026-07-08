@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  Bell, ChevronLeft, ChevronRight, Hexagon, KeyRound, Loader2, LogOut, Moon, Search, Sparkles, Wifi,
+  Bell, ChevronLeft, ChevronRight, HardDrive as HardDriveIcon, Hexagon, KeyRound, Loader2, LogOut,
+  Moon, Search, Sparkles, Wifi,
 } from "lucide-react";
 import { MODULES, SECTIONS } from "../nav/modules";
+import { http } from "../api/client";
 import { useAlerts, useClusters, useJobs } from "../api/hooks";
 import { useUi } from "../store/ui";
 import { cx, healthKind, stateKind } from "../lib/format";
@@ -248,15 +250,40 @@ function Dock() {
   );
 }
 
+interface SpotItem {
+  label: string;
+  sub: string;
+  path: string;
+  icon: (typeof MODULES)[number]["icon"];
+}
+
 function Spotlight({ open, onClose }: { open: boolean; onClose: () => void }) {
   const nav = useNavigate();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
-  const results = MODULES.filter((m) => !q || m.label.toLowerCase().includes(q.toLowerCase()) || m.codename.includes(q.toLowerCase()));
+  const [resources, setResources] = useState<SpotItem[]>([]);
   useEffect(() => { if (open) { setQ(""); setSel(0); } }, [open]);
   useEffect(() => { setSel(0); }, [q]);
+  // Fetch resources once per open so ⌘K can jump straight to a volume/bucket/snapshot/backup.
+  useEffect(() => {
+    if (!open) return;
+    Promise.allSettled([http.get("/volumes"), http.get("/buckets"), http.get("/snapshots"), http.get("/backups")]).then(
+      ([v, b, s, bk]) => {
+        const out: SpotItem[] = [];
+        if (v.status === "fulfilled") v.value.data.forEach((x: any) => out.push({ label: x.name, sub: "volume", path: `/volumes?focus=${x.id}`, icon: HardDriveIcon }));
+        if (b.status === "fulfilled") b.value.data.forEach((x: any) => out.push({ label: x.bucket_name || x.id, sub: "bucket", path: "/buckets", icon: HardDriveIcon }));
+        if (s.status === "fulfilled") s.value.data.forEach((x: any) => out.push({ label: x.name, sub: "snapshot", path: "/snapshots", icon: HardDriveIcon }));
+        if (bk.status === "fulfilled") bk.value.data.forEach((x: any) => out.push({ label: x.id, sub: "backup", path: "/backups", icon: HardDriveIcon }));
+        setResources(out);
+      },
+    );
+  }, [open]);
+
+  const modItems: SpotItem[] = MODULES.map((m) => ({ label: m.label, sub: m.section.toLowerCase(), path: m.path, icon: m.icon }));
+  const ql = q.toLowerCase();
+  const items = [...modItems, ...resources].filter((it) => !q || it.label.toLowerCase().includes(ql) || it.sub.includes(ql)).slice(0, 40);
   if (!open) return null;
-  const go = (i: number) => { const m = results[i]; if (m) { nav(m.path); onClose(); } };
+  const go = (i: number) => { const it = items[i]; if (it) { nav(it.path); onClose(); } };
   return (
     <div className="fixed inset-0 z-[70] pt-[14vh] px-4 flex justify-center" onMouseDown={onClose}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
@@ -266,11 +293,11 @@ function Spotlight({ open, onClose }: { open: boolean; onClose: () => void }) {
           <input
             autoFocus
             className="bg-transparent outline-none flex-1 text-sm"
-            placeholder="Jump to a Center…"
+            placeholder="Search Centers, volumes, buckets, snapshots, backups…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "ArrowDown") { e.preventDefault(); setSel((i) => Math.min(results.length - 1, i + 1)); }
+              if (e.key === "ArrowDown") { e.preventDefault(); setSel((i) => Math.min(items.length - 1, i + 1)); }
               else if (e.key === "ArrowUp") { e.preventDefault(); setSel((i) => Math.max(0, i - 1)); }
               else if (e.key === "Enter") go(sel);
               else if (e.key === "Escape") onClose();
@@ -278,19 +305,19 @@ function Spotlight({ open, onClose }: { open: boolean; onClose: () => void }) {
           />
         </div>
         <div className="max-h-[46vh] overflow-auto p-1.5">
-          {results.map((m, i) => (
+          {items.map((it, i) => (
             <button
-              key={m.id}
+              key={`${it.path}-${it.label}-${i}`}
               onMouseEnter={() => setSel(i)}
               onClick={() => go(i)}
               className={cx("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left", i === sel ? "bg-white/[0.08]" : "hover:bg-white/[0.06]")}
             >
-              <m.icon size={16} className="text-sky-400" />
-              <span className="flex-1 text-sm">{m.label}</span>
-              <span className="text-[11px] text-muted-foreground/60">{m.section.toLowerCase()}</span>
+              <it.icon size={16} className="text-sky-400" />
+              <span className="flex-1 text-sm truncate">{it.label}</span>
+              <span className="text-[11px] text-muted-foreground/60">{it.sub}</span>
             </button>
           ))}
-          {!results.length && <div className="px-3 py-6 text-center text-sm text-muted-foreground">No matches.</div>}
+          {!items.length && <div className="px-3 py-6 text-center text-sm text-muted-foreground">No matches.</div>}
         </div>
       </div>
     </div>

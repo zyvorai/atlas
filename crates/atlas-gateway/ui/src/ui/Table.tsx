@@ -18,6 +18,10 @@ export function Table<T>({
   empty = "Nothing here yet.",
   emptyCta,
   rowKey,
+  selectable,
+  selected,
+  onToggle,
+  onToggleAll,
 }: {
   cols: Col<T>[];
   rows: T[] | undefined;
@@ -26,6 +30,10 @@ export function Table<T>({
   empty?: string;
   emptyCta?: React.ReactNode;
   rowKey?: (r: T, i: number) => string;
+  selectable?: boolean;
+  selected?: Set<string>;
+  onToggle?: (key: string) => void;
+  onToggleAll?: (keys: string[]) => void;
 }) {
   const [sort, setSort] = useState<{ i: number; dir: 1 | -1 } | null>(null);
   const sorted = useMemo(() => {
@@ -45,11 +53,19 @@ export function Table<T>({
     if (!cols[i].sortKey) return;
     setSort((s) => (s?.i === i ? { i, dir: s.dir === 1 ? -1 : 1 } : { i, dir: 1 }));
   };
+  const rk = (r: T, i: number) => (rowKey ? rowKey(r, i) : String(i));
+  const allKeys = (sorted || []).map((r, i) => rk(r, i));
+  const allSelected = selectable && allKeys.length > 0 && allKeys.every((k) => selected?.has(k));
   return (
     <div className="overflow-x-auto">
       <table className="ztable">
         <thead>
           <tr>
+            {selectable && (
+              <th style={{ width: 34 }}>
+                <input type="checkbox" checked={!!allSelected} onChange={() => onToggleAll?.(allKeys)} />
+              </th>
+            )}
             {cols.map((c, i) => (
               <th
                 key={c.h}
@@ -66,12 +82,19 @@ export function Table<T>({
           </tr>
         </thead>
         <tbody>
-          {(sorted || []).map((r, i) => (
+          {(sorted || []).map((r, i) => {
+            const key = rk(r, i);
+            return (
             <tr
-              key={rowKey ? rowKey(r, i) : i}
+              key={key}
               onClick={onRow ? () => onRow(r) : undefined}
-              className={onRow ? "cursor-pointer" : undefined}
+              className={`${onRow ? "cursor-pointer" : ""} ${selected?.has(key) ? "selected" : ""}`}
             >
+              {selectable && (
+                <td onClick={(e) => e.stopPropagation()}>
+                  <input type="checkbox" checked={selected?.has(key) || false} onChange={() => onToggle?.(key)} />
+                </td>
+              )}
               {cols.map((c) => (
                 <td key={c.h} className={c.mono ? "mono" : undefined}>
                   {c.f(r) ?? "—"}
@@ -83,7 +106,8 @@ export function Table<T>({
                 </td>
               )}
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

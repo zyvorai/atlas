@@ -1,5 +1,6 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { HardDrive, Plus, RefreshCw } from "lucide-react";
 import { submit, submitJob } from "../api/client";
 import { useBuckets, useInvalidate, useVolumes } from "../api/hooks";
@@ -22,6 +23,30 @@ export default function Volumes() {
   const [sel, setSel] = useState<StorageVolume | null>(null);
   const [modal, setModal] = useState<{ v: StorageVolume; kind: string } | null>(null);
   const { data: buckets } = useBuckets();
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const toggle = (k: string) => setPicked((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const toggleAll = (keys: string[]) => setPicked((s) => (keys.every((k) => s.has(k)) ? new Set() : new Set(keys)));
+  const bulkDelete = () =>
+    del(`${picked.size} volume(s)`, () => {
+      const ids = [...picked];
+      setPicked(new Set());
+      ids.forEach((id) => {
+        const v = vols?.find((x) => x.id === id);
+        submitJob("delete", `/volumes/${id}?force=true`, null, `delete ${v?.name || id}`, refetch);
+      });
+    });
+  // Deep-link from spotlight: ?focus=<id> opens that volume's drawer.
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const f = params.get("focus");
+    if (f && vols) {
+      const v = vols.find((x) => x.id === f);
+      if (v) {
+        setSel(v);
+        setParams({}, { replace: true });
+      }
+    }
+  }, [params, vols]);
 
   return (
     <div>
@@ -45,11 +70,28 @@ export default function Volumes() {
         <input className="field w-48" placeholder="Filter tenant…" value={tenant} onChange={(e) => setTenant(e.target.value)} />
       </div>
 
-      <GlassSection title={<>Volumes <Badge kind="neutral">{vols?.length || 0}</Badge></>}>
+      <GlassSection
+        title={
+          <span className="flex items-center gap-2 flex-1">
+            Volumes <Badge kind="neutral">{vols?.length || 0}</Badge>
+            {picked.size > 0 && (
+              <span className="flex items-center gap-2 ml-2">
+                <span className="text-xs text-sky-300">{picked.size} selected</span>
+                <Button size="sm" variant="danger" onClick={bulkDelete}>Delete selected</Button>
+                <Button size="sm" onClick={() => setPicked(new Set())}>Clear</Button>
+              </span>
+            )}
+          </span>
+        }
+      >
         <Table
           rows={vols}
           onRow={setSel}
           rowKey={(v) => v.id}
+          selectable
+          selected={picked}
+          onToggle={toggle}
+          onToggleAll={toggleAll}
           empty="No volumes yet."
           emptyCta={<Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>Create volume</Button>}
           cols={[
