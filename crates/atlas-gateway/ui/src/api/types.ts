@@ -183,6 +183,19 @@ export interface MetricSample {
   labels: Record<string, string>;
 }
 
+// One row of the unified activity feed (GET /events) — job | audit | alert normalized.
+export interface ActivityEvent {
+  ts: string;
+  kind: "job" | "audit" | "alert";
+  id: string;
+  severity: string;
+  title: string;
+  detail: string;
+  resource_type: string;
+  resource_id: string;
+  actor: string;
+}
+
 // GET /metrics/forecast — least-squares fill projection; days_to_full is null when not growing.
 export interface MetricForecast {
   samples: number;

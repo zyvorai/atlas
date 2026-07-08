@@ -102,6 +102,7 @@ pub fn router(state: AppState) -> Router {
         .route("/jobs/{id}", get(get_job))
         .route("/jobs/{id}/watch", get(watch_job_sse))
         .route("/audit", get(list_audit))
+        .route("/events", get(list_events))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
@@ -1093,6 +1094,23 @@ async fn list_audit(
         q.limit.unwrap_or(100),
     )
     .await?;
+    Ok(Json(json!(rows)))
+}
+
+#[derive(Debug, Deserialize)]
+struct EventsQuery {
+    limit: Option<i64>,
+}
+
+/// `GET /events[?limit=100]` — unified activity feed (jobs + audit + alerts), newest first.
+/// Operator-gated because it surfaces audit records.
+async fn list_events(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Query(q): Query<EventsQuery>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let rows = atlas_inventory::events::feed(&s.pool, q.limit.unwrap_or(100)).await?;
     Ok(Json(json!(rows)))
 }
 

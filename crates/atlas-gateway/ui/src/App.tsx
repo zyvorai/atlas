@@ -9,6 +9,7 @@ import Schedules from "./views/Schedules";
 import Backups from "./views/Backups";
 import Buckets from "./views/Buckets";
 import Alerts from "./views/Alerts";
+import Activity from "./views/Activity";
 import Jobs from "./views/Jobs";
 import Audit from "./views/Audit";
 import Tenants from "./views/Tenants";
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/schedules" element={<Schedules />} />
         <Route path="/backups" element={<Backups />} />
         <Route path="/buckets" element={<Buckets />} />
+        <Route path="/activity" element={<Activity />} />
         <Route path="/alerts" element={<Alerts />} />
         <Route path="/metrics" element={<Metrics />} />
         <Route path="/jobs" element={<Jobs />} />

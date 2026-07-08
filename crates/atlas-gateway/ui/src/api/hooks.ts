@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { http } from "./client";
 import { useUi } from "../store/ui";
 import type {
-  AlertRecord, AuditRow, BackupRecord, JobRecord, MetricForecast, MetricHistoryPoint, MetricSample, MetricsSummary, Osd,
+  ActivityEvent, AlertRecord, AuditRow, BackupRecord, JobRecord, MetricForecast, MetricHistoryPoint, MetricSample, MetricsSummary, Osd,
   SnapshotSchedule, StorageBucket, StorageCluster, StoragePool, StorageSnapshot, StorageVolume,
   TenantPolicy, TenantQuota,
 } from "./types";
@@ -46,6 +46,8 @@ export const useAlerts = (state?: string) =>
   q<AlertRecord[]>(["alerts", state], `/alerts${state ? "?state=" + state : ""}`, 6000);
 export const useJobs = () => q<JobRecord[]>(["jobs"], "/jobs", 4000);
 export const useAudit = (params: string) => q<AuditRow[]>(["audit", params], `/audit${params}`, 10000);
+export const useEvents = (limit = 100) =>
+  q<ActivityEvent[]>(["events", limit], `/events?limit=${limit}`, 8000);
 export const useTenants = () => q<TenantQuota[]>(["tenants"], "/tenants", 10000);
 export const useTenantPolicies = (id: string) =>
   q<TenantPolicy[]>(["tenantPolicies", id], `/tenants/${id}/policies`, 15000);
