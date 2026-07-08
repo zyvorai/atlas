@@ -24,20 +24,45 @@ async fn main() -> anyhow::Result<()> {
 
     let bind_addr = config.bind_addr.clone();
     let grpc_addr = config.grpc_addr.clone();
+    let https_addr = config.https_addr.clone();
+    let tls_cert = config.tls_cert_path.clone();
+    let tls_key = config.tls_key_path.clone();
     let state = build_state(config, BuildOptions::default()).await?;
 
-    // REST server.
+    // REST server (HTTP).
     let app = routes::router(state.clone())
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive());
     let addr: SocketAddr = bind_addr.parse()?;
     let listener = tokio::net::TcpListener::bind(addr).await?;
     info!("atlas-gateway REST listening on http://{addr}");
+    let rest_app = app.clone();
     let rest = async move {
-        axum::serve(listener, app)
+        axum::serve(listener, rest_app)
             .await
             .map_err(anyhow::Error::from)
     };
+
+    // Optional HTTPS listener (same app), enabled by ATLAS_HTTPS_ADDR + cert/key PEM paths.
+    if let (Some(haddr), Some(cert), Some(key)) = (https_addr, tls_cert, tls_key) {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let tls = axum_server::tls_rustls::RustlsConfig::from_pem_file(&cert, &key)
+            .await
+            .map_err(|e| anyhow::anyhow!("load TLS cert/key: {e}"))?;
+        let saddr: SocketAddr = haddr.parse()?;
+        info!("atlas-gateway REST (TLS) listening on https://{saddr}");
+        let https = async move {
+            axum_server::bind_rustls(saddr, tls)
+                .serve(app.into_make_service())
+                .await
+                .map_err(anyhow::Error::from)
+        };
+        tokio::spawn(async move {
+            if let Err(e) = https.await {
+                tracing::error!("https server error: {e:#}");
+            }
+        });
+    }
 
     // gRPC edge (served concurrently). Empty ATLAS_GRPC_ADDR disables it.
     if grpc_addr.trim().is_empty() {

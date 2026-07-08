@@ -33,6 +33,10 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
         backup_max_age_secs: 0,
         rgw_public_endpoint: None,
         snapshot_tick_secs: 0,
+        https_addr: None,
+        tls_cert_path: None,
+        tls_key_path: None,
+        tls_self_signed: false,
     };
 
     let state = build_state(
@@ -182,6 +186,10 @@ async fn spawn_auth(secret: &str) -> String {
         backup_max_age_secs: 0,
         rgw_public_endpoint: None,
         snapshot_tick_secs: 0,
+        https_addr: None,
+        tls_cert_path: None,
+        tls_key_path: None,
+        tls_self_signed: false,
     };
     let state = build_state(
         config,

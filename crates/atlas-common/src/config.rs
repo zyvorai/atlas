@@ -49,6 +49,13 @@ pub struct Config {
     /// How often (seconds) the protection-schedule worker checks for due snapshot schedules
     /// (0 disables it).
     pub snapshot_tick_secs: u64,
+    /// Optional HTTPS listen address (empty disables TLS). Served alongside the plain HTTP listener.
+    pub https_addr: Option<String>,
+    /// PEM cert/key paths for HTTPS (both required unless `tls_self_signed`).
+    pub tls_cert_path: Option<String>,
+    pub tls_key_path: Option<String>,
+    /// Generate a self-signed cert at startup when no cert/key is provided (lab convenience).
+    pub tls_self_signed: bool,
 }
 
 impl Config {
@@ -99,6 +106,21 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(60),
+            https_addr: std::env::var("ATLAS_HTTPS_ADDR")
+                .ok()
+                .filter(|s| !s.trim().is_empty()),
+            tls_cert_path: std::env::var("ATLAS_TLS_CERT")
+                .ok()
+                .filter(|s| !s.trim().is_empty()),
+            tls_key_path: std::env::var("ATLAS_TLS_KEY")
+                .ok()
+                .filter(|s| !s.trim().is_empty()),
+            tls_self_signed: matches!(
+                std::env::var("ATLAS_TLS_SELF_SIGNED")
+                    .unwrap_or_default()
+                    .as_str(),
+                "1" | "true" | "yes"
+            ),
         }
     }
 
@@ -124,6 +146,10 @@ impl Default for Config {
             backup_max_age_secs: 0,
             rgw_public_endpoint: None,
             snapshot_tick_secs: 0,
+            https_addr: None,
+            tls_cert_path: None,
+            tls_key_path: None,
+            tls_self_signed: false,
         }
     }
 }
