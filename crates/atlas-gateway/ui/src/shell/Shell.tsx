@@ -299,15 +299,27 @@ function Spotlight({ open, onClose }: { open: boolean; onClose: () => void }) {
 
 let welcomed = false;
 
+const SHORTCUTS: [string, string][] = [
+  ["⌘K / Ctrl-K", "Open spotlight search"],
+  ["↑ ↓ / Enter", "Navigate & open in spotlight"],
+  ["?", "Show this help"],
+  ["Esc", "Close dialogs, drawers, menus"],
+];
+
 export function Shell() {
   const spotOpen = useUi((s) => s.spotlightOpen);
   const setSpot = useUi((s) => s.setSpotlight);
+  const [helpOpen, setHelpOpen] = useState(false);
   const loc = useLocation();
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
+      const typing = ["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName);
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setSpot(true);
+      } else if (e.key === "?" && !typing) {
+        e.preventDefault();
+        setHelpOpen(true);
       }
     };
     window.addEventListener("keydown", h);
@@ -344,6 +356,16 @@ export function Shell() {
         </main>
       </div>
       <Spotlight open={spotOpen} onClose={() => setSpot(false)} />
+      <Modal open={helpOpen} onClose={() => setHelpOpen(false)} title="Keyboard shortcuts">
+        <div className="space-y-2">
+          {SHORTCUTS.map(([k, d]) => (
+            <div key={k} className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">{d}</span>
+              <kbd className="px-2 py-0.5 rounded bg-white/10 text-xs mono">{k}</kbd>
+            </div>
+          ))}
+        </div>
+      </Modal>
     </div>
   );
 }

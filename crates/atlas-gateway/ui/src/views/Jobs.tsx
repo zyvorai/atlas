@@ -1,8 +1,10 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+import { useState } from "react";
 import { Clock } from "lucide-react";
 import { useJobs } from "../api/hooks";
 import { useUi } from "../store/ui";
-import { Badge, Copyable, GlassSection, PageHeader } from "../ui/kit";
+import type { JobRecord } from "../api/types";
+import { Badge, Copyable, GlassSection, PageHeader, SlideOver } from "../ui/kit";
 import { Table } from "../ui/Table";
 import { stateKind, timeAgo } from "../lib/format";
 
@@ -18,6 +20,7 @@ function Bar({ pct, kind }: { pct: number; kind: string }) {
 export default function Jobs() {
   const { data } = useJobs();
   const live = Object.values(useUi((s) => s.jobs));
+  const [sel, setSel] = useState<JobRecord | null>(null);
   return (
     <div>
       <PageHeader icon={Clock} title="Jobs" subtitle="Async storage operations — live progress via server-sent events" />
@@ -39,6 +42,7 @@ export default function Jobs() {
         <Table
           rows={data}
           rowKey={(j) => j.id}
+          onRow={setSel}
           cols={[
             { h: "ID", f: (j) => <Copyable text={j.id} />, mono: true },
             { h: "Type", f: (j) => j.job_type, mono: true, sortKey: (j) => j.job_type },
@@ -49,6 +53,42 @@ export default function Jobs() {
           ]}
         />
       </GlassSection>
+
+      <SlideOver open={!!sel} onClose={() => setSel(null)} title={<span className="mono">{sel?.id}</span>} width={520}>
+        {sel && (
+          <div className="space-y-4 text-sm">
+            <div className="grid grid-cols-2 gap-2">
+              <Kv k="Type" v={sel.job_type} mono />
+              <Kv k="State" v={sel.state} />
+              <Kv k="By" v={sel.requested_by} mono />
+              <Kv k="Progress" v={`${sel.progress_percent ?? 0}%`} />
+              <Kv k="Created" v={timeAgo(sel.created_at)} />
+              <Kv k="Updated" v={timeAgo(sel.updated_at)} />
+            </div>
+            {sel.error && (
+              <div>
+                <div className="section-label mb-1">Error</div>
+                <div className="glass-card p-2 text-danger text-xs mono">{sel.error}</div>
+              </div>
+            )}
+            <div>
+              <div className="section-label mb-1">Result</div>
+              <pre className="glass-card p-3 text-[11px] mono overflow-auto max-h-[50vh] whitespace-pre-wrap">
+                {sel.result ? JSON.stringify(sel.result, null, 2) : "—"}
+              </pre>
+            </div>
+          </div>
+        )}
+      </SlideOver>
+    </div>
+  );
+}
+
+function Kv({ k, v, mono }: { k: string; v?: string; mono?: boolean }) {
+  return (
+    <div>
+      <div className="section-label">{k}</div>
+      <div className={mono ? "mono" : ""}>{v || "—"}</div>
     </div>
   );
 }

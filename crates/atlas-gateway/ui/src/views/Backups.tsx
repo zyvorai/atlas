@@ -30,11 +30,11 @@ export default function Backups() {
           emptyCta={<Button variant="primary" icon={Plus} onClick={() => setCreate(true)}>Back up a volume</Button>}
           cols={[
             { h: "ID", f: (b) => b.id, mono: true },
-            { h: "Volume", f: (b) => b.volume_id, mono: true },
-            { h: "Format", f: (b) => b.format },
-            { h: "State", f: (b) => <Badge kind={stateKind(b.state)} dot>{b.state}</Badge> },
+            { h: "Volume", f: (b) => b.volume_id, mono: true, sortKey: (b) => b.volume_id },
+            { h: "Format", f: (b) => b.format, sortKey: (b) => b.format },
+            { h: "State", f: (b) => <Badge kind={stateKind(b.state)} dot>{b.state}</Badge>, sortKey: (b) => b.state },
             { h: "Checksum", f: (b) => <span className="mono text-muted-foreground">{(b.checksum || "").slice(0, 12) || "—"}</span> },
-            { h: "Created", f: (b) => <span className="text-muted-foreground">{timeAgo(b.created_at)}</span> },
+            { h: "Created", f: (b) => <span className="text-muted-foreground">{timeAgo(b.created_at)}</span>, sortKey: (b) => b.created_at || "" },
           ]}
           actions={(b) => (
             <>

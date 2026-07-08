@@ -22,11 +22,11 @@ export default function Snapshots() {
           rows={data}
           rowKey={(s) => s.id}
           cols={[
-            { h: "Name", f: (s) => s.name, mono: true },
-            { h: "Volume", f: (s) => s.volume_id, mono: true },
-            { h: "State", f: (s) => <Badge kind={stateKind(s.state)} dot>{s.state}</Badge> },
+            { h: "Name", f: (s) => s.name, mono: true, sortKey: (s) => s.name },
+            { h: "Volume", f: (s) => s.volume_id, mono: true, sortKey: (s) => s.volume_id },
+            { h: "State", f: (s) => <Badge kind={stateKind(s.state)} dot>{s.state}</Badge>, sortKey: (s) => s.state },
             { h: "Protected", f: (s) => (s.protected ? "yes" : "no") },
-            { h: "Created", f: (s) => <span className="text-muted-foreground">{timeAgo(s.created_at)}</span> },
+            { h: "Created", f: (s) => <span className="text-muted-foreground">{timeAgo(s.created_at)}</span>, sortKey: (s) => s.created_at || "" },
           ]}
           actions={(s) => (
             <>
