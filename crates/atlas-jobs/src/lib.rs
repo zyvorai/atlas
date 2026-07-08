@@ -171,6 +171,16 @@ pub enum JobSpec {
         pool: String,
         image: String,
     },
+    /// Clone a raw RBD image (snapshot + protect + `rbd clone`) into a new COW image.
+    #[serde(rename = "rbd.clone")]
+    RbdClone {
+        volume_id: String,
+        backend_id: String,
+        pool: String,
+        image: String,
+        snap: String,
+        clone_image: String,
+    },
     /// Delete an RGW bucket: remove its ObjectBucketClaim (Rook releases the bucket) and the row.
     #[serde(rename = "bucket.delete")]
     BucketDelete {
@@ -212,6 +222,7 @@ impl JobSpec {
             JobSpec::BucketDelete { .. } => "bucket.delete",
             JobSpec::RbdCreate { .. } => "rbd.create",
             JobSpec::RbdDelete { .. } => "rbd.delete",
+            JobSpec::RbdClone { .. } => "rbd.clone",
         }
     }
 }
@@ -358,6 +369,48 @@ async fn dispatch(
             atlas_inventory::delete_volume_row(pool, &volume_id).await?;
             Ok(serde_json::json!({
                 "volume_id": volume_id, "rbd": format!("{rbd_pool}/{image}"), "deleted": true
+            }))
+        }
+        JobSpec::RbdClone {
+            volume_id,
+            backend_id,
+            pool: rbd_pool,
+            image,
+            snap,
+            clone_image,
+        } => {
+            // Snapshot the source, protect it (required for cloning), then create the COW clone.
+            atlas_driver_ceph::rbd_snap_create(&rbd_pool, &image, &snap)
+                .await
+                .with_context(|| format!("rbd snap create {rbd_pool}/{image}@{snap}"))?;
+            atlas_driver_ceph::rbd_snap_protect(&rbd_pool, &image, &snap)
+                .await
+                .with_context(|| format!("rbd snap protect {rbd_pool}/{image}@{snap}"))?;
+            atlas_driver_ceph::rbd_clone(&rbd_pool, &image, &snap, &rbd_pool, &clone_image)
+                .await
+                .with_context(|| format!("rbd clone {rbd_pool}/{image}@{snap} -> {clone_image}"))?;
+            let size_bytes = atlas_driver_ceph::rbd_info_size(&rbd_pool, &clone_image)
+                .await
+                .unwrap_or(0);
+            let vol = StorageVolume {
+                id: volume_id.clone(),
+                cluster_id: None,
+                pool_id: None,
+                name: clone_image.clone(),
+                kind: VolumeKind::Block,
+                backend_native_id: Some(format!("rbd:{rbd_pool}/{clone_image}")),
+                size_bytes,
+                used_bytes: None,
+                state: "available".into(),
+                health: Health::Ok,
+                kubernetes_namespace: None,
+                pvc_name: None,
+                storage_class_name: None,
+            };
+            atlas_inventory::upsert_volume(pool, &backend_id, tenant_id, &vol, None).await?;
+            Ok(serde_json::json!({
+                "volume_id": volume_id, "clone": format!("{rbd_pool}/{clone_image}"),
+                "parent": format!("{rbd_pool}/{image}@{snap}"), "size_bytes": size_bytes
             }))
         }
         JobSpec::VolumeCreate {

@@ -115,6 +115,84 @@ pub async fn rbd_remove(pool: &str, image: &str) -> Result<(), DriverError> {
     Ok(())
 }
 
+/// Total provisioned size of an RBD image in bytes (`rbd info pool/image --format json`).
+pub async fn rbd_info_size(pool: &str, image: &str) -> Result<i64, DriverError> {
+    let spec = format!("{pool}/{image}");
+    let v = rbd_cmd(&["info", &spec]).await?;
+    v.get("size")
+        .and_then(|s| s.as_i64())
+        .ok_or_else(|| DriverError::Parse(format!("rbd info {spec}: no size")))
+}
+
+/// Protect a snapshot so it can be used as a clone parent (`rbd snap protect`).
+pub async fn rbd_snap_protect(pool: &str, image: &str, snap: &str) -> Result<(), DriverError> {
+    snap_op(&["snap", "protect"], pool, image, snap).await
+}
+
+/// Unprotect a snapshot (`rbd snap unprotect`); best-effort on "not protected".
+pub async fn rbd_snap_unprotect(pool: &str, image: &str, snap: &str) -> Result<(), DriverError> {
+    let spec = format!("{pool}/{image}@{snap}");
+    let output = tokio::process::Command::new("rbd")
+        .args(["snap", "unprotect", &spec])
+        .output()
+        .await
+        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("not protected") || stderr.contains("does not exist") {
+            return Ok(());
+        }
+        return Err(DriverError::Backend(format!(
+            "rbd snap unprotect {spec}: {}",
+            stderr.trim()
+        )));
+    }
+    Ok(())
+}
+
+/// Clone a protected snapshot into a new COW image (`rbd clone parent@snap clone`).
+pub async fn rbd_clone(
+    parent_pool: &str,
+    parent_image: &str,
+    snap: &str,
+    clone_pool: &str,
+    clone_image: &str,
+) -> Result<(), DriverError> {
+    let src = format!("{parent_pool}/{parent_image}@{snap}");
+    let dst = format!("{clone_pool}/{clone_image}");
+    let output = tokio::process::Command::new("rbd")
+        .args(["clone", &src, &dst])
+        .output()
+        .await
+        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(DriverError::Backend(format!(
+            "rbd clone {src} {dst}: {stderr}"
+        )));
+    }
+    Ok(())
+}
+
+async fn snap_op(op: &[&str], pool: &str, image: &str, snap: &str) -> Result<(), DriverError> {
+    let spec = format!("{pool}/{image}@{snap}");
+    let mut args: Vec<&str> = op.to_vec();
+    args.push(&spec);
+    let output = tokio::process::Command::new("rbd")
+        .args(&args)
+        .output()
+        .await
+        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(DriverError::Backend(format!(
+            "rbd {} {spec}: {stderr}",
+            op.join(" ")
+        )));
+    }
+    Ok(())
+}
+
 /// List RBD image names in a pool (`rbd ls pool --format json`).
 pub async fn rbd_list(pool: &str) -> Result<Vec<String>, DriverError> {
     let v = rbd_cmd(&["ls", pool]).await?;

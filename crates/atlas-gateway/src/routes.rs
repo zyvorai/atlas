@@ -43,6 +43,7 @@ pub fn router(state: AppState) -> Router {
             "/rbd-images/{pool}/{image}",
             axum::routing::delete(delete_rbd_image),
         )
+        .route("/rbd-images/{pool}/{image}/clone", post(clone_rbd_image))
         .route("/volumes/{id}/bindings", get(list_volume_bindings))
         .route(
             "/volumes/{id}/labels",
@@ -616,6 +617,52 @@ async fn delete_rbd_image(
     Ok(accepted(
         &job,
         json!({ "rbd": format!("{pool_name}/{image}") }),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+struct CloneRbdBody {
+    /// New clone image name.
+    name: String,
+    /// Snapshot name to create + protect on the parent (defaults to `<clone>-base`).
+    #[serde(default)]
+    snap: Option<String>,
+    #[serde(default)]
+    tenant_id: Option<String>,
+}
+
+/// `POST /rbd-images/{pool}/{image}/clone` — snapshot+protect the parent and create a COW clone.
+async fn clone_rbd_image(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path((pool_name, image)): Path<(String, String)>,
+    Json(body): Json<CloneRbdBody>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    if body.name.trim().is_empty() {
+        return Err(AppError::Validation("name is required".into()));
+    }
+    let snap = body.snap.unwrap_or_else(|| format!("{}-base", body.name));
+    let tenant_id = body.tenant_id.unwrap_or_else(|| "global".into());
+    let volume_id = ids::volume_id();
+    let job_id = ids::job_id();
+    let spec = JobSpec::RbdClone {
+        volume_id: volume_id.clone(),
+        backend_id: CEPH_BACKEND_ID.into(),
+        pool: pool_name.clone(),
+        image: image.clone(),
+        snap: snap.clone(),
+        clone_image: body.name.clone(),
+    };
+    let job = s
+        .jobs
+        .enqueue(&job_id, &tenant_id, &actor.id, spec, None)
+        .await
+        .map_err(AppError::from)?;
+    Ok(accepted(
+        &job,
+        json!({ "volume_id": volume_id, "clone": format!("{pool_name}/{}", body.name),
+                "parent": format!("{pool_name}/{image}@{snap}") }),
     ))
 }
 

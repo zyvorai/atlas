@@ -106,6 +106,15 @@ enum Command {
     },
     /// DELETE /api/atlas/v1/rbd-images/{pool}/{image}
     DeleteRbdImage { pool: String, image: String },
+    /// POST /api/atlas/v1/rbd-images/{pool}/{image}/clone — COW clone (golden image)
+    CloneRbdImage {
+        pool: String,
+        image: String,
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        snap: Option<String>,
+    },
     /// GET /api/atlas/v1/tenants — overview of tenants (usage + quota)
     Tenants,
     /// GET /api/atlas/v1/volumes/{id}/bindings — product ownership for a volume
@@ -359,6 +368,16 @@ async fn main() -> Result<()> {
             "DELETE",
             format!("/api/atlas/v1/rbd-images/{pool}/{image}"),
             None,
+        ),
+        Command::CloneRbdImage {
+            pool,
+            image,
+            name,
+            snap,
+        } => (
+            "POST",
+            format!("/api/atlas/v1/rbd-images/{pool}/{image}/clone"),
+            Some(serde_json::json!({ "name": name, "snap": snap })),
         ),
         Command::Tenants => ("GET", "/api/atlas/v1/tenants".to_string(), None),
         Command::VolumeBindings { id } => {
