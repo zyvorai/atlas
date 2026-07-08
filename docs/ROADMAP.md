@@ -42,7 +42,11 @@ Read-only control plane + real Ceph lab.
 - ⏭ **Safe-by-default** deletes for production *volumes*: approval/confirmation (PDF §14, Rule 2).
   (Snapshot delete already guards on dependents; volume delete does not yet require approval.)
 - ⏭ WebSocket/SSE job progress for the UI.
-- ⏭ Direct RBD create path (bypassing CSI) for non-Kubernetes consumers.
+- ✅ **Direct RBD create path (bypassing CSI)** for non-Kubernetes consumers (machina/libvirt, bare
+  VMs): `POST /rbd-images {name, size_bytes, pool?}` runs `rbd create` and records a volume row
+  (native id `rbd:pool/image`, no PVC); `GET /rbd-images?pool=` lists from Ceph; `DELETE
+  /rbd-images/{pool}/{image}` runs `rbd rm`. `atlasctl create-rbd-image`. Verified live: image
+  created (`rbd info` 1 GiB), listed, and removed on real Ceph.
 - ✅ **Durable gateway DB** — the SQLite file is now backed by a `ReadWriteOnce` PVC (`Recreate`
   strategy). The real-mode gateway dogfoods `zyvor-rbd-prod` (Ceph); the fake-mode gateway uses the
   cluster default StorageClass so it still deploys without Ceph. Verified: inventory survives a pod
