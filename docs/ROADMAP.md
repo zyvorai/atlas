@@ -134,8 +134,13 @@ Read-only control plane + real Ceph lab.
 - ✅ **Ceph mgr Prometheus scrape**: each tick scrapes `rook-ceph-mgr:9283/metrics`, keeps a curated
   whitelist (capacity, OSD up/in/latency, pool usage, pg, health) into `storage_metrics`, and raises a
   high-OSD-latency alert (100ms warn / 1000ms critical). `GET /metrics/ceph?prefix=`. Verified on real
-  Ceph (44 metrics incl. real capacity + `osd.0` apply latency). Follow-up: client IOPS/throughput
-  metrics + recovery/backfill alerts.
+  Ceph (44 metrics incl. real capacity + `osd.0` apply latency).
+- ✅ **Client I/O + recovery metrics/alerts**: the scrape also keeps per-pool client I/O counters
+  (`ceph_pool_rd/wr[_bytes]` — rate them for IOPS/throughput) and recovery/backfill health
+  (`ceph_pg_recovering/backfilling/*_wait`, `ceph_num_objects_degraded/misplaced/unfound`). A
+  recovery alert warns while PGs recover/backfill and escalates to critical on unfound objects,
+  clearing when done. Verified live: client counters populated; recovery alert stays clear on an idle
+  cluster (no false positive).
 - ✅ **CephFS shared volumes (RWX)**: `POST /volumes {"policy":"shared"}` provisions a
   **ReadWriteMany** CephFS volume (`zyvor-cephfs-shared`) that multiple pods mount at once — for ISO
   libraries, templates, and multi-writer product data (GuestKit, Machina). Single-node CephFS
