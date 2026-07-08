@@ -64,6 +64,18 @@ enum Command {
         #[arg(long, default_value_t = 0)]
         keep: i64,
     },
+    /// POST /api/atlas/v1/volumes/{id}/schedule — periodic backups to a bucket
+    ScheduleBackups {
+        volume_id: String,
+        #[arg(long)]
+        bucket_id: String,
+        #[arg(long)]
+        interval_secs: i64,
+        #[arg(long, default_value_t = 0)]
+        keep: i64,
+        #[arg(long, default_value = "manifest")]
+        mode: String,
+    },
     /// GET /api/atlas/v1/schedules (optionally --volume-id)
     Schedules {
         #[arg(long)]
@@ -228,6 +240,20 @@ async fn main() -> Result<()> {
             "POST",
             format!("/api/atlas/v1/volumes/{volume_id}/schedule"),
             Some(serde_json::json!({ "interval_secs": interval_secs, "keep": keep })),
+        ),
+        Command::ScheduleBackups {
+            volume_id,
+            bucket_id,
+            interval_secs,
+            keep,
+            mode,
+        } => (
+            "POST",
+            format!("/api/atlas/v1/volumes/{volume_id}/schedule"),
+            Some(serde_json::json!({
+                "kind": "backup", "bucket_id": bucket_id,
+                "interval_secs": interval_secs, "keep": keep, "mode": mode
+            })),
         ),
         Command::Schedules { volume_id } => (
             "GET",

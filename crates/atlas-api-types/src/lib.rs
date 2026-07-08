@@ -324,12 +324,18 @@ pub struct JobRecord {
     pub updated_at: Option<String>,
 }
 
-/// A protection schedule: snapshot a volume every `interval_secs`, retaining the newest `keep`.
+/// A protection schedule: every `interval_secs`, snapshot or back up a volume, retaining `keep`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnapshotSchedule {
     pub id: String,
     pub tenant_id: String,
     pub volume_id: String,
+    /// "snapshot" (default) or "backup".
+    pub kind: String,
+    /// Target bucket id (backup schedules only).
+    pub bucket_id: Option<String>,
+    /// Backup mode ("manifest" or "data"); ignored for snapshot schedules.
+    pub mode: String,
     pub interval_secs: i64,
     pub keep: i64,
     pub enabled: bool,

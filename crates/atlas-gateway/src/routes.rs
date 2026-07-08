@@ -368,11 +368,20 @@ async fn list_policies() -> Json<Value> {
 
 #[derive(Debug, Deserialize)]
 struct ScheduleBody {
-    /// Snapshot cadence in seconds.
+    /// Cadence in seconds.
     interval_secs: i64,
-    /// Retain the newest N scheduled snapshots (0 = keep all).
+    /// Retain the newest N (0 = keep all).
     #[serde(default)]
     keep: i64,
+    /// "snapshot" (default) or "backup".
+    #[serde(default)]
+    kind: Option<String>,
+    /// Target bucket id (required for backup schedules).
+    #[serde(default)]
+    bucket_id: Option<String>,
+    /// Backup mode ("manifest" default, or "data"); ignored for snapshot schedules.
+    #[serde(default)]
+    mode: Option<String>,
 }
 
 /// `POST /volumes/{id}/schedule` — create a protection schedule for a volume (operator).
@@ -389,15 +398,39 @@ async fn create_schedule(
     if body.keep < 0 {
         return Err(AppError::Validation("keep must be >= 0".into()));
     }
+    let kind = body.kind.as_deref().unwrap_or("snapshot");
+    if kind != "snapshot" && kind != "backup" {
+        return Err(AppError::Validation(
+            "kind must be snapshot or backup".into(),
+        ));
+    }
     atlas_inventory::get_volume(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("volume {id}")))?;
+    let mode = body.mode.as_deref().unwrap_or("manifest");
+    if kind == "backup" {
+        let bucket_id = body
+            .bucket_id
+            .as_deref()
+            .ok_or_else(|| AppError::Validation("backup schedule requires bucket_id".into()))?;
+        let bucket = atlas_inventory::buckets::get_bucket(&s.pool, bucket_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("bucket {bucket_id}")))?;
+        if bucket.state != "bound" {
+            return Err(AppError::Validation(format!(
+                "bucket {bucket_id} is not bound yet"
+            )));
+        }
+    }
     let tenant_id = atlas_inventory::volume_tenant(&s.pool, &id).await?;
     let sched = atlas_inventory::schedules::insert(
         &s.pool,
         &ids::schedule_id(),
         &tenant_id,
         &id,
+        kind,
+        body.bucket_id.as_deref(),
+        mode,
         body.interval_secs,
         body.keep,
     )

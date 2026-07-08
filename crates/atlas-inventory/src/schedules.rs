@@ -8,7 +8,8 @@ use sqlx::{Row, SqlitePool};
 
 fn select(tail: &str) -> String {
     format!(
-        "SELECT id, tenant_id, volume_id, interval_secs, keep, enabled, last_run_at, next_run_at, created_at
+        "SELECT id, tenant_id, volume_id, kind, bucket_id, mode, interval_secs, keep, enabled,
+                last_run_at, next_run_at, created_at
          FROM snapshot_schedules {tail}"
     )
 }
@@ -18,6 +19,9 @@ fn row_to_schedule(r: sqlx::sqlite::SqliteRow) -> SnapshotSchedule {
         id: r.get("id"),
         tenant_id: r.get("tenant_id"),
         volume_id: r.get("volume_id"),
+        kind: r.get("kind"),
+        bucket_id: r.get("bucket_id"),
+        mode: r.get("mode"),
         interval_secs: r.get("interval_secs"),
         keep: r.get("keep"),
         enabled: r.get::<i64, _>("enabled") != 0,
@@ -27,24 +31,32 @@ fn row_to_schedule(r: sqlx::sqlite::SqliteRow) -> SnapshotSchedule {
     }
 }
 
-/// Create a schedule. `next_run_at` starts one interval from now so the first snapshot is not
-/// taken instantly. Returns the stored row.
+/// Create a schedule. `next_run_at` starts one interval from now so the first run is not immediate.
+/// `kind` is "snapshot" or "backup"; backups also carry a `bucket_id` + `mode`. Returns the row.
+#[allow(clippy::too_many_arguments)]
 pub async fn insert(
     pool: &SqlitePool,
     id: &str,
     tenant_id: &str,
     volume_id: &str,
+    kind: &str,
+    bucket_id: Option<&str>,
+    mode: &str,
     interval_secs: i64,
     keep: i64,
 ) -> Result<SnapshotSchedule> {
     let next = format!("+{interval_secs} seconds");
     sqlx::query(
-        "INSERT INTO snapshot_schedules (id, tenant_id, volume_id, interval_secs, keep, next_run_at)
-         VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now', ?))",
+        "INSERT INTO snapshot_schedules
+            (id, tenant_id, volume_id, kind, bucket_id, mode, interval_secs, keep, next_run_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now', ?))",
     )
     .bind(id)
     .bind(tenant_id)
     .bind(volume_id)
+    .bind(kind)
+    .bind(bucket_id)
+    .bind(mode)
     .bind(interval_secs)
     .bind(keep)
     .bind(&next)
