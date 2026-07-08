@@ -67,9 +67,10 @@ cargo run -p atlas-cli -- pools
 cargo run -p atlas-cli -- volumes
 ```
 
-Then open the **Storage Center dashboard** in a browser at **http://127.0.0.1:5110/ui** (or
-`http://<node>:30511/ui` on the cluster) — a self-contained UI over the REST API with live inventory,
-job progress, alerts, metrics, and write actions.
+Then open the **Storage Center** — a Zeus OS-style React console — at **http://127.0.0.1:5110/** (or
+`http://<node>:30511/` on the cluster). It's a React/Vite/Tailwind SPA (`crates/atlas-gateway/ui`)
+embedded in the gateway binary, with live inventory, capacity/health, job progress (SSE), alerts,
+metrics, tenants, and full write actions. Build it with `make ui` (or `make ui-dev` for hot reload).
 
 Full local walkthrough: **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)**.
 

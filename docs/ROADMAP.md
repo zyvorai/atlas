@@ -62,16 +62,26 @@ Read-only control plane + real Ceph lab.
 - ✅ **Object-storage observability**: `GET /buckets/{id}/stats` (`radosgw-admin bucket stats` —
   object count, size, quota) and `GET /buckets/{id}/objects[?prefix=]` (S3 `ListObjectsV2`). Verified.
 
-## ✅ Web dashboard (Storage Center UI)
+## ✅ Web dashboard — Storage Center (Zeus OS-style React console)
 
-A **self-contained single-file SPA** (`crates/atlas-gateway/src/ui.html`, vanilla JS, no external
-deps — CSP-safe) served by the gateway at **`/`** and **`/ui`**, same-origin over the REST API.
-Open it at `http://<node>:30511/ui`. Tabs: Overview (capacity/health/pools/OSDs/alerts/client-I/O/
-recovery), Volumes, RBD Images, Snapshots, Backups, Buckets, Jobs, Alerts, Tenants, Audit — with
-**write actions** (create/delete/snapshot volume, RBD create/clone/resize/flatten, snapshot
-clone/restore, backup create/restore/download, bucket create/stats/objects, tenant quota) and live
-job polling. This sidesteps the Zeus OS `atlas`/`ZeusStorageCenter.tsx` collisions; Zeus OS can later
-embed it or call the same API.
+A full **React 19 + Vite + Tailwind + TanStack Query + zustand** SPA at `crates/atlas-gateway/ui`,
+built to match the **Zeus OS (v9s)** look-and-feel — vendored HSL design tokens + `tahoe/zeus`
+glass/pill/badge/table classes, the **mac-desktop shell** (glassy menu bar with cluster-health badge,
+clock, spotlight ⌘K, live running-jobs indicator, and a Bearer-token control; grouped "Center"
+sidebar; app dock), Inter type, Lucide icons, recharts. Built by a `node:22` Docker stage and
+**embedded into the gateway binary** via `rust-embed`, served at **`/`** with an SPA fallback (open
+`http://<node>:30511/`). Local dev: `make ui` (bundle) / `make ui-dev` (Vite proxy).
+
+Every Atlas capability is wired: **Overview** (capacity gauge, health, client-I/O sparkline,
+recovery, pools/OSDs, open alerts); **Volumes** (filters, create/expand/snapshot/schedule/delete +
+detail drawer with labels & product bindings); **RBD Images** (create/clone/resize/flatten/delete,
+snapshots list/create/rollback, usage refresh); **Snapshots**, **Schedules**, **Backups**
+(create/restore/download/delete), **Buckets** (create/stats/object-browser/delete), **Alerts**
+(state filter + evaluate), **Metrics** (Ceph, prefix filter), **Jobs** (live SSE progress),
+**Audit** (filters), **Tenants** (quota + policy CRUD), **Access** (mint service-account JWTs),
+**Policies**, **Backends**, **Kubernetes**, **Cluster**. Write actions thread `202 → SSE watch →
+toast → refetch`. Replaces the earlier vanilla-JS `ui.html`. This standalone console sidesteps the
+Zeus OS `atlas`/`ZeusStorageCenter.tsx` collisions; Zeus OS can later embed it or call the same API.
 - ✅ **Durable gateway DB** — the SQLite file is now backed by a `ReadWriteOnce` PVC (`Recreate`
   strategy). The real-mode gateway dogfoods `zyvor-rbd-prod` (Ceph); the fake-mode gateway uses the
   cluster default StorageClass so it still deploys without Ceph. Verified: inventory survives a pod
