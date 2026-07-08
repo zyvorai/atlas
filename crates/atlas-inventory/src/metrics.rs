@@ -67,3 +67,13 @@ pub async fn max_value(pool: &SqlitePool, name: &str) -> Result<Option<f64>> {
             .await?,
     )
 }
+
+/// Sum the latest values across all label sets of a metric (0.0 if the metric is absent).
+pub async fn sum_value(pool: &SqlitePool, name: &str) -> Result<f64> {
+    let v: Option<f64> =
+        sqlx::query_scalar("SELECT SUM(value) FROM storage_metrics WHERE name = ?")
+            .bind(name)
+            .fetch_one(pool)
+            .await?;
+    Ok(v.unwrap_or(0.0))
+}

@@ -24,6 +24,21 @@ const WHITELIST: &[&str] = &[
     "ceph_pool_max_avail",
     "ceph_pg_total",
     "ceph_pg_active",
+    // Client I/O (per-pool cumulative counters — rate them for IOPS/throughput).
+    "ceph_pool_rd",
+    "ceph_pool_rd_bytes",
+    "ceph_pool_wr",
+    "ceph_pool_wr_bytes",
+    // Recovery / backfill health (PG states + degraded/misplaced/unfound object counts).
+    "ceph_pg_recovering",
+    "ceph_pg_backfilling",
+    "ceph_pg_backfill_wait",
+    "ceph_pg_recovery_wait",
+    "ceph_pg_degraded",
+    "ceph_pg_undersized",
+    "ceph_num_objects_degraded",
+    "ceph_num_objects_misplaced",
+    "ceph_num_objects_unfound",
 ];
 
 /// OSD apply-latency thresholds for the high-latency alert (ms).
@@ -66,6 +81,7 @@ pub async fn scrape(pool: &SqlitePool, url: &str) -> Result<usize> {
     }
 
     evaluate_latency_alert(pool).await?;
+    evaluate_recovery_alert(pool).await?;
     Ok(stored)
 }
 
@@ -94,6 +110,47 @@ async fn evaluate_latency_alert(pool: &SqlitePool) -> Result<()> {
             .await?;
         }
         _ => atlas_inventory::alerts::resolve(pool, id).await?,
+    }
+    Ok(())
+}
+
+/// Raise a recovery/backfill alert while PGs are recovering (warning), escalating to critical when
+/// data is at risk (unfound objects). Clears when recovery finishes.
+async fn evaluate_recovery_alert(pool: &SqlitePool) -> Result<()> {
+    let id = "alert_recovery_in_progress";
+    let recovering = atlas_inventory::metrics::sum_value(pool, "ceph_pg_recovering").await?;
+    let backfilling = atlas_inventory::metrics::sum_value(pool, "ceph_pg_backfilling").await?;
+    let backfill_wait = atlas_inventory::metrics::sum_value(pool, "ceph_pg_backfill_wait").await?;
+    let recovery_wait = atlas_inventory::metrics::sum_value(pool, "ceph_pg_recovery_wait").await?;
+    let unfound = atlas_inventory::metrics::sum_value(pool, "ceph_num_objects_unfound").await?;
+    let degraded = atlas_inventory::metrics::sum_value(pool, "ceph_num_objects_degraded").await?;
+    let misplaced = atlas_inventory::metrics::sum_value(pool, "ceph_num_objects_misplaced").await?;
+    let active_pgs = recovering + backfilling + backfill_wait + recovery_wait;
+
+    if active_pgs > 0.0 || unfound > 0.0 {
+        let severity = if unfound > 0.0 { "critical" } else { "warning" };
+        atlas_inventory::alerts::upsert_open(
+            pool,
+            id,
+            severity,
+            "monitor",
+            "cluster",
+            "ceph",
+            "Recovery/backfill in progress",
+            &format!(
+                "{recovering:.0} recovering + {backfilling:.0} backfilling PG(s); \
+                 {degraded:.0} degraded / {misplaced:.0} misplaced / {unfound:.0} unfound objects"
+            ),
+            &serde_json::json!({
+                "pg_recovering": recovering, "pg_backfilling": backfilling,
+                "pg_backfill_wait": backfill_wait, "pg_recovery_wait": recovery_wait,
+                "objects_degraded": degraded, "objects_misplaced": misplaced,
+                "objects_unfound": unfound
+            }),
+        )
+        .await?;
+    } else {
+        atlas_inventory::alerts::resolve(pool, id).await?;
     }
     Ok(())
 }
