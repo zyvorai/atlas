@@ -44,6 +44,7 @@ pub fn router(state: AppState) -> Router {
             axum::routing::delete(delete_rbd_image),
         )
         .route("/rbd-images/{pool}/{image}/clone", post(clone_rbd_image))
+        .route("/rbd-usage/refresh", post(refresh_rbd_usage))
         .route("/volumes/{id}/bindings", get(list_volume_bindings))
         .route(
             "/volumes/{id}/labels",
@@ -551,6 +552,52 @@ struct CreateRbdBody {
     pool: Option<String>,
     #[serde(default)]
     tenant_id: Option<String>,
+}
+
+/// `POST /rbd-usage/refresh` — recompute `used_bytes` for every RBD-backed volume via `rbd du`
+/// (operator). Resolves each volume's image (direct `rbd:` id, or the PVC's PV for CSI volumes).
+async fn refresh_rbd_usage(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let volumes = atlas_inventory::list_volumes(&s.pool).await?;
+    let mut updated = 0usize;
+    let mut total_used: i64 = 0;
+    for v in volumes {
+        // Determine the (pool, image) for this volume.
+        let target = if let Some(native) = v
+            .backend_native_id
+            .as_deref()
+            .and_then(|n| n.strip_prefix("rbd:"))
+        {
+            native
+                .split_once('/')
+                .map(|(p, i)| (p.to_string(), i.to_string()))
+        } else if let (Some(ns), Some(pvc)) = (&v.kubernetes_namespace, &v.pvc_name) {
+            match &s.k8s {
+                Some(k8s) => k8s.resolve_rbd(ns, pvc).await.ok().flatten(),
+                None => None,
+            }
+        } else {
+            None
+        };
+        let Some((rbd_pool, image)) = target else {
+            continue;
+        };
+        if let Ok(used) = atlas_driver_ceph::rbd_du_image(&rbd_pool, &image).await {
+            if atlas_inventory::set_volume_used(&s.pool, &v.id, used)
+                .await
+                .is_ok()
+            {
+                updated += 1;
+                total_used += used;
+            }
+        }
+    }
+    Ok(Json(
+        json!({ "updated": updated, "total_used_bytes": total_used }),
+    ))
 }
 
 /// `POST /rbd-images` — provision a raw RBD image directly (bypassing CSI) for non-K8s consumers.

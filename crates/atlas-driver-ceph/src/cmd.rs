@@ -124,6 +124,18 @@ pub async fn rbd_info_size(pool: &str, image: &str) -> Result<i64, DriverError> 
         .ok_or_else(|| DriverError::Parse(format!("rbd info {spec}: no size")))
 }
 
+/// Actual used (allocated) bytes of an RBD image (`rbd du pool/image --format json`).
+pub async fn rbd_du_image(pool: &str, image: &str) -> Result<i64, DriverError> {
+    let spec = format!("{pool}/{image}");
+    let v = rbd_cmd(&["du", &spec]).await?;
+    v.get("images")
+        .and_then(|a| a.as_array())
+        .and_then(|a| a.first())
+        .and_then(|img| img.get("used_size"))
+        .and_then(|u| u.as_i64())
+        .ok_or_else(|| DriverError::Parse(format!("rbd du {spec}: no used_size")))
+}
+
 /// Protect a snapshot so it can be used as a clone parent (`rbd snap protect`).
 pub async fn rbd_snap_protect(pool: &str, image: &str, snap: &str) -> Result<(), DriverError> {
     snap_op(&["snap", "protect"], pool, image, snap).await

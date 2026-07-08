@@ -10,7 +10,7 @@ mod fake;
 mod real;
 
 pub use cmd::{
-    ceph_cmd, radosgw_bucket_quota, rbd_clone, rbd_cmd, rbd_create, rbd_export_diff,
+    ceph_cmd, radosgw_bucket_quota, rbd_clone, rbd_cmd, rbd_create, rbd_du_image, rbd_export_diff,
     rbd_export_diff_child, rbd_import_diff, rbd_import_diff_child, rbd_info_size, rbd_list,
     rbd_remove, rbd_snap_create, rbd_snap_protect, rbd_snap_rm, rbd_snap_unprotect,
 };

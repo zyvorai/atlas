@@ -207,6 +207,18 @@ pub async fn count_snapshot_dependents(pool: &SqlitePool, snapshot_id: &str) -> 
     Ok(n)
 }
 
+/// Update a volume's actual used (allocated) bytes.
+pub async fn set_volume_used(pool: &SqlitePool, id: &str, used_bytes: i64) -> Result<()> {
+    sqlx::query(
+        "UPDATE storage_volumes SET used_bytes=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+    )
+    .bind(used_bytes)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Update just the state of a volume (e.g. to `deleting`).
 pub async fn set_volume_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
     sqlx::query(

@@ -91,6 +91,8 @@ enum Command {
         #[arg(long, default_value_t = 3600)]
         ttl_secs: u64,
     },
+    /// POST /api/atlas/v1/rbd-usage/refresh — recompute used_bytes via rbd du
+    RefreshUsage,
     /// GET /api/atlas/v1/rbd-images?pool= — list raw RBD images in a pool
     RbdImages {
         #[arg(long)]
@@ -345,6 +347,7 @@ async fn main() -> Result<()> {
             "/api/atlas/v1/auth/tokens".to_string(),
             Some(serde_json::json!({ "subject": subject, "role": role, "ttl_secs": ttl_secs })),
         ),
+        Command::RefreshUsage => ("POST", "/api/atlas/v1/rbd-usage/refresh".to_string(), None),
         Command::RbdImages { pool } => (
             "GET",
             match pool {
