@@ -94,6 +94,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/metrics/summary", get(metrics_summary))
         .route("/metrics/ceph", get(metrics_ceph))
+        .route("/metrics/history", get(metrics_history))
         .route("/alerts", get(list_alerts))
         .route("/alerts/evaluate", post(evaluate_alerts))
         .route("/jobs", get(list_jobs))
@@ -422,6 +423,22 @@ async fn metrics_ceph(
 ) -> AppResult<Json<Value>> {
     Ok(Json(json!(
         atlas_inventory::metrics::list(&s.pool, q.prefix.as_deref()).await?
+    )))
+}
+
+#[derive(Debug, Deserialize)]
+struct HistoryQuery {
+    minutes: Option<i64>,
+}
+
+/// `GET /metrics/history[?minutes=60]` — persisted capacity/IO/job time-series for trend charts.
+async fn metrics_history(
+    State(s): State<AppState>,
+    Query(q): Query<HistoryQuery>,
+) -> AppResult<Json<Value>> {
+    let minutes = q.minutes.unwrap_or(60).clamp(1, 2880);
+    Ok(Json(json!(
+        atlas_inventory::metrics::history(&s.pool, minutes).await?
     )))
 }
 

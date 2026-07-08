@@ -2,8 +2,8 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, LayoutDashboard } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { useAlerts, useClusters, useOsds, usePools, useSummary } from "../api/hooks";
-import { history, onHistory, recordSummary } from "../store/history";
+import { useAlerts, useClusters, useHistory, useOsds, usePools, useSummary } from "../api/hooks";
+import { history, onHistory, recordSummary, seed } from "../store/history";
 import { Badge, Card, GlassSection, PageHeader, RadialGauge, StatCard } from "../ui/kit";
 import { Table } from "../ui/Table";
 import { fmtBytes, healthKind, num, stateKind } from "../lib/format";
@@ -18,7 +18,9 @@ export default function Overview() {
   const rc = s?.recovery;
   const recovering = (rc?.pg_recovering || 0) + (rc?.pg_backfilling || 0);
   const [, setTick] = useState(0);
+  const { data: serverHist } = useHistory();
   useEffect(() => onHistory(() => setTick((t) => t + 1)), []);
+  useEffect(() => { if (serverHist) seed(serverHist); }, [serverHist]);
   useEffect(() => { if (s) recordSummary(s); }, [s]);
   const hist = history().map((h) => ({ ...h, ts: new Date(h.t).toLocaleTimeString([], { minute: "2-digit", second: "2-digit" }) }));
   // Synthetic sparkline seed from the read/write totals (visual only).

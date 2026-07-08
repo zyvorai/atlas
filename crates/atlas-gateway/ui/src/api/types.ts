@@ -183,6 +183,21 @@ export interface MetricSample {
   labels: Record<string, string>;
 }
 
+// One persisted time-series row from GET /metrics/history (read_ops/write_ops are cumulative totals).
+export interface MetricHistoryPoint {
+  ts: string;
+  raw_capacity_bytes: number;
+  used_capacity_bytes: number;
+  volumes: number;
+  snapshots: number;
+  read_bytes: number;
+  write_bytes: number;
+  read_ops: number;
+  write_ops: number;
+  jobs_running: number;
+  alerts_open: number;
+}
+
 export interface AuditRow {
   id: number;
   tenant_id?: string | null;

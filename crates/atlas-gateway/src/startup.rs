@@ -123,7 +123,42 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
             state.jobs.clone(),
             state.config.snapshot_tick_secs,
         );
+        // Metrics-history sampler: append a capacity/IO/job time-series row each monitor tick,
+        // pruning to a 48h window, so the Overview trend charts survive restarts + reloads.
+        spawn_metrics_sampler(
+            state.pool.clone(),
+            state.config.monitor_interval_secs.max(5),
+        );
     }
 
     Ok(state)
+}
+
+/// Periodically persist one `metrics_history` sample derived from the current summary + counters.
+fn spawn_metrics_sampler(pool: sqlx::SqlitePool, interval_secs: u64) {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
+        loop {
+            tick.tick().await;
+            if let Err(e) = sample_metrics_history(&pool).await {
+                tracing::debug!("metrics-history sample skipped: {e:#}");
+            }
+        }
+    });
+}
+
+async fn sample_metrics_history(pool: &sqlx::SqlitePool) -> Result<()> {
+    let summary = atlas_inventory::metrics_summary(pool).await?;
+    let running: i64 = atlas_inventory::jobs::count_by_state(pool)
+        .await?
+        .into_iter()
+        .filter(|(s, _)| matches!(s.as_str(), "running" | "queued" | "verifying"))
+        .map(|(_, n)| n)
+        .sum();
+    let alerts_open = atlas_inventory::alerts::list(pool, Some("open"))
+        .await?
+        .len() as i64;
+    atlas_inventory::metrics::record_history(pool, &summary, running, alerts_open).await?;
+    atlas_inventory::metrics::prune_history(pool, 48).await?;
+    Ok(())
 }
