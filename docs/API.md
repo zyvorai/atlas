@@ -310,13 +310,16 @@ The built-in intent → placement catalog (PDF §12.3).
 Protection schedules: a background worker snapshots the volume every `interval_secs` and prunes its
 scheduler-created snapshots to `keep`.
 ```json
-// POST body (operator)
+// POST body (operator) — snapshot schedule
 { "interval_secs": 3600, "keep": 24 }
-// 201 → { "id": "sched_...", "volume_id": "vol_...", "interval_secs": 3600, "keep": 24,
-//         "enabled": true, "next_run_at": "..." }
+// POST body — backup schedule (to a bound bucket)
+{ "kind": "backup", "bucket_id": "bkt_...", "interval_secs": 86400, "keep": 7, "mode": "data" }
+// 201 → { "id": "sched_...", "volume_id": "vol_...", "kind": "snapshot", "interval_secs": 3600,
+//         "keep": 24, "enabled": true, "next_run_at": "..." }
 ```
+`kind` is `snapshot` (default) or `backup`; backups need a bound `bucket_id` (+ optional `mode`).
 Worker cadence is `ATLAS_SNAPSHOT_TICK_SECS` (0 disables). Scheduled snapshots are named
-`<volume>-sched-<id>`; retention only prunes those, never manual snapshots.
+`<volume>-sched-<id>`; retention only prunes scheduler-created snapshots/backups, never manual ones.
 
 ### `GET /api/atlas/v1/tenants/{id}/quota` · `PUT .../quota`
 Per-tenant storage quota + live usage (PDF §14 multi-tenancy). `PUT` (admin) sets the limits.

@@ -151,6 +151,9 @@ Read-only control plane + real Ceph lab.
   the volume on cadence and prunes its scheduler-created snapshots to `keep`. `GET /schedules`,
   `DELETE /schedules/{id}`, `atlasctl schedule-snapshots`. Verified live: snapshots appear on interval
   and retention holds steady at `keep` (delivers the policy catalog's "hourly snapshots").
+- ✅ **Scheduled backups**: the same schedule with `kind:"backup"` (+ `bucket_id`, `mode`) runs
+  periodic backups to RGW and prunes them to `keep` (delivers the "daily backup" half). Verified live:
+  backups created on cadence, retention never exceeds `keep`. `atlasctl schedule-backups`.
 - ✅ **Multi-tenancy quotas**: per-tenant `max_bytes` + `max_volumes` (`storage_tenant_quotas`,
   0 = unlimited). `PUT /tenants/{id}/quota` (admin) sets them; `GET` returns limits + live usage.
   `POST /volumes` (REST + gRPC `CreateVolume`) rejects an over-quota create (409 / `resource_exhausted`)
