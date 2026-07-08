@@ -12,7 +12,9 @@ service AtlasStorage {
   rpc GetVolume(GetVolumeRequest) returns (Volume);
   rpc CreateVolume(CreateVolumeRequest) returns (CreateVolumeReply);
   rpc DeleteVolume(DeleteVolumeRequest) returns (JobReply);
+  rpc ExpandVolume(ExpandVolumeRequest) returns (JobReply);
   rpc CreateSnapshot(CreateSnapshotRequest) returns (JobReply);
+  rpc ListSnapshots(ListSnapshotsRequest) returns (ListSnapshotsReply);
   // Product-scoped: list only the volumes a product owns (via product_bindings).
   rpc ListVolumesByOwner(ListVolumesByOwnerRequest) returns (ListVolumesReply);
   rpc GetJob(GetJobRequest) returns (Job);
@@ -91,11 +93,26 @@ message JobReply {
 }
 
 message DeleteVolumeRequest { string id = 1; }
+message ExpandVolumeRequest {
+  string id = 1;
+  int64 new_size_bytes = 2;
+}
 
 message CreateSnapshotRequest {
   string volume_id = 1;
   string name = 2;  // optional; defaults to snap-<suffix>
 }
+
+message Snapshot {
+  string id = 1;
+  string volume_id = 2;
+  string name = 3;
+  string state = 4;
+  bool protected = 5;
+  string created_at = 6;
+}
+message ListSnapshotsRequest { string volume_id = 1; }  // empty = all
+message ListSnapshotsReply { repeated Snapshot snapshots = 1; }
 
 message ListVolumesByOwnerRequest {
   string product = 1;

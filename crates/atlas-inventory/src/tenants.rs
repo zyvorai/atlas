@@ -6,6 +6,22 @@ use anyhow::Result;
 use atlas_api_types::{TenantPolicy, TenantQuota};
 use sqlx::{Row, SqlitePool};
 
+/// Overview of every tenant that owns volumes or has a quota: usage + limits, one row each.
+pub async fn list_overview(pool: &SqlitePool) -> Result<Vec<TenantQuota>> {
+    let ids: Vec<String> = sqlx::query_scalar(
+        "SELECT tenant_id FROM storage_volumes
+         UNION SELECT tenant_id FROM storage_tenant_quotas
+         ORDER BY tenant_id",
+    )
+    .fetch_all(pool)
+    .await?;
+    let mut out = Vec::with_capacity(ids.len());
+    for id in ids {
+        out.push(get_quota(pool, &id).await?);
+    }
+    Ok(out)
+}
+
 /// Current usage for a tenant: total provisioned volume bytes and volume count.
 pub async fn usage(pool: &SqlitePool, tenant_id: &str) -> Result<(i64, i64)> {
     let row = sqlx::query(

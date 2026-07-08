@@ -91,6 +91,20 @@ enum Command {
         #[arg(long, default_value_t = 3600)]
         ttl_secs: u64,
     },
+    /// GET /api/atlas/v1/tenants — overview of tenants (usage + quota)
+    Tenants,
+    /// GET /api/atlas/v1/volumes/{id}/bindings — product ownership for a volume
+    VolumeBindings { id: String },
+    /// GET /api/atlas/v1/volumes/{id}/labels
+    VolumeLabels { id: String },
+    /// PUT /api/atlas/v1/volumes/{id}/labels — merge one label (--key --value)
+    SetVolumeLabel {
+        id: String,
+        #[arg(long)]
+        key: String,
+        #[arg(long)]
+        value: String,
+    },
     /// GET /api/atlas/v1/audit — query the audit trail (filters + --limit)
     Audit {
         #[arg(long)]
@@ -306,6 +320,16 @@ async fn main() -> Result<()> {
             "POST",
             "/api/atlas/v1/auth/tokens".to_string(),
             Some(serde_json::json!({ "subject": subject, "role": role, "ttl_secs": ttl_secs })),
+        ),
+        Command::Tenants => ("GET", "/api/atlas/v1/tenants".to_string(), None),
+        Command::VolumeBindings { id } => {
+            ("GET", format!("/api/atlas/v1/volumes/{id}/bindings"), None)
+        }
+        Command::VolumeLabels { id } => ("GET", format!("/api/atlas/v1/volumes/{id}/labels"), None),
+        Command::SetVolumeLabel { id, key, value } => (
+            "PUT",
+            format!("/api/atlas/v1/volumes/{id}/labels"),
+            Some(serde_json::json!({ key: value })),
         ),
         Command::Audit {
             actor,

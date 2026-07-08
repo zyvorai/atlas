@@ -260,6 +260,38 @@ pub async fn insert_binding(
     Ok(())
 }
 
+/// List the product ownership bindings for a storage resource (e.g. a volume), newest first.
+pub async fn list_bindings_for(
+    pool: &SqlitePool,
+    storage_resource_type: &str,
+    storage_resource_id: &str,
+) -> Result<Vec<serde_json::Value>> {
+    let rows = sqlx::query(
+        "SELECT id, tenant_id, product, resource_type, resource_id, role, created_at
+         FROM product_bindings
+         WHERE storage_resource_type = ? AND storage_resource_id = ?
+         ORDER BY created_at DESC",
+    )
+    .bind(storage_resource_type)
+    .bind(storage_resource_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.get::<String, _>("id"),
+                "tenant_id": r.get::<String, _>("tenant_id"),
+                "product": r.get::<String, _>("product"),
+                "resource_type": r.get::<String, _>("resource_type"),
+                "resource_id": r.get::<String, _>("resource_id"),
+                "role": r.get::<String, _>("role"),
+                "created_at": r.get::<String, _>("created_at"),
+            })
+        })
+        .collect())
+}
+
 /// Persist a full discovery pass for `backend_id`, upserting cluster, pools, osds and volumes.
 pub async fn upsert_discovery(
     pool: &SqlitePool,
@@ -497,6 +529,51 @@ pub async fn list_volumes(pool: &SqlitePool) -> Result<Vec<StorageVolume>> {
     Ok(rows.into_iter().map(row_to_volume).collect())
 }
 
+/// Merge `labels` (a JSON object) into a volume's `metadata.labels`. Returns the merged label map.
+pub async fn set_volume_labels(
+    pool: &SqlitePool,
+    id: &str,
+    labels: &serde_json::Map<String, serde_json::Value>,
+) -> Result<serde_json::Value> {
+    let existing: Option<String> =
+        sqlx::query_scalar("SELECT metadata FROM storage_volumes WHERE id = ?")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
+    let mut meta: serde_json::Value = existing
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    let map = meta
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("volume metadata is not an object"))?;
+    let current = map.entry("labels").or_insert_with(|| serde_json::json!({}));
+    if let Some(cur) = current.as_object_mut() {
+        for (k, v) in labels {
+            cur.insert(k.clone(), v.clone());
+        }
+    }
+    let merged = map.get("labels").cloned().unwrap_or(serde_json::json!({}));
+    sqlx::query("UPDATE storage_volumes SET metadata = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?")
+        .bind(meta.to_string())
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(merged)
+}
+
+/// Read a volume's `metadata.labels` (empty object if none).
+pub async fn get_volume_labels(pool: &SqlitePool, id: &str) -> Result<serde_json::Value> {
+    let meta: Option<String> =
+        sqlx::query_scalar("SELECT metadata FROM storage_volumes WHERE id = ?")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
+    let v: serde_json::Value = meta
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    Ok(v.get("labels").cloned().unwrap_or(serde_json::json!({})))
+}
+
 /// The owning tenant of a volume (the DTO omits it); defaults to `global` if the volume is gone.
 pub async fn volume_tenant(pool: &SqlitePool, id: &str) -> Result<String> {
     let t: Option<String> =
@@ -583,12 +660,52 @@ pub async fn metrics_summary(pool: &SqlitePool) -> Result<serde_json::Value> {
     let pools_n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM storage_pools")
         .fetch_one(pool)
         .await?;
+    let snapshots: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM storage_snapshots")
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+    let buckets: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM storage_buckets")
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+    let backups: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM storage_backups")
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+    // Client I/O + recovery rollups from the latest scraped Ceph metrics (0 if none yet).
+    let raw = row.get::<i64, _>("raw");
+    let used = row.get::<i64, _>("used");
+    let used_pct = if raw > 0 {
+        (used as f64 / raw as f64 * 100.0).round() / 100.0
+    } else {
+        0.0
+    };
+    async fn sum(pool: &SqlitePool, n: &str) -> f64 {
+        metrics::sum_value(pool, n).await.unwrap_or(0.0)
+    }
     Ok(serde_json::json!({
-        "raw_capacity_bytes": row.get::<i64, _>("raw"),
-        "used_capacity_bytes": row.get::<i64, _>("used"),
+        "raw_capacity_bytes": raw,
+        "used_capacity_bytes": used,
         "available_capacity_bytes": row.get::<i64, _>("avail"),
+        "used_capacity_percent": used_pct,
         "clusters": row.get::<i64, _>("clusters"),
         "pools": pools_n,
         "volumes": volumes,
+        "snapshots": snapshots,
+        "buckets": buckets,
+        "backups": backups,
+        "client_io": {
+            "read_ops_total": sum(pool, "ceph_pool_rd").await,
+            "write_ops_total": sum(pool, "ceph_pool_wr").await,
+            "read_bytes_total": sum(pool, "ceph_pool_rd_bytes").await,
+            "write_bytes_total": sum(pool, "ceph_pool_wr_bytes").await,
+        },
+        "recovery": {
+            "pg_recovering": sum(pool, "ceph_pg_recovering").await,
+            "pg_backfilling": sum(pool, "ceph_pg_backfilling").await,
+            "objects_degraded": sum(pool, "ceph_num_objects_degraded").await,
+            "objects_misplaced": sum(pool, "ceph_num_objects_misplaced").await,
+            "objects_unfound": sum(pool, "ceph_num_objects_unfound").await,
+        },
     }))
 }

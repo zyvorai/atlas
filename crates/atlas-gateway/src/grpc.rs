@@ -16,9 +16,10 @@ use crate::auth::Claims;
 use crate::proto::atlas_storage_server::{AtlasStorage, AtlasStorageServer};
 use crate::proto::{
     Alert, Cluster, CreateSnapshotRequest, CreateVolumeReply, CreateVolumeRequest,
-    DeleteVolumeRequest, Empty, GetJobRequest, GetVolumeRequest, HealthReply, HealthRequest, Job,
-    JobReply, ListAlertsReply, ListAlertsRequest, ListClustersReply, ListPoolsReply,
-    ListVolumesByOwnerRequest, ListVolumesReply, Pool, Volume,
+    DeleteVolumeRequest, Empty, ExpandVolumeRequest, GetJobRequest, GetVolumeRequest, HealthReply,
+    HealthRequest, Job, JobReply, ListAlertsReply, ListAlertsRequest, ListClustersReply,
+    ListPoolsReply, ListSnapshotsReply, ListSnapshotsRequest, ListVolumesByOwnerRequest,
+    ListVolumesReply, Pool, Snapshot, Volume,
 };
 use crate::state::AppState;
 
@@ -323,6 +324,68 @@ impl AtlasStorage for GrpcService {
             job_id: job.id,
             state: job.state,
         }))
+    }
+
+    async fn expand_volume(
+        &self,
+        req: Request<ExpandVolumeRequest>,
+    ) -> Result<Response<JobReply>, Status> {
+        let actor = self.require_role(&req, crate::auth::ROLE_OPERATOR)?;
+        let r = req.into_inner();
+        let vol = atlas_inventory::get_volume(&self.state.pool, &r.id)
+            .await
+            .map_err(internal)?
+            .ok_or_else(|| Status::not_found(format!("volume {}", r.id)))?;
+        if r.new_size_bytes <= vol.size_bytes {
+            return Err(Status::invalid_argument(
+                "new_size_bytes must be larger than the current size",
+            ));
+        }
+        let namespace = vol
+            .kubernetes_namespace
+            .ok_or_else(|| Status::failed_precondition("volume has no kubernetes namespace"))?;
+        let pvc_name = vol
+            .pvc_name
+            .ok_or_else(|| Status::failed_precondition("volume has no pvc"))?;
+        let job_id = atlas_common::ids::job_id();
+        let spec = atlas_jobs::JobSpec::VolumeExpand {
+            volume_id: r.id.clone(),
+            namespace,
+            pvc_name,
+            new_size_bytes: r.new_size_bytes,
+        };
+        let job = self
+            .state
+            .jobs
+            .enqueue(&job_id, "global", &actor, spec, None)
+            .await
+            .map_err(internal)?;
+        Ok(Response::new(JobReply {
+            job_id: job.id,
+            state: job.state,
+        }))
+    }
+
+    async fn list_snapshots(
+        &self,
+        req: Request<ListSnapshotsRequest>,
+    ) -> Result<Response<ListSnapshotsReply>, Status> {
+        let vid = req.into_inner().volume_id;
+        let filter = (!vid.trim().is_empty()).then_some(vid.as_str());
+        let snapshots = atlas_inventory::snapshots::list_snapshots(&self.state.pool, filter)
+            .await
+            .map_err(internal)?
+            .into_iter()
+            .map(|s| Snapshot {
+                id: s.id,
+                volume_id: s.volume_id,
+                name: s.name,
+                state: s.state,
+                protected: s.protected,
+                created_at: s.created_at.unwrap_or_default(),
+            })
+            .collect();
+        Ok(Response::new(ListSnapshotsReply { snapshots }))
     }
 
     async fn create_snapshot(

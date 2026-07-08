@@ -38,6 +38,12 @@ pub fn router(state: AppState) -> Router {
         .route("/volumes", get(list_volumes).post(create_volume))
         .route("/volumes/{id}", get(get_volume).delete(delete_volume))
         .route("/volumes/{id}/expand", post(expand_volume))
+        .route("/volumes/{id}/bindings", get(list_volume_bindings))
+        .route(
+            "/volumes/{id}/labels",
+            get(get_volume_labels).put(put_volume_labels),
+        )
+        .route("/tenants", get(list_tenants))
         .route("/volumes/{id}/snapshots", post(create_snapshot))
         .route("/snapshots", get(list_snapshots))
         .route("/snapshots/{id}", axum::routing::delete(delete_snapshot))
@@ -525,6 +531,50 @@ struct AuditQuery {
     resource_type: Option<String>,
     resource_id: Option<String>,
     limit: Option<i64>,
+}
+
+/// `GET /volumes/{id}/bindings` — product ownership records for a volume.
+async fn list_volume_bindings(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
+    let rows = atlas_inventory::list_bindings_for(&s.pool, "volume", &id).await?;
+    Ok(Json(json!(rows)))
+}
+
+/// `GET /volumes/{id}/labels` — the volume's user labels.
+async fn get_volume_labels(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
+    Ok(Json(
+        atlas_inventory::get_volume_labels(&s.pool, &id).await?,
+    ))
+}
+
+/// `PUT /volumes/{id}/labels` — merge labels into the volume (operator). Body is a JSON object.
+async fn put_volume_labels(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let labels = body
+        .as_object()
+        .ok_or_else(|| AppError::Validation("body must be a JSON object of labels".into()))?;
+    atlas_inventory::get_volume(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("volume {id}")))?;
+    let merged = atlas_inventory::set_volume_labels(&s.pool, &id, labels).await?;
+    Ok(Json(merged))
+}
+
+/// `GET /tenants` — overview of every tenant with volumes or a quota (usage + limits).
+async fn list_tenants(State(s): State<AppState>) -> AppResult<Json<Value>> {
+    Ok(Json(json!(
+        atlas_inventory::tenants::list_overview(&s.pool).await?
+    )))
 }
 
 /// `GET /audit` — query the audit trail (operator), newest first. Filters: `actor`, `action`,
