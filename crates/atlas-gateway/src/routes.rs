@@ -95,6 +95,7 @@ pub fn router(state: AppState) -> Router {
         .route("/metrics/summary", get(metrics_summary))
         .route("/metrics/ceph", get(metrics_ceph))
         .route("/metrics/history", get(metrics_history))
+        .route("/metrics/forecast", get(metrics_forecast))
         .route("/alerts", get(list_alerts))
         .route("/alerts/evaluate", post(evaluate_alerts))
         .route("/jobs", get(list_jobs))
@@ -440,6 +441,17 @@ async fn metrics_history(
     Ok(Json(json!(
         atlas_inventory::metrics::history(&s.pool, minutes).await?
     )))
+}
+
+/// `GET /metrics/forecast[?minutes=1440]` — least-squares projection of days-until-full.
+async fn metrics_forecast(
+    State(s): State<AppState>,
+    Query(q): Query<HistoryQuery>,
+) -> AppResult<Json<Value>> {
+    let minutes = q.minutes.unwrap_or(1440).clamp(1, 20160);
+    Ok(Json(
+        atlas_inventory::metrics::forecast(&s.pool, minutes).await?,
+    ))
 }
 
 #[derive(Debug, Deserialize)]

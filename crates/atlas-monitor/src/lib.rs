@@ -54,11 +54,47 @@ pub fn spawn(
     });
 }
 
+/// Days-until-full thresholds for the capacity-forecast rule.
+const FORECAST_WARN_DAYS: f64 = 14.0;
+const FORECAST_CRITICAL_DAYS: f64 = 3.0;
+
 /// Evaluate all alert rules once against current inventory. Public for tests.
 pub async fn evaluate(pool: &SqlitePool) -> Result<()> {
     evaluate_clusters(pool).await?;
     evaluate_pools(pool).await?;
     evaluate_osds(pool).await?;
+    evaluate_capacity_forecast(pool).await?;
+    Ok(())
+}
+
+/// Raise an alert when the least-squares fill projection (over the last 6h) crosses a threshold.
+async fn evaluate_capacity_forecast(pool: &SqlitePool) -> Result<()> {
+    let id = "alert_capacity_forecast";
+    let f = atlas_inventory::metrics::forecast(pool, 360).await?;
+    let days = f.get("days_to_full").and_then(|v| v.as_f64());
+    match days {
+        Some(d) if d <= FORECAST_WARN_DAYS => {
+            let severity = if d <= FORECAST_CRITICAL_DAYS {
+                "critical"
+            } else {
+                "warning"
+            };
+            atlas_inventory::alerts::upsert_open(
+                pool,
+                id,
+                severity,
+                "monitor",
+                "cluster",
+                "capacity",
+                "Capacity filling up",
+                &format!("Projected full in ~{d:.1} days at the current growth rate"),
+                &f,
+            )
+            .await?;
+        }
+        // No projection, or plenty of runway → clear any existing alert.
+        _ => atlas_inventory::alerts::resolve(pool, id).await?,
+    }
     Ok(())
 }
 

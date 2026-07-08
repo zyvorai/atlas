@@ -137,6 +137,69 @@ pub async fn history(pool: &SqlitePool, minutes: i64) -> Result<Vec<serde_json::
         .collect())
 }
 
+/// Least-squares projection of days-until-full from persisted `used_capacity_bytes` history.
+/// Returns `days_to_full: null` when usage is flat/shrinking or there aren't ≥2 samples.
+pub async fn forecast(pool: &SqlitePool, minutes: i64) -> Result<serde_json::Value> {
+    let rows = sqlx::query(
+        "SELECT CAST(strftime('%s', ts) AS INTEGER) AS t,
+                used_capacity_bytes AS used, raw_capacity_bytes AS raw
+         FROM metrics_history
+         WHERE ts >= strftime('%Y-%m-%dT%H:%M:%fZ','now', ? || ' minutes')
+         ORDER BY ts ASC",
+    )
+    .bind(format!("-{minutes}"))
+    .fetch_all(pool)
+    .await?;
+
+    let n = rows.len();
+    let used_now = rows.last().map(|r| r.get::<i64, _>("used")).unwrap_or(0);
+    let raw = rows.last().map(|r| r.get::<i64, _>("raw")).unwrap_or(0);
+
+    // Slope of used-bytes over time (bytes/second) via ordinary least squares.
+    let slope_per_sec = if n >= 2 {
+        let t0 = rows[0].get::<i64, _>("t") as f64;
+        let xs: Vec<f64> = rows
+            .iter()
+            .map(|r| r.get::<i64, _>("t") as f64 - t0)
+            .collect();
+        let ys: Vec<f64> = rows
+            .iter()
+            .map(|r| r.get::<i64, _>("used") as f64)
+            .collect();
+        let nf = n as f64;
+        let sx: f64 = xs.iter().sum();
+        let sy: f64 = ys.iter().sum();
+        let sxx: f64 = xs.iter().map(|x| x * x).sum();
+        let sxy: f64 = xs.iter().zip(&ys).map(|(x, y)| x * y).sum();
+        let denom = nf * sxx - sx * sx;
+        if denom.abs() > f64::EPSILON {
+            (nf * sxy - sx * sy) / denom
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+
+    let per_day = slope_per_sec * 86_400.0;
+    let free = (raw - used_now).max(0) as f64;
+    // Only meaningful when growing by more than ~1 MiB/day (below that it's noise → "not filling").
+    let days_to_full = if per_day > 1_048_576.0 {
+        Some(((free / per_day) * 10.0).round() / 10.0)
+    } else {
+        None
+    };
+
+    Ok(serde_json::json!({
+        "samples": n,
+        "window_minutes": minutes,
+        "used_capacity_bytes": used_now,
+        "raw_capacity_bytes": raw,
+        "growth_bytes_per_day": per_day.round(),
+        "days_to_full": days_to_full,
+    }))
+}
+
 /// The maximum value of a metric across all its label sets (e.g. worst OSD latency).
 pub async fn max_value(pool: &SqlitePool, name: &str) -> Result<Option<f64>> {
     Ok(

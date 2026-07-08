@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, LayoutDashboard } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { useAlerts, useClusters, useHistory, useOsds, usePools, useSummary } from "../api/hooks";
+import { useAlerts, useClusters, useForecast, useHistory, useOsds, usePools, useSummary } from "../api/hooks";
 import { history, onHistory, recordSummary, seed } from "../store/history";
 import { Badge, Card, GlassSection, PageHeader, RadialGauge, StatCard } from "../ui/kit";
 import { Table } from "../ui/Table";
@@ -14,6 +14,7 @@ export default function Overview() {
   const { data: pools } = usePools();
   const { data: osds } = useOsds();
   const { data: alerts } = useAlerts("open");
+  const { data: forecast } = useForecast();
   const io = s?.client_io;
   const rc = s?.recovery;
   const recovering = (rc?.pg_recovering || 0) + (rc?.pg_backfilling || 0);
@@ -46,6 +47,15 @@ export default function Overview() {
             <div className="section-label">Capacity</div>
             <div className="text-lg font-bold mt-1">{fmtBytes(s?.used_capacity_bytes)}</div>
             <div className="text-xs text-muted-foreground">of {fmtBytes(s?.raw_capacity_bytes)} · {fmtBytes(s?.available_capacity_bytes)} free</div>
+            {forecast && (forecast.samples || 0) >= 2 && (
+              forecast.days_to_full != null ? (
+                <div className={`text-xs mt-1 ${forecast.days_to_full <= 3 ? "text-danger" : forecast.days_to_full <= 14 ? "text-warning" : "text-muted-foreground"}`}>
+                  Full in ~{forecast.days_to_full}d · +{fmtBytes(forecast.growth_bytes_per_day)}/day
+                </div>
+              ) : (
+                <div className="text-xs mt-1 text-muted-foreground">Usage steady — no fill projection</div>
+              )
+            )}
           </div>
         </Card>
         <StatCard label="Client I/O" value={<>{num(io?.read_ops_total)}<span className="text-sm text-muted-foreground font-normal">r</span> {num(io?.write_ops_total)}<span className="text-sm text-muted-foreground font-normal">w</span></>} sub={`${fmtBytes(io?.read_bytes_total)} read · ${fmtBytes(io?.write_bytes_total)} write`}>

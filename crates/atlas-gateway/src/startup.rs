@@ -125,17 +125,18 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
         );
         // Metrics-history sampler: append a capacity/IO/job time-series row each monitor tick,
         // pruning to a 48h window, so the Overview trend charts survive restarts + reloads.
-        spawn_metrics_sampler(
-            state.pool.clone(),
-            state.config.monitor_interval_secs.max(5),
-        );
+        spawn_metrics_sampler(state.pool.clone(), state.config.monitor_interval_secs);
     }
 
     Ok(state)
 }
 
 /// Periodically persist one `metrics_history` sample derived from the current summary + counters.
+/// `interval_secs == 0` disables it (mirrors the monitor/scheduler workers).
 fn spawn_metrics_sampler(pool: sqlx::SqlitePool, interval_secs: u64) {
+    if interval_secs == 0 {
+        return;
+    }
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
         loop {

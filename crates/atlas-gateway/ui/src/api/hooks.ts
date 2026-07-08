@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { http } from "./client";
 import { useUi } from "../store/ui";
 import type {
-  AlertRecord, AuditRow, BackupRecord, JobRecord, MetricHistoryPoint, MetricSample, MetricsSummary, Osd,
+  AlertRecord, AuditRow, BackupRecord, JobRecord, MetricForecast, MetricHistoryPoint, MetricSample, MetricsSummary, Osd,
   SnapshotSchedule, StorageBucket, StorageCluster, StoragePool, StorageSnapshot, StorageVolume,
   TenantPolicy, TenantQuota,
 } from "./types";
@@ -23,6 +23,8 @@ function q<T>(key: unknown[], path: string, refetch = 8000) {
 export const useSummary = () => q<MetricsSummary>(["summary"], "/metrics/summary", 6000);
 export const useHistory = () =>
   q<MetricHistoryPoint[]>(["history"], "/metrics/history?minutes=60", 30000);
+export const useForecast = () =>
+  q<MetricForecast>(["forecast"], "/metrics/forecast?minutes=1440", 30000);
 export const useClusters = () => q<StorageCluster[]>(["clusters"], "/clusters", 10000);
 export const usePools = () => q<StoragePool[]>(["pools"], "/pools", 10000);
 export const useOsds = () => q<Osd[]>(["osds"], "/osds", 10000);

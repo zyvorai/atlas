@@ -183,6 +183,16 @@ export interface MetricSample {
   labels: Record<string, string>;
 }
 
+// GET /metrics/forecast — least-squares fill projection; days_to_full is null when not growing.
+export interface MetricForecast {
+  samples: number;
+  window_minutes: number;
+  used_capacity_bytes: number;
+  raw_capacity_bytes: number;
+  growth_bytes_per_day: number;
+  days_to_full: number | null;
+}
+
 // One persisted time-series row from GET /metrics/history (read_ops/write_ops are cumulative totals).
 export interface MetricHistoryPoint {
   ts: string;
