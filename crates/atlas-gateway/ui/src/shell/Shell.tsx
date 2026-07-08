@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  ChevronLeft, ChevronRight, Hexagon, KeyRound, Loader2, Moon, Search, Sparkles, Wifi,
+  ChevronLeft, ChevronRight, Hexagon, KeyRound, Loader2, LogOut, Moon, Search, Sparkles, Wifi,
 } from "lucide-react";
 import { MODULES, SECTIONS } from "../nav/modules";
 import { useClusters, useJobs } from "../api/hooks";
@@ -88,6 +88,9 @@ function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
         <Wifi size={13} className="text-success" />
         <Clock />
       </span>
+      <button className="btn btn-ghost btn-sm" title="Sign out" onClick={() => useUi.getState().signOut()}>
+        <LogOut size={13} />
+      </button>
       <Modal
         open={tokenOpen}
         onClose={() => setTokenOpen(false)}
@@ -113,6 +116,10 @@ function Sidebar() {
   const collapsed = useUi((s) => s.sidebarCollapsed);
   const toggle = useUi((s) => s.toggleSidebar);
   const [filter, setFilter] = useState("");
+  const [ver, setVer] = useState("");
+  useEffect(() => {
+    fetch("/version").then((r) => r.json()).then((v) => setVer(v.version)).catch(() => {});
+  }, []);
   const grouped = useMemo(() => {
     const f = filter.toLowerCase();
     return SECTIONS.map((sec) => ({
@@ -162,6 +169,14 @@ function Sidebar() {
           </div>
         ))}
       </nav>
+      {!collapsed && (
+        <div className="px-3 pb-1">
+          <a href="https://zyvor.dev" target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60 hover:text-sky-300 transition">
+            <Hexagon size={11} className="text-sky-400" fill="currentColor" />
+            <span className="flex-1">Zyvor · Atlas{ver && ` v${ver}`}</span>
+          </a>
+        </div>
+      )}
       <button className="btn btn-ghost btn-sm m-2 justify-center" onClick={toggle}>
         {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
       </button>

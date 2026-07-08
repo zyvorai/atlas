@@ -16,6 +16,9 @@ export type Theme = "dark" | "aurora";
 interface UiState {
   token: string;
   setToken: (t: string) => void;
+  entered: boolean;
+  enter: () => void;
+  signOut: () => void;
   theme: Theme;
   setTheme: (t: Theme) => void;
   sidebarCollapsed: boolean;
@@ -42,6 +45,16 @@ export const useUi = create<UiState>((set) => ({
   setToken: (t) => {
     ls?.setItem("atlas.token", t);
     set({ token: t });
+  },
+  entered: ls?.getItem("atlas.entered") === "1",
+  enter: () => {
+    ls?.setItem("atlas.entered", "1");
+    set({ entered: true });
+  },
+  signOut: () => {
+    ls?.removeItem("atlas.entered");
+    ls?.removeItem("atlas.token");
+    set({ entered: false, token: "" });
   },
   theme: savedTheme,
   setTheme: (t) => {
