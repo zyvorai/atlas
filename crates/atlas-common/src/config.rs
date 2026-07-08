@@ -58,6 +58,12 @@ pub struct Config {
     pub tls_key_path: Option<String>,
     /// Generate a self-signed cert at startup when no cert/key is provided (lab convenience).
     pub tls_self_signed: bool,
+    /// Register a second NFS backend (demonstrates the pluggable-driver architecture).
+    pub nfs_enable: bool,
+    /// NFS server host for the NFS backend (defaults to a demo host when enabled without one).
+    pub nfs_server: Option<String>,
+    /// Comma-separated NFS export paths (defaults to demo exports when enabled without any).
+    pub nfs_exports: Vec<String>,
 }
 
 impl Config {
@@ -126,6 +132,24 @@ impl Config {
                     .as_str(),
                 "1" | "true" | "yes"
             ),
+            nfs_enable: matches!(
+                std::env::var("ATLAS_NFS_ENABLE")
+                    .unwrap_or_default()
+                    .as_str(),
+                "1" | "true" | "yes"
+            ),
+            nfs_server: std::env::var("ATLAS_NFS_SERVER")
+                .ok()
+                .filter(|s| !s.trim().is_empty()),
+            nfs_exports: std::env::var("ATLAS_NFS_EXPORTS")
+                .ok()
+                .map(|s| {
+                    s.split(',')
+                        .map(|x| x.trim().to_string())
+                        .filter(|x| !x.is_empty())
+                        .collect()
+                })
+                .unwrap_or_default(),
         }
     }
 
@@ -156,6 +180,9 @@ impl Default for Config {
             tls_cert_path: None,
             tls_key_path: None,
             tls_self_signed: false,
+            nfs_enable: false,
+            nfs_server: None,
+            nfs_exports: Vec::new(),
         }
     }
 }

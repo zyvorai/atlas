@@ -109,6 +109,14 @@ spec:
             # Protection-schedule worker: check for due snapshot schedules this often (seconds).
             - name: ATLAS_SNAPSHOT_TICK_SECS
               value: "15"
+            # Demo second backend: an NFS server registered alongside Ceph (fixture capacity) to
+            # showcase the pluggable-driver architecture in the console.
+            - name: ATLAS_NFS_ENABLE
+              value: "1"
+            - name: ATLAS_NFS_SERVER
+              value: "nfs01.zyvor.lab"
+            - name: ATLAS_NFS_EXPORTS
+              value: "/exports/vmstore,/exports/backups"
             # HTTPS listener (self-signed cert in the atlas-tls Secret; browsers warn on first visit).
             - name: ATLAS_HTTPS_ADDR
               value: "0.0.0.0:5443"

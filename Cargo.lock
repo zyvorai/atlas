@@ -238,6 +238,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "atlas-driver-nfs"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "atlas-api-types",
+ "atlas-driver-core",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "atlas-driver-rgw"
 version = "0.1.0"
 dependencies = [
@@ -264,6 +277,7 @@ dependencies = [
  "atlas-driver-ceph",
  "atlas-driver-core",
  "atlas-driver-k8s",
+ "atlas-driver-nfs",
  "atlas-driver-rgw",
  "atlas-inventory",
  "atlas-jobs",

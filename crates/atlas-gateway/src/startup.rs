@@ -12,11 +12,14 @@ use atlas_common::Config;
 use atlas_driver_ceph::{FakeCephDriver, RealCephDriver};
 use atlas_driver_core::{DriverRegistry, StorageDriver};
 use atlas_driver_k8s::K8sDriver;
+use atlas_driver_nfs::NfsDriver;
 
 use crate::state::AppState;
 
 /// The single Ceph backend id used by the MVP.
 pub const CEPH_BACKEND_ID: &str = "bkd_ceph_lab";
+/// Optional second NFS backend id (enabled via `ATLAS_NFS_ENABLE`).
+pub const NFS_BACKEND_ID: &str = "bkd_nfs_lab";
 
 pub struct BuildOptions {
     /// Attempt to attach a live Kubernetes driver (disable in unit/integration tests).
@@ -75,6 +78,47 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
     let mut registry = DriverRegistry::new();
     registry.register(driver.clone());
 
+    // Optionally register a second NFS backend — demonstrates that a non-Ceph driver flows through
+    // the same discovery → inventory → REST/gRPC surface (PDF §17.2 pluggable drivers).
+    let nfs_driver: Option<Arc<dyn StorageDriver>> = if config.nfs_enable {
+        let server = config
+            .nfs_server
+            .clone()
+            .unwrap_or_else(|| "nfs01.zyvor.lab".into());
+        let exports = if config.nfs_exports.is_empty() {
+            vec![
+                "/exports/vmstore".to_string(),
+                "/exports/backups".to_string(),
+            ]
+        } else {
+            config.nfs_exports.clone()
+        };
+        let nfs: Arc<dyn StorageDriver> = Arc::new(NfsDriver::new(NFS_BACKEND_ID, server, exports));
+        let nfs_backend = StorageBackend {
+            id: NFS_BACKEND_ID.into(),
+            name: "zyvor-nfs".into(),
+            backend_type: BackendType::Nfs,
+            mode: BackendMode::External,
+            status: "active".into(),
+            capabilities: Capabilities {
+                block: false,
+                file: true,
+                object: false,
+                snapshots: false,
+                clone: false,
+                expansion: false,
+                replication: false,
+            },
+            connection_ref: None,
+        };
+        atlas_inventory::upsert_backend(&pool, &nfs_backend).await?;
+        registry.register(nfs.clone());
+        tracing::info!("nfs backend registered ({NFS_BACKEND_ID})");
+        Some(nfs)
+    } else {
+        None
+    };
+
     // Attach a live Kubernetes driver if reachable.
     let k8s = if opts.enable_k8s {
         match K8sDriver::try_default().await {
@@ -106,6 +150,12 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
         match atlas_discovery::run_discovery(&state.pool, driver.clone()).await {
             Ok(sum) => tracing::info!(?sum, "initial discovery complete"),
             Err(e) => tracing::warn!("initial discovery failed: {e:#}"),
+        }
+        if let Some(nfs) = &nfs_driver {
+            match atlas_discovery::run_discovery(&state.pool, nfs.clone()).await {
+                Ok(sum) => tracing::info!(?sum, "initial nfs discovery complete"),
+                Err(e) => tracing::warn!("initial nfs discovery failed: {e:#}"),
+            }
         }
     }
 
