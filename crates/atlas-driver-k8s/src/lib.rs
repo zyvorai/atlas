@@ -272,6 +272,25 @@ impl K8sDriver {
         labels: &BTreeMap<String, String>,
         spec: serde_json::Value,
     ) -> Result<(), K8sError> {
+        self.apply_cr_meta(group, version, kind, ns, name, labels, &BTreeMap::new(), spec)
+            .await
+    }
+
+    /// Like `apply_cr_labeled` but also stamps `metadata.annotations` — needed e.g. for Strimzi
+    /// `KafkaConnect`, which only reconciles `KafkaConnector` CRs when annotated with
+    /// `strimzi.io/use-connector-resources: "true"`.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn apply_cr_meta(
+        &self,
+        group: &str,
+        version: &str,
+        kind: &str,
+        ns: &str,
+        name: &str,
+        labels: &BTreeMap<String, String>,
+        annotations: &BTreeMap<String, String>,
+        spec: serde_json::Value,
+    ) -> Result<(), K8sError> {
         let gvk = GroupVersionKind::gvk(group, version, kind);
         let ar = ApiResource::from_gvk(&gvk);
         let api: Api<DynamicObject> = Api::namespaced_with(self.client.clone(), ns, &ar);
@@ -279,6 +298,9 @@ impl K8sDriver {
         obj.metadata.namespace = Some(ns.to_string());
         if !labels.is_empty() {
             obj.metadata.labels = Some(labels.clone().into_iter().collect());
+        }
+        if !annotations.is_empty() {
+            obj.metadata.annotations = Some(annotations.clone().into_iter().collect());
         }
         obj.data = serde_json::json!({ "spec": spec });
         match api.get_opt(name).await? {

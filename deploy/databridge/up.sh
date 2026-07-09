@@ -62,6 +62,8 @@ if [[ "$WITH_STREAMING" == "1" ]]; then
   kubectl create -f "https://strimzi.io/install/${STRIMZI_CHANNEL}?namespace=${NS}" -n "$NS" \
     2>/dev/null || kubectl apply -f "https://strimzi.io/install/${STRIMZI_CHANNEL}?namespace=${NS}" -n "$NS"
   kubectl -n "$NS" rollout status deploy/strimzi-cluster-operator --timeout=180s || true
+  # let Kafka Connect resolve ${secrets:...} in connector configs
+  kubectl apply -f "$HERE/connect-rbac.yaml"
 else
   log "4/4 skipping Strimzi/Kafka (--no-streaming: full-load only, no CDC)"
 fi

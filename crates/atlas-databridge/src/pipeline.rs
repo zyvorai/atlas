@@ -358,9 +358,16 @@ pub async fn start_cdc(
 
     use crate::cr::streaming;
     // 1. KafkaConnect cluster (image must bundle Debezium + JDBC-sink plugins; set at deploy time).
+    // The use-connector-resources annotation is REQUIRED or Strimzi ignores the KafkaConnector CRs.
     let connect_image = std::env::var("ATLAS_DATABRIDGE_CONNECT_IMAGE").ok();
-    k8s.apply_cr(
+    let mut connect_annotations = std::collections::BTreeMap::new();
+    connect_annotations.insert(
+        "strimzi.io/use-connector-resources".to_string(),
+        "true".to_string(),
+    );
+    k8s.apply_cr_meta(
         streaming::GROUP, streaming::VERSION, streaming::CONNECT_KIND, ns, &connect,
+        &std::collections::BTreeMap::new(), &connect_annotations,
         streaming::connect_spec("zyvor-kafka-kafka-bootstrap:9092", 1, connect_image.as_deref()),
     )
     .await

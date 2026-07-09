@@ -46,7 +46,12 @@ pub fn connect_spec(bootstrap_servers: &str, replicas: i64, image: Option<&str>)
         "statusStorageTopic": "zyvor-connect-status",
         "config": {
             "config.providers": "secrets",
-            "config.providers.secrets.class": "io.strimzi.kafka.KubernetesSecretConfigProvider"
+            "config.providers.secrets.class": "io.strimzi.kafka.KubernetesSecretConfigProvider",
+            // Internal topics default to RF 3; a single-broker lab Kafka needs 1 or Connect can't
+            // create them (/health 500 -> crashloop).
+            "config.storage.replication.factor": 1,
+            "offset.storage.replication.factor": 1,
+            "status.storage.replication.factor": 1
         }
     });
     if let Some(img) = image.filter(|s| !s.is_empty()) {
@@ -78,6 +83,11 @@ pub fn debezium_source_spec(
         "database.password": pass,
         "database.dbname": database,
         "topic.prefix": prefix,
+        // Encode Postgres `numeric` as a double, not a VariableScaleDecimal STRUCT the JDBC sink
+        // can't bind. `never` skips the initial snapshot — the full-load already seeded the edge, so
+        // CDC only needs to stream changes from here.
+        "decimal.handling.mode": "double",
+        "snapshot.mode": "never",
     });
     match engine {
         "postgres" => {
@@ -104,15 +114,24 @@ pub fn jdbc_sink_spec(short: &str, jdbc_url: &str, secret_ns: &str, edge_secret:
     let config = json!({
         "connector.class": "io.aiven.connect.jdbc.JdbcSinkConnector",
         "tasks.max": 1,
-        "topics.regex": format!("{prefix}\\..*"),
+        "topics.regex": format!("{prefix}[.][^.]+[.].*"),
         "connection.url": jdbc_url,
         "connection.user": edge_user,
         "connection.password": format!("${{secrets:{secret_ns}/{edge_secret}:{edge_pass_key}}}"),
         "insert.mode": "upsert",
+        // The edge tables already exist (from full-load); PK column is assumed `id`.
         "pk.mode": "record_key",
-        "delete.enabled": true,
-        "auto.create": true,
-        "auto.evolve": true
+        "pk.fields": "id",
+        "auto.create": false,
+        "auto.evolve": true,
+        "consumer.override.auto.offset.reset": "earliest",
+        // Flatten the Debezium envelope to the row image, and route `<prefix>.<schema>.<table>` topics
+        // to the bare `<table>` name so the sink writes to the matching edge table.
+        "transforms": "unwrap,route",
+        "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+        "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+        "transforms.route.regex": format!("{prefix}[.][^.]+[.](.*)"),
+        "transforms.route.replacement": "$1"
     });
     json!({ "class": "io.aiven.connect.jdbc.JdbcSinkConnector", "tasksMax": 1, "config": config })
 }
@@ -160,7 +179,9 @@ mod tests {
     fn sink_targets_topic_regex_and_upsert() {
         let s = jdbc_sink_spec("abc123", "jdbc:postgresql://edge-rw:5432/appdb", "zyvor-databridge", "edge-app", "app", "password");
         assert_eq!(s["config"]["insert.mode"], "upsert");
-        assert_eq!(s["config"]["topics.regex"], "dbabc123\\..*");
+        assert_eq!(s["config"]["pk.fields"], "id");
+        assert_eq!(s["config"]["transforms.unwrap.type"], "io.debezium.transforms.ExtractNewRecordState");
+        assert_eq!(s["config"]["topics.regex"], "dbabc123[.][^.]+[.].*");
     }
 
     #[test]

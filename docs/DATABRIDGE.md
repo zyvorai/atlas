@@ -103,18 +103,27 @@ Prereqs proven in the process: `deploy/databridge/up.sh --pg-only` installs Clou
 cluster; the gateway's **write RBAC** (CNPG `clusters`, batch `jobs`, Strimzi connectors, `secrets`)
 is sufficient; the CNPG `<cluster>-app` Secret exposes the `uri`/`password` keys the loader uses.
 
-**CDC (Strimzi) — partially exercised live:** installed the Strimzi operator + brought up a KRaft
-Kafka on the cluster, which corrected three real bugs in the CDC CR builders (now fixed + validated
-by server-side dry-run against the real CRDs):
-1. Strimzi serves the kinds at `kafka.strimzi.io/**v1**` (not `v1beta2`);
-2. the bootstrap Service is `<kafka>-**kafka**-bootstrap:9092`;
-3. `KafkaConnect` requires top-level `groupId` + `configStorageTopic`/`offsetStorageTopic`/
-   `statusStorageTopic` (not inside `config`).
+**CDC (Strimzi/Debezium) — VERIFIED end-to-end live.** On the Rook cluster: Strimzi + a KRaft Kafka +
+a custom Connect image (Debezium PostgreSQL + Aiven JDBC sink, `deploy/databridge/connect/Dockerfile`,
+set via `ATLAS_DATABRIDGE_CONNECT_IMAGE`). The gateway's `cdc/start` created the KafkaConnect + Debezium
+source + JDBC-sink connectors; a row inserted into the source Postgres **replicated to the Ceph-backed
+edge Postgres** (source → Debezium → Kafka → JDBC sink → edge), and continuous inserts converged.
 
-**Remaining for full CDC data-flow**: a Kafka Connect image that **bundles the Debezium + a JDBC-sink
-plugin** (the stock Strimzi Connect image has none) — set `ATLAS_DATABRIDGE_CONNECT_IMAGE` to a
-prebuilt/registry image; plus Debezium config iteration (replication slot/publication) and real CDC
-**lag tracking** (Kafka Connect offsets). This is a dedicated build/registry follow-up.
+Getting there corrected **nine real issues** in the blind-built CDC path (all now in the code / deploy):
+1. Strimzi serves the kinds at `kafka.strimzi.io/v1` (not `v1beta2`);
+2. bootstrap Service is `<kafka>-kafka-bootstrap:9092`;
+3. `KafkaConnect` needs top-level `groupId` + `*StorageTopic` (not under `config`);
+4. Connect image must match the operator's Kafka major (4.x base) + Debezium 3.x;
+5. single-broker lab needs `{config,offset,status}.storage.replication.factor: 1`;
+6. `KafkaConnect` needs `strimzi.io/use-connector-resources: "true"` or connectors are ignored;
+7. the Connect ServiceAccount needs RBAC to `get` Secrets (`deploy/databridge/connect-rbac.yaml`);
+8. the JDBC sink needs the Debezium `ExtractNewRecordState` unwrap SMT + a `RegexRouter` (topic→table)
+   + `pk.mode=record_key`/`pk.fields`;
+9. Debezium must use `decimal.handling.mode=double` (Postgres unscaled `numeric` → a STRUCT the sink
+   can't bind) + `snapshot.mode=never` (the full-load already seeded the edge).
+
+**Remaining follow-up**: real CDC **lag tracking** (Kafka Connect consumer-group offsets) — the
+reconciler still synthesizes lag in fake mode; and generalizing the sink `pk.fields` beyond `id`.
 
 ## Status
 - **Done + CI-tested**: full pipeline demoable end-to-end (fake) — locked by
