@@ -360,3 +360,50 @@
     transform: none;
   }
 }
+
+/* ---- Observatory visualizations ---- */
+@keyframes obsv-blink { 50% { opacity: 0 } }
+@keyframes obsv-flick { 0%,100% { opacity:.5 } 47% { opacity:.7 } 48% { opacity:.35 } 49% { opacity:.6 } }
+@keyframes obsv-beat { 0%,100% { opacity:1 } 50% { opacity:.35 } }
+
+/* CRT terminal */
+.obsv-crt { padding:22px 26px; overflow:hidden;
+  background:radial-gradient(120% 130% at 50% 50%, #04160d 60%, #02110a 100%);
+  font-family:var(--mono, ui-monospace,"JetBrains Mono",Menlo,monospace); color:#43f39a; }
+.obsv-crt .obsv-scan { position:absolute; inset:0; pointer-events:none; z-index:3;
+  background:repeating-linear-gradient(0deg, rgba(0,0,0,0) 0 2px, rgba(0,0,0,.18) 2px 3px); mix-blend-mode:multiply; }
+.obsv-screen { position:relative; z-index:2; height:100%; overflow:auto; text-shadow:0 0 6px rgba(67,243,154,.4); }
+.obsv-log { margin:0; font-size:13px; line-height:1.6; }
+.obsv-ln { display:flex; align-items:baseline; white-space:pre; min-height:1.6em; }
+.obsv-ln .lead { color:#1f8a57 } .obsv-ln .msg { color:#43f39a } .obsv-ln .dots { color:#0e4029; flex:1; overflow:hidden }
+.obsv-ln .tag { opacity:0; transition:opacity .12s; padding-left:6px }
+.obsv-ln .tag.show { opacity:1 }
+.obsv-ln .tag.ok,.obsv-ln .tag.rdy { color:#43f39a } .obsv-ln .tag.warn { color:#ffcf6b; text-shadow:0 0 8px rgba(255,207,107,.5) } .obsv-ln .tag.info { color:#5bd8ff }
+.obsv-hud { margin-top:16px; padding-top:14px; border-top:1px solid #0e4029 }
+.obsv-status { font-size:14px; color:#43f39a; letter-spacing:.05em; margin-bottom:13px; display:flex; align-items:center; gap:10px }
+.obsv-status .beat { animation:obsv-beat 1.6s infinite } .obsv-status small { color:#1f8a57; letter-spacing:.02em }
+.obsv-gauge { font-size:13px; margin-bottom:12px; word-break:break-all }
+.obsv-gauge .bar { color:#43f39a } .obsv-gauge .empty { color:#0e4029 } .obsv-gauge .cap { color:#5bd8ff }
+.obsv-io { font-size:12.5px; line-height:1.7; color:#1f8a57 } .obsv-io b { color:#43f39a; font-variant-numeric:tabular-nums }
+.obsv-prompt { margin-top:14px; font-size:13px; color:#43f39a }
+.obsv-cur { display:inline-block; width:9px; height:15px; background:#43f39a; margin-left:2px; vertical-align:-2px; box-shadow:0 0 8px rgba(67,243,154,.7); animation:obsv-blink 1.05s steps(1) infinite }
+
+/* treemap */
+.obsv-map { }
+.obsv-tile { position:absolute; border-radius:7px; overflow:hidden; border:1px solid rgba(0,0,0,.35);
+  transition:transform .5s cubic-bezier(.2,.7,.2,1), opacity .5s; transform-origin:center }
+.obsv-tile .fillbg { position:absolute; inset:0; opacity:.16 }
+.obsv-tile .used { position:absolute; left:0; right:0; bottom:0; opacity:.5 }
+.obsv-tile .lab { position:absolute; inset:0; padding:8px 9px; display:flex; flex-direction:column; justify-content:space-between }
+.obsv-tile .nm { font-family:var(--mono,ui-monospace,Menlo,monospace); font-size:11px; color:#eaf3ff; text-shadow:0 1px 3px rgba(0,0,0,.6); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.obsv-tile .meta { font-family:var(--mono,ui-monospace,Menlo,monospace); font-size:10px; color:rgba(234,243,255,.82); text-shadow:0 1px 3px rgba(0,0,0,.7); font-variant-numeric:tabular-nums }
+.obsv-tile.sm .meta { display:none } .obsv-tile.sm .nm { font-size:9.5px }
+.obsv-tile:hover { outline:1.5px solid rgba(234,243,255,.8); outline-offset:-1px; z-index:5 }
+
+/* iso focus panel */
+.obsv-isofocus { position:absolute; left:18px; bottom:16px; min-width:220px; background:rgba(13,20,34,.72);
+  border:1px solid #1C2A40; border-radius:11px; padding:11px 14px; backdrop-filter:blur(10px);
+  font-family:var(--mono,ui-monospace,Menlo,monospace); transition:opacity .2s; pointer-events:none;
+  box-shadow:0 12px 40px rgba(0,0,0,.45) }
+.obsv-isofocus .fnm { font-size:12.5px; margin-bottom:4px }
+.obsv-isofocus .fmeta { font-size:10.5px; color:#8AA0BD; font-variant-numeric:tabular-nums }
