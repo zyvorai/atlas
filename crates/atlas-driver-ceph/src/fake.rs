@@ -174,4 +174,42 @@ impl StorageDriver for FakeCephDriver {
             m("ceph_degraded_objects", 0.0),
         ])
     }
+
+    async fn ceph_status(&self) -> Result<serde_json::Value, DriverError> {
+        Ok(serde_json::json!({
+            "fsid": "f5100000-0000-4000-8000-000000000001",
+            "health": { "status": "HEALTH_WARN", "checks": {
+                "OSD_DOWN": { "severity": "HEALTH_WARN", "summary": { "message": "1 osds down" } }
+            }},
+            "monmap": { "num_mons": 3 },
+            "quorum_names": ["a", "b", "c"],
+            "mgrmap": { "available": true, "active_name": "a" },
+            "osdmap": { "num_osds": 6, "num_up_osds": 5, "num_in_osds": 6 },
+            "pgmap": {
+                "num_pgs": 289,
+                "pgs_by_state": [ { "state_name": "active+clean", "count": 281 }, { "state_name": "active+undersized+degraded", "count": 8 } ],
+                "bytes_total": 220_000_000_000_000_i64, "bytes_used": 97_000_000_000_000_i64, "bytes_avail": 123_000_000_000_000_i64,
+                "read_bytes_sec": 12_400_000, "write_bytes_sec": 8_100_000, "read_op_per_sec": 1420, "write_op_per_sec": 860,
+                "recovering_bytes_per_sec": 0
+            }
+        }))
+    }
+
+    async fn ceph_osd_tree(&self) -> Result<serde_json::Value, DriverError> {
+        let osd = |id: i64, up: bool| serde_json::json!({ "id": id, "name": format!("osd.{id}"), "type": "osd", "status": if up {"up"} else {"down"}, "crush_weight": 32.7, "reweight": if up {1.0} else {0.0} });
+        Ok(serde_json::json!({ "nodes": [
+            { "id": -1, "name": "default", "type": "root", "children": [-2, -3, -4] },
+            { "id": -2, "name": "node01", "type": "host", "children": [0, 1] }, osd(0, true), osd(1, true),
+            { "id": -3, "name": "node02", "type": "host", "children": [2, 3] }, osd(2, true), osd(3, false),
+            { "id": -4, "name": "node03", "type": "host", "children": [4, 5] }, osd(4, true), osd(5, true)
+        ]}))
+    }
+
+    async fn ceph_df(&self) -> Result<serde_json::Value, DriverError> {
+        let pool = |id: i64, name: &str, stored: i64, objs: i64, pct: f64| serde_json::json!({ "name": name, "id": id, "stats": { "stored": stored, "objects": objs, "percent_used": pct, "max_avail": 80_000_000_000_000_i64 } });
+        Ok(serde_json::json!({
+            "stats": { "total_bytes": 220_000_000_000_000_i64, "total_used_bytes": 97_000_000_000_000_i64, "total_avail_bytes": 123_000_000_000_000_i64 },
+            "pools": [ pool(1, "rbd-nvme-prod", 40_000_000_000_000, 9_800_000, 0.33), pool(2, "cephfs-data0", 12_000_000_000_000, 3_100_000, 0.16), pool(3, ".rgw.root", 1_000_000_000, 42, 0.0) ]
+        }))
+    }
 }

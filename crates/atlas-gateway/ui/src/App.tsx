@@ -11,6 +11,7 @@ import Buckets from "./views/Buckets";
 import Alerts from "./views/Alerts";
 import Activity from "./views/Activity";
 import Observatory from "./views/Observatory";
+import Ceph from "./views/Ceph";
 import Jobs from "./views/Jobs";
 import Audit from "./views/Audit";
 import Tenants from "./views/Tenants";
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/backends" element={<Backends />} />
         <Route path="/kubernetes" element={<Kubernetes />} />
         <Route path="/cluster" element={<Cluster />} />
+        <Route path="/ceph" element={<Ceph />} />
         <Route path="*" element={<Overview />} />
       </Route>
     </Routes>

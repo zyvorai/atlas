@@ -239,6 +239,16 @@ impl StorageDriver for RealCephDriver {
         out.push(metric("ceph_degraded_objects", h.degraded_objects as f64));
         Ok(out)
     }
+
+    async fn ceph_status(&self) -> Result<serde_json::Value, DriverError> {
+        ceph_cmd(&["status"]).await
+    }
+    async fn ceph_osd_tree(&self) -> Result<serde_json::Value, DriverError> {
+        ceph_cmd(&["osd", "tree"]).await
+    }
+    async fn ceph_df(&self) -> Result<serde_json::Value, DriverError> {
+        ceph_cmd(&["df", "detail"]).await
+    }
 }
 
 fn metric(name: &str, value: f64) -> MetricSample {

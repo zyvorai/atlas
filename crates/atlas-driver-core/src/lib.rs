@@ -73,4 +73,18 @@ pub trait StorageDriver: Send + Sync {
     async fn delete_snapshot(&self, _req: DeleteSnapshotRequest) -> Result<(), DriverError> {
         Err(DriverError::NotImplemented("delete_snapshot"))
     }
+
+    // ---- Ceph-native introspection (read-only; other backends return NotImplemented) ----
+    /// `ceph status -f json` — cluster health, mon quorum, mgr, osdmap, pgmap, client I/O.
+    async fn ceph_status(&self) -> Result<serde_json::Value, DriverError> {
+        Err(DriverError::NotImplemented("ceph_status"))
+    }
+    /// `ceph osd tree -f json` — the CRUSH hierarchy (roots → hosts → OSDs).
+    async fn ceph_osd_tree(&self) -> Result<serde_json::Value, DriverError> {
+        Err(DriverError::NotImplemented("ceph_osd_tree"))
+    }
+    /// `ceph df detail -f json` — cluster + per-pool capacity/usage/objects.
+    async fn ceph_df(&self) -> Result<serde_json::Value, DriverError> {
+        Err(DriverError::NotImplemented("ceph_df"))
+    }
 }

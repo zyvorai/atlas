@@ -33,6 +33,9 @@ pub fn router(state: AppState) -> Router {
         .route("/nodes", get(list_nodes))
         .route("/osds", get(list_osds))
         .route("/pools", get(list_pools))
+        .route("/ceph/status", get(get_ceph_status))
+        .route("/ceph/osd-tree", get(get_ceph_osd_tree))
+        .route("/ceph/df", get(get_ceph_df))
         .route("/storage-classes", get(list_storage_classes))
         .route("/kubernetes/pvcs", get(list_pvcs))
         .route("/kubernetes/pvs", get(list_pvs))
@@ -467,6 +470,42 @@ async fn list_nodes(State(s): State<AppState>) -> AppResult<Json<Value>> {
 
 async fn list_osds(State(s): State<AppState>) -> AppResult<Json<Value>> {
     Ok(Json(json!(atlas_inventory::list_osds(&s.pool).await?)))
+}
+
+/// `GET /ceph/status` — live `ceph status` from the cluster (health, quorum, osdmap, pgmap, I/O).
+async fn get_ceph_status(State(s): State<AppState>) -> AppResult<Json<Value>> {
+    let d = s
+        .driver_for(CEPH_BACKEND_ID)
+        .ok_or_else(|| AppError::Driver("no ceph driver".into()))?;
+    Ok(Json(
+        d.ceph_status()
+            .await
+            .map_err(|e| AppError::Driver(e.to_string()))?,
+    ))
+}
+
+/// `GET /ceph/osd-tree` — the CRUSH hierarchy (roots → hosts → OSDs).
+async fn get_ceph_osd_tree(State(s): State<AppState>) -> AppResult<Json<Value>> {
+    let d = s
+        .driver_for(CEPH_BACKEND_ID)
+        .ok_or_else(|| AppError::Driver("no ceph driver".into()))?;
+    Ok(Json(
+        d.ceph_osd_tree()
+            .await
+            .map_err(|e| AppError::Driver(e.to_string()))?,
+    ))
+}
+
+/// `GET /ceph/df` — cluster + per-pool capacity/usage/objects (`ceph df detail`).
+async fn get_ceph_df(State(s): State<AppState>) -> AppResult<Json<Value>> {
+    let d = s
+        .driver_for(CEPH_BACKEND_ID)
+        .ok_or_else(|| AppError::Driver("no ceph driver".into()))?;
+    Ok(Json(
+        d.ceph_df()
+            .await
+            .map_err(|e| AppError::Driver(e.to_string()))?,
+    ))
 }
 
 #[derive(Debug, Deserialize)]

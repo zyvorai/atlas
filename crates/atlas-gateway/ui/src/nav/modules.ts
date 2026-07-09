@@ -2,7 +2,7 @@
 // Module registry (mirrors Zeus OS osModules.ts shape) — single source for sidebar + dock + spotlight.
 import type { LucideIcon } from "lucide-react";
 import {
-  Activity, Archive, Bell, Boxes, Camera, Clock, Cloud, Database, FileClock, Gauge, HardDrive,
+  Activity, Aperture, Archive, Bell, Boxes, Camera, Clock, Cloud, Database, FileClock, Gauge, HardDrive,
   KeyRound, Layers, LayoutDashboard, Orbit, Server, ShieldCheck, Sparkles, Timer, Users,
 } from "lucide-react";
 
@@ -40,6 +40,7 @@ export const MODULES: Module[] = [
   { id: "backends", codename: "gaia", label: "Backends", path: "/backends", icon: Server, section: "INFRASTRUCTURE" },
   { id: "kubernetes", codename: "talos", label: "Kubernetes", path: "/kubernetes", icon: Boxes, section: "INFRASTRUCTURE" },
   { id: "cluster", codename: "oracle", label: "Cluster", path: "/cluster", icon: Database, section: "INFRASTRUCTURE" },
+  { id: "ceph", codename: "kraken", label: "Ceph", path: "/ceph", icon: Aperture, section: "INFRASTRUCTURE" },
 ];
 
 export const SECTIONS = ["STORAGE", "DATA PROTECTION", "OBSERVABILITY", "GOVERNANCE", "INFRASTRUCTURE"];
