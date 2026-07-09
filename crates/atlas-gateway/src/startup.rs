@@ -13,6 +13,7 @@ use atlas_driver_ceph::{FakeCephDriver, RealCephDriver};
 use atlas_driver_core::{DriverRegistry, StorageDriver};
 use atlas_driver_k8s::K8sDriver;
 use atlas_driver_nfs::NfsDriver;
+use atlas_driver_zfs::ZfsDriver;
 
 use crate::state::AppState;
 
@@ -20,6 +21,8 @@ use crate::state::AppState;
 pub const CEPH_BACKEND_ID: &str = "bkd_ceph_lab";
 /// Optional second NFS backend id (enabled via `ATLAS_NFS_ENABLE`).
 pub const NFS_BACKEND_ID: &str = "bkd_nfs_lab";
+/// Optional third ZFS backend id (enabled via `ATLAS_ZFS_ENABLE`).
+pub const ZFS_BACKEND_ID: &str = "bkd_zfs_lab";
 
 pub struct BuildOptions {
     /// Attempt to attach a live Kubernetes driver (disable in unit/integration tests).
@@ -119,6 +122,43 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
         None
     };
 
+    // Optionally register a third ZFS backend — same pluggable-driver contract as Ceph/NFS.
+    let zfs_driver: Option<Arc<dyn StorageDriver>> = if config.zfs_enable {
+        let host = config
+            .zfs_host
+            .clone()
+            .unwrap_or_else(|| "zfs01.zyvor.lab".into());
+        let zpools = if config.zfs_pools.is_empty() {
+            vec!["tank".to_string(), "vault".to_string()]
+        } else {
+            config.zfs_pools.clone()
+        };
+        let zfs: Arc<dyn StorageDriver> = Arc::new(ZfsDriver::new(ZFS_BACKEND_ID, host, zpools));
+        let zfs_backend = StorageBackend {
+            id: ZFS_BACKEND_ID.into(),
+            name: "zyvor-zfs".into(),
+            backend_type: BackendType::Zfs,
+            mode: BackendMode::External,
+            status: "active".into(),
+            capabilities: Capabilities {
+                block: true,
+                file: true,
+                object: false,
+                snapshots: true,
+                clone: true,
+                expansion: true,
+                replication: false,
+            },
+            connection_ref: None,
+        };
+        atlas_inventory::upsert_backend(&pool, &zfs_backend).await?;
+        registry.register(zfs.clone());
+        tracing::info!("zfs backend registered ({ZFS_BACKEND_ID})");
+        Some(zfs)
+    } else {
+        None
+    };
+
     // Attach a live Kubernetes driver if reachable.
     let k8s = if opts.enable_k8s {
         match K8sDriver::try_default().await {
@@ -155,6 +195,12 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
             match atlas_discovery::run_discovery(&state.pool, nfs.clone()).await {
                 Ok(sum) => tracing::info!(?sum, "initial nfs discovery complete"),
                 Err(e) => tracing::warn!("initial nfs discovery failed: {e:#}"),
+            }
+        }
+        if let Some(zfs) = &zfs_driver {
+            match atlas_discovery::run_discovery(&state.pool, zfs.clone()).await {
+                Ok(sum) => tracing::info!(?sum, "initial zfs discovery complete"),
+                Err(e) => tracing::warn!("initial zfs discovery failed: {e:#}"),
             }
         }
     }

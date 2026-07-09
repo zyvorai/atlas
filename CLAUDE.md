@@ -24,6 +24,7 @@ per-product integrations, Zeus OS UI.
 - `crates/atlas-driver-core` — `StorageDriver` trait + `DriverError` + `DriverRegistry`.
 - `crates/atlas-driver-ceph` — `ceph`/`rbd` CLI wrappers + `FakeCephDriver`.
 - `crates/atlas-driver-nfs` — `NfsDriver` (second backend; exports→pools, shares→filesystem volumes).
+- `crates/atlas-driver-zfs` — `ZfsDriver` (third backend; zpools→pools, datasets→filesystem volumes).
 - `crates/atlas-driver-k8s` — `kube-rs` read-only StorageClass/PVC/PV listing.
 - `crates/atlas-inventory` — SQLite read/upsert model.
 - `crates/atlas-discovery` — discovery worker.

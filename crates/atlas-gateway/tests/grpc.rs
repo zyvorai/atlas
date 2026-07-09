@@ -38,6 +38,9 @@ async fn grpc_edge_health_create_and_list() {
         nfs_enable: false,
         nfs_server: None,
         nfs_exports: Vec::new(),
+        zfs_enable: false,
+        zfs_host: None,
+        zfs_pools: Vec::new(),
     };
     let state = build_state(
         config,
@@ -142,6 +145,9 @@ async fn grpc_enforces_jwt_when_auth_required() {
         nfs_enable: false,
         nfs_server: None,
         nfs_exports: Vec::new(),
+        zfs_enable: false,
+        zfs_host: None,
+        zfs_pools: Vec::new(),
     };
     let state = build_state(
         config,

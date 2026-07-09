@@ -12,11 +12,25 @@ import { PageHeader, Spinner } from "../ui/kit";
 
 const KC: Record<string, string> = {
   rbd: "#38BDF8", cephfs_data: "#5bd8ff", cephfs_metadata: "#5bd8ff",
-  rgw: "#A78BFA", nfs_export: "#34D399", other: "#6b8bb5",
+  rgw: "#A78BFA", nfs_export: "#34D399", zpool: "#FBBF24", other: "#6b8bb5",
 };
 const kc = (k: string) => KC[k] || KC.other;
 const bcol = (t: string) => (t === "nfs" ? "#34D399" : t === "zfs" ? "#FBBF24" : "#38BDF8");
-const poolBackend = (kind: string) => (kind === "nfs_export" ? "nfs" : "ceph");
+// Map a pool to its backend TYPE via the cluster join (robust for N backends). Falls back to a
+// kind heuristic when clusters aren't loaded yet.
+function poolBackendMap(clusters: any[], backends: any[]) {
+  const clById: Record<string, string> = {};
+  (clusters || []).forEach((c) => (clById[c.id] = c.backend_id));
+  const typeByBackend: Record<string, string> = {};
+  (backends || []).forEach((b) => (typeByBackend[b.backend_id] = b.backend_type));
+  return (pool: any): string => {
+    const bt = typeByBackend[clById[pool.cluster_id]];
+    if (bt) return bt;
+    if (pool.kind === "nfs_export") return "nfs";
+    if (pool.kind === "zpool") return "zfs";
+    return "ceph";
+  };
+}
 const TB = 1e12, GB = 1e9;
 function tb(n: number) {
   if (n >= TB) return (n / TB).toFixed(n >= 10 * TB ? 1 : 2) + " TB";
@@ -58,7 +72,8 @@ function Orbital({ data }: { data: any }) {
     let raf = 0; const red = reduced();
     const draw = (t: number) => {
       const W = api.w(), H = api.h(); if (W !== lastW) { S = stars(); lastW = W; }
-      const { s, backends, pools } = ref.current;
+      const { s, backends, pools, clusters } = ref.current;
+      const pb = poolBackendMap(clusters, backends);
       const cx = W / 2, cy = H / 2, half = Math.min(W, H) / 2;
       ctx.clearRect(0, 0, W, H);
       for (const st of S) { const tw = red ? 0.7 : 0.45 + 0.55 * Math.abs(Math.sin(t * 0.001 + st.ph)); ctx.globalAlpha = (0.25 + 0.6 * st.z) * tw; ctx.fillStyle = st.z > 0.85 ? "#bfe0ff" : "#7f9bc4"; ctx.fillRect(st.x, st.y, st.z > 0.9 ? 1.6 : 1, st.z > 0.9 ? 1.6 : 1); }
@@ -81,7 +96,7 @@ function Orbital({ data }: { data: any }) {
         const r = 14 + 5 * Math.log10(Math.max(10, B.raw_capacity_bytes / GB)) - 8;
         const col = bcol(B.backend_type);
         ctx.strokeStyle = "rgba(56,90,140,.2)"; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(bx, by); ctx.stroke();
-        const mp = (pools || []).filter((p: any) => poolBackend(p.kind) === B.backend_type);
+        const mp = (pools || []).filter((p: any) => pb(p) === B.backend_type);
         mp.forEach((p: any, j: number) => { const a = (j / Math.max(1, mp.length)) * 6.283 + t * 0.0004 * (red ? 0 : 1); const md = r + 16 + (j % 3) * 7; const mx = bx + Math.cos(a) * md, my = by + Math.sin(a) * md; ctx.globalAlpha = 0.85; ctx.fillStyle = kc(p.kind); ctx.beginPath(); ctx.arc(mx, my, p.kind === "nfs_export" ? 4 : 3, 0, 6.283); ctx.fill(); });
         ctx.globalAlpha = 1;
         const bg = ctx.createRadialGradient(bx, by, 0, bx, by, r * 2.4); bg.addColorStop(0, col + "55"); bg.addColorStop(1, col + "00"); ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(bx, by, r * 2.4, 0, 6.283); ctx.fill();
@@ -158,7 +173,6 @@ function Trajectory({ data }: { data: any }) {
 function Terminal({ data }: { data: any }) {
   const d = data; const s = d.s, backends = d.backends || [], fc = d.fc, clusters = d.clusters || [], alerts = d.alerts || [];
   const ceph = backends.find((b: any) => b.backend_type === "ceph") || {};
-  const nfs = backends.find((b: any) => b.backend_type === "nfs");
   const cephCl = clusters.find((c: any) => c.backend_id === ceph.backend_id);
   const health = cephCl ? String(cephCl.health).toUpperCase() : "OK";
   const used = s.raw_capacity_bytes > 0 ? s.used_capacity_bytes / s.raw_capacity_bytes : 0;
@@ -171,8 +185,9 @@ function Terminal({ data }: { data: any }) {
     const LINES = [
       { l: "init ", m: "ATLAS control plane · build v0.1.0", tag: "LIVE", c: "info" },
       { l: "mount", m: "sqlite inventory (WAL, fk=on)", tag: "OK", c: "ok" },
-      { l: "drv  ", m: "ceph → " + (ceph.backend_id || "ceph") + " · HEALTH_" + health, tag: health === "OK" ? "OK" : "WARN", c: health === "OK" ? "ok" : "warn" },
-      ...(nfs ? [{ l: "drv  ", m: "nfs  → nfs01.zyvor.lab · reachable", tag: "OK", c: "ok" }] : []),
+      ...backends.map((b: any) => b.backend_type === "ceph"
+        ? { l: "drv  ", m: "ceph → " + (b.backend_id || "ceph") + " · HEALTH_" + health, tag: health === "OK" ? "OK" : "WARN", c: health === "OK" ? "ok" : "warn" }
+        : { l: "drv  ", m: b.backend_type.padEnd(4) + " → " + b.backend_id + " · reachable", tag: "OK", c: "ok" }),
       { l: "disc ", m: "pools · " + s.pools, tag: "OK", c: "ok" },
       { l: "disc ", m: "volumes · " + s.volumes, tag: "OK", c: "ok" },
       { l: "disc ", m: "buckets · " + s.buckets, tag: "OK", c: "ok" },
@@ -231,14 +246,15 @@ function Fabric({ data }: { data: any }) {
   const ref = useRef(data); ref.current = data;
   const { box, cv } = useCanvas((ctx, api) => {
     const red = reduced();
-    const { backends, pools } = ref.current;
+    const { backends, pools, clusters } = ref.current;
+    const pb = poolBackendMap(clusters, backends);
     const nodes: any[] = [], links: any[] = [], byId: any = {};
     const add = (n: any) => { n.vx = 0; n.vy = 0; nodes.push(n); byId[n.id] = n; return n; };
     const link = (a: string, b: string, rest: number) => links.push({ a: byId[a], b: byId[b], rest });
     add({ id: "atlas", type: "atlas", label: "ATLAS", color: "#38BDF8", r: 22 });
     PRODUCTS.forEach((p, i) => { add({ id: "p" + i, type: "product", label: p, color: "#A78BFA", r: 8 }); link("p" + i, "atlas", 150); });
     (backends || []).forEach((B: any) => { const id = B.backend_type; add({ id, type: "backend", label: B.backend_type.toUpperCase(), color: bcol(B.backend_type), r: B.backend_type === "nfs" ? 16 : 14 }); link("atlas", id, 172);
-      (pools || []).filter((p: any) => poolBackend(p.kind) === B.backend_type).forEach((p: any, j: number) => { const pid = id + "-p" + j; add({ id: pid, type: "pool", label: p.name, color: kc(p.kind), r: 4.5 }); link(id, pid, 50); }); });
+      (pools || []).filter((p: any) => pb(p) === B.backend_type).forEach((p: any, j: number) => { const pid = id + "-p" + j; add({ id: pid, type: "pool", label: p.name, color: kc(p.kind), r: 4.5 }); link(id, pid, 50); }); });
     const adj: any = {}; nodes.forEach((n) => (adj[n.id] = new Set())); links.forEach((l) => { adj[l.a.id].add(l.b.id); adj[l.b.id].add(l.a.id); });
     let W = api.w(), H = api.h();
     const anchors = () => { W = api.w(); H = api.h();
@@ -312,8 +328,9 @@ function Iso({ data }: { data: any }) {
     const red = reduced();
     const c = cv.current!;
     let raf = 0; let hover: any = null;
-    const build = () => { const { backends, pools } = ref.current; const bs = backends || []; const list: any[] = [];
-      bs.slice().sort((a: any) => (a.backend_type === "nfs" ? 1 : -1)).forEach((B: any, i: number) => { const sl = (pools || []).filter((p: any) => poolBackend(p.kind) === B.backend_type); list.push({ name: B.backend_type.toUpperCase(), bx: i === 0 ? -3.2 : 3.0, by: i === 0 ? 0 : 1.0, slabs: sl, phase: i * 2.1 }); }); return list; };
+    const build = () => { const { backends, pools, clusters } = ref.current; const pb = poolBackendMap(clusters, backends); const bs = (backends || []).slice(); const list: any[] = [];
+      const spread = bs.length > 1 ? bs.length : 1;
+      bs.forEach((B: any, i: number) => { const sl = (pools || []).filter((p: any) => pb(p) === B.backend_type); const bx = -3.6 + (i / Math.max(1, spread - 1)) * 7.2; list.push({ name: B.backend_type.toUpperCase(), bx, by: i * 0.7, slabs: sl, phase: i * 2.1 }); }); return list; };
     const inPoly = (px: number, py: number, pts: number[][]) => { let c2 = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { if (((pts[i][1] > py) !== (pts[j][1] > py)) && px < (pts[j][0] - pts[i][0]) * (py - pts[i][1]) / (pts[j][1] - pts[i][1]) + pts[i][0]) c2 = !c2; } return c2; };
     const dk = (hex: string, f: number) => { const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16); return "rgb(" + Math.round(r * f) + "," + Math.round(g * f) + "," + Math.round(b * f) + ")"; };
     let hit: any[] = [];

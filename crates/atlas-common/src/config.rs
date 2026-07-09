@@ -64,6 +64,12 @@ pub struct Config {
     pub nfs_server: Option<String>,
     /// Comma-separated NFS export paths (defaults to demo exports when enabled without any).
     pub nfs_exports: Vec<String>,
+    /// Register a third ZFS backend (demonstrates the pluggable-driver architecture scaling).
+    pub zfs_enable: bool,
+    /// ZFS host for the ZFS backend (defaults to a demo host when enabled without one).
+    pub zfs_host: Option<String>,
+    /// Comma-separated zpool names (defaults to demo zpools when enabled without any).
+    pub zfs_pools: Vec<String>,
 }
 
 impl Config {
@@ -150,6 +156,24 @@ impl Config {
                         .collect()
                 })
                 .unwrap_or_default(),
+            zfs_enable: matches!(
+                std::env::var("ATLAS_ZFS_ENABLE")
+                    .unwrap_or_default()
+                    .as_str(),
+                "1" | "true" | "yes"
+            ),
+            zfs_host: std::env::var("ATLAS_ZFS_HOST")
+                .ok()
+                .filter(|s| !s.trim().is_empty()),
+            zfs_pools: std::env::var("ATLAS_ZFS_POOLS")
+                .ok()
+                .map(|s| {
+                    s.split(',')
+                        .map(|x| x.trim().to_string())
+                        .filter(|x| !x.is_empty())
+                        .collect()
+                })
+                .unwrap_or_default(),
         }
     }
 
@@ -183,6 +207,9 @@ impl Default for Config {
             nfs_enable: false,
             nfs_server: None,
             nfs_exports: Vec::new(),
+            zfs_enable: false,
+            zfs_host: None,
+            zfs_pools: Vec::new(),
         }
     }
 }

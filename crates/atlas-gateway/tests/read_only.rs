@@ -41,6 +41,9 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
         nfs_enable: false,
         nfs_server: None,
         nfs_exports: Vec::new(),
+        zfs_enable: false,
+        zfs_host: None,
+        zfs_pools: Vec::new(),
     };
 
     let state = build_state(
@@ -198,6 +201,9 @@ async fn spawn_auth(secret: &str) -> String {
         nfs_enable: false,
         nfs_server: None,
         nfs_exports: Vec::new(),
+        zfs_enable: false,
+        zfs_host: None,
+        zfs_pools: Vec::new(),
     };
     let state = build_state(
         config,

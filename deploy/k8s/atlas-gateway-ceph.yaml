@@ -117,6 +117,13 @@ spec:
               value: "nfs01.zyvor.lab"
             - name: ATLAS_NFS_EXPORTS
               value: "/exports/vmstore,/exports/backups"
+            # Demo third backend: a ZFS host registered alongside Ceph + NFS.
+            - name: ATLAS_ZFS_ENABLE
+              value: "1"
+            - name: ATLAS_ZFS_HOST
+              value: "zfs01.zyvor.lab"
+            - name: ATLAS_ZFS_POOLS
+              value: "tank,vault"
             # HTTPS listener (self-signed cert in the atlas-tls Secret; browsers warn on first visit).
             - name: ATLAS_HTTPS_ADDR
               value: "0.0.0.0:5443"
