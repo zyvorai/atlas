@@ -173,6 +173,25 @@ cert/ingress gives trusted TLS).
   list-by-owner scoped correctly → snapshot → delete, all jobs `succeeded`).
 - Follow-ups: generated gRPC client stubs vendored into each product (Veyron, Hyper2KVM, …).
 
+## ✅ DataBridge — cloud-to-edge database mobility (done, verified on two clusters)
+
+A migration control plane layered on Atlas (`atlas-databridge`): migrate managed cloud databases
+(AWS RDS/Aurora, GCP Cloud SQL — PostgreSQL & MySQL) to open engines at the edge on Ceph-backed storage.
+
+- Pipeline as async jobs + a reconciler: **discover → assess → provision → full-load → CDC → validate →
+  cutover → rollback**. Admin-guarded cutover (validated + validation passed + CDC lag threshold); rollback window.
+- Edge targets: **CloudNativePG** (Postgres) / **Percona XtraDB** (MySQL), data + WAL on `zyvor-rbd-prod` (Ceph RBD).
+- CDC: **Debezium** on Strimzi/Kafka → JDBC sink to the edge DB.
+- Real Postgres source connector (`tokio-postgres`); `migrations/0011_databridge.sql`;
+  `/api/atlas/v1/databridge/*`; **DataBridge** console section; `deploy/databridge/` operator bundle + Connect image.
+- **Verified end-to-end on two independent live Rook Ceph clusters** (`175.110.122.71`, `80.79.5.173`):
+  a real Postgres → Ceph edge Postgres migration incl. live CDC replication, driven through the deployed gateway.
+- Fake-first: the entire pipeline runs with no cloud/k8s (`make run-databridge`), CI-locked by
+  `tests/databridge_pipeline.rs`.
+- Follow-ups: real MySQL source connector + TLS for cloud SSL; precise numeric CDC lag (embedded Kafka AdminClient).
+
+See [DATABRIDGE.md](DATABRIDGE.md).
+
 ## ⏭ Slice 3+ — Enterprise & product integration
 - Product integrations: Veyron (VM datastores), Hyper2KVM (direct-to-RBD migration), GuestKit
   (read-only snapshot inspection), PacketWolf (VM→OSD network/storage RCA), Ragnarok (AI storage

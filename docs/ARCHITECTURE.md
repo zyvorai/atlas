@@ -41,6 +41,13 @@ atlas-common            atlas-driver-core ──► StorageDriver trait, DriverE
 Dependency rule: the gateway and discovery worker depend only on the **`StorageDriver` trait**,
 never on a concrete backend. Adding a backend = implementing the trait + registering it.
 
+**DataBridge** (`atlas-databridge`) layers a cloud-to-edge DB migration control plane on the same
+foundation — it reuses the job engine, inventory (`migrations/0011_databridge.sql`), gateway, and
+console, adds source connectors + operator/Debezium CR builders, and a periodic **reconciler** (mirrors
+`spawn_scheduler`) that advances long-running pipeline work (edge CR readiness, full-load/validation
+Jobs, CDC health). It calls Atlas to provision Ceph-backed storage for the edge databases. See
+[DATABRIDGE.md](DATABRIDGE.md).
+
 ## The driver contract
 
 `atlas-driver-core::StorageDriver` (PDF §17.2):

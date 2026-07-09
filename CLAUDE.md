@@ -18,8 +18,9 @@ Implemented:
 - **Zeus OS React console** embedded in the gateway (HTTPS, login, Observatory, Ceph page, Nebula theme).
 - `deploy/rook-ceph-lab/` (single-node overlay + day-2 ops scripts) + `deploy/k8s/` ceph deployment.
 - **DataBridge** (`atlas-databridge`): cloud-to-edge DB migration control plane (RDS/Cloud SQL PG+MySQL
-  → CloudNativePG/Percona on Ceph). Full pipeline demoable fake (discover→assess→provision→full-load→
-  CDC→validate→cutover→rollback); real edge provisioning wired. See `docs/DATABRIDGE.md`.
+  → CloudNativePG/Percona on Ceph). Full pipeline (discover→assess→provision→full-load→CDC→validate→
+  cutover→rollback); **verified end-to-end on two live Rook Ceph clusters incl. real Debezium CDC**,
+  and fake-first (`make run-databridge`). See `docs/DATABRIDGE.md` + `deploy/databridge/`.
 
 Deferred: RBD mirroring/DR (needs a 2nd cluster), per-product integrations beyond the gRPC surface.
 

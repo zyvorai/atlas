@@ -73,10 +73,13 @@ for stage in assess provision full-load cdc/start validate cutover; do curl -sX 
 ## Configuration
 | Env | Default | Meaning |
 |---|---|---|
-| `ATLAS_DATABRIDGE_RECONCILE_SECS` | `15` | reconciler tick (edge CR readiness, CDC lag). `0` disables. |
+| `ATLAS_DATABRIDGE_RECONCILE_SECS` | `15` | reconciler tick (edge CR readiness, full-load/validation Jobs, CDC health). `0` disables. |
+| `ATLAS_DATABRIDGE_CONNECT_IMAGE` | *(unset)* | Kafka Connect image bundling Debezium + a JDBC-sink plugin (see `deploy/databridge/connect/Dockerfile`). Required for real CDC. |
+| `ATLAS_DATABRIDGE_SINK_PK_FIELDS` | `id` | record-key PK column(s) the JDBC sink upserts on. |
 
 Source `driver_mode` (`fake`/`real`) is per-source, set at registration. Edge namespace is
-`zyvor-databridge`; edge storage class is `zyvor-rbd-prod`.
+`zyvor-databridge`; edge storage class is `zyvor-rbd-prod`. Real CDC also expects a Strimzi Kafka named
+`zyvor-kafka` in the edge namespace (bootstrap `zyvor-kafka-kafka-bootstrap:9092`).
 
 ## Data model
 `migration_sources`, `migration_plans`, `edge_db_clusters`, `cdc_streams`, `validation_runs`,
@@ -86,8 +89,9 @@ cdc_streaming → validating → validated → cutover_pending → cutover_in_pr
 → completed | rolled_back | failed`.
 
 ## Live verification (real infra)
-**A full end-to-end real migration was driven through the deployed gateway** on the Rook cluster
-(k3s + Rook Ceph), Postgres → Ceph-backed edge Postgres:
+**Verified end-to-end on two independent live Rook Ceph clusters** (`175.110.122.71`, `80.79.5.173`).
+A full real migration was driven through the deployed gateway (k3s + Rook Ceph), Postgres →
+Ceph-backed edge Postgres:
 
 | Stage | Result |
 |---|---|
@@ -109,7 +113,10 @@ set via `ATLAS_DATABRIDGE_CONNECT_IMAGE`). The gateway's `cdc/start` created the
 source + JDBC-sink connectors; a row inserted into the source Postgres **replicated to the Ceph-backed
 edge Postgres** (source → Debezium → Kafka → JDBC sink → edge), and continuous inserts converged.
 
-Getting there corrected **nine real issues** in the blind-built CDC path (all now in the code / deploy):
+Getting there corrected **ten real issues** in the blind-built CDC path (all now in the code / deploy),
+confirmed by re-running the whole flow on the **second** cluster: `cdc/start` there produced both
+connectors RUNNING and replicated a row to the edge with **zero manual patching** — the committed code
++ `deploy/databridge/` bundle stand up working CDC on their own.
 1. Strimzi serves the kinds at `kafka.strimzi.io/v1` (not `v1beta2`);
 2. bootstrap Service is `<kafka>-kafka-bootstrap:9092`;
 3. `KafkaConnect` needs top-level `groupId` + `*StorageTopic` (not under `config`);
@@ -120,7 +127,9 @@ Getting there corrected **nine real issues** in the blind-built CDC path (all no
 8. the JDBC sink needs the Debezium `ExtractNewRecordState` unwrap SMT + a `RegexRouter` (topic→table)
    + `pk.mode=record_key`/`pk.fields`;
 9. Debezium must use `decimal.handling.mode=double` (Postgres unscaled `numeric` → a STRUCT the sink
-   can't bind) + `snapshot.mode=never` (the full-load already seeded the edge).
+   can't bind) + `snapshot.mode=never` (the full-load already seeded the edge);
+10. the JDBC sink needs `consumer.override.metadata.max.age.ms` shortened (default 5 min) so it discovers
+    a table's Debezium topic (created on the first change) promptly, without a restart.
 
 Real CDC is **health-tracked** by the reconciler: a streaming stream backed by a real Debezium
 `KafkaConnector` follows the connector's state (RUNNING → live/caught-up, else → `error`); fake
@@ -129,18 +138,16 @@ streams keep the synthesized lag drain. The sink `pk.fields` is configurable via
 consumer offset) would need an embedded Kafka AdminClient — a scoped future addition.
 
 ## Status
-- **Done + CI-tested**: full pipeline demoable end-to-end (fake) — locked by
-  `tests/databridge_pipeline.rs`; real edge provisioning (CNPG/Percona CR apply + reconciler readiness
-  polling) on Ceph; **real full-load** (`pg_dump|psql` / `mysqldump|mysql` batch Jobs, reconciler-watched).
-- **Done, UNVERIFIED against a live stack** (unit-tested CR/Job builders; need a running Strimzi/Kafka
-  + real DB to prove end-to-end):
-  - real **CDC** — `start_cdc` applies a Strimzi `KafkaConnect` cluster + a Debezium source
-    `KafkaConnector` + a JDBC-sink `KafkaConnector` (creds via `${secrets:…}` config-provider);
-  - real **validation** — `validate` applies a row-count-compare batch Job (source↔edge), reconciler
-    records passed/failed.
-- **Follow-up (single remaining)**: real CDC **lag tracking** (Kafka Connect consumer-group offsets /
-  source LSN) — the reconciler only synthesizes lag in fake mode today, so the lag-gated cutover
-  guard needs real lag before a real cutover is safe.
+- **Done + verified end-to-end on two live Rook Ceph clusters** (and CI-locked by
+  `tests/databridge_pipeline.rs` for the fake path): the entire pipeline — discover (real
+  `tokio-postgres` connector) → assess → provision (CNPG/Percona CR on Ceph, reconciler-advanced) →
+  full-load (`pg_dump|psql` / `mysqldump|mysql` batch Jobs, reconciler-watched) → **CDC** (Strimzi
+  `KafkaConnect` + Debezium source + JDBC-sink connectors, live source→edge replication) → validate
+  (row-count-compare Job) → cutover (guarded) → rollback.
+- Real CDC is **health-tracked** by the reconciler; the JDBC sink `pk.fields` is configurable.
+- **Follow-ups**: real **MySQL** source connector + TLS for cloud SSL; **precise numeric CDC lag**
+  (topic end − sink consumer offset) via an embedded Kafka AdminClient — today a real streaming stream
+  reports caught-up (0) while its connectors are healthy.
 
 ### Full-load secret assumptions
 The real full-load Job runs in `zyvor-databridge`, so the **source Secret must exist in that

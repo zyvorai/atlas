@@ -75,9 +75,11 @@ call **stable Atlas APIs**; Atlas talks to storage backends through **pluggable 
   engines at the edge (**CloudNativePG / Percona on Ceph RBD**), from one control plane.
 - Full pipeline — **discover → assess → provision → full-load → CDC (Debezium) → validate → cutover
   → rollback** — as async jobs with a reconciler; admin-guarded cutover, rollback window.
-- **Fake-first**: the whole pipeline runs with no cloud/k8s (`make run-databridge`); real edge
-  provisioning (operator CR apply + Ceph PVCs) is wired. Console: **DataBridge** section. See
-  [docs/DATABRIDGE.md](docs/DATABRIDGE.md) + [deploy/databridge/](deploy/databridge/README.md).
+- **Verified end-to-end on two live Rook Ceph clusters**: a real Postgres → Ceph-backed edge Postgres
+  migration with live **CDC replication** (Debezium → Kafka → JDBC sink), driven through the deployed
+  gateway. Also **fake-first** — the whole pipeline runs with no cloud/k8s (`make run-databridge`).
+  Console: **DataBridge** section. See [docs/DATABRIDGE.md](docs/DATABRIDGE.md) +
+  [deploy/databridge/](deploy/databridge/README.md).
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/API.md](docs/API.md).
 

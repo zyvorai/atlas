@@ -283,6 +283,35 @@ is used. The signature binds to the host, so the client must connect to the endp
    "format": "manifest-v1", "checksum": "8495f123...", "state": "verified", "created_at": "..." }]
 ```
 
+## DataBridge — cloud-to-edge DB migration
+
+Migrate managed cloud databases (PostgreSQL/MySQL) to edge databases on Ceph. Stage triggers return
+`202 + job id` (track via `/jobs/{id}/watch`); reads return the inventory rows. Full reference +
+runbook: [DATABRIDGE.md](DATABRIDGE.md).
+
+### Sources
+- `GET /api/atlas/v1/databridge/sources` · `POST /api/atlas/v1/databridge/sources` — list / register a source
+  (`{name, kind: postgres|mysql, cloud, endpoint, port, database, secret_ref, secret_namespace, tls_mode, driver_mode: fake|real}`).
+- `GET`/`DELETE /api/atlas/v1/databridge/sources/{id}` — get / delete.
+- `POST /api/atlas/v1/databridge/sources/{id}/discover` — introspect the source schema (job).
+
+### Plans & pipeline
+- `GET /api/atlas/v1/databridge/plans` · `POST` — list / create (`{name, source_id, rollback_window_secs?}`).
+- `GET /api/atlas/v1/databridge/plans/{id}` — plan detail (state, readiness_score, assessment).
+- `POST /api/atlas/v1/databridge/plans/{id}/assess` — score readiness (job).
+- `POST .../provision` — provision the edge DB (CloudNativePG/Percona) on Ceph (job).
+- `POST .../full-load` — dump+load source → edge (batch job).
+- `POST .../cdc/start` · `.../cdc/stop` — Debezium CDC control (job).
+- `POST .../validate` — row-count/checksum compare (job).
+- `POST .../cutover` — **admin, guarded** (validated + validation passed + CDC lag under threshold) (job).
+- `POST .../rollback` — **admin**, within the rollback window (job).
+
+### Read models
+- `GET /api/atlas/v1/databridge/edge-clusters` · `/{id}`
+- `GET /api/atlas/v1/databridge/cdc-streams` · `/{id}` (live lag)
+- `GET /api/atlas/v1/databridge/validations[?plan_id=]`
+- `GET /api/atlas/v1/databridge/cutovers`
+
 ## Jobs, snapshots, policies
 
 ### `GET /api/atlas/v1/jobs` · `GET /api/atlas/v1/jobs/{id}`
