@@ -67,7 +67,8 @@ call **stable Atlas APIs**; Atlas talks to storage backends through **pluggable 
 - **React/Vite console** (Zeus OS "Tahoe" design, embedded in the gateway): every capability wired,
   HTTPS, branded login, **Observatory** (6 live canvas visualizations), Ceph page, per-backend cards,
   and a **Nebula** default theme (+ Midnight, Aurora).
-- **Day-2 ops**: `deploy/rook-ceph-lab/{reclaim-space,resize-osd,teardown}.sh` (Ceph capped to 400 GiB verified).
+- **Day-2 ops**: `deploy/rook-ceph-lab/{reclaim-space,resize-osd,setup-k3s-disk,teardown}.sh`
+  (Ceph capped to 400 GiB on `/dev/sdb1`; the freed tail becomes `/dev/sdb2` for the k3s data-dir).
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/API.md](docs/API.md).
 

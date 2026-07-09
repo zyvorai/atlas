@@ -56,6 +56,17 @@ the root FS `/dev/sda2` is separate):
   ```sh
   ./resize-osd.sh 400 --confirm
   ```
+- **`setup-k3s-disk.sh --confirm`** — put the **k3s storage load on the big disk.** After
+  `resize-osd.sh` caps Ceph to `/dev/sdb1` (400 GiB), ~531 GiB of `/dev/sdb` is left free; this
+  carves it into `/dev/sdb2`, formats it, and moves the k3s data-dir (`/var/lib/rancher` —
+  containerd image store + local-path PV data + datastore) onto it so k3s stops filling the small
+  root FS (`/dev/sda2`). Creates **only** the new partition — the Ceph OSD on `/dev/sdb1` is left
+  intact, so it's safe on a live cluster. Stops/starts k3s around the move; keeps the pre-move copy
+  at `/var/lib/rancher.pre-sdb2`. Dry-run without `--confirm`.
+  ```sh
+  ./resize-osd.sh 400 --confirm     # first: Ceph -> /dev/sdb1, free the rest of /dev/sdb
+  ./setup-k3s-disk.sh --confirm     # then: /dev/sdb2 <- the free tail, k3s data-dir moves there
+  ```
 - **`teardown.sh --confirm`** — fully uninstall Rook Ceph (reverses `up.sh`) and wipe `/dev/sdb`
   using Rook's own `cleanupPolicy`. **Destructive.** Dry-run without `--confirm`.
   ```sh
@@ -64,3 +75,4 @@ the root FS `/dev/sda2` is separate):
 
 > Note: the OSD claims the **whole** raw device, so a BlueStore OSD can't be shrunk online — capping
 > to 400 GiB means recreating it on a partition, which is why `resize-osd.sh` is destructive.
+> After that, `/dev/sdb` holds `sdb1` (400 GiB Ceph OSD) + `sdb2` (rest, k3s data-dir).

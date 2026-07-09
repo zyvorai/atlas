@@ -40,7 +40,9 @@ log "1/7 namespaces"
 kubectl apply -f "$HERE/01-namespaces.yaml"
 
 log "2/7 Rook Ceph operator ($ROOK_VERSION)"
-base="https://raw.githubusercontent.com/rook/rook/release-${ROOK_VERSION%.*}/deploy/examples"
+# Rook release BRANCHES have no leading 'v' (release-1.15); only the tags do (v1.15.6).
+rook_minor="${ROOK_VERSION#v}"; rook_minor="${rook_minor%.*}"   # v1.15.6 -> 1.15
+base="https://raw.githubusercontent.com/rook/rook/release-${rook_minor}/deploy/examples"
 kubectl apply -f "$base/crds.yaml"
 kubectl apply -f "$base/common.yaml"
 kubectl apply -f "$base/operator.yaml"

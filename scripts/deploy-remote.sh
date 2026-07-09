@@ -12,19 +12,27 @@
 #   5. verify /health and /storage-classes over the NodePort
 #
 # Optional:
-#   --with-ceph   also run deploy/rook-ceph-lab/up.sh on the remote (CONSUMES an empty disk for
-#                 a Ceph OSD — destructive to that disk; see up.sh). Off by default.
+#   --with-ceph      also run deploy/rook-ceph-lab/up.sh on the remote (CONSUMES an empty disk
+#                    for a Ceph OSD — destructive to that disk; see up.sh). Off by default.
+#   --with-k3s-disk  also run deploy/rook-ceph-lab/setup-k3s-disk.sh: carve /dev/sdb2 from the
+#                    free tail left by resize-osd.sh and move the k3s data-dir onto it, so the
+#                    big disk carries the k3s load instead of the small root FS. Off by default.
 #
 # Usage:
 #   ./scripts/deploy-remote.sh 212.8.248.187 sus
 #   ./scripts/deploy-remote.sh 212.8.248.187 sus --with-ceph
+#   ./scripts/deploy-remote.sh 212.8.248.187 sus --with-k3s-disk
 set -euo pipefail
 
 HOST="${1:-${DEPLOY_HOST:-}}"
 USER="${2:-${DEPLOY_USER:-sus}}"
 WITH_CEPH=0
-for a in "$@"; do [[ "$a" == "--with-ceph" ]] && WITH_CEPH=1; done
-[[ -z "$HOST" ]] && { echo "usage: $0 <host> <user> [--with-ceph]" >&2; exit 2; }
+WITH_K3S_DISK=0
+for a in "$@"; do
+  [[ "$a" == "--with-ceph" ]] && WITH_CEPH=1
+  [[ "$a" == "--with-k3s-disk" ]] && WITH_K3S_DISK=1
+done
+[[ -z "$HOST" ]] && { echo "usage: $0 <host> <user> [--with-ceph] [--with-k3s-disk]" >&2; exit 2; }
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REMOTE_DIR=".deployment/atlas"
@@ -52,6 +60,11 @@ $SSH "cd ~/${REMOTE_DIR} && kubectl apply -f deploy/k8s/atlas-gateway.yaml && ku
 if [[ "$WITH_CEPH" == "1" ]]; then
   log "4b/5 installing Rook Ceph (DESTRUCTIVE: consumes an empty disk as an OSD)"
   $SSH "cd ~/${REMOTE_DIR} && bash deploy/rook-ceph-lab/up.sh"
+fi
+
+if [[ "$WITH_K3S_DISK" == "1" ]]; then
+  log "4c/5 carving /dev/sdb2 + moving the k3s data-dir onto it (needs sdb1 from resize-osd.sh)"
+  $SSH "cd ~/${REMOTE_DIR} && bash deploy/rook-ceph-lab/setup-k3s-disk.sh --confirm"
 fi
 
 log "5/5 verify over NodePort ${NODEPORT}"

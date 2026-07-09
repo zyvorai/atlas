@@ -114,6 +114,11 @@ say "waiting for the new OSD to come up (up to 5 min)"
 kubectl -n "$NS" wait --for=condition=Ready pod -l app=rook-ceph-osd --timeout=300s || warn "OSD not Ready yet — check 'kubectl -n $NS get pods'"
 
 say "4/5 re-apply pools / CephFS / RGW + StorageClasses"
+# StorageClass parameters are immutable: if up.sh (or a prior run) already created them, a plain
+# `kubectl apply` aborts with "field is immutable". Deleting an SC is safe — it never touches
+# already-bound PVs (they reference the class by name in their own spec) — so drop the zyvor-* SCs
+# first, then re-apply cleanly. Pools/filesystem/objectstore CRs apply idempotently as-is.
+kubectl delete storageclass zyvor-rbd-prod zyvor-cephfs-shared zyvor-rgw-bucket --ignore-not-found
 kubectl apply -f "$HERE/single-node/blockpool-sc.yaml"
 kubectl apply -f "$HERE/single-node/cephfs-sc.yaml"
 kubectl apply -f "$HERE/single-node/rgw.yaml"
