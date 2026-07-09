@@ -86,11 +86,16 @@ cdc_streaming → validating → validated → cutover_pending → cutover_in_pr
 → completed | rolled_back | failed`.
 
 ## Status
-- **Done**: full pipeline demoable end-to-end (fake); real edge provisioning (CNPG/Percona CR apply +
-  reconciler readiness polling) on Ceph; **real full-load** (`pg_dump|psql` / `mysqldump|mysql` batch
-  Jobs applied to the edge namespace, watched to completion by the reconciler).
-- **Follow-ups (real infra)**: real Debezium CDC + lag from Kafka Connect, real source-vs-edge
-  validation queries.
+- **Done + CI-tested**: full pipeline demoable end-to-end (fake) — locked by
+  `tests/databridge_pipeline.rs`; real edge provisioning (CNPG/Percona CR apply + reconciler readiness
+  polling) on Ceph; **real full-load** (`pg_dump|psql` / `mysqldump|mysql` batch Jobs, reconciler-watched).
+- **Done, UNVERIFIED against a live stack**: real CDC wiring — `start_cdc` (real mode) applies a
+  Strimzi `KafkaConnect` cluster + a Debezium source `KafkaConnector` + a JDBC-sink `KafkaConnector`
+  (credentials via Strimzi's `${secrets:…}` config-provider). The CR specs are unit-tested but need a
+  running Strimzi/Kafka + real DB to prove end-to-end.
+- **Follow-ups**: real CDC **lag tracking** (Kafka Connect consumer-group offsets / source LSN) — the
+  reconciler only synthesizes lag in fake mode today; and real source-vs-edge **validation queries**
+  (currently reports matching counts in fake mode).
 
 ### Full-load secret assumptions
 The real full-load Job runs in `zyvor-databridge`, so the **source Secret must exist in that

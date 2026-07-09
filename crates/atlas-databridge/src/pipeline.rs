@@ -286,14 +286,14 @@ pub async fn start_cdc(
     let source = atlas_inventory::databridge::sources::get_source(pool, &plan.source_id)
         .await?
         .ok_or_else(|| anyhow!("source not found"))?;
-    let engine = &source.kind;
-    let s = short(plan_id);
+    let engine = source.kind.clone();
+    let s = short(plan_id).to_string();
     let cdc_id = atlas_common::ids::cdc_stream_id();
-    let connect = format!("dbz-connect-{s}");
-    let connector = format!("dbz-{s}");
-    let topic_prefix = format!("db-{s}");
+    let connect = crate::cr::streaming::connect_name(&s);
+    let connector = crate::cr::streaming::source_connector_name(&s);
+    let topic_prefix = crate::cr::streaming::topic_prefix(&s);
     atlas_inventory::databridge::cdc::insert_stream(
-        pool, &cdc_id, &plan.tenant_id, plan_id, engine, &connect, &connector, &topic_prefix,
+        pool, &cdc_id, &plan.tenant_id, plan_id, &engine, &connect, &connector, &topic_prefix,
     )
     .await?;
     atlas_inventory::databridge::plans::set_cdc_stream(pool, plan_id, &cdc_id).await?;
@@ -308,9 +308,72 @@ pub async fn start_cdc(
         .await?;
         return Ok(serde_json::json!({ "plan_id": plan_id, "cdc_stream_id": cdc_id, "state": "streaming", "mode": "fake" }));
     }
-    Err(anyhow!(
-        "real CDC (Debezium/Kafka connectors) is not implemented in this slice"
-    ))
+
+    // Real mode: apply the Strimzi KafkaConnect cluster + Debezium source + JDBC sink connectors.
+    // (Structurally correct but UNVERIFIED against a live Kafka/DB stack — see docs/DATABRIDGE.md.)
+    let k8s = k8s.expect("k8s present in real branch");
+    let edge_id = plan
+        .edge_cluster_id
+        .as_deref()
+        .ok_or_else(|| anyhow!("plan has no edge cluster; provision first"))?;
+    let edge = atlas_inventory::databridge::edge_clusters::get_edge_cluster(pool, edge_id)
+        .await?
+        .ok_or_else(|| anyhow!("edge cluster not found"))?;
+    let ns = EDGE_NAMESPACE;
+    let src_secret = source
+        .secret_ref
+        .as_deref()
+        .ok_or_else(|| anyhow!("source has no secret_ref"))?;
+    let src_secret_ns = source.secret_namespace.as_deref().unwrap_or(ns);
+    let edge_secret = edge
+        .secret_ref
+        .as_deref()
+        .ok_or_else(|| anyhow!("edge cluster has no secret"))?;
+    let cr_name = edge.cr_name.as_deref().unwrap_or("");
+    let db = source.database.as_deref().unwrap_or("appdb");
+
+    use crate::cr::streaming;
+    // 1. KafkaConnect cluster
+    k8s.apply_cr(
+        streaming::GROUP, streaming::VERSION, streaming::CONNECT_KIND, ns, &connect,
+        streaming::connect_spec("zyvor-kafka-bootstrap:9092", 1),
+    )
+    .await
+    .map_err(|e| anyhow!("apply KafkaConnect: {e}"))?;
+
+    let mut labels = std::collections::BTreeMap::new();
+    labels.insert("strimzi.io/cluster".to_string(), connect.clone());
+
+    // 2. Debezium source connector
+    let src_spec = streaming::debezium_source_spec(
+        &engine, &s, source.endpoint.as_deref().unwrap_or(""),
+        source.port.unwrap_or(if engine == "postgres" { 5432 } else { 3306 }),
+        db, src_secret_ns, src_secret,
+    );
+    k8s.apply_cr_labeled(
+        streaming::GROUP, streaming::VERSION, streaming::CONNECTOR_KIND, ns, &connector, &labels, src_spec,
+    )
+    .await
+    .map_err(|e| anyhow!("apply Debezium source connector: {e}"))?;
+
+    // 3. JDBC sink connector -> edge DB
+    let (jdbc_url, edge_user, edge_pass_key) = if engine == "postgres" {
+        (format!("jdbc:postgresql://{cr_name}-rw.{ns}.svc:5432/{db}"), "app", "password")
+    } else {
+        (format!("jdbc:mysql://{cr_name}-haproxy.{ns}.svc:3306/{db}"), "root", "root")
+    };
+    let sink_spec = streaming::jdbc_sink_spec(&s, &jdbc_url, ns, edge_secret, edge_user, edge_pass_key);
+    k8s.apply_cr_labeled(
+        streaming::GROUP, streaming::VERSION, streaming::CONNECTOR_KIND, ns,
+        &streaming::sink_connector_name(&s), &labels, sink_spec,
+    )
+    .await
+    .map_err(|e| anyhow!("apply JDBC sink connector: {e}"))?;
+
+    atlas_inventory::databridge::cdc::set_state(pool, &cdc_id, "streaming").await?;
+    Ok(serde_json::json!({
+        "plan_id": plan_id, "cdc_stream_id": cdc_id, "connect": connect, "state": "streaming", "mode": "real"
+    }))
 }
 
 /// Stop a plan's CDC stream.

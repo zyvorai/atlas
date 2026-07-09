@@ -255,11 +255,31 @@ impl K8sDriver {
         name: &str,
         spec: serde_json::Value,
     ) -> Result<(), K8sError> {
+        self.apply_cr_labeled(group, version, kind, ns, name, &BTreeMap::new(), spec)
+            .await
+    }
+
+    /// Like `apply_cr` but also stamps `metadata.labels` — needed e.g. for Strimzi `KafkaConnector`,
+    /// which associates with its Connect cluster via the `strimzi.io/cluster` label.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn apply_cr_labeled(
+        &self,
+        group: &str,
+        version: &str,
+        kind: &str,
+        ns: &str,
+        name: &str,
+        labels: &BTreeMap<String, String>,
+        spec: serde_json::Value,
+    ) -> Result<(), K8sError> {
         let gvk = GroupVersionKind::gvk(group, version, kind);
         let ar = ApiResource::from_gvk(&gvk);
         let api: Api<DynamicObject> = Api::namespaced_with(self.client.clone(), ns, &ar);
         let mut obj = DynamicObject::new(name, &ar);
         obj.metadata.namespace = Some(ns.to_string());
+        if !labels.is_empty() {
+            obj.metadata.labels = Some(labels.clone().into_iter().collect());
+        }
         obj.data = serde_json::json!({ "spec": spec });
         match api.get_opt(name).await? {
             Some(existing) => {

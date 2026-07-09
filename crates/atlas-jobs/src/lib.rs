@@ -559,13 +559,25 @@ async fn dispatch(
 
             // Verify: poll for Bound (Immediate SCs bind quickly; WaitForFirstConsumer stays Pending).
             let phase = poll_pvc_phase(&k8s, &namespace, &name).await;
+            // Resolve the real Ceph RBD `pool/image` (via the bound PV's CSI
+            // attributes) so products that attach the volume directly (e.g. host
+            // libvirt / a hypervisor VM disk) get a usable backend id. Falls back
+            // to a PVC reference when it isn't a bound ceph-csi RBD volume.
+            let native = if phase.as_deref() == Some("Bound") {
+                match k8s.resolve_rbd(&namespace, &name).await {
+                    Ok(Some((pool, image))) => format!("{pool}/{image}"),
+                    _ => format!("pvc/{namespace}/{name}"),
+                }
+            } else {
+                format!("pvc/{namespace}/{name}")
+            };
             let vol = StorageVolume {
                 id: volume_id.clone(),
                 cluster_id: None,
                 pool_id: None,
                 name: name.clone(),
                 kind: parse_kind(&kind),
-                backend_native_id: Some(format!("pvc/{namespace}/{name}")),
+                backend_native_id: Some(native),
                 size_bytes,
                 used_bytes: None,
                 state: phase
