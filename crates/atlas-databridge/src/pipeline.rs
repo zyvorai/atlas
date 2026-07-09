@@ -357,10 +357,11 @@ pub async fn start_cdc(
     let db = source.database.as_deref().unwrap_or("appdb");
 
     use crate::cr::streaming;
-    // 1. KafkaConnect cluster
+    // 1. KafkaConnect cluster (image must bundle Debezium + JDBC-sink plugins; set at deploy time).
+    let connect_image = std::env::var("ATLAS_DATABRIDGE_CONNECT_IMAGE").ok();
     k8s.apply_cr(
         streaming::GROUP, streaming::VERSION, streaming::CONNECT_KIND, ns, &connect,
-        streaming::connect_spec("zyvor-kafka-bootstrap:9092", 1),
+        streaming::connect_spec("zyvor-kafka-kafka-bootstrap:9092", 1, connect_image.as_deref()),
     )
     .await
     .map_err(|e| anyhow!("apply KafkaConnect: {e}"))?;

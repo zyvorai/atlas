@@ -10,7 +10,8 @@
 use serde_json::{json, Value};
 
 pub const GROUP: &str = "kafka.strimzi.io";
-pub const VERSION: &str = "v1beta2";
+// Current Strimzi serves the Kafka/KafkaConnect/KafkaConnector kinds at v1 (v1beta2 was removed).
+pub const VERSION: &str = "v1";
 pub const CONNECT_KIND: &str = "KafkaConnect";
 pub const CONNECTOR_KIND: &str = "KafkaConnector";
 
@@ -28,22 +29,30 @@ pub fn topic_prefix(short: &str) -> String {
     format!("db{short}")
 }
 
-/// A `KafkaConnect` cluster spec with the Debezium + JDBC-sink plugins and a Secret config provider.
-pub fn connect_spec(bootstrap_servers: &str, replicas: i64) -> Value {
-    json!({
+/// A `KafkaConnect` cluster spec (Strimzi v1). `groupId` + the three storage topics are top-level
+/// required fields; the Secret config-provider lets connectors reference `${secrets:…}`.
+///
+/// `image` must be a Kafka Connect image that BUNDLES the Debezium (postgres/mysql) + a JDBC-sink
+/// plugin (e.g. built with Strimzi's `spec.build` + a registry, or a prebuilt image). The default
+/// Strimzi Connect image has no connector plugins, so leaving `image` empty means connectors won't
+/// instantiate — set `ATLAS_DATABRIDGE_CONNECT_IMAGE` at deploy time.
+pub fn connect_spec(bootstrap_servers: &str, replicas: i64, image: Option<&str>) -> Value {
+    let mut spec = json!({
         "replicas": replicas.max(1),
         "bootstrapServers": bootstrap_servers,
+        "groupId": "zyvor-databridge-connect",
+        "configStorageTopic": "zyvor-connect-configs",
+        "offsetStorageTopic": "zyvor-connect-offsets",
+        "statusStorageTopic": "zyvor-connect-status",
         "config": {
-            "group.id": "zyvor-databridge-connect",
-            "offset.storage.topic": "zyvor-connect-offsets",
-            "config.storage.topic": "zyvor-connect-configs",
-            "status.storage.topic": "zyvor-connect-status",
             "config.providers": "secrets",
             "config.providers.secrets.class": "io.strimzi.kafka.KubernetesSecretConfigProvider"
-        },
-        // Plugins are baked into the Connect image in production; listed here for provenance.
-        "build": { "plugins": ["debezium-postgres", "debezium-mysql", "jdbc-sink"] }
-    })
+        }
+    });
+    if let Some(img) = image.filter(|s| !s.is_empty()) {
+        spec["image"] = json!(img);
+    }
+    spec
 }
 
 /// Debezium source connector config for the given engine. `secret_ns`/`secret` reference the source
@@ -81,7 +90,7 @@ pub fn debezium_source_spec(
             config["connector.class"] = json!("io.debezium.connector.mysql.MySqlConnector");
             config["database.server.id"] = json!(184000 + (short.len() as i64));
             config["schema.history.internal.kafka.bootstrap.servers"] =
-                json!("zyvor-kafka-bootstrap:9092");
+                json!("zyvor-kafka-kafka-bootstrap:9092");
             config["schema.history.internal.kafka.topic"] = json!(format!("dbz-history-{short}"));
         }
     }

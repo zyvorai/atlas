@@ -103,8 +103,18 @@ Prereqs proven in the process: `deploy/databridge/up.sh --pg-only` installs Clou
 cluster; the gateway's **write RBAC** (CNPG `clusters`, batch `jobs`, Strimzi connectors, `secrets`)
 is sufficient; the CNPG `<cluster>-app` Secret exposes the `uri`/`password` keys the loader uses.
 
-Not yet exercised live: real **CDC** (needs Strimzi/Kafka — `up.sh` without `--pg-only`) and real
-CDC **lag tracking** (Kafka Connect offsets).
+**CDC (Strimzi) — partially exercised live:** installed the Strimzi operator + brought up a KRaft
+Kafka on the cluster, which corrected three real bugs in the CDC CR builders (now fixed + validated
+by server-side dry-run against the real CRDs):
+1. Strimzi serves the kinds at `kafka.strimzi.io/**v1**` (not `v1beta2`);
+2. the bootstrap Service is `<kafka>-**kafka**-bootstrap:9092`;
+3. `KafkaConnect` requires top-level `groupId` + `configStorageTopic`/`offsetStorageTopic`/
+   `statusStorageTopic` (not inside `config`).
+
+**Remaining for full CDC data-flow**: a Kafka Connect image that **bundles the Debezium + a JDBC-sink
+plugin** (the stock Strimzi Connect image has none) — set `ATLAS_DATABRIDGE_CONNECT_IMAGE` to a
+prebuilt/registry image; plus Debezium config iteration (replication slot/publication) and real CDC
+**lag tracking** (Kafka Connect offsets). This is a dedicated build/registry follow-up.
 
 ## Status
 - **Done + CI-tested**: full pipeline demoable end-to-end (fake) — locked by
