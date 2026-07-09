@@ -40,28 +40,41 @@ kubectl -n "$NS" get deploy rook-ceph-operator >/dev/null 2>&1 || {
 
 warn "REBUILDING Ceph OSD on /dev/$DEV capped to ${SIZE_GIB} GiB — ALL CEPH DATA LOST — 5s to abort"; sleep 5
 
-say "1/5 arm disk-cleanup + delete CephCluster (Rook zaps /dev/$DEV)"
-kubectl -n "$NS" patch cephcluster rook-ceph --type merge \
-  -p '{"spec":{"cleanupPolicy":{"confirmation":"yes-really-destroy-data"}}}' || true
-kubectl -n "$NS" delete cephcluster rook-ceph --ignore-not-found --timeout=300s || true
-# wait for OSD/mon pods to drain
-for i in $(seq 1 30); do
-  n=$(kubectl -n "$NS" get pods --no-headers 2>/dev/null | grep -cE 'rook-ceph-(osd|mon|mgr)' || true)
+say "1/5 tear down the current Ceph cluster (deterministic — no Rook cleanupPolicy hang)"
+# stop the operator so it doesn't recreate daemons mid-teardown
+kubectl -n "$NS" scale deploy rook-ceph-operator --replicas=0 || true
+# delete the daemons that hold /dev/$DEV open
+for sel in rook-ceph-osd rook-ceph-mon rook-ceph-mgr rook-ceph-mds rook-ceph-rgw; do
+  kubectl -n "$NS" delete deploy -l app="$sel" --ignore-not-found --wait=false || true
+done
+# delete the CephCluster; if it hangs on its finalizer, strip it
+kubectl -n "$NS" delete cephcluster rook-ceph --ignore-not-found --wait=false || true
+sleep 5
+kubectl -n "$NS" patch cephcluster rook-ceph --type=merge -p '{"metadata":{"finalizers":[]}}' 2>/dev/null || true
+# wait for daemon pods to actually terminate (releases the disk)
+for i in $(seq 1 48); do
+  n=$(kubectl -n "$NS" get pods --no-headers 2>/dev/null | grep -cE 'rook-ceph-(osd|mon|mgr|mds|rgw)' || true)
   [ "$n" = "0" ] && break; sleep 5
 done
 
-say "2/5 partition /dev/$DEV → /dev/$PART = ${SIZE_GIB} GiB"
+say "2/5 partition /dev/$DEV → /dev/$PART = ${SIZE_GIB} GiB (+ clean stale LVM/host state)"
 sudo bash -c '
   set -e
   for m in $(dmsetup ls 2>/dev/null | awk "/ceph/{print \$1}"); do dmsetup remove "$m" || true; done
+  rm -rf /var/lib/rook/rook-ceph
   sgdisk --zap-all "/dev/'"$DEV"'"
   wipefs -a "/dev/'"$DEV"'" || true
   parted -s "/dev/'"$DEV"'" mklabel gpt
   parted -s "/dev/'"$DEV"'" mkpart primary 1MiB "'"${SIZE_GIB}"'GiB"
   partprobe "/dev/'"$DEV"'"
   sleep 2
+  wipefs -a "/dev/'"$PART"'" || true
   lsblk -o NAME,SIZE,TYPE "/dev/'"$DEV"'"
 '
+
+say "restart the operator"
+kubectl -n "$NS" scale deploy rook-ceph-operator --replicas=1 || true
+kubectl -n "$NS" rollout status deploy/rook-ceph-operator --timeout=180s || true
 
 say "3/5 re-create the CephCluster on the ${SIZE_GIB} GiB partition /dev/$PART"
 NODE="$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')"
