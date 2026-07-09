@@ -433,3 +433,133 @@ pub struct StorageSnapshot {
     pub parent_snapshot_id: Option<String>,
     pub created_at: Option<String>,
 }
+
+// ---------------------------------------------------------------------------
+// DataBridge — cloud-to-edge database migration (PDF §DataBridge)
+// ---------------------------------------------------------------------------
+
+/// A registered source database in a cloud (AWS RDS/Aurora, GCP Cloud SQL) or a generic endpoint.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MigrationSource {
+    pub id: String,
+    pub tenant_id: String,
+    pub name: String,
+    /// postgres | mysql
+    pub kind: String,
+    /// rds | aurora | cloudsql | generic
+    pub cloud: String,
+    pub endpoint: Option<String>,
+    pub port: Option<i64>,
+    pub database: Option<String>,
+    /// k8s Secret holding the source credentials — never the credentials themselves.
+    pub secret_ref: Option<String>,
+    pub secret_namespace: Option<String>,
+    pub tls_mode: String,
+    /// fake | real — fake serves a canned schema so the pipeline runs with no cloud creds.
+    pub driver_mode: String,
+    pub state: String,
+    /// Discovered schema/tables/sizes/version/extensions (opaque JSON).
+    #[serde(default)]
+    pub discovered: serde_json::Value,
+    pub created_at: Option<String>,
+}
+
+/// The edge target DB cluster (CloudNativePG / MySQL operator) on Ceph-backed storage.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EdgeDbCluster {
+    pub id: String,
+    pub tenant_id: String,
+    pub plan_id: Option<String>,
+    /// postgres | mysql
+    pub engine: String,
+    /// cnpg | percona | oracle
+    pub operator: String,
+    pub namespace: String,
+    pub cr_name: Option<String>,
+    pub storage_class: String,
+    pub wal_storage_class: Option<String>,
+    pub instances: i64,
+    pub size_bytes: i64,
+    pub service_endpoint: Option<String>,
+    pub secret_ref: Option<String>,
+    pub state: String,
+    pub created_at: Option<String>,
+}
+
+/// A Debezium CDC stream keeping the edge DB in sync with the source.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CdcStream {
+    pub id: String,
+    pub tenant_id: String,
+    pub plan_id: Option<String>,
+    pub engine: String,
+    pub connect_name: Option<String>,
+    pub connector_name: Option<String>,
+    pub topic_prefix: Option<String>,
+    pub state: String,
+    pub lag_bytes: i64,
+    pub lag_seconds: i64,
+    pub last_source_lsn: Option<String>,
+    pub last_applied_lsn: Option<String>,
+    pub events_total: i64,
+    pub lag_updated_at: Option<String>,
+    pub created_at: Option<String>,
+}
+
+/// A migration plan: source -> edge, with assessment, CDC, cutover state.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MigrationPlan {
+    pub id: String,
+    pub tenant_id: String,
+    pub name: String,
+    pub source_id: String,
+    pub edge_cluster_id: Option<String>,
+    pub cdc_stream_id: Option<String>,
+    pub readiness_score: i64,
+    #[serde(default)]
+    pub assessment: serde_json::Value,
+    pub rollback_window_secs: i64,
+    pub cutover_at: Option<String>,
+    pub state: String,
+    pub created_at: Option<String>,
+}
+
+/// One table's comparison result inside a validation run.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationTableResult {
+    pub table: String,
+    pub source_rows: i64,
+    pub edge_rows: i64,
+    pub checksum_match: bool,
+}
+
+/// A validation run comparing source vs edge (row counts / checksums / schema diff).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationRun {
+    pub id: String,
+    pub tenant_id: String,
+    pub plan_id: String,
+    pub kind: String,
+    pub state: String,
+    pub tables_total: i64,
+    pub tables_mismatched: i64,
+    #[serde(default)]
+    pub summary: serde_json::Value,
+    pub created_at: Option<String>,
+    pub completed_at: Option<String>,
+}
+
+/// A cutover: freeze source, drain CDC lag, switch endpoint, open a rollback window.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Cutover {
+    pub id: String,
+    pub tenant_id: String,
+    pub plan_id: String,
+    pub state: String,
+    pub from_endpoint: Option<String>,
+    pub to_endpoint: Option<String>,
+    pub drain_deadline: Option<String>,
+    pub rollback_deadline: Option<String>,
+    pub created_at: Option<String>,
+    pub completed_at: Option<String>,
+}

@@ -24,6 +24,7 @@ atlas-inventory = { workspace = true }
 atlas-discovery = { workspace = true }
 atlas-monitor = { workspace = true }
 atlas-jobs = { workspace = true }
+atlas-databridge = { workspace = true }
 
 axum = { workspace = true }
 tokio = { workspace = true }

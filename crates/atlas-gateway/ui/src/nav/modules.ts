@@ -3,7 +3,8 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity, Aperture, Archive, Bell, Boxes, Camera, Clock, Cloud, Database, FileClock, Gauge, HardDrive,
-  KeyRound, Layers, LayoutDashboard, Orbit, Server, ShieldCheck, Sparkles, Timer, Users,
+  KeyRound, Layers, LayoutDashboard, Orbit, Server, ShieldCheck, Sparkles, Timer, Users, CloudCog,
+  Route as RouteIcon,
 } from "lucide-react";
 
 export interface Module {
@@ -37,11 +38,15 @@ export const MODULES: Module[] = [
   { id: "access", codename: "aegis", label: "Access", path: "/access", icon: KeyRound, section: "GOVERNANCE" },
   { id: "policies", codename: "dike", label: "Policies", path: "/policies", icon: ShieldCheck, section: "GOVERNANCE" },
 
+  { id: "cloud-databases", codename: "prometheus", label: "Cloud Databases", path: "/databridge/sources", icon: CloudCog, section: "DATABRIDGE", dock: true },
+  { id: "migration-plans", codename: "iris", label: "Migration Plans", path: "/databridge/plans", icon: RouteIcon, section: "DATABRIDGE", dock: true },
+  { id: "edge-clusters", codename: "epimetheus", label: "Edge DB Clusters", path: "/databridge/edge-clusters", icon: Server, section: "DATABRIDGE" },
+
   { id: "backends", codename: "gaia", label: "Backends", path: "/backends", icon: Server, section: "INFRASTRUCTURE" },
   { id: "kubernetes", codename: "talos", label: "Kubernetes", path: "/kubernetes", icon: Boxes, section: "INFRASTRUCTURE" },
   { id: "cluster", codename: "oracle", label: "Cluster", path: "/cluster", icon: Database, section: "INFRASTRUCTURE" },
   { id: "ceph", codename: "kraken", label: "Ceph", path: "/ceph", icon: Aperture, section: "INFRASTRUCTURE" },
 ];
 
-export const SECTIONS = ["STORAGE", "DATA PROTECTION", "OBSERVABILITY", "GOVERNANCE", "INFRASTRUCTURE"];
+export const SECTIONS = ["STORAGE", "DATA PROTECTION", "DATABRIDGE", "OBSERVABILITY", "GOVERNANCE", "INFRASTRUCTURE"];
 export const SPARK = Sparkles; // brand accent icon

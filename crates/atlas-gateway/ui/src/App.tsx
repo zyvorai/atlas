@@ -17,6 +17,10 @@ import Audit from "./views/Audit";
 import Tenants from "./views/Tenants";
 import Access from "./views/Access";
 import { Backends, Cluster, Kubernetes, Metrics, Policies } from "./views/Simple";
+import Sources from "./views/databridge/Sources";
+import Plans from "./views/databridge/Plans";
+import PlanDetail from "./views/databridge/PlanDetail";
+import EdgeClusters from "./views/databridge/EdgeClusters";
 
 export default function App() {
   return (
@@ -42,6 +46,10 @@ export default function App() {
         <Route path="/kubernetes" element={<Kubernetes />} />
         <Route path="/cluster" element={<Cluster />} />
         <Route path="/ceph" element={<Ceph />} />
+        <Route path="/databridge/sources" element={<Sources />} />
+        <Route path="/databridge/plans" element={<Plans />} />
+        <Route path="/databridge/plans/:id" element={<PlanDetail />} />
+        <Route path="/databridge/edge-clusters" element={<EdgeClusters />} />
         <Route path="*" element={<Overview />} />
       </Route>
     </Routes>

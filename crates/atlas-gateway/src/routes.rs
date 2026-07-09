@@ -93,6 +93,22 @@ pub fn router(state: AppState) -> Router {
         .route("/backups", get(list_backups))
         .route("/backups/{id}", get(get_backup).delete(delete_backup))
         .route("/backups/{id}/download", get(download_backup))
+        // ---- DataBridge (cloud-to-edge DB migration) ----
+        .route(
+            "/databridge/sources",
+            get(db_list_sources).post(db_create_source),
+        )
+        .route(
+            "/databridge/sources/{id}",
+            get(db_get_source).delete(db_delete_source),
+        )
+        .route("/databridge/sources/{id}/discover", post(db_discover_source))
+        .route("/databridge/plans", get(db_list_plans).post(db_create_plan))
+        .route("/databridge/plans/{id}", get(db_get_plan).delete(db_delete_plan))
+        .route("/databridge/plans/{id}/assess", post(db_assess_plan))
+        .route("/databridge/plans/{id}/provision", post(db_provision_edge))
+        .route("/databridge/edge-clusters", get(db_list_edge_clusters))
+        .route("/databridge/edge-clusters/{id}", get(db_get_edge_cluster))
         .route("/policies", get(list_policies))
         .route("/auth/tokens", post(issue_token))
         .route(
@@ -1985,6 +2001,269 @@ async fn list_pvs(State(s): State<AppState>) -> AppResult<Json<Value>> {
         .await
         .map_err(|e| AppError::Driver(e.to_string()))?;
     Ok(Json(json!(pvs)))
+}
+
+// ---- DataBridge: sources (cloud-to-edge DB migration) ----
+
+#[derive(Debug, Deserialize)]
+struct CreateSourceBody {
+    name: String,
+    /// postgres | mysql
+    kind: String,
+    /// rds | aurora | cloudsql | generic
+    #[serde(default)]
+    cloud: Option<String>,
+    endpoint: Option<String>,
+    port: Option<i64>,
+    database: Option<String>,
+    /// k8s Secret with the source credentials (used only in real driver mode).
+    secret_ref: Option<String>,
+    secret_namespace: Option<String>,
+    tls_mode: Option<String>,
+    /// fake (default) | real
+    driver_mode: Option<String>,
+}
+
+async fn db_list_sources(State(s): State<AppState>) -> AppResult<Json<Value>> {
+    Ok(Json(json!(
+        atlas_inventory::databridge::sources::list_sources(&s.pool).await?
+    )))
+}
+
+async fn db_get_source(State(s): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
+    let src = atlas_inventory::databridge::sources::get_source(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("source {id}")))?;
+    Ok(Json(json!(src)))
+}
+
+/// `POST /databridge/sources` — register a cloud/source database (synchronous; no job).
+async fn db_create_source(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Json(body): Json<CreateSourceBody>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    if body.name.trim().is_empty() {
+        return Err(AppError::Validation("name is required".into()));
+    }
+    if atlas_databridge::SourceKind::parse(&body.kind).is_none() {
+        return Err(AppError::Validation(
+            "kind must be postgres or mysql".into(),
+        ));
+    }
+    let source_id = ids::source_id();
+    let cloud = body.cloud.as_deref().unwrap_or("generic");
+    let tls_mode = body.tls_mode.as_deref().unwrap_or("require");
+    let driver_mode = body.driver_mode.as_deref().unwrap_or("fake");
+    atlas_inventory::databridge::sources::insert_source(
+        &s.pool,
+        &source_id,
+        "global",
+        &body.name,
+        &body.kind,
+        cloud,
+        body.endpoint.as_deref(),
+        body.port,
+        body.database.as_deref(),
+        body.secret_ref.as_deref(),
+        body.secret_namespace.as_deref(),
+        tls_mode,
+        driver_mode,
+    )
+    .await?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "databridge.source.create",
+        "migration.source",
+        &source_id,
+        "success",
+        Some(json!({ "name": body.name, "kind": body.kind, "cloud": cloud })),
+        None,
+    )
+    .await;
+    let src = atlas_inventory::databridge::sources::get_source(&s.pool, &source_id)
+        .await?
+        .ok_or_else(|| AppError::Internal("source vanished after insert".into()))?;
+    Ok((StatusCode::CREATED, Json(json!(src))))
+}
+
+async fn db_delete_source(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    atlas_inventory::databridge::sources::delete_source_row(&s.pool, &id).await?;
+    Ok(Json(json!({ "source_id": id, "deleted": true })))
+}
+
+/// `POST /databridge/sources/{id}/discover` — discover the source's schema as an async job.
+async fn db_discover_source(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    atlas_inventory::databridge::sources::get_source(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("source {id}")))?;
+    let job_id = ids::job_id();
+    let spec = JobSpec::SourceDiscover {
+        source_id: id.clone(),
+    };
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, spec, None)
+        .await
+        .map_err(AppError::from)?;
+    Ok(accepted(&job, json!({ "source_id": id })))
+}
+
+// ---- DataBridge: migration plans ----
+
+#[derive(Debug, Deserialize)]
+struct CreatePlanBody {
+    name: String,
+    source_id: String,
+    /// Rollback window after cutover, in seconds (default 72h).
+    rollback_window_secs: Option<i64>,
+}
+
+async fn db_list_plans(State(s): State<AppState>) -> AppResult<Json<Value>> {
+    Ok(Json(json!(
+        atlas_inventory::databridge::plans::list_plans(&s.pool).await?
+    )))
+}
+
+async fn db_get_plan(State(s): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
+    let p = atlas_inventory::databridge::plans::get_plan(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("plan {id}")))?;
+    Ok(Json(json!(p)))
+}
+
+/// `POST /databridge/plans` — create a migration plan for a source (synchronous).
+async fn db_create_plan(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Json(body): Json<CreatePlanBody>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    if body.name.trim().is_empty() {
+        return Err(AppError::Validation("name is required".into()));
+    }
+    let source = atlas_inventory::databridge::sources::get_source(&s.pool, &body.source_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("source {}", body.source_id)))?;
+    let plan_id = ids::migration_plan_id();
+    let window = body.rollback_window_secs.unwrap_or(259_200);
+    atlas_inventory::databridge::plans::insert_plan(
+        &s.pool, &plan_id, "global", &body.name, &source.id, window,
+    )
+    .await?;
+    // If the source is already discovered, reflect that in the plan state.
+    if source.state == "discovered" {
+        atlas_inventory::databridge::plans::set_state(&s.pool, &plan_id, "discovered").await?;
+    }
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "databridge.plan.create",
+        "migration.plan",
+        &plan_id,
+        "success",
+        Some(json!({ "name": body.name, "source_id": source.id })),
+        None,
+    )
+    .await;
+    let p = atlas_inventory::databridge::plans::get_plan(&s.pool, &plan_id)
+        .await?
+        .ok_or_else(|| AppError::Internal("plan vanished after insert".into()))?;
+    Ok((StatusCode::CREATED, Json(json!(p))))
+}
+
+async fn db_delete_plan(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    atlas_inventory::databridge::plans::delete_plan_row(&s.pool, &id).await?;
+    Ok(Json(json!({ "plan_id": id, "deleted": true })))
+}
+
+/// `POST /databridge/plans/{id}/assess` — score readiness from the source's discovered schema (async).
+async fn db_assess_plan(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let plan = atlas_inventory::databridge::plans::get_plan(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("plan {id}")))?;
+    let source = atlas_inventory::databridge::sources::get_source(&s.pool, &plan.source_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("source {}", plan.source_id)))?;
+    if source.state != "discovered" {
+        return Err(AppError::Validation(format!(
+            "source {} must be discovered before assessing (state: {})",
+            source.id, source.state
+        )));
+    }
+    let job_id = ids::job_id();
+    let spec = JobSpec::MigrationAssess { plan_id: id.clone() };
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, spec, None)
+        .await
+        .map_err(AppError::from)?;
+    Ok(accepted(&job, json!({ "plan_id": id })))
+}
+
+/// `POST /databridge/plans/{id}/provision` — provision the edge DB cluster on Ceph (async).
+async fn db_provision_edge(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let plan = atlas_inventory::databridge::plans::get_plan(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("plan {id}")))?;
+    if plan.readiness_score == 0 && plan.state == "draft" {
+        return Err(AppError::Validation(
+            "assess the plan before provisioning".into(),
+        ));
+    }
+    let job_id = ids::job_id();
+    let spec = JobSpec::EdgeDbProvision { plan_id: id.clone() };
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, spec, None)
+        .await
+        .map_err(AppError::from)?;
+    Ok(accepted(&job, json!({ "plan_id": id })))
+}
+
+async fn db_list_edge_clusters(State(s): State<AppState>) -> AppResult<Json<Value>> {
+    Ok(Json(json!(
+        atlas_inventory::databridge::edge_clusters::list_edge_clusters(&s.pool).await?
+    )))
+}
+
+async fn db_get_edge_cluster(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
+    let c = atlas_inventory::databridge::edge_clusters::get_edge_cluster(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("edge cluster {id}")))?;
+    Ok(Json(json!(c)))
 }
 
 // ---- object storage (buckets) ----

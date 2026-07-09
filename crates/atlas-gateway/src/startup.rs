@@ -223,6 +223,12 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
         // Metrics-history sampler: append a capacity/IO/job time-series row each monitor tick,
         // pruning to a 48h window, so the Overview trend charts survive restarts + reloads.
         spawn_metrics_sampler(state.pool.clone(), state.config.monitor_interval_secs);
+        // DataBridge reconciler: advances migration pipelines (edge CR status, full-load/validation
+        // Jobs, CDC lag) that the single-shot job engine can't hold open.
+        atlas_databridge::reconcile::spawn_reconciler(
+            state.pool.clone(),
+            state.config.databridge_reconcile_secs,
+        );
     }
 
     Ok(state)

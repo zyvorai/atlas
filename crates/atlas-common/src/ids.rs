@@ -43,6 +43,26 @@ pub fn schedule_id() -> String {
     prefixed("sched")
 }
 
+// ---- DataBridge (cloud-to-edge DB migration) ----
+pub fn source_id() -> String {
+    prefixed("src")
+}
+pub fn migration_plan_id() -> String {
+    prefixed("mplan")
+}
+pub fn edge_cluster_id() -> String {
+    prefixed("edb")
+}
+pub fn cdc_stream_id() -> String {
+    prefixed("cdc")
+}
+pub fn validation_id() -> String {
+    prefixed("val")
+}
+pub fn cutover_id() -> String {
+    prefixed("cut")
+}
+
 /// Deterministic id derived from a stable natural key, so re-discovering the same backend
 /// resource yields the same id (idempotent upserts). Uses a 64-bit FNV-1a hash — not cryptographic.
 pub fn stable_id(prefix: &str, natural_key: &str) -> String {

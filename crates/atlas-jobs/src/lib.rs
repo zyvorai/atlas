@@ -213,6 +213,15 @@ pub enum JobSpec {
         namespace: String,
         obc_name: String,
     },
+    /// DataBridge: discover a source database's schema (tables/sizes/version/CDC capability).
+    #[serde(rename = "databridge.source.discover")]
+    SourceDiscover { source_id: String },
+    /// DataBridge: score a plan's migration readiness from the discovered schema.
+    #[serde(rename = "databridge.assess")]
+    MigrationAssess { plan_id: String },
+    /// DataBridge: provision the edge database cluster (CloudNativePG / MySQL operator) on Ceph.
+    #[serde(rename = "databridge.edge.provision")]
+    EdgeDbProvision { plan_id: String },
     /// Delete a backup: remove its S3 manifest + data objects and the RBD snapshot (best-effort).
     #[serde(rename = "backup.delete")]
     BackupDelete {
@@ -252,6 +261,9 @@ impl JobSpec {
             JobSpec::RbdFlatten { .. } => "rbd.flatten",
             JobSpec::RbdSnapshot { .. } => "rbd.snapshot",
             JobSpec::RbdRollback { .. } => "rbd.rollback",
+            JobSpec::SourceDiscover { .. } => "databridge.source.discover",
+            JobSpec::MigrationAssess { .. } => "databridge.assess",
+            JobSpec::EdgeDbProvision { .. } => "databridge.edge.provision",
         }
     }
 }
@@ -930,6 +942,18 @@ async fn dispatch(
             }
             atlas_inventory::buckets::delete_bucket_row(pool, &bucket_id).await?;
             Ok(serde_json::json!({ "bucket_id": bucket_id, "deleted": true }))
+        }
+
+        JobSpec::SourceDiscover { source_id } => {
+            atlas_databridge::pipeline::discover(pool, &source_id).await
+        }
+
+        JobSpec::MigrationAssess { plan_id } => {
+            atlas_databridge::pipeline::assess_plan(pool, &plan_id).await
+        }
+
+        JobSpec::EdgeDbProvision { plan_id } => {
+            atlas_databridge::pipeline::provision_edge(pool, &plan_id).await
         }
 
         JobSpec::BucketCreate {

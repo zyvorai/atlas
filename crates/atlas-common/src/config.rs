@@ -51,6 +51,9 @@ pub struct Config {
     /// How often (seconds) the protection-schedule worker checks for due snapshot schedules
     /// (0 disables it).
     pub snapshot_tick_secs: u64,
+    /// How often (seconds) the DataBridge reconciler advances migration pipelines / CDC lag
+    /// (0 disables it).
+    pub databridge_reconcile_secs: u64,
     /// Optional HTTPS listen address (empty disables TLS). Served alongside the plain HTTP listener.
     pub https_addr: Option<String>,
     /// PEM cert/key paths for HTTPS (both required unless `tls_self_signed`).
@@ -123,6 +126,10 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(60),
+            databridge_reconcile_secs: std::env::var("ATLAS_DATABRIDGE_RECONCILE_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(15),
             https_addr: std::env::var("ATLAS_HTTPS_ADDR")
                 .ok()
                 .filter(|s| !s.trim().is_empty()),
@@ -200,6 +207,7 @@ impl Default for Config {
             backup_max_age_secs: 0,
             rgw_public_endpoint: None,
             snapshot_tick_secs: 0,
+            databridge_reconcile_secs: 0,
             https_addr: None,
             tls_cert_path: None,
             tls_key_path: None,

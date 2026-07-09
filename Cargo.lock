@@ -186,6 +186,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "atlas-databridge"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "atlas-api-types",
+ "atlas-common",
+ "atlas-inventory",
+ "chrono",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "atlas-discovery"
 version = "0.1.0"
 dependencies = [
@@ -286,6 +303,7 @@ dependencies = [
  "async-stream",
  "atlas-api-types",
  "atlas-common",
+ "atlas-databridge",
  "atlas-discovery",
  "atlas-driver-ceph",
  "atlas-driver-core",
@@ -333,6 +351,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "tokio",
  "tracing",
 ]
 
@@ -343,6 +362,7 @@ dependencies = [
  "anyhow",
  "atlas-api-types",
  "atlas-common",
+ "atlas-databridge",
  "atlas-driver-ceph",
  "atlas-driver-k8s",
  "atlas-driver-rgw",

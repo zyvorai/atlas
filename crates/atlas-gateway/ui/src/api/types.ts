@@ -240,3 +240,43 @@ export interface JobAccepted {
   resource?: Record<string, unknown>;
   links?: { job?: string };
 }
+
+// ---- DataBridge (cloud-to-edge DB migration) ----
+export interface DiscoveredTable { schema: string; name: string; est_rows: number; size_bytes: number; has_primary_key: boolean; }
+export interface DiscoveredSchema {
+  engine?: string; version?: string; databases?: string[];
+  tables?: DiscoveredTable[]; extensions?: string[]; total_size_bytes?: number; cdc_capable?: boolean;
+}
+export interface MigrationSource {
+  id: string; tenant_id: string; name: string; kind: string; cloud: string;
+  endpoint?: string | null; port?: number | null; database?: string | null;
+  secret_ref?: string | null; secret_namespace?: string | null; tls_mode: string;
+  driver_mode: string; state: string; discovered?: DiscoveredSchema; created_at?: string | null;
+}
+export interface MigrationPlan {
+  id: string; tenant_id: string; name: string; source_id: string;
+  edge_cluster_id?: string | null; cdc_stream_id?: string | null;
+  readiness_score: number; assessment?: any; rollback_window_secs: number;
+  cutover_at?: string | null; state: string; created_at?: string | null;
+}
+export interface EdgeDbCluster {
+  id: string; tenant_id: string; plan_id?: string | null; engine: string; operator: string;
+  namespace: string; cr_name?: string | null; storage_class: string; wal_storage_class?: string | null;
+  instances: number; size_bytes: number; service_endpoint?: string | null; secret_ref?: string | null;
+  state: string; created_at?: string | null;
+}
+export interface CdcStream {
+  id: string; tenant_id: string; plan_id?: string | null; engine: string;
+  connect_name?: string | null; connector_name?: string | null; topic_prefix?: string | null;
+  state: string; lag_bytes: number; lag_seconds: number; last_source_lsn?: string | null;
+  last_applied_lsn?: string | null; events_total: number; lag_updated_at?: string | null; created_at?: string | null;
+}
+export interface ValidationRun {
+  id: string; tenant_id: string; plan_id: string; kind: string; state: string;
+  tables_total: number; tables_mismatched: number; summary?: any; created_at?: string | null; completed_at?: string | null;
+}
+export interface Cutover {
+  id: string; tenant_id: string; plan_id: string; state: string;
+  from_endpoint?: string | null; to_endpoint?: string | null;
+  drain_deadline?: string | null; rollback_deadline?: string | null; created_at?: string | null; completed_at?: string | null;
+}

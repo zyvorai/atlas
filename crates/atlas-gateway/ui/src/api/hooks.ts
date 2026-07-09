@@ -7,6 +7,7 @@ import type {
   ActivityEvent, AlertRecord, AuditRow, BackupRecord, JobRecord, MetricForecast, MetricHistoryPoint, MetricSample, MetricsSummary, Osd,
   SnapshotSchedule, StorageBucket, StorageCluster, StoragePool, StorageSnapshot, StorageVolume,
   TenantPolicy, TenantQuota,
+  MigrationSource, MigrationPlan, EdgeDbCluster, CdcStream, ValidationRun,
 } from "./types";
 
 const g = async <T,>(path: string): Promise<T> => (await http.get<T>(path)).data;
@@ -65,6 +66,16 @@ export const useCephDf = () => q<any>(["ceph-df"], "/ceph/df", 12000);
 export const useStorageClasses = () => q<any[]>(["scs"], "/storage-classes", 20000);
 export const useRbdImages = (pool: string) =>
   q<{ pool: string; images: string[] }>(["rbd", pool], `/rbd-images?pool=${pool}`, 8000);
+
+// ---- DataBridge ----
+export const useSources = () => q<MigrationSource[]>(["db-sources"], "/databridge/sources", 6000);
+export const useSource = (id: string) => q<MigrationSource>(["db-source", id], `/databridge/sources/${id}`, 4000);
+export const usePlans = () => q<MigrationPlan[]>(["db-plans"], "/databridge/plans", 6000);
+export const usePlan = (id: string) => q<MigrationPlan>(["db-plan", id], `/databridge/plans/${id}`, 4000);
+export const useEdgeClusters = () => q<EdgeDbCluster[]>(["db-edge"], "/databridge/edge-clusters", 8000);
+export const useCdcStreams = () => q<CdcStream[]>(["db-cdc"], "/databridge/cdc-streams", 4000);
+export const useValidations = (planId?: string) =>
+  q<ValidationRun[]>(["db-val", planId], `/databridge/validations${planId ? "?plan_id=" + planId : ""}`, 6000);
 
 export function useInvalidate() {
   const qc = useQueryClient();

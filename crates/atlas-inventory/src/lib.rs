@@ -20,6 +20,7 @@ pub mod alerts;
 pub mod audit;
 pub mod backups;
 pub mod buckets;
+pub mod databridge;
 pub mod events;
 pub mod jobs;
 pub mod metrics;
