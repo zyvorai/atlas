@@ -57,6 +57,7 @@ export const useCephMetrics = (prefix?: string) =>
   q<MetricSample[]>(["cephMetrics", prefix], `/metrics/ceph${prefix ? "?prefix=" + prefix : ""}`, 8000);
 export const usePolicies = () => q<any[]>(["policies"], "/policies", 60000);
 export const useBackends = () => q<any[]>(["backends"], "/backends", 20000);
+export const useBackendsSummary = () => q<any[]>(["backends-summary"], "/backends/summary", 15000);
 export const useStorageClasses = () => q<any[]>(["scs"], "/storage-classes", 20000);
 export const useRbdImages = (pool: string) =>
   q<{ pool: string; images: string[] }>(["rbd", pool], `/rbd-images?pool=${pool}`, 8000);

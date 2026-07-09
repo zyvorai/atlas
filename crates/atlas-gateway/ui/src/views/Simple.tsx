@@ -4,8 +4,8 @@ import { useState } from "react";
 import { Boxes, Database, Gauge, Server, ShieldCheck } from "lucide-react";
 import { submit } from "../api/client";
 import {
-  useBackends, useCephMetrics, useClusters, useInvalidate, useNodes, useOsds, usePolicies,
-  usePools, useStorageClasses,
+  useBackends, useBackendsSummary, useCephMetrics, useClusters, useInvalidate, useNodes, useOsds,
+  usePolicies, usePools, useStorageClasses,
 } from "../api/hooks";
 import { Badge, Button, GlassSection, PageHeader } from "../ui/kit";
 import { Table } from "../ui/Table";
@@ -30,19 +30,49 @@ export function Policies() {
   );
 }
 
+const BACKEND_KIND: Record<string, "success" | "info" | "warning" | "neutral"> = {
+  ceph: "info", nfs: "success", zfs: "warning", rgw: "neutral",
+};
+
 export function Backends() {
   const { data } = useBackends();
+  const { data: summary } = useBackendsSummary();
   const inv = useInvalidate();
   return (
     <div>
       <PageHeader icon={Server} title="Backends" subtitle="Registered storage backends and discovery"
         actions={<Button onClick={() => submit("post", "/backends/bkd_ceph_lab/discover", null, "discovery triggered", () => inv("clusters"))}>Discover</Button>} />
+
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+        {(summary || []).map((b) => {
+          const pct = b.raw_capacity_bytes > 0 ? (b.used_capacity_bytes / b.raw_capacity_bytes) * 100 : 0;
+          return (
+            <div key={b.backend_id} className="glass-card p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Badge kind={BACKEND_KIND[b.backend_type] || "neutral"}>{b.backend_type}</Badge>
+                <span className="font-semibold truncate">{b.backend_id}</span>
+              </div>
+              <div className="text-xs text-muted-foreground mb-2">
+                {b.clusters} cluster(s) · {b.volumes} volume(s) · {b.mode}
+              </div>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-muted-foreground">{fmtBytes(b.used_capacity_bytes)} used</span>
+                <span className="text-muted-foreground">of {fmtBytes(b.raw_capacity_bytes)}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${Math.min(100, pct)}%`, background: "linear-gradient(180deg,#38BDF8,#2563EB)" }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
       <GlassSection title="Backends">
         <Table rows={data} rowKey={(b) => b.id}
           cols={[
             { h: "ID", f: (b) => b.id, mono: true },
             { h: "Name", f: (b) => b.name },
-            { h: "Type", f: (b) => b.backend_type },
+            { h: "Type", f: (b) => <Badge kind={BACKEND_KIND[b.backend_type] || "neutral"}>{b.backend_type}</Badge> },
             { h: "Mode", f: (b) => b.mode },
             { h: "Status", f: (b) => <Badge kind={b.status === "active" ? "success" : "neutral"}>{b.status}</Badge> },
           ]} />
