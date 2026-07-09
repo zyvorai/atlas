@@ -47,6 +47,8 @@ kubectl -n "$NS" scale deploy rook-ceph-operator --replicas=0 || true
 for sel in rook-ceph-osd rook-ceph-mon rook-ceph-mgr rook-ceph-mds rook-ceph-rgw; do
   kubectl -n "$NS" delete deploy -l app="$sel" --ignore-not-found --wait=false || true
 done
+# delete leftover prepare/cleanup jobs (they pin the disk / block a fresh start)
+kubectl -n "$NS" delete jobs --all --ignore-not-found --wait=false 2>/dev/null || true
 # delete the CephCluster; if it hangs on its finalizer, strip it
 kubectl -n "$NS" delete cephcluster rook-ceph --ignore-not-found --wait=false || true
 sleep 5
@@ -57,11 +59,13 @@ for i in $(seq 1 48); do
   [ "$n" = "0" ] && break; sleep 5
 done
 
-say "2/5 partition /dev/$DEV → /dev/$PART = ${SIZE_GIB} GiB (+ clean stale LVM/host state)"
+say "2/5 partition /dev/$DEV → /dev/$PART = ${SIZE_GIB} GiB (+ FULL host-state wipe for a fresh cluster)"
 sudo bash -c '
   set -e
   for m in $(dmsetup ls 2>/dev/null | awk "/ceph/{print \$1}"); do dmsetup remove "$m" || true; done
-  rm -rf /var/lib/rook/rook-ceph
+  # wipe ALL Rook host state (mon store, osd dirs, config) so the new cluster starts fresh —
+  # keeping the old mon store would revive the old osdmap whose OSD disk no longer exists.
+  rm -rf /var/lib/rook; mkdir -p /var/lib/rook
   sgdisk --zap-all "/dev/'"$DEV"'"
   wipefs -a "/dev/'"$DEV"'" || true
   parted -s "/dev/'"$DEV"'" mklabel gpt
