@@ -86,19 +86,25 @@ cdc_streaming → validating → validated → cutover_pending → cutover_in_pr
 → completed | rolled_back | failed`.
 
 ## Live verification (real infra)
-Verified against real infrastructure (not just fake):
-- **Real Postgres discovery** — `PostgresSourceConnector` introspected a live Postgres 14 (tables,
-  PKs, sizes, `wal_level`) ✅.
-- **CloudNativePG bundle** installs on the real Rook cluster (`deploy/databridge/up.sh --pg-only`) ✅.
-- **Provisioning CR** (exactly what `cnpg::cluster_spec` produces) stood up a Postgres with **data +
-  WAL PVCs Bound on `zyvor-rbd-prod` (Ceph RBD)**, reached *"Cluster in healthy state"* — and the
-  real `status` matches `cnpg::is_ready` ✅.
-- **Secret contract** — the CNPG `<cluster>-app` Secret exposes the `uri` + `password` keys the
-  full-load / JDBC-sink builders reference ✅.
+**A full end-to-end real migration was driven through the deployed gateway** on the Rook cluster
+(k3s + Rook Ceph), Postgres → Ceph-backed edge Postgres:
 
-A full gateway-driven end-to-end real migration additionally needs: the DataBridge gateway image
-deployed to the cluster, and **write RBAC** for its ServiceAccount (CNPG `Cluster`, batch `Job`, and
-Strimzi `KafkaConnector` in `zyvor-databridge`).
+| Stage | Result |
+|---|---|
+| discover | gateway's `tokio-postgres` connector introspected a live Postgres **16.14** (tables, PKs, sizes, `wal_level=logical`) |
+| assess | readiness **90/100** (flagged the no-PK `audit_log`) |
+| provision | gateway applied a **CloudNativePG `Cluster` CR**; data + WAL PVCs **Bound on `zyvor-rbd-prod`**; reconciler advanced `provisioning → provisioned` when it reached healthy |
+| full-load | gateway ran a **`pg_dump\|psql` batch Job**; **data really copied** (100 customers, 500 orders verified in the edge DB) |
+| validate | gateway ran a **row-count-compare Job**; reconciler → `validated` |
+| cutover | guarded (validated + validation passed) → endpoint switched source → `edge-…-rw.zyvor-databridge.svc:5432`, 72h rollback window |
+| rollback | within window → `rolled_back` |
+
+Prereqs proven in the process: `deploy/databridge/up.sh --pg-only` installs CloudNativePG on the real
+cluster; the gateway's **write RBAC** (CNPG `clusters`, batch `jobs`, Strimzi connectors, `secrets`)
+is sufficient; the CNPG `<cluster>-app` Secret exposes the `uri`/`password` keys the loader uses.
+
+Not yet exercised live: real **CDC** (needs Strimzi/Kafka — `up.sh` without `--pg-only`) and real
+CDC **lag tracking** (Kafka Connect offsets).
 
 ## Status
 - **Done + CI-tested**: full pipeline demoable end-to-end (fake) — locked by
