@@ -94,6 +94,15 @@ pub async fn list_plans(pool: &SqlitePool) -> Result<Vec<MigrationPlan>> {
     Ok(rows.into_iter().map(row_to_plan).collect())
 }
 
+/// Plans in a given pipeline state — used by the reconciler to advance in-flight work.
+pub async fn list_by_state(pool: &SqlitePool, state: &str) -> Result<Vec<MigrationPlan>> {
+    let rows = sqlx::query(&select("WHERE state = ? ORDER BY created_at DESC"))
+        .bind(state)
+        .fetch_all(pool)
+        .await?;
+    Ok(rows.into_iter().map(row_to_plan).collect())
+}
+
 fn select(tail: &str) -> String {
     format!(
         "SELECT id, tenant_id, name, source_id, edge_cluster_id, cdc_stream_id, readiness_score,

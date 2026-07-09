@@ -88,6 +88,35 @@ async fn reconcile_once(
             Err(e) => tracing::warn!("poll {kind} status for {}: {e}", edge.id),
         }
     }
+
+    // Watch full-load batch Jobs -> advance full_loading -> loaded | failed.
+    for plan in atlas_inventory::databridge::plans::list_by_state(pool, "full_loading").await? {
+        let job = crate::loader::job_name(&plan.id);
+        match k8s
+            .get_cr_status(
+                crate::loader::JOB_GROUP,
+                crate::loader::JOB_VERSION,
+                crate::loader::JOB_KIND,
+                crate::pipeline::EDGE_NAMESPACE,
+                &job,
+            )
+            .await
+        {
+            Ok(Some(status)) => match crate::loader::job_outcome(&status) {
+                crate::loader::JobOutcome::Succeeded => {
+                    atlas_inventory::databridge::plans::set_state(pool, &plan.id, "loaded").await?;
+                    tracing::info!("plan {} full-load complete", plan.id);
+                }
+                crate::loader::JobOutcome::Failed => {
+                    atlas_inventory::databridge::plans::set_state(pool, &plan.id, "failed").await?;
+                    tracing::warn!("plan {} full-load Job {job} failed", plan.id);
+                }
+                crate::loader::JobOutcome::Running => {}
+            },
+            Ok(None) => tracing::debug!("plan {} full-load Job {job} has no status yet", plan.id),
+            Err(e) => tracing::warn!("poll full-load Job {job}: {e}"),
+        }
+    }
     Ok(())
 }
 

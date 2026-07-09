@@ -87,6 +87,12 @@ cdc_streaming → validating → validated → cutover_pending → cutover_in_pr
 
 ## Status
 - **Done**: full pipeline demoable end-to-end (fake); real edge provisioning (CNPG/Percona CR apply +
-  reconciler readiness polling) on Ceph.
-- **Follow-ups (real infra)**: real full-load (`pg_dump`/`mydumper` batch Jobs), real Debezium CDC +
-  lag from Kafka Connect, real source-vs-edge validation queries.
+  reconciler readiness polling) on Ceph; **real full-load** (`pg_dump|psql` / `mysqldump|mysql` batch
+  Jobs applied to the edge namespace, watched to completion by the reconciler).
+- **Follow-ups (real infra)**: real Debezium CDC + lag from Kafka Connect, real source-vs-edge
+  validation queries.
+
+### Full-load secret assumptions
+The real full-load Job runs in `zyvor-databridge`, so the **source Secret must exist in that
+namespace** with `username`/`password` keys. The edge Secret is operator-generated: CloudNativePG's
+`<cluster>-app` provides a ready-to-use `uri`; Percona's `<cluster>-secrets` provides `root`.

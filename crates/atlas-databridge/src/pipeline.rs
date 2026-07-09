@@ -202,9 +202,75 @@ pub async fn full_load(
         atlas_inventory::databridge::plans::set_state(pool, plan_id, "loaded").await?;
         return Ok(serde_json::json!({ "plan_id": plan_id, "state": "loaded", "tables": tables, "mode": "fake" }));
     }
-    Err(anyhow!(
-        "real full-load (pg_dump/mydumper batch Job) is not implemented in this slice"
-    ))
+
+    // Real mode: apply a batch Job that dumps the source and loads it into the edge DB. The
+    // reconciler watches the Job to completion and advances full_loading -> loaded (or failed).
+    let k8s = k8s.expect("k8s present in real branch");
+    let edge_id = plan
+        .edge_cluster_id
+        .as_deref()
+        .ok_or_else(|| anyhow!("plan has no edge cluster; provision first"))?;
+    let edge = atlas_inventory::databridge::edge_clusters::get_edge_cluster(pool, edge_id)
+        .await?
+        .ok_or_else(|| anyhow!("edge cluster {edge_id} not found"))?;
+    if edge.state != "ready" {
+        return Err(anyhow!("edge cluster is not ready yet (state: {})", edge.state));
+    }
+    let source_secret = source
+        .secret_ref
+        .as_deref()
+        .ok_or_else(|| anyhow!("source has no secret_ref for credentials"))?;
+    let edge_secret = edge
+        .secret_ref
+        .as_deref()
+        .ok_or_else(|| anyhow!("edge cluster has no credentials secret"))?;
+    let engine = crate::SourceKind::parse(&source.kind)
+        .ok_or_else(|| anyhow!("unsupported engine: {}", source.kind))?;
+    let src_host = source.endpoint.as_deref().unwrap_or("");
+    let src_db = source.database.as_deref().unwrap_or("appdb");
+
+    let job_spec = match engine {
+        crate::SourceKind::Postgres => crate::loader::pg_job_spec(
+            source_secret,
+            edge_secret,
+            src_host,
+            source.port.unwrap_or(5432),
+            src_db,
+            &source.tls_mode,
+        ),
+        crate::SourceKind::Mysql => {
+            // edge host = the HAProxy service (endpoint without the :port suffix).
+            let edge_ep = crate::cr::mysql_operator::endpoint(
+                edge.cr_name.as_deref().unwrap_or(""),
+                &edge.namespace,
+            );
+            let edge_host = edge_ep.split(':').next().unwrap_or("");
+            crate::loader::mysql_job_spec(
+                source_secret,
+                edge_secret,
+                src_host,
+                source.port.unwrap_or(3306),
+                src_db,
+                edge_host,
+                src_db,
+            )
+        }
+    };
+    let job_name = crate::loader::job_name(plan_id);
+    k8s.apply_cr(
+        crate::loader::JOB_GROUP,
+        crate::loader::JOB_VERSION,
+        crate::loader::JOB_KIND,
+        &edge.namespace,
+        &job_name,
+        job_spec,
+    )
+    .await
+    .map_err(|e| anyhow!("apply full-load Job: {e}"))?;
+
+    Ok(serde_json::json!({
+        "plan_id": plan_id, "job": job_name, "state": "full_loading", "mode": "real"
+    }))
 }
 
 /// Start Debezium CDC. Fake mode records a streaming stream with an initial lag the reconciler

@@ -12,6 +12,7 @@ pub mod assess;
 pub mod connector;
 pub mod connectors;
 pub mod cr;
+pub mod loader;
 pub mod pipeline;
 pub mod reconcile;
 
