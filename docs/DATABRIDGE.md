@@ -85,6 +85,21 @@ Source `driver_mode` (`fake`/`real`) is per-source, set at registration. Edge na
 cdc_streaming → validating → validated → cutover_pending → cutover_in_progress → cutover_complete
 → completed | rolled_back | failed`.
 
+## Live verification (real infra)
+Verified against real infrastructure (not just fake):
+- **Real Postgres discovery** — `PostgresSourceConnector` introspected a live Postgres 14 (tables,
+  PKs, sizes, `wal_level`) ✅.
+- **CloudNativePG bundle** installs on the real Rook cluster (`deploy/databridge/up.sh --pg-only`) ✅.
+- **Provisioning CR** (exactly what `cnpg::cluster_spec` produces) stood up a Postgres with **data +
+  WAL PVCs Bound on `zyvor-rbd-prod` (Ceph RBD)**, reached *"Cluster in healthy state"* — and the
+  real `status` matches `cnpg::is_ready` ✅.
+- **Secret contract** — the CNPG `<cluster>-app` Secret exposes the `uri` + `password` keys the
+  full-load / JDBC-sink builders reference ✅.
+
+A full gateway-driven end-to-end real migration additionally needs: the DataBridge gateway image
+deployed to the cluster, and **write RBAC** for its ServiceAccount (CNPG `Cluster`, batch `Job`, and
+Strimzi `KafkaConnector` in `zyvor-databridge`).
+
 ## Status
 - **Done + CI-tested**: full pipeline demoable end-to-end (fake) — locked by
   `tests/databridge_pipeline.rs`; real edge provisioning (CNPG/Percona CR apply + reconciler readiness
