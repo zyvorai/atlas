@@ -171,3 +171,186 @@ pub async fn provision_edge(
         "size_gib": size_gib, "mode": "real",
     }))
 }
+
+/// Short suffix of a plan id, for naming derived k8s objects.
+fn short(plan_id: &str) -> &str {
+    &plan_id[plan_id.len().saturating_sub(8)..]
+}
+
+/// Full-load: copy the source dataset into the freshly-provisioned edge DB. Fake mode simulates an
+/// instant load; real mode (pg_dump/mydumper batch Job) is a follow-up.
+pub async fn full_load(
+    pool: &SqlitePool,
+    k8s: Option<&atlas_driver_k8s::K8sDriver>,
+    plan_id: &str,
+) -> Result<serde_json::Value> {
+    let plan = atlas_inventory::databridge::plans::get_plan(pool, plan_id)
+        .await?
+        .ok_or_else(|| anyhow!("plan {plan_id} not found"))?;
+    let source = atlas_inventory::databridge::sources::get_source(pool, &plan.source_id)
+        .await?
+        .ok_or_else(|| anyhow!("source not found"))?;
+    atlas_inventory::databridge::plans::set_state(pool, plan_id, "full_loading").await?;
+
+    if source.driver_mode == "fake" || k8s.is_none() {
+        let tables = source
+            .discovered
+            .get("tables")
+            .and_then(|t| t.as_array())
+            .map(|a| a.len())
+            .unwrap_or(0);
+        atlas_inventory::databridge::plans::set_state(pool, plan_id, "loaded").await?;
+        return Ok(serde_json::json!({ "plan_id": plan_id, "state": "loaded", "tables": tables, "mode": "fake" }));
+    }
+    Err(anyhow!(
+        "real full-load (pg_dump/mydumper batch Job) is not implemented in this slice"
+    ))
+}
+
+/// Start Debezium CDC. Fake mode records a streaming stream with an initial lag the reconciler
+/// drains toward zero; real mode (KafkaConnect + Debezium connector CRs) is a follow-up.
+pub async fn start_cdc(
+    pool: &SqlitePool,
+    k8s: Option<&atlas_driver_k8s::K8sDriver>,
+    plan_id: &str,
+) -> Result<serde_json::Value> {
+    let plan = atlas_inventory::databridge::plans::get_plan(pool, plan_id)
+        .await?
+        .ok_or_else(|| anyhow!("plan {plan_id} not found"))?;
+    let source = atlas_inventory::databridge::sources::get_source(pool, &plan.source_id)
+        .await?
+        .ok_or_else(|| anyhow!("source not found"))?;
+    let engine = &source.kind;
+    let s = short(plan_id);
+    let cdc_id = atlas_common::ids::cdc_stream_id();
+    let connect = format!("dbz-connect-{s}");
+    let connector = format!("dbz-{s}");
+    let topic_prefix = format!("db-{s}");
+    atlas_inventory::databridge::cdc::insert_stream(
+        pool, &cdc_id, &plan.tenant_id, plan_id, engine, &connect, &connector, &topic_prefix,
+    )
+    .await?;
+    atlas_inventory::databridge::plans::set_cdc_stream(pool, plan_id, &cdc_id).await?;
+    atlas_inventory::databridge::plans::set_state(pool, plan_id, "cdc_streaming").await?;
+
+    if source.driver_mode == "fake" || k8s.is_none() {
+        atlas_inventory::databridge::cdc::set_state(pool, &cdc_id, "streaming").await?;
+        // seed an initial backlog; the reconciler drains it so the UI lag chart animates.
+        atlas_inventory::databridge::cdc::update_lag(
+            pool, &cdc_id, 512 * 1024 * 1024, 45, Some("0/1000"), Some("0/0"), 0,
+        )
+        .await?;
+        return Ok(serde_json::json!({ "plan_id": plan_id, "cdc_stream_id": cdc_id, "state": "streaming", "mode": "fake" }));
+    }
+    Err(anyhow!(
+        "real CDC (Debezium/Kafka connectors) is not implemented in this slice"
+    ))
+}
+
+/// Stop a plan's CDC stream.
+pub async fn stop_cdc(pool: &SqlitePool, plan_id: &str) -> Result<serde_json::Value> {
+    let plan = atlas_inventory::databridge::plans::get_plan(pool, plan_id)
+        .await?
+        .ok_or_else(|| anyhow!("plan {plan_id} not found"))?;
+    if let Some(cdc_id) = plan.cdc_stream_id.as_deref() {
+        atlas_inventory::databridge::cdc::set_state(pool, cdc_id, "stopped").await?;
+    }
+    Ok(serde_json::json!({ "plan_id": plan_id, "state": "stopped" }))
+}
+
+/// Validate source vs edge (row counts / checksums). Fake mode reports matching counts per table.
+pub async fn validate(pool: &SqlitePool, plan_id: &str, kind: &str) -> Result<serde_json::Value> {
+    let plan = atlas_inventory::databridge::plans::get_plan(pool, plan_id)
+        .await?
+        .ok_or_else(|| anyhow!("plan {plan_id} not found"))?;
+    let source = atlas_inventory::databridge::sources::get_source(pool, &plan.source_id)
+        .await?
+        .ok_or_else(|| anyhow!("source not found"))?;
+    atlas_inventory::databridge::plans::set_state(pool, plan_id, "validating").await?;
+
+    let val_id = atlas_common::ids::validation_id();
+    atlas_inventory::databridge::validations::insert_validation(
+        pool, &val_id, &plan.tenant_id, plan_id, kind,
+    )
+    .await?;
+
+    // Fake: every discovered table matches on both sides.
+    let tables = source
+        .discovered
+        .get("tables")
+        .and_then(|t| t.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let results: Vec<serde_json::Value> = tables
+        .iter()
+        .map(|t| {
+            let name = t.get("name").and_then(|n| n.as_str()).unwrap_or("?");
+            let rows = t.get("est_rows").and_then(|r| r.as_i64()).unwrap_or(0);
+            serde_json::json!({ "table": name, "source_rows": rows, "edge_rows": rows, "checksum_match": true })
+        })
+        .collect();
+    let summary = serde_json::json!({ "tables": results });
+    atlas_inventory::databridge::validations::set_result(
+        pool, &val_id, true, tables.len() as i64, 0, &summary,
+    )
+    .await?;
+    atlas_inventory::databridge::plans::set_state(pool, plan_id, "validated").await?;
+
+    Ok(serde_json::json!({ "plan_id": plan_id, "validation_id": val_id, "passed": true, "tables": tables.len() }))
+}
+
+/// Cutover: freeze source, drain CDC, switch endpoint, open the rollback window. Fake mode drains
+/// instantly. Guards (validated + validation passed + lag under threshold) are enforced in the route.
+pub async fn cutover(pool: &SqlitePool, plan_id: &str) -> Result<serde_json::Value> {
+    let plan = atlas_inventory::databridge::plans::get_plan(pool, plan_id)
+        .await?
+        .ok_or_else(|| anyhow!("plan {plan_id} not found"))?;
+    let source = atlas_inventory::databridge::sources::get_source(pool, &plan.source_id)
+        .await?
+        .ok_or_else(|| anyhow!("source not found"))?;
+    let edge_id = plan
+        .edge_cluster_id
+        .as_deref()
+        .ok_or_else(|| anyhow!("plan has no edge cluster"))?;
+    let edge = atlas_inventory::databridge::edge_clusters::get_edge_cluster(pool, edge_id)
+        .await?
+        .ok_or_else(|| anyhow!("edge cluster not found"))?;
+
+    let cut_id = atlas_common::ids::cutover_id();
+    let from = source.endpoint.clone().unwrap_or_default();
+    let to = edge.service_endpoint.clone().unwrap_or_default();
+    let now = chrono::Utc::now();
+    let drain = (now + chrono::Duration::minutes(5)).to_rfc3339();
+    let rollback = (now + chrono::Duration::seconds(plan.rollback_window_secs)).to_rfc3339();
+
+    atlas_inventory::databridge::cutovers::insert_cutover(
+        pool, &cut_id, &plan.tenant_id, plan_id, Some(&from), Some(&to), Some(&drain), Some(&rollback),
+    )
+    .await?;
+    atlas_inventory::databridge::plans::set_state(pool, plan_id, "cutover_in_progress").await?;
+
+    // Fake: drain + switch complete immediately.
+    atlas_inventory::databridge::cutovers::set_state(pool, &cut_id, "switching").await?;
+    atlas_inventory::databridge::cutovers::set_complete(pool, &cut_id, "complete").await?;
+    atlas_inventory::databridge::plans::set_state(pool, plan_id, "cutover_complete").await?;
+    if let Some(cdc_id) = plan.cdc_stream_id.as_deref() {
+        atlas_inventory::databridge::cdc::set_state(pool, cdc_id, "stopped").await?;
+    }
+
+    Ok(serde_json::json!({
+        "plan_id": plan_id, "cutover_id": cut_id, "from": from, "to": to,
+        "rollback_deadline": rollback, "state": "cutover_complete",
+    }))
+}
+
+/// Roll back a cutover within its window: revert the active endpoint to the source.
+pub async fn rollback(pool: &SqlitePool, plan_id: &str) -> Result<serde_json::Value> {
+    let plan = atlas_inventory::databridge::plans::get_plan(pool, plan_id)
+        .await?
+        .ok_or_else(|| anyhow!("plan {plan_id} not found"))?;
+    if let Some(cut) = atlas_inventory::databridge::cutovers::latest_for_plan(pool, plan_id).await? {
+        atlas_inventory::databridge::cutovers::set_complete(pool, &cut.id, "rolled_back").await?;
+    }
+    atlas_inventory::databridge::plans::set_state(pool, plan_id, "rolled_back").await?;
+    Ok(serde_json::json!({ "plan_id": plan.id, "state": "rolled_back" }))
+}

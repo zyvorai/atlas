@@ -42,6 +42,10 @@ async fn reconcile_once(
     pool: &SqlitePool,
     k8s: Option<&atlas_driver_k8s::K8sDriver>,
 ) -> anyhow::Result<()> {
+    // Fake CDC: drain each streaming stream's lag toward zero so the Replication view animates and
+    // cutover eventually becomes allowed. (Real lag comes from Kafka Connect / source LSN.)
+    drain_fake_cdc(pool).await?;
+
     let Some(k8s) = k8s else { return Ok(()) }; // fake mode completes provisioning inline
 
     for edge in atlas_inventory::databridge::edge_clusters::list_by_state(pool, "provisioning").await? {
@@ -83,6 +87,30 @@ async fn reconcile_once(
             Ok(_) => tracing::debug!("edge cluster {} still provisioning", edge.id),
             Err(e) => tracing::warn!("poll {kind} status for {}: {e}", edge.id),
         }
+    }
+    Ok(())
+}
+
+/// Drain fake CDC streams toward zero lag each tick (demoable replication without a real Kafka).
+async fn drain_fake_cdc(pool: &SqlitePool) -> anyhow::Result<()> {
+    for stream in atlas_inventory::databridge::cdc::list_by_state(pool, "streaming").await? {
+        if stream.lag_seconds <= 0 && stream.lag_bytes <= 0 {
+            continue;
+        }
+        // ~40% of remaining backlog per tick, plus a few thousand more events applied.
+        let lag_bytes = (stream.lag_bytes * 6 / 10).max(0);
+        let lag_seconds = (stream.lag_seconds * 6 / 10).max(0);
+        let events = stream.events_total + 5000;
+        atlas_inventory::databridge::cdc::update_lag(
+            pool,
+            &stream.id,
+            lag_bytes,
+            lag_seconds,
+            stream.last_source_lsn.as_deref(),
+            stream.last_source_lsn.as_deref(), // caught up to source
+            events,
+        )
+        .await?;
     }
     Ok(())
 }

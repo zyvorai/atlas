@@ -4,7 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity, Aperture, Archive, Bell, Boxes, Camera, Clock, Cloud, Database, FileClock, Gauge, HardDrive,
   KeyRound, Layers, LayoutDashboard, Orbit, Server, ShieldCheck, Sparkles, Timer, Users, CloudCog,
-  Route as RouteIcon,
+  Route as RouteIcon, Radio,
 } from "lucide-react";
 
 export interface Module {
@@ -41,6 +41,8 @@ export const MODULES: Module[] = [
   { id: "cloud-databases", codename: "prometheus", label: "Cloud Databases", path: "/databridge/sources", icon: CloudCog, section: "DATABRIDGE", dock: true },
   { id: "migration-plans", codename: "iris", label: "Migration Plans", path: "/databridge/plans", icon: RouteIcon, section: "DATABRIDGE", dock: true },
   { id: "edge-clusters", codename: "epimetheus", label: "Edge DB Clusters", path: "/databridge/edge-clusters", icon: Server, section: "DATABRIDGE" },
+  { id: "replication", codename: "echo", label: "Replication", path: "/databridge/replication", icon: Radio, section: "DATABRIDGE" },
+  { id: "validation", codename: "astraea", label: "Validation", path: "/databridge/validation", icon: ShieldCheck, section: "DATABRIDGE" },
 
   { id: "backends", codename: "gaia", label: "Backends", path: "/backends", icon: Server, section: "INFRASTRUCTURE" },
   { id: "kubernetes", codename: "talos", label: "Kubernetes", path: "/kubernetes", icon: Boxes, section: "INFRASTRUCTURE" },

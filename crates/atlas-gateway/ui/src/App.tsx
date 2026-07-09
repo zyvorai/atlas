@@ -21,6 +21,8 @@ import Sources from "./views/databridge/Sources";
 import Plans from "./views/databridge/Plans";
 import PlanDetail from "./views/databridge/PlanDetail";
 import EdgeClusters from "./views/databridge/EdgeClusters";
+import Replication from "./views/databridge/Replication";
+import Validation from "./views/databridge/Validation";
 
 export default function App() {
   return (
@@ -50,6 +52,8 @@ export default function App() {
         <Route path="/databridge/plans" element={<Plans />} />
         <Route path="/databridge/plans/:id" element={<PlanDetail />} />
         <Route path="/databridge/edge-clusters" element={<EdgeClusters />} />
+        <Route path="/databridge/replication" element={<Replication />} />
+        <Route path="/databridge/validation" element={<Validation />} />
         <Route path="*" element={<Overview />} />
       </Route>
     </Routes>

@@ -222,6 +222,24 @@ pub enum JobSpec {
     /// DataBridge: provision the edge database cluster (CloudNativePG / MySQL operator) on Ceph.
     #[serde(rename = "databridge.edge.provision")]
     EdgeDbProvision { plan_id: String },
+    /// DataBridge: full-load the source dataset into the edge DB (pg_dump/mydumper).
+    #[serde(rename = "databridge.fullload")]
+    FullLoad { plan_id: String },
+    /// DataBridge: start Debezium CDC from the source to the edge DB.
+    #[serde(rename = "databridge.cdc.start")]
+    CdcStart { plan_id: String },
+    /// DataBridge: stop a plan's CDC stream.
+    #[serde(rename = "databridge.cdc.stop")]
+    CdcStop { plan_id: String },
+    /// DataBridge: validate source vs edge (row counts / checksums / schema diff).
+    #[serde(rename = "databridge.validate")]
+    ValidateRun { plan_id: String, kind: String },
+    /// DataBridge: cutover — freeze source, drain CDC, switch endpoint, open rollback window.
+    #[serde(rename = "databridge.cutover")]
+    Cutover { plan_id: String },
+    /// DataBridge: roll back a cutover within its window.
+    #[serde(rename = "databridge.rollback")]
+    Rollback { plan_id: String },
     /// Delete a backup: remove its S3 manifest + data objects and the RBD snapshot (best-effort).
     #[serde(rename = "backup.delete")]
     BackupDelete {
@@ -264,6 +282,12 @@ impl JobSpec {
             JobSpec::SourceDiscover { .. } => "databridge.source.discover",
             JobSpec::MigrationAssess { .. } => "databridge.assess",
             JobSpec::EdgeDbProvision { .. } => "databridge.edge.provision",
+            JobSpec::FullLoad { .. } => "databridge.fullload",
+            JobSpec::CdcStart { .. } => "databridge.cdc.start",
+            JobSpec::CdcStop { .. } => "databridge.cdc.stop",
+            JobSpec::ValidateRun { .. } => "databridge.validate",
+            JobSpec::Cutover { .. } => "databridge.cutover",
+            JobSpec::Rollback { .. } => "databridge.rollback",
         }
     }
 }
@@ -955,6 +979,21 @@ async fn dispatch(
         JobSpec::EdgeDbProvision { plan_id } => {
             atlas_databridge::pipeline::provision_edge(pool, k8s.as_deref(), &plan_id).await
         }
+
+        JobSpec::FullLoad { plan_id } => {
+            atlas_databridge::pipeline::full_load(pool, k8s.as_deref(), &plan_id).await
+        }
+        JobSpec::CdcStart { plan_id } => {
+            atlas_databridge::pipeline::start_cdc(pool, k8s.as_deref(), &plan_id).await
+        }
+        JobSpec::CdcStop { plan_id } => {
+            atlas_databridge::pipeline::stop_cdc(pool, &plan_id).await
+        }
+        JobSpec::ValidateRun { plan_id, kind } => {
+            atlas_databridge::pipeline::validate(pool, &plan_id, &kind).await
+        }
+        JobSpec::Cutover { plan_id } => atlas_databridge::pipeline::cutover(pool, &plan_id).await,
+        JobSpec::Rollback { plan_id } => atlas_databridge::pipeline::rollback(pool, &plan_id).await,
 
         JobSpec::BucketCreate {
             bucket_id,

@@ -107,8 +107,18 @@ pub fn router(state: AppState) -> Router {
         .route("/databridge/plans/{id}", get(db_get_plan).delete(db_delete_plan))
         .route("/databridge/plans/{id}/assess", post(db_assess_plan))
         .route("/databridge/plans/{id}/provision", post(db_provision_edge))
+        .route("/databridge/plans/{id}/full-load", post(db_full_load))
+        .route("/databridge/plans/{id}/cdc/start", post(db_cdc_start))
+        .route("/databridge/plans/{id}/cdc/stop", post(db_cdc_stop))
+        .route("/databridge/plans/{id}/validate", post(db_validate))
+        .route("/databridge/plans/{id}/cutover", post(db_cutover))
+        .route("/databridge/plans/{id}/rollback", post(db_rollback))
         .route("/databridge/edge-clusters", get(db_list_edge_clusters))
         .route("/databridge/edge-clusters/{id}", get(db_get_edge_cluster))
+        .route("/databridge/cdc-streams", get(db_list_cdc_streams))
+        .route("/databridge/cdc-streams/{id}", get(db_get_cdc_stream))
+        .route("/databridge/validations", get(db_list_validations))
+        .route("/databridge/cutovers", get(db_list_cutovers))
         .route("/policies", get(list_policies))
         .route("/auth/tokens", post(issue_token))
         .route(
@@ -2264,6 +2274,181 @@ async fn db_get_edge_cluster(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("edge cluster {id}")))?;
     Ok(Json(json!(c)))
+}
+
+/// Cutover is refused unless the plan is validated + last validation passed + CDC lag is under this.
+const CUTOVER_MAX_LAG_SECS: i64 = 10;
+
+/// Enqueue a plan-scoped DataBridge stage job (operator role). Shared by the simple stage triggers.
+async fn db_stage_job(
+    s: &AppState,
+    actor: &Actor,
+    plan_id: &str,
+    spec: JobSpec,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, actor, crate::auth::ROLE_OPERATOR)?;
+    atlas_inventory::databridge::plans::get_plan(&s.pool, plan_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("plan {plan_id}")))?;
+    let job_id = ids::job_id();
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, spec, None)
+        .await
+        .map_err(AppError::from)?;
+    Ok(accepted(&job, json!({ "plan_id": plan_id })))
+}
+
+async fn db_full_load(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    db_stage_job(&s, &actor, &id, JobSpec::FullLoad { plan_id: id.clone() }).await
+}
+
+async fn db_cdc_start(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    db_stage_job(&s, &actor, &id, JobSpec::CdcStart { plan_id: id.clone() }).await
+}
+
+async fn db_cdc_stop(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    db_stage_job(&s, &actor, &id, JobSpec::CdcStop { plan_id: id.clone() }).await
+}
+
+async fn db_validate(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    db_stage_job(
+        &s,
+        &actor,
+        &id,
+        JobSpec::ValidateRun { plan_id: id.clone(), kind: "rowcount".into() },
+    )
+    .await
+}
+
+/// `POST /databridge/plans/{id}/cutover` — guarded (admin): validated + last validation passed +
+/// CDC lag under threshold.
+async fn db_cutover(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    let plan = atlas_inventory::databridge::plans::get_plan(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("plan {id}")))?;
+    if plan.state != "validated" {
+        return Err(AppError::Conflict(format!(
+            "plan must be validated before cutover (state: {})",
+            plan.state
+        )));
+    }
+    let last = atlas_inventory::databridge::validations::latest_for_plan(&s.pool, &id).await?;
+    if last.as_ref().map(|v| v.state.as_str()) != Some("passed") {
+        return Err(AppError::Conflict(
+            "latest validation must have passed before cutover".into(),
+        ));
+    }
+    if let Some(cdc_id) = plan.cdc_stream_id.as_deref() {
+        if let Some(stream) = atlas_inventory::databridge::cdc::get_stream(&s.pool, cdc_id).await? {
+            if stream.lag_seconds > CUTOVER_MAX_LAG_SECS {
+                return Err(AppError::Conflict(format!(
+                    "CDC lag ({}s) exceeds the cutover threshold ({CUTOVER_MAX_LAG_SECS}s); wait for it to drain",
+                    stream.lag_seconds
+                )));
+            }
+        }
+    }
+    let job_id = ids::job_id();
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, JobSpec::Cutover { plan_id: id.clone() }, None)
+        .await
+        .map_err(AppError::from)?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool, None, &actor.id, "databridge.cutover", "migration.plan", &id, "accepted", None, None,
+    )
+    .await;
+    Ok(accepted(&job, json!({ "plan_id": id })))
+}
+
+/// `POST /databridge/plans/{id}/rollback` — guarded (admin): only within the rollback window.
+async fn db_rollback(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    atlas_inventory::databridge::plans::get_plan(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("plan {id}")))?;
+    let cut = atlas_inventory::databridge::cutovers::latest_for_plan(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::Conflict("no cutover to roll back".into()))?;
+    if let Some(deadline) = cut.rollback_deadline.as_deref() {
+        if let Ok(dl) = chrono::DateTime::parse_from_rfc3339(deadline) {
+            if chrono::Utc::now() > dl {
+                return Err(AppError::Conflict(
+                    "rollback window has closed for this cutover".into(),
+                ));
+            }
+        }
+    }
+    let job_id = ids::job_id();
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, JobSpec::Rollback { plan_id: id.clone() }, None)
+        .await
+        .map_err(AppError::from)?;
+    Ok(accepted(&job, json!({ "plan_id": id })))
+}
+
+async fn db_list_cdc_streams(State(s): State<AppState>) -> AppResult<Json<Value>> {
+    Ok(Json(json!(
+        atlas_inventory::databridge::cdc::list_streams(&s.pool).await?
+    )))
+}
+
+async fn db_get_cdc_stream(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
+    let c = atlas_inventory::databridge::cdc::get_stream(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("cdc stream {id}")))?;
+    Ok(Json(json!(c)))
+}
+
+#[derive(Debug, Deserialize)]
+struct PlanIdQuery {
+    plan_id: Option<String>,
+}
+
+async fn db_list_validations(
+    State(s): State<AppState>,
+    Query(q): Query<PlanIdQuery>,
+) -> AppResult<Json<Value>> {
+    Ok(Json(json!(
+        atlas_inventory::databridge::validations::list_validations(&s.pool, q.plan_id.as_deref())
+            .await?
+    )))
+}
+
+async fn db_list_cutovers(State(s): State<AppState>) -> AppResult<Json<Value>> {
+    Ok(Json(json!(
+        atlas_inventory::databridge::cutovers::list_cutovers(&s.pool).await?
+    )))
 }
 
 // ---- object storage (buckets) ----

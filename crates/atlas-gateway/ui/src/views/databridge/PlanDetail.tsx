@@ -19,8 +19,8 @@ const COMPLETED_THROUGH: Record<string, number> = {
   cutover_pending: 5, cutover_in_progress: 5, cutover_complete: 6, completed: 6,
   rolled_back: 6, failed: -1,
 };
-// Which stages are wired so far (later slices flip these on).
-const IMPLEMENTED = new Set(["discover", "assess", "provision"]);
+// All pipeline stages are wired (fake pipeline runs end-to-end).
+const IMPLEMENTED = new Set(STAGES as readonly string[]);
 
 export default function PlanDetail() {
   const { id = "" } = useParams();
@@ -35,16 +35,26 @@ export default function PlanDetail() {
   const a = plan.assessment as any;
 
   const act = (stage: string) => {
+    const P = `/databridge/plans/${plan.id}`;
     if (stage === "discover" && source) return submitJob("post", `/databridge/sources/${source.id}/discover`, null, "discover source", refresh);
-    if (stage === "assess") return submitJob("post", `/databridge/plans/${plan.id}/assess`, null, "assess plan", refresh);
-    if (stage === "provision") return submitJob("post", `/databridge/plans/${plan.id}/provision`, null, "provision edge", refresh);
+    if (stage === "assess") return submitJob("post", `${P}/assess`, null, "assess plan", refresh);
+    if (stage === "provision") return submitJob("post", `${P}/provision`, null, "provision edge", refresh);
+    if (stage === "full-load") return submitJob("post", `${P}/full-load`, null, "full-load", refresh);
+    if (stage === "cdc") return submitJob("post", `${P}/cdc/start`, null, "start CDC", refresh);
+    if (stage === "validate") return submitJob("post", `${P}/validate`, null, "validate", refresh);
+    if (stage === "cutover") return submitJob("post", `${P}/cutover`, null, "cutover", refresh);
   };
 
   return (
     <div>
       <PageHeader icon={RouteIcon} title={plan.name}
         subtitle={`Plan ${plan.id} · source ${source?.name || plan.source_id}`}
-        actions={<Badge kind={planStateKind(plan.state)} dot>{plan.state}</Badge>} />
+        actions={<div className="flex gap-2 items-center">
+          {plan.state === "cutover_complete" && (
+            <Button size="sm" variant="danger" onClick={() => submitJob("post", `/databridge/plans/${plan.id}/rollback`, null, "rollback", refresh)}>Rollback</Button>
+          )}
+          <Badge kind={planStateKind(plan.state)} dot>{plan.state}</Badge>
+        </div>} />
 
       <GlassSection title="Pipeline">
         <ol className="flex flex-col gap-2">
