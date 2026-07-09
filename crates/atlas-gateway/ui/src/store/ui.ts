@@ -11,7 +11,7 @@ interface TrackedJob {
   error?: string | null;
 }
 
-export type Theme = "dark" | "aurora";
+export type Theme = "nebula" | "dark" | "aurora";
 export type Density = "comfortable" | "compact";
 
 interface UiState {
@@ -38,7 +38,7 @@ interface UiState {
 
 const ls = typeof localStorage !== "undefined" ? localStorage : null;
 const savedToken = ls?.getItem("atlas.token") || "";
-const savedTheme = (ls?.getItem("atlas.theme") as Theme) || "dark";
+const savedTheme = (ls?.getItem("atlas.theme") as Theme) || "nebula";
 const savedDensity = (ls?.getItem("atlas.density") as Density) || "comfortable";
 
 function applyTheme(t: Theme) {

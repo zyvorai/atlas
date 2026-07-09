@@ -37,6 +37,24 @@
     --radius: 0.75rem;
   }
 
+  /* Nebula shell (default) — electric violet + magenta over deep cosmic indigo. */
+  :root[data-ui-shell="nebula"] {
+    --background: 258 45% 4%;
+    --card: 262 32% 8%;
+    --card-foreground: 260 30% 97%;
+    --foreground: 260 30% 97%;
+    --popover: 262 32% 8%;
+    --primary: 280 90% 66%;
+    --primary-foreground: 260 30% 98%;
+    --ring: 280 90% 66%;
+    --info: 280 90% 66%;
+    --muted-foreground: 258 18% 76%;
+    --border: 272 32% 18%;
+    --secondary: 270 28% 15%;
+    --accent: 270 28% 15%;
+    --input: 272 32% 18%;
+  }
+
   /* Aurora neon shell (Zeus OS variant) — cyan/purple/pink glow over near-black. */
   :root[data-ui-shell="aurora"] {
     --background: 240 30% 3%;
@@ -103,6 +121,22 @@
   :root[data-ui-shell="aurora"] .btn-primary {
     background: linear-gradient(180deg, rgb(34, 211, 238) 0%, rgb(147, 51, 234) 100%);
     box-shadow: 0 1px 0 rgba(255, 255, 255, 0.2) inset, 0 8px 22px -6px rgba(147, 51, 234, 0.5);
+  }
+  /* Nebula shell canvas + accents */
+  :root[data-ui-shell="nebula"] .tahoe-canvas {
+    background:
+      radial-gradient(ellipse 72% 52% at 16% -6%, rgba(168, 85, 247, 0.18), transparent 55%),
+      radial-gradient(ellipse 62% 50% at 90% 6%, rgba(236, 72, 153, 0.13), transparent 55%),
+      radial-gradient(ellipse 84% 62% at 58% 114%, rgba(56, 189, 248, 0.1), transparent 55%),
+      linear-gradient(180deg, #070312, #0c0620 45%, #12082a 82%, #08040f);
+  }
+  :root[data-ui-shell="nebula"] .btn-primary {
+    background: linear-gradient(180deg, rgb(192, 132, 252) 0%, rgb(219, 39, 119) 100%);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.22) inset, 0 8px 22px -6px rgba(192, 60, 220, 0.55);
+  }
+  :root[data-ui-shell="nebula"] .glass-card.hoverable:hover {
+    box-shadow: 0 0 32px -8px rgba(192, 132, 252, 0.4);
+    border-color: rgba(192, 132, 252, 0.4);
   }
   .zeus-sidebar {
     background: linear-gradient(180deg, hsl(var(--card) / 0.92) 0%, hsl(222 47% 5%) 100%);

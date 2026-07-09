@@ -129,10 +129,16 @@ function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
       </button>
       <button
         className="btn btn-ghost btn-sm"
-        title={theme === "aurora" ? "Switch to dark" : "Switch to Aurora"}
-        onClick={() => setTheme(theme === "aurora" ? "dark" : "aurora")}
+        title={`Theme: ${theme} — click to cycle (Nebula · Midnight · Aurora)`}
+        onClick={() => setTheme(theme === "nebula" ? "dark" : theme === "dark" ? "aurora" : "nebula")}
       >
-        {theme === "aurora" ? <Sparkles size={13} className="text-cyan-300" /> : <Moon size={13} />}
+        {theme === "nebula" ? (
+          <Sparkles size={13} className="text-fuchsia-300" />
+        ) : theme === "aurora" ? (
+          <Sparkles size={13} className="text-cyan-300" />
+        ) : (
+          <Moon size={13} />
+        )}
       </button>
       <Badge kind={healthKind(h)} dot>
         {h}

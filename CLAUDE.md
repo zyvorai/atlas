@@ -6,17 +6,19 @@ Atlas talks to storage backends through **pluggable drivers**. Ceph is the first
 
 Design authority: `Zyvor_Ceph_Integration_Developer_Implementation_Plan.pdf` (v1.0 engineering draft).
 
-## Current state (MVP slice 1: read-only backend + Rook lab)
+## Current state (slices 1–5 done; verified on real Rook Ceph)
 Implemented:
-- `atlas-*` cargo workspace, SQLite persistence (`sqlx`), axum 0.8 gateway.
-- Read-only REST discovery/inventory endpoints (`/api/atlas/v1/...`).
-- `StorageDriver` trait with a **fake Ceph driver** (fixtures) and a **live K8s driver**
-  (list StorageClasses / PVCs / PVs).
-- `atlas-discovery` worker normalizing driver output into SQLite inventory.
-- `deploy/rook-ceph-lab/` manifests to stand up Rook Ceph + KubeVirt/CDI.
+- `atlas-*` cargo workspace, SQLite (`sqlx`), axum 0.8 REST + `tonic` gRPC; async **job engine**.
+- **Three backends** behind `StorageDriver`: real Ceph (`ceph`/`rbd` CLI) + **NFS** + **ZFS**,
+  plus a fake Ceph driver and a live K8s driver. Discovery worker → SQLite inventory.
+- Write path: volumes (PVC + direct RBD), snapshots/clone/restore, CephFS RWX, RGW buckets + backups
+  (`export-diff`→S3, retention, presigned), scheduled snapshots/backups, per-tenant quotas + policies.
+- Observability: monitor/alerts + webhook, `/metrics` (Prometheus self), `/metrics/{history,forecast,ceph}`,
+  Ceph-native `/ceph/{status,osd-tree,osd-df,df}`, unified `/events`, `/readyz`; `deploy/observability/`.
+- **Zeus OS React console** embedded in the gateway (HTTPS, login, Observatory, Ceph page, Nebula theme).
+- `deploy/rook-ceph-lab/` (single-node overlay + day-2 ops scripts) + `deploy/k8s/` ceph deployment.
 
-Deferred (not built yet): write/provisioning path + job engine, gRPC edge, RGW/backup,
-per-product integrations, Zeus OS UI.
+Deferred: RBD mirroring/DR (needs a 2nd cluster), per-product integrations beyond the gRPC surface.
 
 ## Layout
 - `crates/atlas-common` — config, error, tracing, id helpers.

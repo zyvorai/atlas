@@ -46,13 +46,30 @@ call **stable Atlas APIs**; Atlas talks to storage backends through **pluggable 
 - **Verified**: `POST /volumes` → PVC Bound on `zyvor-rbd-prod` → snapshot → clone/restore.
 - Durable DB: SQLite backed by a Ceph PVC (survives pod restarts).
 
-**Slice 3 (part 1) — RGW object storage + backups:**
-- `atlas-driver-rgw` S3 client; buckets via **ObjectBucketClaim** (`POST /buckets`).
-- `POST /backup-jobs`: snapshot + write a **backup manifest** to RGW over S3 + verify (checksum).
-- **Verified** on real Ceph RGW: bucket bound, manifest object written + verified.
+**Slice 3 — RGW object storage + backups:**
+- `atlas-driver-rgw` S3 client; buckets via **ObjectBucketClaim** (`POST /buckets`); bucket quotas + stats.
+- `POST /backup-jobs`: RBD `export-diff` streamed to RGW (multipart) + verify; restore-from-data;
+  retention (keep-N + max-age); presigned downloads. **Verified** on real Ceph RGW.
 
-**Deferred:** full data backup (`rbd export`→S3), restore-jobs, gRPC edge, per-product integrations,
-Zeus OS UI, monitor/alerts. See [docs/ROADMAP.md](docs/ROADMAP.md).
+**Slice 4 — edges, protection, multi-tenancy, observability:**
+- **gRPC edge** (`tonic`) alongside REST: `WatchJob` streaming, product-integration surface, RBAC.
+- **SSE** job progress; **monitor/alerts** worker (cluster/pool/OSD/capacity-forecast rules) + webhook notifier.
+- CephFS RWX; direct RBD (provision/clone/resize/flatten/snap/rollback/du); scheduled snapshots & backups;
+  per-tenant quotas + policy overrides; audit log; service-account JWTs.
+- **Metrics**: `/metrics` (Prometheus self-metrics), `/metrics/history` (persisted time-series),
+  `/metrics/forecast` (days-to-full), `/metrics/ceph`; `deploy/observability/` Prometheus + Grafana bundle.
+- **Ceph-native introspection**: `/ceph/status`, `/ceph/osd-tree`, `/ceph/osd-df`, `/ceph/df`.
+
+**Slice 5 — multi-backend + Zeus OS console:**
+- **Three backends** behind `StorageDriver`: Ceph + **NFS** + **ZFS** (all in `/backends`, filters, gauges).
+- `/backends/summary` + per-backend Prometheus gauges; `?backend=&kind=` filters on `/volumes` + `/pools`;
+  `/volumes.csv` export; unified activity feed (`/events`); `/readyz` deep-check.
+- **React/Vite console** (Zeus OS "Tahoe" design, embedded in the gateway): every capability wired,
+  HTTPS, branded login, **Observatory** (6 live canvas visualizations), Ceph page, per-backend cards,
+  and a **Nebula** default theme (+ Midnight, Aurora).
+- **Day-2 ops**: `deploy/rook-ceph-lab/{reclaim-space,resize-osd,teardown}.sh` (Ceph capped to 400 GiB verified).
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/API.md](docs/API.md).
 
 ## Quickstart (no Ceph, no cluster needed)
 
