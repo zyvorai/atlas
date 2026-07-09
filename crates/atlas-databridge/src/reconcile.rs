@@ -117,6 +117,39 @@ async fn reconcile_once(
             Err(e) => tracing::warn!("poll full-load Job {job}: {e}"),
         }
     }
+
+    // Watch validation Jobs -> record passed/failed and advance the plan.
+    for v in atlas_inventory::databridge::validations::list_by_state(pool, "running").await? {
+        let job = crate::validate::job_name(&v.id);
+        match k8s
+            .get_cr_status(
+                crate::loader::JOB_GROUP,
+                crate::loader::JOB_VERSION,
+                crate::loader::JOB_KIND,
+                crate::pipeline::EDGE_NAMESPACE,
+                &job,
+            )
+            .await
+        {
+            Ok(Some(status)) => match crate::loader::job_outcome(&status) {
+                crate::loader::JobOutcome::Succeeded => {
+                    let summary = serde_json::json!({ "note": "row counts matched (see Job logs)" });
+                    atlas_inventory::databridge::validations::set_result(pool, &v.id, true, 0, 0, &summary).await?;
+                    atlas_inventory::databridge::plans::set_state(pool, &v.plan_id, "validated").await?;
+                    tracing::info!("validation {} passed", v.id);
+                }
+                crate::loader::JobOutcome::Failed => {
+                    let summary = serde_json::json!({ "note": "row-count mismatch (see Job logs)" });
+                    atlas_inventory::databridge::validations::set_result(pool, &v.id, false, 0, 1, &summary).await?;
+                    atlas_inventory::databridge::plans::set_state(pool, &v.plan_id, "failed").await?;
+                    tracing::warn!("validation {} failed", v.id);
+                }
+                crate::loader::JobOutcome::Running => {}
+            },
+            Ok(None) => tracing::debug!("validation {} Job {job} has no status yet", v.id),
+            Err(e) => tracing::warn!("poll validation Job {job}: {e}"),
+        }
+    }
     Ok(())
 }
 

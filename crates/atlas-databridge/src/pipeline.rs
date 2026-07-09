@@ -388,7 +388,12 @@ pub async fn stop_cdc(pool: &SqlitePool, plan_id: &str) -> Result<serde_json::Va
 }
 
 /// Validate source vs edge (row counts / checksums). Fake mode reports matching counts per table.
-pub async fn validate(pool: &SqlitePool, plan_id: &str, kind: &str) -> Result<serde_json::Value> {
+pub async fn validate(
+    pool: &SqlitePool,
+    k8s: Option<&atlas_driver_k8s::K8sDriver>,
+    plan_id: &str,
+    kind: &str,
+) -> Result<serde_json::Value> {
     let plan = atlas_inventory::databridge::plans::get_plan(pool, plan_id)
         .await?
         .ok_or_else(|| anyhow!("plan {plan_id} not found"))?;
@@ -402,6 +407,44 @@ pub async fn validate(pool: &SqlitePool, plan_id: &str, kind: &str) -> Result<se
         pool, &val_id, &plan.tenant_id, plan_id, kind,
     )
     .await?;
+
+    // Real mode: apply a validation Job (row-count compare); the reconciler advances it.
+    if let (false, Some(k8s)) = (source.driver_mode == "fake", k8s) {
+        let edge_id = plan
+            .edge_cluster_id
+            .as_deref()
+            .ok_or_else(|| anyhow!("plan has no edge cluster"))?;
+        let edge = atlas_inventory::databridge::edge_clusters::get_edge_cluster(pool, edge_id)
+            .await?
+            .ok_or_else(|| anyhow!("edge cluster not found"))?;
+        let src_secret = source.secret_ref.as_deref().ok_or_else(|| anyhow!("source has no secret_ref"))?;
+        let edge_secret = edge.secret_ref.as_deref().ok_or_else(|| anyhow!("edge has no secret"))?;
+        let engine = crate::SourceKind::parse(&source.kind).ok_or_else(|| anyhow!("bad engine"))?;
+        let src_host = source.endpoint.as_deref().unwrap_or("");
+        let db = source.database.as_deref().unwrap_or("appdb");
+        let cr_name = edge.cr_name.as_deref().unwrap_or("");
+        let job_spec = match engine {
+            crate::SourceKind::Postgres => crate::validate::pg_validate_job_spec(
+                src_secret, edge_secret, src_host, source.port.unwrap_or(5432), db, &source.tls_mode,
+            ),
+            crate::SourceKind::Mysql => {
+                let edge_host = format!("{cr_name}-haproxy");
+                crate::validate::mysql_validate_job_spec(
+                    src_secret, edge_secret, src_host, source.port.unwrap_or(3306), db, &edge_host, db,
+                )
+            }
+        };
+        let job_name = crate::validate::job_name(&val_id);
+        k8s.apply_cr(
+            crate::loader::JOB_GROUP, crate::loader::JOB_VERSION, crate::loader::JOB_KIND,
+            &edge.namespace, &job_name, job_spec,
+        )
+        .await
+        .map_err(|e| anyhow!("apply validation Job: {e}"))?;
+        return Ok(serde_json::json!({
+            "plan_id": plan_id, "validation_id": val_id, "state": "running", "mode": "real"
+        }));
+    }
 
     // Fake: every discovered table matches on both sides.
     let tables = source

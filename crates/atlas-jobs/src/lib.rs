@@ -1002,7 +1002,7 @@ async fn dispatch(
             atlas_databridge::pipeline::stop_cdc(pool, &plan_id).await
         }
         JobSpec::ValidateRun { plan_id, kind } => {
-            atlas_databridge::pipeline::validate(pool, &plan_id, &kind).await
+            atlas_databridge::pipeline::validate(pool, k8s.as_deref(), &plan_id, &kind).await
         }
         JobSpec::Cutover { plan_id } => atlas_databridge::pipeline::cutover(pool, &plan_id).await,
         JobSpec::Rollback { plan_id } => atlas_databridge::pipeline::rollback(pool, &plan_id).await,

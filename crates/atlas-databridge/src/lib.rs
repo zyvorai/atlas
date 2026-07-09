@@ -15,6 +15,7 @@ pub mod cr;
 pub mod loader;
 pub mod pipeline;
 pub mod reconcile;
+pub mod validate;
 
 pub use connector::{DiscoveredSchema, SourceCloud, SourceConnector, SourceKind, TableInfo};
 

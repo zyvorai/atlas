@@ -74,6 +74,15 @@ pub async fn list_validations(pool: &SqlitePool, plan_id: Option<&str>) -> Resul
     Ok(rows.into_iter().map(row_to_validation).collect())
 }
 
+/// Validations in a given state — used by the reconciler to watch running validation Jobs.
+pub async fn list_by_state(pool: &SqlitePool, state: &str) -> Result<Vec<ValidationRun>> {
+    let rows = sqlx::query(&select("WHERE state = ? ORDER BY created_at DESC"))
+        .bind(state)
+        .fetch_all(pool)
+        .await?;
+    Ok(rows.into_iter().map(row_to_validation).collect())
+}
+
 /// The most recent validation for a plan — used by the cutover guard.
 pub async fn latest_for_plan(pool: &SqlitePool, plan_id: &str) -> Result<Option<ValidationRun>> {
     let row = sqlx::query(&select("WHERE plan_id = ? ORDER BY created_at DESC LIMIT 1"))
