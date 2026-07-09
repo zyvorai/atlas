@@ -193,6 +193,7 @@ dependencies = [
  "async-trait",
  "atlas-api-types",
  "atlas-common",
+ "atlas-driver-k8s",
  "atlas-inventory",
  "chrono",
  "serde",

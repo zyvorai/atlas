@@ -77,10 +77,30 @@ pub async fn assess_plan(pool: &SqlitePool, plan_id: &str) -> Result<serde_json:
     }))
 }
 
+/// 1 GiB in bytes.
+const GIB: i64 = 1024 * 1024 * 1024;
+/// Namespace the edge databases + their CRs live in.
+pub const EDGE_NAMESPACE: &str = "zyvor-databridge";
+
+/// Data-volume size for the edge cluster: discovered dataset + 50% headroom, min 10 GiB.
+fn edge_size_gib(source: &atlas_api_types::MigrationSource) -> i64 {
+    let total = source
+        .discovered
+        .get("total_size_bytes")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    ((total + total / 2) / GIB).max(10)
+}
+
 /// Provision the edge database cluster for a plan. In `fake` source mode this fabricates a ready
-/// cluster with a synthetic endpoint (no k8s needed); real mode (later slice) applies the
-/// CloudNativePG / MySQL operator CR and lets the reconciler poll it to `ready`.
-pub async fn provision_edge(pool: &SqlitePool, plan_id: &str) -> Result<serde_json::Value> {
+/// cluster with a synthetic endpoint (no k8s needed). In `real` mode it applies the CloudNativePG /
+/// MySQL operator CR (data on Ceph RBD) and leaves the cluster `provisioning` for the reconciler to
+/// poll to `ready`.
+pub async fn provision_edge(
+    pool: &SqlitePool,
+    k8s: Option<&atlas_driver_k8s::K8sDriver>,
+    plan_id: &str,
+) -> Result<serde_json::Value> {
     let plan = atlas_inventory::databridge::plans::get_plan(pool, plan_id)
         .await?
         .ok_or_else(|| anyhow!("plan {plan_id} not found"))?;
@@ -90,13 +110,14 @@ pub async fn provision_edge(pool: &SqlitePool, plan_id: &str) -> Result<serde_js
 
     let engine = crate::SourceKind::parse(&source.kind)
         .ok_or_else(|| anyhow!("unsupported engine: {}", source.kind))?;
-    let (engine_str, operator, port) = match engine {
-        crate::SourceKind::Postgres => ("postgres", "cnpg", 5432),
-        crate::SourceKind::Mysql => ("mysql", "percona", 3306),
+    let (engine_str, operator) = match engine {
+        crate::SourceKind::Postgres => ("postgres", "cnpg"),
+        crate::SourceKind::Mysql => ("mysql", "percona"),
     };
-    let namespace = "zyvor-databridge";
+    let namespace = EDGE_NAMESPACE;
     let cr_name = format!("edge-{}", &plan_id[plan_id.len().saturating_sub(8)..]);
     let edge_id = atlas_common::ids::edge_cluster_id();
+    let size_gib = edge_size_gib(&source);
 
     atlas_inventory::databridge::edge_clusters::insert_edge_cluster(
         pool, &edge_id, &plan.tenant_id, plan_id, engine_str, operator, namespace, &cr_name,
@@ -106,10 +127,17 @@ pub async fn provision_edge(pool: &SqlitePool, plan_id: &str) -> Result<serde_js
     atlas_inventory::databridge::plans::set_edge_cluster(pool, plan_id, &edge_id).await?;
     atlas_inventory::databridge::plans::set_state(pool, plan_id, "provisioning").await?;
 
-    if source.driver_mode == "fake" {
-        // No operator/CR — fabricate a ready cluster so the pipeline runs end-to-end.
-        let endpoint = format!("{cr_name}-rw.{namespace}.svc:{port}");
-        let secret_ref = format!("{cr_name}-app");
+    // Fake source mode (or no reachable k8s): fabricate a ready cluster so the pipeline runs.
+    if source.driver_mode == "fake" || k8s.is_none() {
+        let (endpoint, secret_ref) = match engine {
+            crate::SourceKind::Postgres => {
+                (crate::cr::cnpg::endpoint(&cr_name, namespace), crate::cr::cnpg::secret_ref(&cr_name))
+            }
+            crate::SourceKind::Mysql => (
+                crate::cr::mysql_operator::endpoint(&cr_name, namespace),
+                crate::cr::mysql_operator::secret_ref(&cr_name),
+            ),
+        };
         atlas_inventory::databridge::edge_clusters::set_ready(pool, &edge_id, &endpoint, &secret_ref)
             .await?;
         atlas_inventory::databridge::plans::set_state(pool, plan_id, "provisioned").await?;
@@ -119,8 +147,27 @@ pub async fn provision_edge(pool: &SqlitePool, plan_id: &str) -> Result<serde_js
         }));
     }
 
-    // Real mode: the CR-apply + reconciler polling lands in a later slice.
-    Err(anyhow!(
-        "real edge provisioning (CloudNativePG/MySQL operator) is not implemented in this slice"
-    ))
+    // Real mode: apply the operator CR; the reconciler advances provisioning -> ready.
+    let k8s = k8s.expect("k8s present in real branch");
+    let db = source.database.as_deref().unwrap_or("appdb");
+    let (group, version, kind, spec) = match engine {
+        crate::SourceKind::Postgres => (
+            crate::cr::cnpg::GROUP, crate::cr::cnpg::VERSION, crate::cr::cnpg::KIND,
+            crate::cr::cnpg::cluster_spec(1, "zyvor-rbd-prod", "zyvor-rbd-prod", size_gib, db),
+        ),
+        crate::SourceKind::Mysql => (
+            crate::cr::mysql_operator::GROUP, crate::cr::mysql_operator::VERSION,
+            crate::cr::mysql_operator::KIND,
+            crate::cr::mysql_operator::cluster_spec(1, "zyvor-rbd-prod", size_gib),
+        ),
+    };
+    k8s.apply_cr(group, version, kind, namespace, &cr_name, spec)
+        .await
+        .map_err(|e| anyhow!("apply {kind} CR: {e}"))?;
+
+    Ok(serde_json::json!({
+        "plan_id": plan_id, "edge_cluster_id": edge_id, "engine": engine_str,
+        "operator": operator, "state": "provisioning", "cr_name": cr_name,
+        "size_gib": size_gib, "mode": "real",
+    }))
 }

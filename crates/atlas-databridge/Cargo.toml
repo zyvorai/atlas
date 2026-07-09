@@ -10,6 +10,7 @@ authors.workspace = true
 atlas-common = { workspace = true }
 atlas-api-types = { workspace = true }
 atlas-inventory = { workspace = true }
+atlas-driver-k8s = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
 sqlx = { workspace = true }

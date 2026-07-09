@@ -227,6 +227,7 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
         // Jobs, CDC lag) that the single-shot job engine can't hold open.
         atlas_databridge::reconcile::spawn_reconciler(
             state.pool.clone(),
+            state.k8s.clone(),
             state.config.databridge_reconcile_secs,
         );
     }

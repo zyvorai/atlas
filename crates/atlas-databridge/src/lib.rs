@@ -8,9 +8,10 @@
 
 use atlas_api_types::MigrationSource;
 
+pub mod assess;
 pub mod connector;
 pub mod connectors;
-pub mod assess;
+pub mod cr;
 pub mod pipeline;
 pub mod reconcile;
 

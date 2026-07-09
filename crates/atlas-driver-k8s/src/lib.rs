@@ -236,6 +236,76 @@ impl K8sDriver {
         Ok(())
     }
 
+    // ---- generic custom-resource apply/status/delete (CloudNativePG, MySQL operator, Debezium) ----
+
+    fn cr_api(&self, group: &str, version: &str, kind: &str, ns: &str) -> Api<DynamicObject> {
+        let gvk = GroupVersionKind::gvk(group, version, kind);
+        let ar = ApiResource::from_gvk(&gvk);
+        Api::namespaced_with(self.client.clone(), ns, &ar)
+    }
+
+    /// Create-or-replace an arbitrary namespaced custom resource from a `spec` JSON object. Used to
+    /// apply operator CRs (CloudNativePG `Cluster`, MySQL `PerconaXtraDBCluster`, Debezium connectors).
+    pub async fn apply_cr(
+        &self,
+        group: &str,
+        version: &str,
+        kind: &str,
+        ns: &str,
+        name: &str,
+        spec: serde_json::Value,
+    ) -> Result<(), K8sError> {
+        let gvk = GroupVersionKind::gvk(group, version, kind);
+        let ar = ApiResource::from_gvk(&gvk);
+        let api: Api<DynamicObject> = Api::namespaced_with(self.client.clone(), ns, &ar);
+        let mut obj = DynamicObject::new(name, &ar);
+        obj.metadata.namespace = Some(ns.to_string());
+        obj.data = serde_json::json!({ "spec": spec });
+        match api.get_opt(name).await? {
+            Some(existing) => {
+                obj.metadata.resource_version = existing.metadata.resource_version;
+                api.replace(name, &PostParams::default(), &obj).await?;
+            }
+            None => {
+                api.create(&PostParams::default(), &obj).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Read a custom resource's `status` object (None if the CR is absent or has no status yet).
+    pub async fn get_cr_status(
+        &self,
+        group: &str,
+        version: &str,
+        kind: &str,
+        ns: &str,
+        name: &str,
+    ) -> Result<Option<serde_json::Value>, K8sError> {
+        let api = self.cr_api(group, version, kind, ns);
+        Ok(api
+            .get_opt(name)
+            .await?
+            .and_then(|o| o.data.get("status").cloned()))
+    }
+
+    /// Delete a custom resource (ignores not-found).
+    pub async fn delete_cr(
+        &self,
+        group: &str,
+        version: &str,
+        kind: &str,
+        ns: &str,
+        name: &str,
+    ) -> Result<(), K8sError> {
+        let api = self.cr_api(group, version, kind, ns);
+        match api.delete(name, &DeleteParams::default()).await {
+            Ok(_) => Ok(()),
+            Err(kube::Error::Api(e)) if e.code == 404 => Ok(()),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     // ---- object storage (RGW via ObjectBucketClaim) ----
 
     fn obc_api(&self, ns: &str) -> (Api<DynamicObject>, ApiResource) {

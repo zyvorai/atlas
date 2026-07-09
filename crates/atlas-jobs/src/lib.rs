@@ -953,7 +953,7 @@ async fn dispatch(
         }
 
         JobSpec::EdgeDbProvision { plan_id } => {
-            atlas_databridge::pipeline::provision_edge(pool, &plan_id).await
+            atlas_databridge::pipeline::provision_edge(pool, k8s.as_deref(), &plan_id).await
         }
 
         JobSpec::BucketCreate {
