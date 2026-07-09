@@ -127,6 +127,9 @@ pub fn jdbc_sink_spec(short: &str, jdbc_url: &str, secret_ns: &str, edge_secret:
         "auto.create": false,
         "auto.evolve": true,
         "consumer.override.auto.offset.reset": "earliest",
+        // topics.regex discovers new Debezium topics on a metadata refresh; shorten it from the 5min
+        // default so a table's topic (created on first change) is picked up promptly (no restart).
+        "consumer.override.metadata.max.age.ms": "10000",
         // Flatten the Debezium envelope to the row image, and route `<prefix>.<schema>.<table>` topics
         // to the bare `<table>` name so the sink writes to the matching edge table.
         "transforms": "unwrap,route",
