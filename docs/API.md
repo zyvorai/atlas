@@ -397,6 +397,10 @@ atlasctl ceph-metrics [--prefix P]  # GET /metrics/ceph
 atlasctl history [--minutes 60]     # GET /metrics/history (persisted time-series)
 atlasctl forecast [--minutes 1440]  # GET /metrics/forecast (days-until-full projection)
 atlasctl self-metrics               # GET /metrics (Prometheus text-exposition)
+atlasctl ceph-status               # GET /ceph/status (live ceph status)
+atlasctl ceph-osd-tree             # GET /ceph/osd-tree (CRUSH map)
+atlasctl ceph-osd-df               # GET /ceph/osd-df (per-OSD utilization)
+atlasctl ceph-df                   # GET /ceph/df (per-pool usage)
 # write path (slice 2):
 atlasctl policies                   # GET /policies
 atlasctl create-volume NAME --size-gib 5 --policy database --namespace default

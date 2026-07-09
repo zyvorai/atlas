@@ -58,6 +58,14 @@ enum Command {
         #[arg(long)]
         prefix: Option<String>,
     },
+    /// GET /api/atlas/v1/ceph/status — live `ceph status` (health, quorum, osdmap, pgmap, I/O)
+    CephStatus,
+    /// GET /api/atlas/v1/ceph/osd-tree — the CRUSH hierarchy (roots → hosts → OSDs)
+    CephOsdTree,
+    /// GET /api/atlas/v1/ceph/osd-df — per-OSD utilization (size/used/avail/%, PG count)
+    CephOsdDf,
+    /// GET /api/atlas/v1/ceph/df — cluster + per-pool capacity/usage/objects
+    CephDf,
     /// GET /api/atlas/v1/metrics/history — persisted capacity/IO/job time-series (--minutes)
     History {
         #[arg(long, default_value_t = 60)]
@@ -365,6 +373,10 @@ async fn main() -> Result<()> {
             None,
         ),
         Command::SelfMetrics => ("GET", "/metrics".to_string(), None),
+        Command::CephStatus => ("GET", "/api/atlas/v1/ceph/status".to_string(), None),
+        Command::CephOsdTree => ("GET", "/api/atlas/v1/ceph/osd-tree".to_string(), None),
+        Command::CephOsdDf => ("GET", "/api/atlas/v1/ceph/osd-df".to_string(), None),
+        Command::CephDf => ("GET", "/api/atlas/v1/ceph/df".to_string(), None),
         Command::Policies => ("GET", "/api/atlas/v1/policies".to_string(), None),
         Command::ScheduleSnapshots {
             volume_id,
