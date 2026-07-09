@@ -212,4 +212,23 @@ impl StorageDriver for FakeCephDriver {
             "pools": [ pool(1, "rbd-nvme-prod", 40_000_000_000_000, 9_800_000, 0.33), pool(2, "cephfs-data0", 12_000_000_000_000, 3_100_000, 0.16), pool(3, ".rgw.root", 1_000_000_000, 42, 0.0) ]
         }))
     }
+
+    async fn ceph_osd_df(&self) -> Result<serde_json::Value, DriverError> {
+        let kib = 36_000_000_000_i64; // ~36 TB per OSD in KiB
+        let o = |id: i64, host: &str, pct: f64, pgs: i64, up: bool| {
+            serde_json::json!({
+                "id": id, "name": format!("osd.{id}"), "device_class": if id < 3 {"nvme"} else {"ssd"},
+                "kb": kib, "kb_used": (kib as f64 * pct / 100.0) as i64, "kb_avail": (kib as f64 * (1.0 - pct / 100.0)) as i64,
+                "utilization": pct, "pgs": pgs, "status": if up {"up"} else {"down"}, "crush_weight": 32.7, "host": host
+            })
+        };
+        Ok(serde_json::json!({
+            "nodes": [
+                o(0, "node01", 41.2, 96, true), o(1, "node01", 44.8, 101, true),
+                o(2, "node02", 39.5, 92, true), o(3, "node02", 0.0, 0, false),
+                o(4, "node03", 47.1, 108, true), o(5, "node03", 43.3, 99, true)
+            ],
+            "summary": { "total_kb": kib * 6, "average_utilization": 42.6, "min_var": 0.93, "max_var": 1.11, "dev": 2.8 }
+        }))
+    }
 }

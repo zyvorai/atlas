@@ -60,6 +60,7 @@ export const useBackends = () => q<any[]>(["backends"], "/backends", 20000);
 export const useBackendsSummary = () => q<any[]>(["backends-summary"], "/backends/summary", 15000);
 export const useCephStatus = () => q<any>(["ceph-status"], "/ceph/status", 8000);
 export const useCephOsdTree = () => q<any>(["ceph-osd-tree"], "/ceph/osd-tree", 15000);
+export const useCephOsdDf = () => q<any>(["ceph-osd-df"], "/ceph/osd-df", 12000);
 export const useCephDf = () => q<any>(["ceph-df"], "/ceph/df", 12000);
 export const useStorageClasses = () => q<any[]>(["scs"], "/storage-classes", 20000);
 export const useRbdImages = (pool: string) =>

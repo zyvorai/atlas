@@ -35,6 +35,7 @@ pub fn router(state: AppState) -> Router {
         .route("/pools", get(list_pools))
         .route("/ceph/status", get(get_ceph_status))
         .route("/ceph/osd-tree", get(get_ceph_osd_tree))
+        .route("/ceph/osd-df", get(get_ceph_osd_df))
         .route("/ceph/df", get(get_ceph_df))
         .route("/storage-classes", get(list_storage_classes))
         .route("/kubernetes/pvcs", get(list_pvcs))
@@ -503,6 +504,18 @@ async fn get_ceph_df(State(s): State<AppState>) -> AppResult<Json<Value>> {
         .ok_or_else(|| AppError::Driver("no ceph driver".into()))?;
     Ok(Json(
         d.ceph_df()
+            .await
+            .map_err(|e| AppError::Driver(e.to_string()))?,
+    ))
+}
+
+/// `GET /ceph/osd-df` — per-OSD utilization (`ceph osd df`).
+async fn get_ceph_osd_df(State(s): State<AppState>) -> AppResult<Json<Value>> {
+    let d = s
+        .driver_for(CEPH_BACKEND_ID)
+        .ok_or_else(|| AppError::Driver("no ceph driver".into()))?;
+    Ok(Json(
+        d.ceph_osd_df()
             .await
             .map_err(|e| AppError::Driver(e.to_string()))?,
     ))

@@ -87,4 +87,8 @@ pub trait StorageDriver: Send + Sync {
     async fn ceph_df(&self) -> Result<serde_json::Value, DriverError> {
         Err(DriverError::NotImplemented("ceph_df"))
     }
+    /// `ceph osd df -f json` — per-OSD utilization (size/used/avail/%, PG count).
+    async fn ceph_osd_df(&self) -> Result<serde_json::Value, DriverError> {
+        Err(DriverError::NotImplemented("ceph_osd_df"))
+    }
 }
