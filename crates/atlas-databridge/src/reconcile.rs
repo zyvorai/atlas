@@ -118,6 +118,27 @@ async fn reconcile_once(
         }
     }
 
+    // Health-check real CDC: if a streaming stream's Debezium source connector isn't RUNNING, flag
+    // it. Fake streams have no KafkaConnector CR (status None) and are left to the fake drain.
+    for stream in atlas_inventory::databridge::cdc::list_by_state(pool, "streaming").await? {
+        let Some(connector) = stream.connector_name.as_deref() else { continue };
+        if let Ok(Some(status)) = k8s
+            .get_cr_status(
+                crate::cr::streaming::GROUP,
+                crate::cr::streaming::VERSION,
+                crate::cr::streaming::CONNECTOR_KIND,
+                crate::pipeline::EDGE_NAMESPACE,
+                connector,
+            )
+            .await
+        {
+            if !crate::cr::streaming::connector_running(&status) {
+                atlas_inventory::databridge::cdc::set_state(pool, &stream.id, "error").await?;
+                tracing::warn!("CDC stream {} connector {connector} is not RUNNING", stream.id);
+            }
+        }
+    }
+
     // Watch validation Jobs -> record passed/failed and advance the plan.
     for v in atlas_inventory::databridge::validations::list_by_state(pool, "running").await? {
         let job = crate::validate::job_name(&v.id);
