@@ -91,6 +91,7 @@ Storage nodes (derived from distinct OSD hosts in the MVP): `[{ "host": "node01"
 ```
 
 ### `GET /api/atlas/v1/pools`
+Filters: `?backend=&kind=` (kind in rbd|cephfs_data|cephfs_metadata|rgw|nfs_export|other).
 ```json
 [{ "id": "pool_1", "cluster_id": "cls_5ace73d1-...", "name": "rbd-nvme-prod",
    "kind": "rbd", "device_class": null, "replica_size": null,

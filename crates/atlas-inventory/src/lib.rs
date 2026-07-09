@@ -499,10 +499,26 @@ fn row_to_cluster(r: sqlx::sqlite::SqliteRow) -> StorageCluster {
 }
 
 pub async fn list_pools(pool: &SqlitePool) -> Result<Vec<StoragePool>> {
+    list_pools_filtered(pool, None, None).await
+}
+
+/// List pools, optionally filtered by owning backend (via the cluster join) and/or pool `kind`.
+pub async fn list_pools_filtered(
+    pool: &SqlitePool,
+    backend_id: Option<&str>,
+    kind: Option<&str>,
+) -> Result<Vec<StoragePool>> {
     let rows = sqlx::query(
         "SELECT id, cluster_id, name, kind, device_class, replica_size, used_bytes, max_bytes, health
-         FROM storage_pools ORDER BY name",
+         FROM storage_pools
+         WHERE (? IS NULL OR kind = ?)
+           AND (? IS NULL OR cluster_id IN (SELECT id FROM storage_clusters WHERE backend_id = ?))
+         ORDER BY name",
     )
+    .bind(kind)
+    .bind(kind)
+    .bind(backend_id)
+    .bind(backend_id)
     .fetch_all(pool)
     .await?;
     Ok(rows

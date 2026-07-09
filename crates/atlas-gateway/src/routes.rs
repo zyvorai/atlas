@@ -469,8 +469,23 @@ async fn list_osds(State(s): State<AppState>) -> AppResult<Json<Value>> {
     Ok(Json(json!(atlas_inventory::list_osds(&s.pool).await?)))
 }
 
-async fn list_pools(State(s): State<AppState>) -> AppResult<Json<Value>> {
-    Ok(Json(json!(atlas_inventory::list_pools(&s.pool).await?)))
+#[derive(Debug, Deserialize)]
+struct PoolQuery {
+    backend: Option<String>,
+    kind: Option<String>,
+}
+
+async fn list_pools(
+    State(s): State<AppState>,
+    Query(q): Query<PoolQuery>,
+) -> AppResult<Json<Value>> {
+    let pools = if q.backend.is_some() || q.kind.is_some() {
+        atlas_inventory::list_pools_filtered(&s.pool, q.backend.as_deref(), q.kind.as_deref())
+            .await?
+    } else {
+        atlas_inventory::list_pools(&s.pool).await?
+    };
+    Ok(Json(json!(pools)))
 }
 
 #[derive(Debug, Deserialize)]
