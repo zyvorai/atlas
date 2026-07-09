@@ -13,6 +13,7 @@ atlas-inventory = { workspace = true }
 atlas-driver-k8s = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
+tokio-postgres = "0.7"
 sqlx = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }

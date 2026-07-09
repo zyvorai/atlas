@@ -19,10 +19,13 @@ pub mod validate;
 
 pub use connector::{DiscoveredSchema, SourceCloud, SourceConnector, SourceKind, TableInfo};
 
-/// Build a source connector for a registered source. In `fake` driver mode (default) this returns
-/// the canned `FakeSourceConnector` so the pipeline runs with no cloud credentials; `real` mode
-/// (added in a later slice) builds a live PostgreSQL/MySQL connector from the source's Secret.
-pub fn build_connector(source: &MigrationSource) -> anyhow::Result<Box<dyn SourceConnector>> {
+/// Build a source connector for a registered source. In `fake` driver mode this returns the canned
+/// `FakeSourceConnector` (no credentials needed); `real` mode builds a live PostgreSQL connector from
+/// the source endpoint + `creds` (username, password) resolved from the source's k8s Secret.
+pub fn build_connector(
+    source: &MigrationSource,
+    creds: Option<(&str, &str)>,
+) -> anyhow::Result<Box<dyn SourceConnector>> {
     let kind = SourceKind::parse(&source.kind)
         .ok_or_else(|| anyhow::anyhow!("unsupported source kind: {}", source.kind))?;
     match source.driver_mode.as_str() {
@@ -30,7 +33,25 @@ pub fn build_connector(source: &MigrationSource) -> anyhow::Result<Box<dyn Sourc
             source.id.clone(),
             kind,
         ))),
-        "real" => anyhow::bail!("real source connectors are not implemented in this slice"),
+        "real" => {
+            let (user, password) =
+                creds.ok_or_else(|| anyhow::anyhow!("real connector requires credentials"))?;
+            match kind {
+                SourceKind::Postgres => Ok(Box::new(
+                    connectors::postgres::PostgresSourceConnector::new(
+                        source.id.clone(),
+                        source.endpoint.as_deref().unwrap_or(""),
+                        source.port.unwrap_or(5432),
+                        source.database.as_deref().unwrap_or("appdb"),
+                        user,
+                        password,
+                    ),
+                )),
+                SourceKind::Mysql => {
+                    anyhow::bail!("real MySQL source connector is not implemented yet")
+                }
+            }
+        }
         other => anyhow::bail!("unknown driver_mode: {other}"),
     }
 }

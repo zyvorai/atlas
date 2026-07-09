@@ -981,7 +981,7 @@ async fn dispatch(
         }
 
         JobSpec::SourceDiscover { source_id } => {
-            atlas_databridge::pipeline::discover(pool, &source_id).await
+            atlas_databridge::pipeline::discover(pool, k8s.as_deref(), &source_id).await
         }
 
         JobSpec::MigrationAssess { plan_id } => {

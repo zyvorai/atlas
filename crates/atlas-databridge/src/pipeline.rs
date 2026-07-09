@@ -9,8 +9,13 @@ use sqlx::SqlitePool;
 use crate::connector::DiscoveredSchema;
 use crate::{assess, build_connector};
 
-/// Discover a source's schema and persist it. Advances the source `registered → discovered`.
-pub async fn discover(pool: &SqlitePool, source_id: &str) -> Result<serde_json::Value> {
+/// Discover a source's schema and persist it. Advances the source `registered → discovered`. In
+/// real mode the credentials are read from the source's k8s Secret (`username`/`password` keys).
+pub async fn discover(
+    pool: &SqlitePool,
+    k8s: Option<&atlas_driver_k8s::K8sDriver>,
+    source_id: &str,
+) -> Result<serde_json::Value> {
     let source = atlas_inventory::databridge::sources::get_source(pool, source_id)
         .await?
         .ok_or_else(|| anyhow!("source {source_id} not found"))?;
@@ -19,7 +24,26 @@ pub async fn discover(pool: &SqlitePool, source_id: &str) -> Result<serde_json::
 
     // On any discovery failure, flip the source to `error` so the UI shows why.
     let schema = match async {
-        let connector = build_connector(&source)?;
+        // Resolve credentials from the source Secret for real connectors.
+        let creds = if source.driver_mode == "real" {
+            let k8s = k8s.ok_or_else(|| anyhow!("real discovery needs a reachable Kubernetes cluster"))?;
+            let ns = source.secret_namespace.as_deref().unwrap_or(EDGE_NAMESPACE);
+            let secret_ref = source
+                .secret_ref
+                .as_deref()
+                .ok_or_else(|| anyhow!("source has no secret_ref for credentials"))?;
+            let secret = k8s
+                .get_secret(ns, secret_ref)
+                .await
+                .map_err(|e| anyhow!("read source secret: {e}"))?
+                .ok_or_else(|| anyhow!("source secret {ns}/{secret_ref} not found"))?;
+            let user = secret.get("username").cloned().ok_or_else(|| anyhow!("secret missing 'username'"))?;
+            let pass = secret.get("password").cloned().ok_or_else(|| anyhow!("secret missing 'password'"))?;
+            Some((user, pass))
+        } else {
+            None
+        };
+        let connector = build_connector(&source, creds.as_ref().map(|(u, p)| (u.as_str(), p.as_str())))?;
         connector.discover().await
     }
     .await
