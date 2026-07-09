@@ -104,6 +104,16 @@ impl S3Target {
             .to_string()
     }
 
+    /// A time-limited presigned PUT URL for `key` (client can upload directly to RGW without
+    /// credentials — the gateway never sees the object bytes). SigV4 query auth, so the browser
+    /// just does `fetch(url, { method: "PUT", body: file })`.
+    pub fn presigned_put(&self, key: &str, ttl_secs: u64) -> String {
+        self.bucket
+            .put_object(Some(&self.creds), key)
+            .sign(Duration::from_secs(ttl_secs))
+            .to_string()
+    }
+
     /// Stream `src` to `key` as an S3 multipart upload, hashing the bytes as they pass through.
     /// Returns `(total_bytes, sha256_hex)`. Never buffers the whole object — only one `part_size`
     /// chunk at a time (clamped to the S3 5 MiB minimum). Aborts the upload on any error.

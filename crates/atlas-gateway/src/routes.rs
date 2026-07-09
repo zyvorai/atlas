@@ -65,7 +65,13 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/rbd-usage/refresh", post(refresh_rbd_usage))
         .route("/buckets/{id}/stats", get(bucket_stats))
-        .route("/buckets/{id}/objects", get(bucket_objects))
+        .route(
+            "/buckets/{id}/objects",
+            get(bucket_objects).delete(bucket_object_delete),
+        )
+        .route("/buckets/{id}/objects/upload-url", post(bucket_object_upload_url))
+        .route("/buckets/{id}/objects/download-url", get(bucket_object_download_url))
+        .route("/buckets/{id}/objects/prune", post(bucket_objects_prune))
         .route("/volumes/{id}/bindings", get(list_volume_bindings))
         .route(
             "/volumes/{id}/labels",
@@ -2025,13 +2031,20 @@ struct PrefixQuery {
     prefix: Option<String>,
 }
 
-/// `GET /buckets/{id}/objects[?prefix=]` — list objects in the bucket over S3 (creds in-cluster).
-async fn bucket_objects(
-    State(s): State<AppState>,
-    Path(id): Path<String>,
-    Query(q): Query<PrefixQuery>,
-) -> AppResult<Json<Value>> {
-    let b = atlas_inventory::buckets::get_bucket(&s.pool, &id)
+#[derive(serde::Deserialize)]
+struct ObjectKeyQuery {
+    key: Option<String>,
+    ttl_secs: Option<u64>,
+}
+
+/// Build an `S3Target` for a bound bucket, reading the OBC credentials from its in-cluster
+/// Secret. The endpoint prefers `rgw_public_endpoint` (the browser-reachable URL) so presigned
+/// upload/download URLs it mints are usable from outside the cluster. Shared by every object op.
+async fn bucket_s3_target(
+    s: &AppState,
+    id: &str,
+) -> AppResult<atlas_driver_rgw::S3Target> {
+    let b = atlas_inventory::buckets::get_bucket(&s.pool, id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("bucket {id}")))?;
     if b.state != "bound" {
@@ -2063,14 +2076,23 @@ async fn bucket_objects(
         .clone()
         .or(b.endpoint)
         .unwrap_or_default();
-    let s3 = atlas_driver_rgw::S3Target::new(
+    atlas_driver_rgw::S3Target::new(
         &endpoint,
         &b.region.unwrap_or_else(|| "us-east-1".into()),
         &b.bucket_name.unwrap_or_default(),
         access,
         secret_key,
     )
-    .map_err(|e| AppError::Driver(e.to_string()))?;
+    .map_err(|e| AppError::Driver(e.to_string()))
+}
+
+/// `GET /buckets/{id}/objects[?prefix=]` — list objects in the bucket over S3 (creds in-cluster).
+async fn bucket_objects(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<PrefixQuery>,
+) -> AppResult<Json<Value>> {
+    let s3 = bucket_s3_target(&s, &id).await?;
     let objects = s3
         .list_objects(q.prefix.as_deref())
         .await
@@ -2082,6 +2104,172 @@ async fn bucket_objects(
     Ok(Json(
         json!({ "bucket_id": id, "count": items.len(), "objects": items }),
     ))
+}
+
+/// TTL for minted object upload/download URLs; long enough for a large db file over a slow link.
+const OBJECT_URL_TTL_SECS: u64 = 3600;
+
+/// `POST /buckets/{id}/objects/upload-url` — mint a presigned PUT URL so the browser uploads a
+/// file straight to RGW (the gateway never touches the bytes). Body: `{ "key": "...", "ttl_secs"? }`.
+async fn bucket_object_upload_url(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let key = body
+        .get("key")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|k| !k.is_empty())
+        .ok_or_else(|| AppError::Validation("object key is required".into()))?
+        .to_string();
+    let ttl = body
+        .get("ttl_secs")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(OBJECT_URL_TTL_SECS);
+    // Versioned uploads (for db-file backups): store each upload at `<key>.<UTC-timestamp>` so old
+    // copies are retained instead of overwritten. The timestamp is lexicographically sortable, so
+    // the prune endpoint can keep the newest N by a plain string sort. base_key + "." is the prefix
+    // that lists all versions of this key.
+    let versioned = body
+        .get("versioned")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let stored_key = if versioned {
+        format!("{key}.{}", chrono::Utc::now().format("%Y%m%dT%H%M%SZ"))
+    } else {
+        key.clone()
+    };
+    let s3 = bucket_s3_target(&s, &id).await?;
+    let url = s3.presigned_put(&stored_key, ttl);
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "bucket.object.upload-url",
+        "bucket.object",
+        &format!("{id}/{stored_key}"),
+        "success",
+        None,
+        None,
+    )
+    .await;
+    Ok(Json(json!({
+        "bucket_id": id,
+        "key": stored_key,
+        "base_key": key,
+        "versioned": versioned,
+        "method": "PUT",
+        "url": url,
+        "expires_in": ttl,
+    })))
+}
+
+/// `GET /buckets/{id}/objects/download-url?key=...[&ttl_secs=]` — mint a presigned GET URL so the
+/// browser downloads an object straight from RGW.
+async fn bucket_object_download_url(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<ObjectKeyQuery>,
+) -> AppResult<Json<Value>> {
+    let key = q
+        .key
+        .as_deref()
+        .map(str::trim)
+        .filter(|k| !k.is_empty())
+        .ok_or_else(|| AppError::Validation("object key is required".into()))?;
+    let ttl = q.ttl_secs.unwrap_or(OBJECT_URL_TTL_SECS);
+    let s3 = bucket_s3_target(&s, &id).await?;
+    let url = s3.presigned_get(key, ttl);
+    Ok(Json(
+        json!({ "bucket_id": id, "key": key, "method": "GET", "url": url, "expires_in": ttl }),
+    ))
+}
+
+/// `DELETE /buckets/{id}/objects?key=...` — delete a single object (proxied through the gateway so
+/// it stays authenticated + audited; the payload is tiny so there's no streaming concern).
+async fn bucket_object_delete(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+    Query(q): Query<ObjectKeyQuery>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let key = q
+        .key
+        .as_deref()
+        .map(str::trim)
+        .filter(|k| !k.is_empty())
+        .ok_or_else(|| AppError::Validation("object key is required".into()))?;
+    let s3 = bucket_s3_target(&s, &id).await?;
+    s3.delete_object(key)
+        .await
+        .map_err(|e| AppError::Driver(e.to_string()))?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "bucket.object.delete",
+        "bucket.object",
+        &format!("{id}/{key}"),
+        "success",
+        None,
+        None,
+    )
+    .await;
+    Ok(Json(json!({ "bucket_id": id, "key": key, "deleted": true })))
+}
+
+/// `POST /buckets/{id}/objects/prune` — retention for versioned db-file backups. Body:
+/// `{ "prefix": "<base_key>.", "keep": N }`. Lists objects under `prefix`, keeps the newest N
+/// (version suffixes are sortable UTC timestamps → lexicographic desc = newest first) and deletes
+/// the rest. Returns the deleted keys. Call it after a versioned upload to enforce keep-N.
+async fn bucket_objects_prune(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let prefix = body
+        .get("prefix")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .ok_or_else(|| AppError::Validation("prefix is required".into()))?
+        .to_string();
+    let keep = body.get("keep").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
+    let s3 = bucket_s3_target(&s, &id).await?;
+    let mut objs = s3
+        .list_objects(Some(&prefix))
+        .await
+        .map_err(|e| AppError::Driver(e.to_string()))?;
+    objs.sort_by(|a, b| b.0.cmp(&a.0)); // newest (highest timestamp suffix) first
+    let mut pruned = Vec::new();
+    for (key, _size) in objs.into_iter().skip(keep) {
+        s3.delete_object(&key)
+            .await
+            .map_err(|e| AppError::Driver(e.to_string()))?;
+        pruned.push(key);
+    }
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "bucket.object.prune",
+        "bucket.object",
+        &format!("{id}/{prefix} keep={keep} pruned={}", pruned.len()),
+        "success",
+        None,
+        None,
+    )
+    .await;
+    Ok(Json(json!({
+        "bucket_id": id, "prefix": prefix, "keep": keep,
+        "pruned_count": pruned.len(), "pruned": pruned,
+    })))
 }
 
 /// `DELETE /buckets/{id}[?force=true]` — delete the OBC + row; blocked if backups reference it.

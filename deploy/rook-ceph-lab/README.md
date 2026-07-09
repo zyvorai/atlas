@@ -23,7 +23,13 @@ Pin versions via env: `ROOK_VERSION`, `KUBEVIRT_VERSION`, `CDI_VERSION`, `SNAPSH
 | RBD pool + StorageClass | `rbd-nvme-prod` / `zyvor-rbd-prod` |
 | CephFS + RWX StorageClass | `zyvorfs` / `zyvor-cephfs-shared` |
 | RGW object store + bucket class | `zyvor-rgw` / `zyvor-rgw-bucket` |
+| RGW NodePort (browser S3 access) | `rook-ceph-rgw-zyvor-rgw-nodeport` → `:30800` |
 | VolumeSnapshotClass | `zyvor-rbd-snapclass` |
+
+> The RGW NodePort (`:30800`) lets browsers reach RGW directly for **presigned object
+> upload/download** from the Buckets page. The gateway advertises it via
+> `ATLAS_RGW_PUBLIC_ENDPOINT=http://<node-ip>:30800` (set from `status.hostIP` in
+> `deploy/k8s/atlas-gateway.yaml`). Versioned uploads (keep-N) power db-file backups.
 
 ## Verify
 ```bash

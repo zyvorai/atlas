@@ -94,6 +94,15 @@ spec:
               value: "fake"          # switch to "real" once Rook Ceph + ceph client are present
             - name: ATLAS_AUTH_REQUIRED
               value: "0"
+            # Browser-reachable RGW endpoint for presigned object upload/download URLs.
+            # NODE_IP is this node's address (public on the lab hosts); 30800 is the RGW NodePort
+            # created alongside the CephObjectStore (see deploy/rook-ceph-lab/*rgw*.yaml).
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: ATLAS_RGW_PUBLIC_ENDPOINT
+              value: "http://$(NODE_IP):30800"
             - name: RUST_LOG
               value: "info,atlas_gateway=debug"
           ports:
