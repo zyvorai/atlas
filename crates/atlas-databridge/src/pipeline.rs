@@ -394,7 +394,9 @@ pub async fn start_cdc(
     } else {
         (format!("jdbc:mysql://{cr_name}-haproxy.{ns}.svc:3306/{db}"), "root", "root")
     };
-    let sink_spec = streaming::jdbc_sink_spec(&s, &jdbc_url, ns, edge_secret, edge_user, edge_pass_key);
+    let pk_fields = std::env::var("ATLAS_DATABRIDGE_SINK_PK_FIELDS").unwrap_or_else(|_| "id".into());
+    let sink_spec =
+        streaming::jdbc_sink_spec(&s, &jdbc_url, ns, edge_secret, edge_user, edge_pass_key, &pk_fields);
     k8s.apply_cr_labeled(
         streaming::GROUP, streaming::VERSION, streaming::CONNECTOR_KIND, ns,
         &streaming::sink_connector_name(&s), &labels, sink_spec,

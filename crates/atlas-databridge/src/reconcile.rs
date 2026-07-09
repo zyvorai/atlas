@@ -118,11 +118,16 @@ async fn reconcile_once(
         }
     }
 
-    // Health-check real CDC: if a streaming stream's Debezium source connector isn't RUNNING, flag
-    // it. Fake streams have no KafkaConnector CR (status None) and are left to the fake drain.
+    // Real CDC tracking: a streaming stream backed by a real Debezium `KafkaConnector` (status
+    // present) is driven by the connector's health — RUNNING refreshes liveness (lag caught-up),
+    // anything else flags the stream `error`. Fake streams have no CR (status None) and are left to
+    // the synthesized drain above.
+    //
+    // NOTE: a precise numeric offset-lag (topic end offset − sink consumer offset) needs a Kafka
+    // AdminClient, which the gateway does not embed; once streaming and healthy we report lag 0.
     for stream in atlas_inventory::databridge::cdc::list_by_state(pool, "streaming").await? {
         let Some(connector) = stream.connector_name.as_deref() else { continue };
-        if let Ok(Some(status)) = k8s
+        match k8s
             .get_cr_status(
                 crate::cr::streaming::GROUP,
                 crate::cr::streaming::VERSION,
@@ -132,10 +137,26 @@ async fn reconcile_once(
             )
             .await
         {
-            if !crate::cr::streaming::connector_running(&status) {
-                atlas_inventory::databridge::cdc::set_state(pool, &stream.id, "error").await?;
-                tracing::warn!("CDC stream {} connector {connector} is not RUNNING", stream.id);
+            Ok(Some(status)) => {
+                if crate::cr::streaming::connector_running(&status) {
+                    // Healthy real stream: refresh lag_updated_at (liveness) and report caught-up.
+                    atlas_inventory::databridge::cdc::update_lag(
+                        pool,
+                        &stream.id,
+                        0,
+                        0,
+                        stream.last_source_lsn.as_deref(),
+                        stream.last_applied_lsn.as_deref(),
+                        stream.events_total,
+                    )
+                    .await?;
+                } else {
+                    atlas_inventory::databridge::cdc::set_state(pool, &stream.id, "error").await?;
+                    tracing::warn!("CDC stream {} connector {connector} is not RUNNING", stream.id);
+                }
             }
+            Ok(None) => {} // fake stream — handled by the synthesized drain
+            Err(e) => tracing::warn!("poll CDC connector {connector}: {e}"),
         }
     }
 

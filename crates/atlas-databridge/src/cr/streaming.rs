@@ -109,7 +109,8 @@ pub fn debezium_source_spec(
 
 /// JDBC sink connector config applying the source topics to the edge DB. `edge_secret` is the
 /// operator app Secret (CNPG `uri`/Percona `root`); we build a JDBC URL to the edge service.
-pub fn jdbc_sink_spec(short: &str, jdbc_url: &str, secret_ns: &str, edge_secret: &str, edge_user: &str, edge_pass_key: &str) -> Value {
+#[allow(clippy::too_many_arguments)]
+pub fn jdbc_sink_spec(short: &str, jdbc_url: &str, secret_ns: &str, edge_secret: &str, edge_user: &str, edge_pass_key: &str, pk_fields: &str) -> Value {
     let prefix = topic_prefix(short);
     let config = json!({
         "connector.class": "io.aiven.connect.jdbc.JdbcSinkConnector",
@@ -119,9 +120,10 @@ pub fn jdbc_sink_spec(short: &str, jdbc_url: &str, secret_ns: &str, edge_secret:
         "connection.user": edge_user,
         "connection.password": format!("${{secrets:{secret_ns}/{edge_secret}:{edge_pass_key}}}"),
         "insert.mode": "upsert",
-        // The edge tables already exist (from full-load); PK column is assumed `id`.
+        // A single Aiven sink connector takes one pk.fields for all its tables (the record-key PK
+        // column name(s)); default `id`, override with ATLAS_DATABRIDGE_SINK_PK_FIELDS.
         "pk.mode": "record_key",
-        "pk.fields": "id",
+        "pk.fields": pk_fields,
         "auto.create": false,
         "auto.evolve": true,
         "consumer.override.auto.offset.reset": "earliest",
@@ -177,7 +179,7 @@ mod tests {
 
     #[test]
     fn sink_targets_topic_regex_and_upsert() {
-        let s = jdbc_sink_spec("abc123", "jdbc:postgresql://edge-rw:5432/appdb", "zyvor-databridge", "edge-app", "app", "password");
+        let s = jdbc_sink_spec("abc123", "jdbc:postgresql://edge-rw:5432/appdb", "zyvor-databridge", "edge-app", "app", "password", "id");
         assert_eq!(s["config"]["insert.mode"], "upsert");
         assert_eq!(s["config"]["pk.fields"], "id");
         assert_eq!(s["config"]["transforms.unwrap.type"], "io.debezium.transforms.ExtractNewRecordState");

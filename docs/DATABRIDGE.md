@@ -122,8 +122,11 @@ Getting there corrected **nine real issues** in the blind-built CDC path (all no
 9. Debezium must use `decimal.handling.mode=double` (Postgres unscaled `numeric` → a STRUCT the sink
    can't bind) + `snapshot.mode=never` (the full-load already seeded the edge).
 
-**Remaining follow-up**: real CDC **lag tracking** (Kafka Connect consumer-group offsets) — the
-reconciler still synthesizes lag in fake mode; and generalizing the sink `pk.fields` beyond `id`.
+Real CDC is **health-tracked** by the reconciler: a streaming stream backed by a real Debezium
+`KafkaConnector` follows the connector's state (RUNNING → live/caught-up, else → `error`); fake
+streams keep the synthesized lag drain. The sink `pk.fields` is configurable via
+`ATLAS_DATABRIDGE_SINK_PK_FIELDS` (default `id`). Precise numeric offset-lag (topic end − sink
+consumer offset) would need an embedded Kafka AdminClient — a scoped future addition.
 
 ## Status
 - **Done + CI-tested**: full pipeline demoable end-to-end (fake) — locked by
