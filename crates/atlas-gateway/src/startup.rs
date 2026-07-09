@@ -187,18 +187,20 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
     };
 
     if opts.initial_discovery {
-        match atlas_discovery::run_discovery(&state.pool, driver.clone()).await {
+        let rbd_owners = state.rbd_owners().await;
+        match atlas_discovery::run_discovery(&state.pool, driver.clone(), rbd_owners.as_ref()).await
+        {
             Ok(sum) => tracing::info!(?sum, "initial discovery complete"),
             Err(e) => tracing::warn!("initial discovery failed: {e:#}"),
         }
         if let Some(nfs) = &nfs_driver {
-            match atlas_discovery::run_discovery(&state.pool, nfs.clone()).await {
+            match atlas_discovery::run_discovery(&state.pool, nfs.clone(), None).await {
                 Ok(sum) => tracing::info!(?sum, "initial nfs discovery complete"),
                 Err(e) => tracing::warn!("initial nfs discovery failed: {e:#}"),
             }
         }
         if let Some(zfs) = &zfs_driver {
-            match atlas_discovery::run_discovery(&state.pool, zfs.clone()).await {
+            match atlas_discovery::run_discovery(&state.pool, zfs.clone(), None).await {
                 Ok(sum) => tracing::info!(?sum, "initial zfs discovery complete"),
                 Err(e) => tracing::warn!("initial zfs discovery failed: {e:#}"),
             }

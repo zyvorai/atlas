@@ -40,7 +40,7 @@ pub fn spawn(
         let mut tick = tokio::time::interval(Duration::from_secs(interval_secs));
         loop {
             tick.tick().await;
-            if let Err(e) = atlas_discovery::run_discovery(&pool, driver.clone()).await {
+            if let Err(e) = atlas_discovery::run_discovery(&pool, driver.clone(), None).await {
                 tracing::warn!("monitor discovery failed: {e:#}");
             }
             if let Err(e) = evaluate(&pool).await {

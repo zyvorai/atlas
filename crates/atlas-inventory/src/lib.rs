@@ -398,8 +398,14 @@ pub async fn upsert_discovery(
              ON CONFLICT(id) DO UPDATE SET
                 cluster_id=excluded.cluster_id, pool_id=excluded.pool_id, name=excluded.name, kind=excluded.kind,
                 backend_native_id=excluded.backend_native_id, size_bytes=excluded.size_bytes, used_bytes=excluded.used_bytes,
-                state=excluded.state, health=excluded.health, kubernetes_namespace=excluded.kubernetes_namespace,
-                pvc_name=excluded.pvc_name, storage_class_name=excluded.storage_class_name, updated_at=excluded.updated_at",
+                state=excluded.state, health=excluded.health,
+                -- Preserve Kubernetes correlation across re-discovery: a driver pass that can't
+                -- attribute the RBD image (e.g. the periodic monitor, which has no K8s client)
+                -- reports NULL — keep the previously enriched value instead of wiping it.
+                kubernetes_namespace=COALESCE(excluded.kubernetes_namespace, storage_volumes.kubernetes_namespace),
+                pvc_name=COALESCE(excluded.pvc_name, storage_volumes.pvc_name),
+                storage_class_name=COALESCE(excluded.storage_class_name, storage_volumes.storage_class_name),
+                updated_at=excluded.updated_at",
         )
         .bind(&v.id)
         .bind(backend_id)

@@ -445,6 +445,41 @@ impl K8sDriver {
         }
     }
 
+    /// Reverse of `resolve_rbd`: map every Rook/Ceph CSI **RBD image name** → the PVC that owns
+    /// it (namespace, PVC name, storage class), derived from cluster PersistentVolumes. Discovery
+    /// uses this to attribute raw RBD images (which `rbd ls` alone can't tie to Kubernetes) back to
+    /// their VM disk. Best-effort — PVs without a CSI `imageName` or a bound `claimRef` are skipped.
+    pub async fn rbd_image_owners(
+        &self,
+    ) -> Result<std::collections::HashMap<String, RbdImageOwner>, K8sError> {
+        let api: Api<PersistentVolume> = Api::all(self.client.clone());
+        let list = api.list(&ListParams::default().limit(1000)).await?;
+        let mut out = std::collections::HashMap::new();
+        for pv in list.items {
+            let Some(spec) = pv.spec else { continue };
+            let storage_class = spec.storage_class_name.clone();
+            let image = spec
+                .csi
+                .as_ref()
+                .and_then(|c| c.volume_attributes.as_ref())
+                .and_then(|a| a.get("imageName").cloned());
+            let (Some(image), Some(claim)) = (image, spec.claim_ref) else {
+                continue;
+            };
+            if let (Some(namespace), Some(pvc_name)) = (claim.namespace, claim.name) {
+                out.insert(
+                    image,
+                    RbdImageOwner {
+                        namespace,
+                        pvc_name,
+                        storage_class,
+                    },
+                );
+            }
+        }
+        Ok(out)
+    }
+
     /// Read a Secret's `data`, base64-decoded to strings. Credentials stay in this process; the
     /// caller must not log them.
     pub async fn get_secret(
@@ -499,6 +534,14 @@ impl From<PersistentVolumeClaim> for PvcSummary {
             volume_mode: spec.volume_mode,
         }
     }
+}
+
+/// Owning PVC of a Ceph RBD image, resolved from a PersistentVolume's `claimRef`.
+#[derive(Debug, Clone)]
+pub struct RbdImageOwner {
+    pub namespace: String,
+    pub pvc_name: String,
+    pub storage_class: Option<String>,
 }
 
 /// Compact PV view for the inventory / API.

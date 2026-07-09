@@ -28,4 +28,22 @@ impl AppState {
     ) -> Option<Arc<dyn atlas_driver_core::StorageDriver>> {
         self.drivers.get(backend_id).or_else(|| self.drivers.any())
     }
+
+    /// Build the RBD-image → owning-PVC map from cluster PersistentVolumes, so discovery can
+    /// attribute raw `rbd ls` images to their Kubernetes VM disk. `None` when no cluster is
+    /// attached or the PV list fails (discovery then just leaves those volumes unattributed).
+    pub async fn rbd_owners(&self) -> Option<atlas_discovery::RbdOwners> {
+        let k8s = self.k8s.as_ref()?;
+        match k8s.rbd_image_owners().await {
+            Ok(m) => Some(
+                m.into_iter()
+                    .map(|(img, o)| (img, (o.namespace, o.pvc_name, o.storage_class)))
+                    .collect(),
+            ),
+            Err(e) => {
+                tracing::warn!("rbd_image_owners failed: {e}");
+                None
+            }
+        }
+    }
 }

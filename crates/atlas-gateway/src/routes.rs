@@ -437,7 +437,8 @@ async fn discover_backend(
         .driver_for(&id)
         .ok_or_else(|| AppError::NotFound(format!("no driver registered for backend {id}")))?;
 
-    let result = atlas_discovery::run_discovery(&s.pool, driver).await;
+    let rbd_owners = s.rbd_owners().await;
+    let result = atlas_discovery::run_discovery(&s.pool, driver, rbd_owners.as_ref()).await;
     let (status, payload) = match &result {
         Ok(sum) => ("success", serde_json::to_value(sum).unwrap_or(Value::Null)),
         Err(e) => ("failed", json!({ "error": e.to_string() })),
