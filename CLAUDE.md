@@ -17,6 +17,9 @@ Implemented:
   Ceph-native `/ceph/{status,osd-tree,osd-df,df}`, unified `/events`, `/readyz`; `deploy/observability/`.
 - **Zeus OS React console** embedded in the gateway (HTTPS, login, Observatory, Ceph page, Nebula theme).
 - `deploy/rook-ceph-lab/` (single-node overlay + day-2 ops scripts) + `deploy/k8s/` ceph deployment.
+- **DataBridge** (`atlas-databridge`): cloud-to-edge DB migration control plane (RDS/Cloud SQL PG+MySQL
+  → CloudNativePG/Percona on Ceph). Full pipeline demoable fake (discover→assess→provision→full-load→
+  CDC→validate→cutover→rollback); real edge provisioning wired. See `docs/DATABRIDGE.md`.
 
 Deferred: RBD mirroring/DR (needs a 2nd cluster), per-product integrations beyond the gRPC surface.
 
@@ -27,6 +30,8 @@ Deferred: RBD mirroring/DR (needs a 2nd cluster), per-product integrations beyon
 - `crates/atlas-driver-ceph` — `ceph`/`rbd` CLI wrappers + `FakeCephDriver`.
 - `crates/atlas-driver-nfs` — `NfsDriver` (second backend; exports→pools, shares→filesystem volumes).
 - `crates/atlas-driver-zfs` — `ZfsDriver` (third backend; zpools→pools, datasets→filesystem volumes).
+- `crates/atlas-databridge` — DataBridge: source connectors, assessment, CNPG/Percona CR builders,
+  pipeline stages, reconciler (cloud-to-edge DB migration; `migrations/0011`, `/api/atlas/v1/databridge/*`).
 - `crates/atlas-driver-k8s` — `kube-rs` read-only StorageClass/PVC/PV listing.
 - `crates/atlas-inventory` — SQLite read/upsert model.
 - `crates/atlas-discovery` — discovery worker.

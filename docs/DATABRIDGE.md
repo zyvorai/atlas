@@ -1,0 +1,92 @@
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved. -->
+# Zyvor DataBridge — cloud-to-edge database mobility
+
+DataBridge migrates **managed cloud databases** (AWS RDS/Aurora, GCP Cloud SQL — PostgreSQL & MySQL)
+to **open, self-managed engines at the edge** on Kubernetes, with **Ceph (via Atlas/Rook) as the
+storage layer**. It runs from Atlas as a migration control plane, reusing the job engine, inventory,
+gateway, and Zeus OS console. Ceph is the *storage*, not the database engine.
+
+> Positioning: *"Migrate managed cloud databases to open engines running on Zyvor Edge, backed by
+> Ceph — with continuous replication, validation, cutover, and rollback from one control plane."*
+> DynamoDB / Firestore / Spanner are **out of scope** — those are data-model migrations, not storage
+> migrations.
+
+## Pipeline
+```
+Discover → Assess → Provision (edge DB on Ceph) → Full-load → CDC (Debezium)
+        → Validate → Cutover → (Rollback within window)
+```
+Each stage is an async job (`202 + job id`, progress via `/jobs/{id}/watch`). Long-running work
+(edge CR readiness, CDC lag) is advanced by the **DataBridge reconciler** worker.
+
+- **Edge runtime**: CloudNativePG (Postgres) / Percona XtraDB (MySQL), data + WAL on the
+  `zyvor-rbd-prod` Ceph RBD StorageClass.
+- **CDC**: Debezium on Strimzi/Kafka (cloud-neutral, reads WAL/binlog).
+- **Cutover** is admin-guarded: plan `validated` + last validation `passed` + CDC `lag_seconds` under
+  threshold; **rollback** only within the plan's rollback window.
+
+## Fake vs real
+The whole pipeline runs **fake-first** with no cloud creds or operators — connectors serve a canned
+schema, edge provisioning/full-load/CDC/validate complete inline, and the reconciler drains a
+synthetic CDC lag so the UI animates. Set a source's `driver_mode: real` (creds in a k8s Secret) and
+install the edge operators to run it for real.
+
+## Run locally (fake, no cloud/k8s)
+```bash
+make run-databridge          # gateway with fake Ceph driver + DataBridge reconciler @5s
+```
+Then open the console at http://127.0.0.1:5110/ → **DataBridge → Cloud Databases**, register a
+source (kind `postgres`/`mysql`, driver mode `fake`), and walk the plan through the stepper. Or over
+REST:
+```bash
+B=http://127.0.0.1:5110/api/atlas/v1
+SID=$(curl -sX POST $B/databridge/sources -d '{"name":"orders","kind":"postgres","cloud":"rds"}' | jq -r .id)
+curl -sX POST $B/databridge/sources/$SID/discover
+PID=$(curl -sX POST $B/databridge/plans -d "{\"name\":\"orders\",\"source_id\":\"$SID\"}" | jq -r .id)
+for stage in assess provision full-load cdc/start validate cutover; do curl -sX POST $B/databridge/plans/$PID/$stage; done
+```
+
+## Run for real (edge cluster)
+1. Install the edge operators: [`deploy/databridge/up.sh`](../deploy/databridge/README.md)
+   (CloudNativePG + Percona + Strimzi) — needs the `zyvor-rbd-prod` StorageClass.
+2. Register a source with `driver_mode: real` and `secret_ref`/`secret_namespace` pointing at a k8s
+   Secret holding the source credentials (never sent in the API).
+3. Run the pipeline; the edge `Cluster` CR binds PVCs on Ceph, the reconciler polls it to `ready`.
+
+## REST endpoints (`/api/atlas/v1`)
+| Method | Path | Purpose |
+|---|---|---|
+| GET/POST | `/databridge/sources` | list / register sources |
+| GET/DELETE | `/databridge/sources/{id}` | get / delete a source |
+| POST | `/databridge/sources/{id}/discover` | discover schema (job) |
+| GET/POST | `/databridge/plans` | list / create plans |
+| GET | `/databridge/plans/{id}` | plan detail |
+| POST | `/databridge/plans/{id}/assess` | score readiness (job) |
+| POST | `/databridge/plans/{id}/provision` | provision edge DB (job) |
+| POST | `/databridge/plans/{id}/full-load` | full-load (job) |
+| POST | `/databridge/plans/{id}/cdc/start` · `/cdc/stop` | CDC control (job) |
+| POST | `/databridge/plans/{id}/validate` | validate source vs edge (job) |
+| POST | `/databridge/plans/{id}/cutover` | cutover — **admin, guarded** (job) |
+| POST | `/databridge/plans/{id}/rollback` | rollback within window — **admin** (job) |
+| GET | `/databridge/{edge-clusters,cdc-streams,validations,cutovers}` | read models |
+
+## Configuration
+| Env | Default | Meaning |
+|---|---|---|
+| `ATLAS_DATABRIDGE_RECONCILE_SECS` | `15` | reconciler tick (edge CR readiness, CDC lag). `0` disables. |
+
+Source `driver_mode` (`fake`/`real`) is per-source, set at registration. Edge namespace is
+`zyvor-databridge`; edge storage class is `zyvor-rbd-prod`.
+
+## Data model
+`migration_sources`, `migration_plans`, `edge_db_clusters`, `cdc_streams`, `validation_runs`,
+`cutovers` (SQLite; migration `0011_databridge.sql`). Plan state machine:
+`draft → discovered → assessed → provisioning → provisioned → full_loading → loaded →
+cdc_streaming → validating → validated → cutover_pending → cutover_in_progress → cutover_complete
+→ completed | rolled_back | failed`.
+
+## Status
+- **Done**: full pipeline demoable end-to-end (fake); real edge provisioning (CNPG/Percona CR apply +
+  reconciler readiness polling) on Ceph.
+- **Follow-ups (real infra)**: real full-load (`pg_dump`/`mydumper` batch Jobs), real Debezium CDC +
+  lag from Kafka Connect, real source-vs-edge validation queries.

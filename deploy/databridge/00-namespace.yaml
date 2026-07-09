@@ -1,0 +1,10 @@
+# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Namespace for DataBridge edge databases + their operators/streaming (matches EDGE_NAMESPACE
+# in atlas-databridge::pipeline). Edge CloudNativePG / Percona clusters and Debezium connectors
+# are created here by the migration pipeline.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zyvor-databridge
+  labels:
+    zyvor.dev/component: databridge

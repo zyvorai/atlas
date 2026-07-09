@@ -70,6 +70,15 @@ call **stable Atlas APIs**; Atlas talks to storage backends through **pluggable 
 - **Day-2 ops**: `deploy/rook-ceph-lab/{reclaim-space,resize-osd,setup-k3s-disk,teardown}.sh`
   (Ceph capped to 400 GiB on `/dev/sdb1`; the freed tail becomes `/dev/sdb2` for the k3s data-dir).
 
+**DataBridge — cloud-to-edge database mobility:**
+- Migrate managed cloud databases (AWS RDS/Aurora, GCP Cloud SQL — PostgreSQL & MySQL) to open
+  engines at the edge (**CloudNativePG / Percona on Ceph RBD**), from one control plane.
+- Full pipeline — **discover → assess → provision → full-load → CDC (Debezium) → validate → cutover
+  → rollback** — as async jobs with a reconciler; admin-guarded cutover, rollback window.
+- **Fake-first**: the whole pipeline runs with no cloud/k8s (`make run-databridge`); real edge
+  provisioning (operator CR apply + Ceph PVCs) is wired. Console: **DataBridge** section. See
+  [docs/DATABRIDGE.md](docs/DATABRIDGE.md) + [deploy/databridge/](deploy/databridge/README.md).
+
 See [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/API.md](docs/API.md).
 
 ## Quickstart (no Ceph, no cluster needed)
