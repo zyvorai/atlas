@@ -4,7 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity, Aperture, Archive, Bell, Boxes, Camera, Clock, Cloud, Database, FileClock, Gauge, HardDrive,
   KeyRound, Layers, LayoutDashboard, Orbit, Server, ShieldCheck, Sparkles, Timer, Users, CloudCog,
-  Route as RouteIcon, Radio,
+  Route as RouteIcon, Radio, Wrench, GitBranch,
 } from "lucide-react";
 
 export interface Module {
@@ -48,6 +48,8 @@ export const MODULES: Module[] = [
   { id: "kubernetes", codename: "talos", label: "Kubernetes", path: "/kubernetes", icon: Boxes, section: "INFRASTRUCTURE" },
   { id: "cluster", codename: "oracle", label: "Cluster", path: "/cluster", icon: Database, section: "INFRASTRUCTURE" },
   { id: "ceph", codename: "kraken", label: "Ceph", path: "/ceph", icon: Aperture, section: "INFRASTRUCTURE" },
+  { id: "maintenance", codename: "hestia", label: "Maintenance", path: "/maintenance", icon: Wrench, section: "INFRASTRUCTURE" },
+  { id: "dr", codename: "styx", label: "Disaster Recovery", path: "/dr", icon: GitBranch, section: "INFRASTRUCTURE" },
 ];
 
 export const SECTIONS = ["STORAGE", "DATA PROTECTION", "DATABRIDGE", "OBSERVABILITY", "GOVERNANCE", "INFRASTRUCTURE"];

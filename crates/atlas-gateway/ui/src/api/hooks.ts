@@ -59,6 +59,18 @@ export const useCephMetrics = (prefix?: string) =>
 export const usePolicies = () => q<any[]>(["policies"], "/policies", 60000);
 export const useBackends = () => q<any[]>(["backends"], "/backends", 20000);
 export const useBackendsSummary = () => q<any[]>(["backends-summary"], "/backends/summary", 15000);
+
+// Day-2 operations.
+export const useMaintenance = () => q<{ paused: boolean }>(["maintenance"], "/maintenance", 8000);
+export const usePreflight = () =>
+  q<{ ready: boolean; checks: { check: string; ok: boolean; detail: string }[]; blockers: string[] }>(
+    ["preflight"], "/upgrade/preflight", 10000);
+export const useOrphans = () => q<{ orphan_backups: any[]; count: number }>(["orphans"], "/maintenance/orphans", 20000);
+export const useDrStatus = () =>
+  q<{ peers: number; mirrors: number; primary: number; secondary: number; worst_rpo_seconds: number | null }>(
+    ["dr-status"], "/dr/status", 10000);
+export const useDrPeers = () => q<any[]>(["dr-peers"], "/dr/peers", 15000);
+export const useDrMirrors = () => q<any[]>(["dr-mirrors"], "/dr/mirrors", 10000);
 export const useCephStatus = () => q<any>(["ceph-status"], "/ceph/status", 8000);
 export const useCephOsdTree = () => q<any>(["ceph-osd-tree"], "/ceph/osd-tree", 15000);
 export const useCephOsdDf = () => q<any>(["ceph-osd-df"], "/ceph/osd-df", 12000);

@@ -5,6 +5,7 @@ import { submit } from "../api/client";
 import { useAlerts, useInvalidate } from "../api/hooks";
 import { Badge, Button, GlassSection, PageHeader, Select } from "../ui/kit";
 import { Table } from "../ui/Table";
+import { confirmThen } from "../ui/confirm";
 import { stateKind, timeAgo } from "../lib/format";
 
 export default function Alerts() {
@@ -32,6 +33,15 @@ export default function Alerts() {
             { h: "Resource", f: (a) => a.resource_id, mono: true },
             { h: "Since", f: (a) => <span className="text-muted-foreground">{timeAgo(a.created_at)}</span> },
           ]}
+          actions={(a) =>
+            a.state === "open" ? (
+              <>
+                <Button size="sm" onClick={() => submit("post", `/alerts/${a.id}/ack`, null, "acknowledged", () => inv("alerts"))}>Ack</Button>
+                <Button size="sm" onClick={() => submit("post", `/alerts/${a.id}/silence?secs=3600`, null, "silenced 1h", () => inv("alerts"))}>Silence</Button>
+                <Button size="sm" variant="danger" onClick={() => confirmThen({ title: "Resolve alert?", message: a.title, confirmLabel: "Resolve" }, () => submit("post", `/alerts/${a.id}/resolve`, null, "resolved", () => inv("alerts")))}>Resolve</Button>
+              </>
+            ) : null
+          }
         />
       </GlassSection>
     </div>
