@@ -1,0 +1,64 @@
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved. -->
+# Atlas scripts
+
+Reusable automation for testing and deploying Atlas. Run from the repo root.
+
+## `test-all.sh` — full local gate
+One-shot "test everything that needs no external infra, then real DBs if a container runtime is up."
+
+```bash
+scripts/test-all.sh                 # clippy + workspace tests + feature compiles + container connector tests
+scripts/test-all.sh --no-containers # skip the real-DB step (Tiers 0–1 only)
+```
+
+Runs: `cargo clippy -D warnings` → `cargo test --workspace` (unit + gateway integration incl.
+`observability.rs` and `databridge_engines.rs`) → optional-feature compile checks
+(`sqlserver`/`oracle`/`mongodb`, plus `kafka-lag` when `cmake` is present) → `test-connectors.sh`.
+Prints the opt-in follow-ups (Tier 3 real Ceph/k8s write path, Tier 4 UI smoke) at the end.
+
+> Note: `cargo fmt --all --check` is intentionally not part of the gate — the repo's dense one-line
+> style predates current stable rustfmt, so CI runs the fmt step `continue-on-error` and clippy/test/
+> build are the enforced gates.
+
+## `test-connectors.sh` — real DataBridge source connectors via containers
+Spins an ephemeral DB per engine (podman or docker), seeds a `customers`/`orders` schema, exports the
+matching `DATABRIDGE_TEST_*` var, runs that engine's env-gated `#[tokio::test]` discovery test, and
+tears the container down.
+
+```bash
+scripts/test-connectors.sh                  # postgres, mysql, mariadb, mongo, mssql
+scripts/test-connectors.sh pg mysql mongo   # a subset
+RUNTIME=docker scripts/test-connectors.sh   # force docker
+```
+
+The gated tests skip (pass as no-op) when their var is unset, so `cargo test --workspace` stays
+infra-free. Engine → var → feature:
+
+| Engine | `DATABRIDGE_TEST_*` (value: `host,port,database,user,password`) | cargo feature |
+|---|---|---|
+| Postgres | `DATABRIDGE_TEST_PG` (libpq conn string) | *(default)* |
+| MySQL | `DATABRIDGE_TEST_MYSQL` | *(default)* |
+| MariaDB | `DATABRIDGE_TEST_MARIADB` | *(default)* |
+| MongoDB | `DATABRIDGE_TEST_MONGO` | `mongodb` |
+| SQL Server | `DATABRIDGE_TEST_MSSQL` | `sqlserver` |
+
+Oracle is compile-only (needs the OCI client): `cargo build -p atlas-databridge --features oracle`.
+
+## `deploy-remote.sh` — deploy the gateway to a remote k3s host
+rsync → podman build → import into k3s containerd → `kubectl apply` + **rollout restart** (so a
+same-tag `:dev` image actually rolls out) → verify `/health` + `/storage-classes` over NodePort 30510.
+
+```bash
+scripts/deploy-remote.sh <host> <user>                  # e.g. 212.8.248.187 sus
+scripts/deploy-remote.sh <host> <user> --with-ceph      # also run the Rook Ceph lab (DESTRUCTIVE: consumes a disk)
+scripts/deploy-remote.sh <host> <user> --with-k3s-disk  # move the k3s data-dir onto a carved partition
+```
+
+Needs local `ssh`+`rsync` and remote `podman`+`k3s`+`kubectl`. The built image runs **default cargo
+features** (real Postgres/MySQL/MariaDB + fake for all); SQL Server/Oracle/MongoDB real connectors and
+`kafka-lag` need their features added to the `Dockerfile` build.
+
+## Related (under `deploy/`)
+- `deploy/rook-ceph-lab/up.sh` — stands up Rook Ceph + the `zyvor-rbd-prod` StorageClass.
+- `deploy/databridge/up.sh` — installs the edge operators (CloudNativePG / Percona / Strimzi) for real migrations.
+- `deploy/observability/up.sh` — observability stack.
