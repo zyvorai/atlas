@@ -120,9 +120,11 @@ pub fn mongo_validate_job_spec(
     edge_host: &str,
     edge_db: &str,
 ) -> Value {
+    // authSource=admin: the URI names a db (SRC_DB/EDGE_DB), so without it the auth db defaults to
+    // the app db — where the admin user does not exist — and SCRAM auth fails. The admin user is in `admin`.
     let script = r#"set -euo pipefail
-SRC="mongodb://${SRC_USER}:${SRC_PASS}@${SRC_HOST}:${SRC_PORT}/${SRC_DB}?replicaSet=rs0"
-EDGE="mongodb://${EDGE_USER}:${EDGE_PASS}@${EDGE_HOST}:27017/${EDGE_DB}?replicaSet=rs0"
+SRC="mongodb://${SRC_USER}:${SRC_PASS}@${SRC_HOST}:${SRC_PORT}/${SRC_DB}?replicaSet=rs0&authSource=admin"
+EDGE="mongodb://${EDGE_USER}:${EDGE_PASS}@${EDGE_HOST}:27017/${EDGE_DB}?replicaSet=rs0&authSource=admin"
 cols=$(mongosh "$SRC" --quiet --eval 'db.getCollectionNames().join("\n")')
 fail=0
 for c in $cols; do
@@ -182,5 +184,6 @@ mod tests {
         let args = spec["template"]["spec"]["containers"][0]["args"][0].as_str().unwrap();
         assert!(args.contains("countDocuments"));
         assert!(args.contains("MISMATCH"));
+        assert!(args.contains("authSource=admin"));
     }
 }

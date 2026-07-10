@@ -143,9 +143,12 @@ pub fn mongo_job_spec(
     edge_host: &str,
     edge_db: &str,
 ) -> Value {
+    // authSource=admin is required: mongodump/mongorestore default the auth db to `--db`/the URI
+    // path (the app DB), where the admin user does not exist — omitting it fails SCRAM auth. (mongosh
+    // defaults to admin, which is why interactive checks mislead.) The admin user lives in `admin`.
     let script = r#"set -euo pipefail
-SRC_URI="mongodb://${SRC_USER}:${SRC_PASS}@${SRC_HOST}:${SRC_PORT}/?replicaSet=rs0"
-EDGE_URI="mongodb://${EDGE_USER}:${EDGE_PASS}@${EDGE_HOST}:27017/?replicaSet=rs0"
+SRC_URI="mongodb://${SRC_USER}:${SRC_PASS}@${SRC_HOST}:${SRC_PORT}/?replicaSet=rs0&authSource=admin"
+EDGE_URI="mongodb://${EDGE_USER}:${EDGE_PASS}@${EDGE_HOST}:27017/?replicaSet=rs0&authSource=admin"
 echo "full-load: mongodump ${SRC_HOST}:${SRC_PORT}/${SRC_DB} -> ${EDGE_HOST}/${EDGE_DB}"
 mongodump --uri="$SRC_URI" --db="$SRC_DB" --archive \
   | mongorestore --uri="$EDGE_URI" --archive --nsFrom="${SRC_DB}.*" --nsTo="${EDGE_DB}.*"
@@ -221,6 +224,8 @@ mod tests {
         let args = c["args"][0].as_str().unwrap();
         assert!(args.contains("mongodump"));
         assert!(args.contains("mongorestore"));
+        // mongodump/mongorestore default authSource to the app db, where the admin user isn't — must pin admin.
+        assert!(args.contains("authSource=admin"));
         let env = c["env"].as_array().unwrap();
         assert!(env.iter().any(|e| e["name"] == "EDGE_USER"
             && e["valueFrom"]["secretKeyRef"]["key"] == "MONGODB_DATABASE_ADMIN_USER"));

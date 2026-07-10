@@ -244,10 +244,18 @@ stream reports caught-up (0).
   fails on a MariaDB source (`Unknown table 'COLUMN_STATISTICS'`, 1109) unless `--column-statistics=0` is
   passed — now added (harmless for MySQL). Streaming CDC + cutover were not run — they need Kafka/Debezium,
   not installed on the shared lab.
+- **MongoDB full-load + validate — verified live** (2026-07): drove provision → full-load → validate
+  against a lightweight edge PSMDB replica set. Surfaced + fixed **two real bugs**: (1) the gateway
+  ClusterRole was missing `psmdb.percona.com/perconaservermongodbs`, so MongoDB edge provisioning was
+  RBAC-forbidden (added to `deploy/k8s/atlas-gateway.yaml`); (2) the `mongodump`/`mongorestore`/`mongosh`
+  URIs in the loader + validation Jobs omitted `authSource=admin`, so authenticated Mongo sources failed
+  SCRAM auth (the mongo tools default the auth db to the app db, not `admin`). The **full-load copied the
+  data** (3 customers + 1 order) and **validate confirmed exact document-count parity** (plan → `validated`).
 - **Follow-ups (verify on live infra)**: **streaming CDC + cutover** for the non-Postgres engines, and
-  full-load for MongoDB/SQL Server/Oracle (MySQL + MariaDB are verified through full-load+validate;
-  Postgres through CDC) — the Kafka/Debezium/edge-operator stack is not installed on the shared k3s lab,
-  so these remain wired + unit-tested but not yet live-verified. cross-engine per-table row-count
+  full-load for SQL Server/Oracle (MySQL + MariaDB + MongoDB are verified through full-load+validate;
+  Postgres through CDC; Oracle/SQL Server full-load is by design the Debezium snapshot → folds into CDC) —
+  the Kafka/Debezium/edge-operator stack is not installed on the shared k3s lab, so these remain
+  wired + unit-tested but not yet live-verified. cross-engine per-table row-count
   validation for heterogeneous plans is advisory (parity confirmed by snapshot/stream convergence
   rather than a source-vs-edge count Job). Real MongoDB CDC needs a Connect image bundling the Debezium
   MongoDB connector + the MongoDB Kafka sink.
