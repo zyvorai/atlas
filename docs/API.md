@@ -159,6 +159,10 @@ Run the alert rules on demand (also runs every `ATLAS_MONITOR_INTERVAL_SECS`).
   jobs (`ceph osd out|in|reweight`); `202 + job id`.
 - `POST /api/atlas/v1/rbd-images/{pool}/{image}/qos?iops=&bps=` — per-image QoS throttle
   (`rbd config image set rbd_qos_*_limit`); `0` clears a cap; `202 + job id` (operator).
+- `POST /api/atlas/v1/rbd-images/{pool}/{image}/resize` `{size_bytes, allow_shrink}` — resize an RBD
+  image; shrink requires `allow_shrink: true` (guarded).
+- `POST /api/atlas/v1/rbd-images/{pool}/{image}/migrate?dest_pool=<pool>` — live-migrate an image to
+  another pool (`rbd migration`).
 - `GET /api/atlas/v1/maintenance/orphans` — day-2 hygiene: backups whose source volume no longer
   exists (dangling catalog rows). Clean each via `DELETE /backups/{id}`.
 - `GET /api/atlas/v1/upgrade/preflight` — health-gated "safe to upgrade?" verdict: no HEALTH_ERR

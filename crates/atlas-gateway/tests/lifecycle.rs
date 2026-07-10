@@ -130,3 +130,25 @@ async fn qos_enqueues_and_validates() {
     assert_eq!(c.post(format!("{base}/rbd-images/nvme/img1/qos")).send().await.unwrap().status(), 400);
     assert_eq!(c.post(format!("{base}/rbd-images/nvme/img1/qos?bps=-1")).send().await.unwrap().status(), 400);
 }
+
+/// Resize-down is opt-in (allow_shrink), and pool migration validates its destination.
+#[tokio::test]
+async fn resize_down_and_migrate() {
+    let base = format!("http://{}/api/atlas/v1", spawn().await.0);
+    let c = reqwest::Client::new();
+
+    // Shrink with allow_shrink → 202, echoed.
+    let shrink = c
+        .post(format!("{base}/rbd-images/nvme/img1/resize"))
+        .json(&json!({ "size_bytes": 1073741824i64, "allow_shrink": true }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(shrink.status(), 202);
+    assert_eq!(shrink.json::<Value>().await.unwrap()["resource"]["allow_shrink"], true);
+
+    // Migrate to another pool → 202; same pool or missing dest → 400.
+    assert_eq!(c.post(format!("{base}/rbd-images/nvme/img1/migrate?dest_pool=hdd")).send().await.unwrap().status(), 202);
+    assert_eq!(c.post(format!("{base}/rbd-images/nvme/img1/migrate?dest_pool=nvme")).send().await.unwrap().status(), 400);
+    assert_eq!(c.post(format!("{base}/rbd-images/nvme/img1/migrate")).send().await.unwrap().status(), 400);
+}

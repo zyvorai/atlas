@@ -65,6 +65,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/rbd-images/{pool}/{image}/clone", post(clone_rbd_image))
         .route("/rbd-images/{pool}/{image}/resize", post(resize_rbd_image))
+        .route("/rbd-images/{pool}/{image}/migrate", post(migrate_rbd_image))
         .route("/rbd-images/{pool}/{image}/qos", post(qos_rbd_image))
         .route(
             "/rbd-images/{pool}/{image}/flatten",
@@ -1758,9 +1759,13 @@ async fn clone_rbd_image(
 #[derive(Debug, Deserialize)]
 struct ResizeRbdBody {
     size_bytes: i64,
+    /// Day-2: permit a shrink (guarded — a shrink can lose data past the new size). Default false.
+    #[serde(default)]
+    allow_shrink: bool,
 }
 
-/// `POST /rbd-images/{pool}/{image}/resize` — grow a raw RBD image (operator).
+/// `POST /rbd-images/{pool}/{image}/resize` — resize a raw RBD image (operator). Grow by default;
+/// shrink requires `allow_shrink: true`.
 async fn resize_rbd_image(
     State(s): State<AppState>,
     Extension(actor): Extension<Actor>,
@@ -1784,6 +1789,7 @@ async fn resize_rbd_image(
         pool: pool_name.clone(),
         image: image.clone(),
         new_size_bytes: body.size_bytes,
+        allow_shrink: body.allow_shrink,
     };
     let job = s
         .jobs
@@ -1792,8 +1798,43 @@ async fn resize_rbd_image(
         .map_err(AppError::from)?;
     Ok(accepted(
         &job,
-        json!({ "rbd": format!("{pool_name}/{image}"), "new_size_bytes": body.size_bytes }),
+        json!({ "rbd": format!("{pool_name}/{image}"), "new_size_bytes": body.size_bytes, "allow_shrink": body.allow_shrink }),
     ))
+}
+
+#[derive(Debug, Deserialize)]
+struct MigrateQuery {
+    dest_pool: String,
+}
+
+/// `POST /rbd-images/{pool}/{image}/migrate?dest_pool=<pool>` — live-migrate an RBD image to another
+/// pool (operator; `rbd migration prepare→execute→commit`).
+async fn migrate_rbd_image(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path((pool_name, image)): Path<(String, String)>,
+    Query(q): Query<MigrateQuery>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    if q.dest_pool.trim().is_empty() || q.dest_pool == pool_name {
+        return Err(AppError::Validation("dest_pool must be a different, non-empty pool".into()));
+    }
+    let native = format!("rbd:{pool_name}/{image}");
+    let volume_id = atlas_inventory::list_volumes(&s.pool)
+        .await?
+        .into_iter()
+        .find(|v| v.backend_native_id.as_deref() == Some(native.as_str()))
+        .map(|v| v.id)
+        .unwrap_or_default();
+    let job_id = ids::job_id();
+    let spec = JobSpec::RbdMigrate {
+        volume_id,
+        pool: pool_name.clone(),
+        image: image.clone(),
+        dest_pool: q.dest_pool.clone(),
+    };
+    let job = s.jobs.enqueue(&job_id, "global", &actor.id, spec, None).await?;
+    Ok(accepted(&job, json!({ "from": format!("{pool_name}/{image}"), "to": format!("{}/{image}", q.dest_pool) })))
 }
 
 /// `POST /rbd-images/{pool}/{image}/flatten` — detach a COW clone from its parent (operator).

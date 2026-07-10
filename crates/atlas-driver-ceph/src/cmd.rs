@@ -257,18 +257,51 @@ pub async fn rbd_remove(pool: &str, image: &str) -> Result<(), DriverError> {
     Ok(())
 }
 
-/// Grow an RBD image (`rbd resize pool/image --size <MiB>`; grow-only, no shrink).
-pub async fn rbd_resize(pool: &str, image: &str, size_bytes: i64) -> Result<(), DriverError> {
+/// Resize an RBD image (`rbd resize pool/image --size <MiB>`). Shrinking is refused by `rbd` unless
+/// `allow_shrink` is set (day-2, guarded — a shrink can lose data past the new size).
+pub async fn rbd_resize(
+    pool: &str,
+    image: &str,
+    size_bytes: i64,
+    allow_shrink: bool,
+) -> Result<(), DriverError> {
     let spec = format!("{pool}/{image}");
     let mib = std::cmp::max(1, size_bytes / (1024 * 1024)).to_string();
+    let mut args = vec!["resize", &spec, "--size", &mib];
+    if allow_shrink {
+        args.push("--allow-shrink");
+    }
     let output = tokio::process::Command::new("rbd")
-        .args(["resize", &spec, "--size", &mib])
+        .args(&args)
         .output()
         .await
         .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         return Err(DriverError::Backend(format!("rbd resize {spec}: {stderr}")));
+    }
+    Ok(())
+}
+
+/// Day-2: migrate an RBD image to another pool (`rbd migration prepare`→`execute`→`commit`). Live,
+/// online migration. UNVERIFIED against real Ceph (needs the source + dest pools present).
+pub async fn rbd_migrate(pool: &str, image: &str, dest_pool: &str) -> Result<(), DriverError> {
+    let src = format!("{pool}/{image}");
+    let dst = format!("{dest_pool}/{image}");
+    for stage in [
+        vec!["migration", "prepare", &src, &dst],
+        vec!["migration", "execute", &dst],
+        vec!["migration", "commit", &dst],
+    ] {
+        let output = tokio::process::Command::new("rbd")
+            .args(&stage)
+            .output()
+            .await
+            .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            return Err(DriverError::Backend(format!("rbd {}: {stderr}", stage.join(" "))));
+        }
     }
     Ok(())
 }

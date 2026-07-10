@@ -189,10 +189,21 @@ pub enum JobSpec {
         pool: String,
         image: String,
         new_size_bytes: i64,
+        /// Day-2: permit a shrink (guarded — can lose data past the new size).
+        #[serde(default)]
+        allow_shrink: bool,
     },
     /// Flatten a cloned RBD image so it no longer depends on its parent (`rbd flatten`).
     #[serde(rename = "rbd.flatten")]
     RbdFlatten { pool: String, image: String },
+    /// Day-2: migrate an RBD image to another pool (`rbd migration` prepare→execute→commit).
+    #[serde(rename = "rbd.migrate")]
+    RbdMigrate {
+        volume_id: String,
+        pool: String,
+        image: String,
+        dest_pool: String,
+    },
     /// Day-2 per-image QoS throttle (IOPS / bandwidth caps; `0` clears a cap).
     #[serde(rename = "rbd.qos")]
     RbdQos {
@@ -306,6 +317,7 @@ impl JobSpec {
             JobSpec::RbdClone { .. } => "rbd.clone",
             JobSpec::RbdResize { .. } => "rbd.resize",
             JobSpec::RbdFlatten { .. } => "rbd.flatten",
+            JobSpec::RbdMigrate { .. } => "rbd.migrate",
             JobSpec::RbdQos { .. } => "rbd.qos",
             JobSpec::CephOsdOp { .. } => "ceph.osd.op",
             JobSpec::RbdMirror { .. } => "rbd.mirror",
@@ -593,14 +605,24 @@ async fn dispatch(
             pool: rbd_pool,
             image,
             new_size_bytes,
+            allow_shrink,
         } => {
-            atlas_driver_ceph::rbd_resize(&rbd_pool, &image, new_size_bytes)
+            atlas_driver_ceph::rbd_resize(&rbd_pool, &image, new_size_bytes, allow_shrink)
                 .await
                 .with_context(|| format!("rbd resize {rbd_pool}/{image}"))?;
             atlas_inventory::set_volume_size(pool, &volume_id, new_size_bytes).await?;
             Ok(serde_json::json!({
                 "volume_id": volume_id, "rbd": format!("{rbd_pool}/{image}"),
                 "new_size_bytes": new_size_bytes
+            }))
+        }
+        JobSpec::RbdMigrate { volume_id, pool: rbd_pool, image, dest_pool } => {
+            atlas_driver_ceph::rbd_migrate(&rbd_pool, &image, &dest_pool)
+                .await
+                .with_context(|| format!("rbd migrate {rbd_pool}/{image} -> {dest_pool}"))?;
+            Ok(serde_json::json!({
+                "volume_id": volume_id, "from": format!("{rbd_pool}/{image}"),
+                "to": format!("{dest_pool}/{image}")
             }))
         }
         JobSpec::RbdFlatten {
