@@ -10,7 +10,7 @@ mod fake;
 mod real;
 
 pub use cmd::{
-    ceph_cmd, radosgw_admin_json, radosgw_bucket_quota, rbd_clone, rbd_cmd, rbd_create,
+    ceph_cmd, ceph_osd_op, radosgw_admin_json, radosgw_bucket_quota, rbd_clone, rbd_cmd, rbd_create,
     rbd_du_image, rbd_export_diff, rbd_export_diff_child, rbd_flatten, rbd_import_diff,
     rbd_import_diff_child, rbd_info_size, rbd_list, rbd_remove, rbd_resize, rbd_snap_create,
     rbd_snap_list, rbd_snap_protect, rbd_snap_rm, rbd_snap_rollback, rbd_snap_unprotect,

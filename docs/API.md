@@ -150,6 +150,14 @@ Run the alert rules on demand (also runs every `ATLAS_MONITOR_INTERVAL_SECS`).
   (default 1h, max 30d); the condition keeps being tracked and still shows in `/alerts`.
 - `POST /api/atlas/v1/alerts/{id}/resolve` — operator override to resolve an open alert.
 
+### Maintenance & cluster ops (admin, day-2)
+- `POST /api/atlas/v1/backends/{id}/cordon` · `/uncordon` — stop / resume new provisioning onto a
+  backend (existing volumes untouched). A create against a cordoned backend returns **503**.
+- `GET /api/atlas/v1/maintenance` · `POST /api/atlas/v1/maintenance {"paused":true|false}` — pause /
+  resume the job engine. Paused jobs stay `queued` (the worker holds them) and drain when resumed.
+- `POST /api/atlas/v1/osds/{osd_id}/out` · `/in` · `/reweight?weight=0.8` — OSD maintenance as async
+  jobs (`ceph osd out|in|reweight`); `202 + job id`.
+
 ## Write path (async jobs) — slice 2
 
 All write operations enqueue a job and return **`202 Accepted`** with a `job_id`; poll

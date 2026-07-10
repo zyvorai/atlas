@@ -8,6 +8,7 @@
 //! Redis/NATS dependency (we are SQLite-only). It can be swapped for a durable queue later without
 //! changing the gateway.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -192,6 +193,13 @@ pub enum JobSpec {
     /// Flatten a cloned RBD image so it no longer depends on its parent (`rbd flatten`).
     #[serde(rename = "rbd.flatten")]
     RbdFlatten { pool: String, image: String },
+    /// Day-2 OSD maintenance op: `out` | `in` | `reweight` (weight in [0,1] for reweight).
+    #[serde(rename = "ceph.osd.op")]
+    CephOsdOp {
+        osd_id: i64,
+        action: String,
+        weight: Option<f64>,
+    },
     /// Snapshot a raw RBD image (`rbd snap create`).
     #[serde(rename = "rbd.snapshot")]
     RbdSnapshot {
@@ -277,6 +285,7 @@ impl JobSpec {
             JobSpec::RbdClone { .. } => "rbd.clone",
             JobSpec::RbdResize { .. } => "rbd.resize",
             JobSpec::RbdFlatten { .. } => "rbd.flatten",
+            JobSpec::CephOsdOp { .. } => "ceph.osd.op",
             JobSpec::RbdSnapshot { .. } => "rbd.snapshot",
             JobSpec::RbdRollback { .. } => "rbd.rollback",
             JobSpec::SourceDiscover { .. } => "databridge.source.discover",
@@ -297,6 +306,8 @@ impl JobSpec {
 pub struct JobEngine {
     pool: SqlitePool,
     tx: mpsc::UnboundedSender<String>,
+    /// Maintenance pause: when set, the worker holds jobs (leaves them `queued`) until resumed.
+    paused: Arc<AtomicBool>,
 }
 
 impl JobEngine {
@@ -305,9 +316,11 @@ impl JobEngine {
     /// `pending` is re-enqueued and any job stuck `running` (interrupted mid-flight) is failed-safe.
     pub fn start(pool: SqlitePool, k8s: Option<Arc<K8sDriver>>) -> Self {
         let (tx, rx) = mpsc::unbounded_channel::<String>();
+        let paused = Arc::new(AtomicBool::new(false));
         let worker_pool = pool.clone();
         let worker_tx = tx.clone();
-        tokio::spawn(async move { run_worker(worker_pool, k8s, rx, worker_tx).await });
+        let worker_paused = paused.clone();
+        tokio::spawn(async move { run_worker(worker_pool, k8s, rx, worker_tx, worker_paused).await });
 
         // Recover across restart (channel lost its contents); the worker above is already draining.
         let recover_pool = pool.clone();
@@ -318,7 +331,18 @@ impl JobEngine {
             }
         });
 
-        Self { pool, tx }
+        Self { pool, tx, paused }
+    }
+
+    /// Pause or resume job execution (maintenance mode). Paused jobs stay `queued` until resumed.
+    pub fn set_paused(&self, paused: bool) {
+        self.paused.store(paused, Ordering::Relaxed);
+        tracing::info!(paused, "job engine maintenance pause toggled");
+    }
+
+    /// Whether the job worker is currently paused for maintenance.
+    pub fn is_paused(&self) -> bool {
+        self.paused.load(Ordering::Relaxed)
     }
 
     /// Enqueue a job. Honors idempotency: a repeated key returns the existing job (PDF §17.4).
@@ -387,9 +411,14 @@ async fn run_worker(
     k8s: Option<Arc<K8sDriver>>,
     mut rx: mpsc::UnboundedReceiver<String>,
     tx: mpsc::UnboundedSender<String>,
+    paused: Arc<AtomicBool>,
 ) {
     tracing::info!("atlas-jobs worker started");
     while let Some(job_id) = rx.recv().await {
+        // Maintenance pause: hold the job (leave it `queued`, don't mark_running) until resumed.
+        while paused.load(Ordering::Relaxed) {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
         if let Err(e) = execute_job(&pool, &k8s, &job_id).await {
             let err = format!("{e:#}");
             match atlas_inventory::jobs::retry_budget(&pool, &job_id).await {
@@ -558,6 +587,12 @@ async fn dispatch(
                 .await
                 .with_context(|| format!("rbd flatten {rbd_pool}/{image}"))?;
             Ok(serde_json::json!({ "rbd": format!("{rbd_pool}/{image}"), "flattened": true }))
+        }
+        JobSpec::CephOsdOp { osd_id, action, weight } => {
+            atlas_driver_ceph::ceph_osd_op(&action, osd_id, weight)
+                .await
+                .with_context(|| format!("ceph osd {action} {osd_id}"))?;
+            Ok(serde_json::json!({ "osd_id": osd_id, "action": action, "weight": weight, "applied": true }))
         }
         JobSpec::RbdSnapshot {
             pool: rbd_pool,

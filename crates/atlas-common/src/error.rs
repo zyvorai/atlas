@@ -22,6 +22,8 @@ pub enum AppError {
     Forbidden(String),
     #[error("conflict: {0}")]
     Conflict(String),
+    #[error("unavailable: {0}")]
+    Unavailable(String),
     #[error("driver error: {0}")]
     Driver(String),
     #[error("database error: {0}")]
@@ -38,6 +40,7 @@ impl AppError {
             AppError::Auth(_) => (StatusCode::UNAUTHORIZED, "AUTH_ERROR"),
             AppError::Forbidden(_) => (StatusCode::FORBIDDEN, "FORBIDDEN"),
             AppError::Conflict(_) => (StatusCode::CONFLICT, "CONFLICT"),
+            AppError::Unavailable(_) => (StatusCode::SERVICE_UNAVAILABLE, "UNAVAILABLE"),
             AppError::Driver(_) => (StatusCode::BAD_GATEWAY, "DRIVER_ERROR"),
             AppError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "DB_ERROR"),
             AppError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL"),

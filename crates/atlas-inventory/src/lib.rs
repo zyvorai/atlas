@@ -463,6 +463,27 @@ pub async fn upsert_discovery(
 // Reads
 // ---------------------------------------------------------------------------
 
+/// Cordon or uncordon a backend (day-2 maintenance). Returns whether a row changed.
+pub async fn set_backend_cordoned(pool: &SqlitePool, id: &str, cordoned: bool) -> Result<bool> {
+    let res = sqlx::query(
+        "UPDATE storage_backends SET cordoned=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+    )
+    .bind(cordoned as i64)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected() > 0)
+}
+
+/// Whether a backend is cordoned (rejects new provisioning). Missing backend → not cordoned.
+pub async fn is_backend_cordoned(pool: &SqlitePool, id: &str) -> Result<bool> {
+    let v: Option<i64> = sqlx::query_scalar("SELECT cordoned FROM storage_backends WHERE id=?")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(v.unwrap_or(0) != 0)
+}
+
 pub async fn list_backends(pool: &SqlitePool) -> Result<Vec<StorageBackend>> {
     let rows = sqlx::query(
         "SELECT id, name, backend_type, mode, status, capabilities, connection_ref FROM storage_backends ORDER BY name",

@@ -33,6 +33,38 @@ pub async fn rbd_snap_create(pool: &str, image: &str, snap: &str) -> Result<(), 
     Ok(())
 }
 
+/// Day-2 OSD maintenance op: `ceph osd out|in <id>` (drain / return an OSD) or
+/// `ceph osd reweight <id> <weight>` (rebalance data off/onto an OSD; weight in [0,1]).
+pub async fn ceph_osd_op(op: &str, osd_id: i64, weight: Option<f64>) -> Result<(), DriverError> {
+    let id = osd_id.to_string();
+    let args: Vec<String> = match op {
+        "out" => vec!["osd".into(), "out".into(), id],
+        "in" => vec!["osd".into(), "in".into(), id],
+        "reweight" => {
+            let w = weight
+                .ok_or_else(|| DriverError::Backend("reweight requires a weight".into()))?;
+            if !(0.0..=1.0).contains(&w) {
+                return Err(DriverError::Backend(
+                    "reweight weight must be in [0.0, 1.0]".into(),
+                ));
+            }
+            vec!["osd".into(), "reweight".into(), id, format!("{w}")]
+        }
+        other => return Err(DriverError::Backend(format!("unknown osd op: {other}"))),
+    };
+    let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    let output = tokio::process::Command::new("ceph")
+        .args(&refs)
+        .output()
+        .await
+        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `ceph`: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(DriverError::Backend(format!("ceph {}: {stderr}", refs.join(" "))));
+    }
+    Ok(())
+}
+
 /// Set + enable an RGW per-bucket quota via `radosgw-admin` (Rook doesn't always apply the OBC
 /// additionalConfig quota, so Atlas enforces it directly with the admin keyring in the pod).
 pub async fn radosgw_bucket_quota(
