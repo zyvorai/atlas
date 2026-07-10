@@ -33,6 +33,13 @@ pub async fn register_peer(
     Ok(())
 }
 
+/// Remove a mirroring peer and any mirrors that referenced it (stale/decommissioned peer).
+pub async fn delete_peer(pool: &SqlitePool, id: &str) -> Result<()> {
+    sqlx::query("DELETE FROM dr_mirrors WHERE peer_id=?").bind(id).execute(pool).await?;
+    sqlx::query("DELETE FROM dr_peers WHERE id=?").bind(id).execute(pool).await?;
+    Ok(())
+}
+
 pub async fn list_peers(pool: &SqlitePool) -> Result<Vec<serde_json::Value>> {
     let rows = sqlx::query(
         "SELECT id, name, cluster_fsid, direction, bootstrap_secret_ref, state, created_at

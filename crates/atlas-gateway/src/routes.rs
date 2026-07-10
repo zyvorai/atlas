@@ -6,7 +6,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     middleware,
-    routing::{get, post},
+    routing::{delete, get, post},
     Extension, Json, Router,
 };
 use serde::Deserialize;
@@ -26,6 +26,7 @@ pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .route("/backends", get(list_backends).post(create_backend))
         .route("/backends/summary", get(backends_summary))
+        .route("/backends/{id}", delete(delete_backend))
         .route("/backends/{id}/discover", post(discover_backend))
         .route("/backends/{id}/cordon", post(cordon_backend))
         .route("/backends/{id}/uncordon", post(uncordon_backend))
@@ -33,6 +34,7 @@ pub fn router(state: AppState) -> Router {
         .route("/maintenance/orphans", get(list_orphans))
         .route("/upgrade/preflight", get(upgrade_preflight))
         .route("/dr/peers", get(list_dr_peers).post(register_dr_peer))
+        .route("/dr/peers/{id}", delete(delete_dr_peer))
         .route("/dr/mirrors", get(list_dr_mirrors))
         .route("/dr/status", get(dr_status))
         .route("/dr/mirrors/{id}/promote", post(promote_mirror))
@@ -131,7 +133,7 @@ pub fn router(state: AppState) -> Router {
         .route("/databridge/plans/{id}/cutover", post(db_cutover))
         .route("/databridge/plans/{id}/rollback", post(db_rollback))
         .route("/databridge/edge-clusters", get(db_list_edge_clusters))
-        .route("/databridge/edge-clusters/{id}", get(db_get_edge_cluster))
+        .route("/databridge/edge-clusters/{id}", get(db_get_edge_cluster).delete(db_delete_edge_cluster))
         .route("/databridge/cdc-streams", get(db_list_cdc_streams))
         .route("/databridge/cdc-streams/{id}", get(db_get_cdc_stream))
         .route("/databridge/validations", get(db_list_validations))
@@ -413,6 +415,39 @@ async fn version() -> Json<Value> {
 
 async fn list_backends(State(s): State<AppState>) -> AppResult<Json<Vec<StorageBackend>>> {
     Ok(Json(atlas_inventory::list_backends(&s.pool).await?))
+}
+
+#[derive(serde::Deserialize)]
+struct DeleteBackendQuery {
+    /// Also purge the backend's leftover inventory volume rows (no real storage is touched) — for a
+    /// decommissioned/fixture backend whose discovered volumes have no live driver to delete through.
+    #[serde(default)]
+    purge: bool,
+}
+
+/// `DELETE /backends/{id}[?purge=true]` — remove a backend inventory row (e.g. a decommissioned or
+/// fixture backend). Refused while volumes still reference it (so live volumes aren't orphaned)
+/// unless `?purge=true`, which first drops the backend's orphaned inventory volume rows.
+async fn delete_backend(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+    Query(q): Query<DeleteBackendQuery>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    let volumes = atlas_inventory::backend_volume_count(&s.pool, &id).await?;
+    let mut purged = 0u64;
+    if volumes > 0 {
+        if !q.purge {
+            return Err(AppError::Validation(format!(
+                "backend {id} still has {volumes} volume(s); remove them first or pass ?purge=true \
+                 to drop the orphaned inventory rows"
+            )));
+        }
+        purged = atlas_inventory::delete_volumes_by_backend(&s.pool, &id).await?;
+    }
+    atlas_inventory::delete_backend(&s.pool, &id).await?;
+    Ok(Json(json!({ "backend_id": id, "deleted": true, "volumes_purged": purged })))
 }
 
 /// `GET /backends/summary` — per-backend inventory breakdown (type, clusters/volumes, capacity).
@@ -1153,6 +1188,17 @@ struct PeerBody {
 }
 
 /// `POST /dr/peers` — register a mirroring peer cluster (admin).
+/// `DELETE /dr/peers/{id}` — remove a mirroring peer (and any mirrors that referenced it).
+async fn delete_dr_peer(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    atlas_inventory::dr::delete_peer(&s.pool, &id).await?;
+    Ok(Json(json!({ "peer_id": id, "deleted": true })))
+}
+
 async fn register_dr_peer(
     State(s): State<AppState>,
     Extension(actor): Extension<Actor>,
@@ -3007,6 +3053,18 @@ async fn db_get_edge_cluster(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("edge cluster {id}")))?;
     Ok(Json(json!(c)))
+}
+
+/// `DELETE /databridge/edge-clusters/{id}` — remove a stale/orphaned edge-cluster inventory row
+/// (the operator CR, if any, is torn down separately).
+async fn db_delete_edge_cluster(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    atlas_inventory::databridge::edge_clusters::delete_edge_cluster(&s.pool, &id).await?;
+    Ok(Json(json!({ "edge_cluster_id": id, "deleted": true })))
 }
 
 /// Cutover is refused unless the plan is validated + last validation passed + CDC lag is under this.

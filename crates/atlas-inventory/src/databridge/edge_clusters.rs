@@ -67,6 +67,16 @@ pub async fn set_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
     Ok(())
 }
 
+/// Delete an edge cluster inventory row (e.g. an orphaned/stale cluster). The backing operator CR
+/// is torn down separately; this only removes the control-plane record.
+pub async fn delete_edge_cluster(pool: &SqlitePool, id: &str) -> Result<()> {
+    sqlx::query("DELETE FROM edge_db_clusters WHERE id=?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn get_edge_cluster(pool: &SqlitePool, id: &str) -> Result<Option<EdgeDbCluster>> {
     let row = sqlx::query(&select("WHERE id = ?"))
         .bind(id)

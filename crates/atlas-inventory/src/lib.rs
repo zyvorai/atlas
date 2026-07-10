@@ -538,6 +538,35 @@ pub async fn is_backend_cordoned(pool: &SqlitePool, id: &str) -> Result<bool> {
     Ok(v.unwrap_or(0) != 0)
 }
 
+/// Number of volumes still referencing a backend — a guard against deleting an in-use backend.
+pub async fn backend_volume_count(pool: &SqlitePool, id: &str) -> Result<i64> {
+    Ok(sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM storage_volumes WHERE backend_id=?")
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0))
+}
+
+/// Delete a backend inventory row (e.g. a decommissioned or fixture backend). Callers should refuse
+/// when [`backend_volume_count`] is non-zero so live volumes aren't orphaned.
+pub async fn delete_backend(pool: &SqlitePool, id: &str) -> Result<()> {
+    sqlx::query("DELETE FROM storage_backends WHERE id=?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Purge a backend's leftover *inventory* volume rows without touching any real storage — for a
+/// decommissioned/fixture backend whose discovered volumes (e.g. NFS exports) have no live driver.
+pub async fn delete_volumes_by_backend(pool: &SqlitePool, backend_id: &str) -> Result<u64> {
+    let r = sqlx::query("DELETE FROM storage_volumes WHERE backend_id=?")
+        .bind(backend_id)
+        .execute(pool)
+        .await?;
+    Ok(r.rows_affected())
+}
+
 pub async fn list_backends(pool: &SqlitePool) -> Result<Vec<StorageBackend>> {
     let rows = sqlx::query(
         "SELECT id, name, backend_type, mode, status, capabilities, connection_ref FROM storage_backends ORDER BY name",
