@@ -32,6 +32,12 @@ pub fn router(state: AppState) -> Router {
         .route("/maintenance", get(get_maintenance).post(set_maintenance))
         .route("/maintenance/orphans", get(list_orphans))
         .route("/upgrade/preflight", get(upgrade_preflight))
+        .route("/dr/peers", get(list_dr_peers).post(register_dr_peer))
+        .route("/dr/mirrors", get(list_dr_mirrors))
+        .route("/dr/status", get(dr_status))
+        .route("/dr/mirrors/{id}/promote", post(promote_mirror))
+        .route("/dr/mirrors/{id}/demote", post(demote_mirror))
+        .route("/volumes/{id}/mirror", post(enable_mirror).delete(disable_mirror))
         .route("/clusters", get(list_clusters))
         .route("/clusters/{id}/health", get(cluster_health))
         .route("/clusters/{id}/capabilities", get(cluster_capabilities))
@@ -1095,6 +1101,199 @@ async fn upgrade_preflight(
 
     let ready = blockers.is_empty();
     Ok(Json(json!({ "ready": ready, "checks": checks, "blockers": blockers })))
+}
+
+// ---- cross-cluster DR (RBD mirroring; scaffolding — real ops UNVERIFIED without a 2nd cluster) ----
+
+#[derive(Debug, Deserialize)]
+struct PeerBody {
+    name: String,
+    cluster_fsid: Option<String>,
+    direction: Option<String>,
+    /// k8s Secret holding the peer bootstrap token (never the token itself).
+    secret_ref: Option<String>,
+}
+
+/// `POST /dr/peers` — register a mirroring peer cluster (admin).
+async fn register_dr_peer(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Json(body): Json<PeerBody>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    if body.name.trim().is_empty() {
+        return Err(AppError::Validation("name is required".into()));
+    }
+    let id = ids::stable_id("drp", &body.name);
+    let direction = body.direction.as_deref().unwrap_or("rx-tx");
+    atlas_inventory::dr::register_peer(
+        &s.pool, &id, &body.name, body.cluster_fsid.as_deref(), direction, body.secret_ref.as_deref(),
+    )
+    .await?;
+    Ok((StatusCode::CREATED, Json(json!({ "id": id, "name": body.name, "direction": direction }))))
+}
+
+async fn list_dr_peers(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    Ok(Json(json!(atlas_inventory::dr::list_peers(&s.pool).await?)))
+}
+
+async fn list_dr_mirrors(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    Ok(Json(json!(atlas_inventory::dr::list_mirrors(&s.pool).await?)))
+}
+
+/// `GET /dr/status` — DR posture: mirror counts by role/state + worst RPO.
+async fn dr_status(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let mirrors = atlas_inventory::dr::list_mirrors(&s.pool).await?;
+    let primaries = mirrors.iter().filter(|m| m["role"] == "primary").count();
+    let secondaries = mirrors.iter().filter(|m| m["role"] == "secondary").count();
+    let worst_rpo = mirrors.iter().filter_map(|m| m["rpo_seconds"].as_i64()).max();
+    let peers = atlas_inventory::dr::list_peers(&s.pool).await?.len();
+    Ok(Json(json!({
+        "peers": peers, "mirrors": mirrors.len(),
+        "primary": primaries, "secondary": secondaries, "worst_rpo_seconds": worst_rpo
+    })))
+}
+
+/// Resolve a volume id to its `(pool, image)` (direct-RBD `rbd:<pool>/<image>` native id).
+async fn rbd_of_volume(s: &AppState, volume_id: &str) -> AppResult<(String, String)> {
+    let vols = atlas_inventory::list_volumes(&s.pool).await?;
+    let v = vols
+        .iter()
+        .find(|v| v.id == volume_id)
+        .ok_or_else(|| AppError::NotFound(format!("volume {volume_id}")))?;
+    let native = v.backend_native_id.as_deref().unwrap_or("");
+    let rest = native
+        .strip_prefix("rbd:")
+        .ok_or_else(|| AppError::Validation("volume is not a direct RBD image".into()))?;
+    let (pool, image) = rest
+        .split_once('/')
+        .ok_or_else(|| AppError::Validation("malformed rbd native id".into()))?;
+    Ok((pool.to_string(), image.to_string()))
+}
+
+#[derive(Debug, Deserialize)]
+struct MirrorQuery {
+    mode: Option<String>,
+    peer: Option<String>,
+}
+
+/// `POST /volumes/{id}/mirror?mode=snapshot&peer=<id>` — enable RBD mirroring for a volume (admin).
+async fn enable_mirror(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(volume_id): Path<String>,
+    Query(q): Query<MirrorQuery>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    let (rbd_pool, image) = rbd_of_volume(&s, &volume_id).await?;
+    let mode = q.mode.as_deref().unwrap_or("snapshot");
+    if !matches!(mode, "snapshot" | "journal") {
+        return Err(AppError::Validation("mode must be snapshot or journal".into()));
+    }
+    let mirror_id = ids::stable_id("drm", &format!("{rbd_pool}/{image}"));
+    // Real mode advances via the job; fake mode records the intent as enabled for the demo/API.
+    let real = matches!(s.config.ceph_driver_mode, atlas_common::config::CephDriverMode::Real);
+    let state = if real { "enabling" } else { "enabled" };
+    atlas_inventory::dr::upsert_mirror(
+        &s.pool, &mirror_id, "global", Some(&volume_id), &rbd_pool, &image,
+        q.peer.as_deref(), mode, "primary", state,
+    )
+    .await?;
+    let job_id = ids::job_id();
+    let spec = JobSpec::RbdMirror {
+        mirror_id: mirror_id.clone(),
+        pool: rbd_pool.clone(),
+        image: image.clone(),
+        action: "enable".into(),
+        mode: mode.to_string(),
+    };
+    let job = s.jobs.enqueue(&job_id, "global", &actor.id, spec, None).await?;
+    Ok(accepted(&job, json!({ "mirror_id": mirror_id, "rbd": format!("{rbd_pool}/{image}"), "state": state })))
+}
+
+/// `DELETE /volumes/{id}/mirror` — disable RBD mirroring for a volume (admin).
+async fn disable_mirror(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(volume_id): Path<String>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    let (rbd_pool, image) = rbd_of_volume(&s, &volume_id).await?;
+    let mirror_id = ids::stable_id("drm", &format!("{rbd_pool}/{image}"));
+    let real = matches!(s.config.ceph_driver_mode, atlas_common::config::CephDriverMode::Real);
+    atlas_inventory::dr::set_mirror(&s.pool, &mirror_id, "primary", if real { "disabling" } else { "disabled" }).await?;
+    let job_id = ids::job_id();
+    let spec = JobSpec::RbdMirror {
+        mirror_id: mirror_id.clone(),
+        pool: rbd_pool.clone(),
+        image: image.clone(),
+        action: "disable".into(),
+        mode: "snapshot".into(),
+    };
+    let job = s.jobs.enqueue(&job_id, "global", &actor.id, spec, None).await?;
+    Ok(accepted(&job, json!({ "mirror_id": mirror_id, "state": "disabling" })))
+}
+
+/// `POST /dr/mirrors/{id}/promote` — failover: promote this cluster's copy to primary (admin).
+async fn promote_mirror(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    mirror_role_op(&s, &actor, &id, "promote").await
+}
+
+/// `POST /dr/mirrors/{id}/demote` — demote this cluster's copy to secondary (admin).
+async fn demote_mirror(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    mirror_role_op(&s, &actor, &id, "demote").await
+}
+
+async fn mirror_role_op(
+    s: &AppState,
+    actor: &Actor,
+    id: &str,
+    action: &str,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, actor, crate::auth::ROLE_ADMIN)?;
+    let (rbd_pool, image, _role) = atlas_inventory::dr::mirror_target(&s.pool, id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("mirror {id}")))?;
+    // Fake mode reflects the new role immediately; real mode advances via the job.
+    let real = matches!(s.config.ceph_driver_mode, atlas_common::config::CephDriverMode::Real);
+    if !real {
+        let new_role = if action == "promote" { "primary" } else { "secondary" };
+        atlas_inventory::dr::set_mirror(&s.pool, id, new_role, "enabled").await?;
+    }
+    let job_id = ids::job_id();
+    let spec = JobSpec::RbdMirror {
+        mirror_id: id.to_string(),
+        pool: rbd_pool.clone(),
+        image: image.clone(),
+        action: action.to_string(),
+        mode: "snapshot".into(),
+    };
+    let job = s.jobs.enqueue(&job_id, "global", &actor.id, spec, None).await?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool, None, &actor.id, &format!("dr.mirror.{action}"), "dr_mirror", id, "ok", None, None,
+    )
+    .await;
+    Ok(accepted(&job, json!({ "mirror_id": id, "action": action })))
 }
 
 // ---- jobs ----

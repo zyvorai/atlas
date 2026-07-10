@@ -19,6 +19,7 @@ use sqlx::{Row, SqlitePool};
 pub mod alerts;
 pub mod audit;
 pub mod backups;
+pub mod dr;
 pub mod buckets;
 pub mod databridge;
 pub mod events;

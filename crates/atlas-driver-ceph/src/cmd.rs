@@ -33,6 +33,36 @@ pub async fn rbd_snap_create(pool: &str, image: &str, snap: &str) -> Result<(), 
     Ok(())
 }
 
+/// Day-2 cross-cluster DR: per-image RBD mirroring op — `rbd mirror image enable <pool>/<image>
+/// <mode>` / `disable` / `promote` (failover to this cluster) / `demote`. **UNVERIFIED** against a
+/// live second Ceph cluster (needs a mirroring peer; see docs/CLAUDE.md — DR was deferred for this).
+pub async fn rbd_mirror_op(
+    op: &str,
+    pool: &str,
+    image: &str,
+    mode: &str,
+) -> Result<(), DriverError> {
+    let spec = format!("{pool}/{image}");
+    let args: Vec<String> = match op {
+        "enable" => vec!["mirror".into(), "image".into(), "enable".into(), spec.clone(), mode.into()],
+        "disable" => vec!["mirror".into(), "image".into(), "disable".into(), spec.clone()],
+        "promote" => vec!["mirror".into(), "image".into(), "promote".into(), spec.clone()],
+        "demote" => vec!["mirror".into(), "image".into(), "demote".into(), spec.clone()],
+        other => return Err(DriverError::Backend(format!("unknown mirror op: {other}"))),
+    };
+    let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    let output = tokio::process::Command::new("rbd")
+        .args(&refs)
+        .output()
+        .await
+        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(DriverError::Backend(format!("rbd {}: {stderr}", refs.join(" "))));
+    }
+    Ok(())
+}
+
 /// Day-2 per-image QoS: `rbd config image set <pool>/<image> rbd_qos_{iops,bps}_limit <n>` to cap a
 /// noisy volume's IOPS / bandwidth. A limit of `0` removes that cap. Only the provided limits are set.
 pub async fn rbd_qos_set(

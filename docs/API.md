@@ -165,6 +165,14 @@ Run the alert rules on demand (also runs every `ATLAS_MONITOR_INTERVAL_SECS`).
   cluster, no open critical alerts, no in-flight jobs, no lagging CDC → `{ "ready": bool, "checks":
   [...], "blockers": [...] }`. `scripts/deploy-remote.sh` gates on this (and supports `--rollback`).
 
+### Cross-cluster DR (RBD mirroring, admin, day-2)
+> **Scaffolding** — the control-plane catalog + API are here; the real `rbd mirror` operations run as
+> jobs and are **UNVERIFIED** without a live second Ceph cluster (DR was deferred in `CLAUDE.md`).
+- `POST /api/atlas/v1/dr/peers` · `GET /dr/peers` — register / list a mirroring peer (bootstrap token via a k8s Secret ref).
+- `POST /api/atlas/v1/volumes/{id}/mirror?mode=snapshot&peer=<id>` · `DELETE .../mirror` — enable / disable RBD mirroring for a volume.
+- `GET /api/atlas/v1/dr/mirrors` · `GET /dr/status` — mirrored images + DR posture (roles, worst RPO).
+- `POST /api/atlas/v1/dr/mirrors/{id}/promote` · `/demote` — failover: promote a secondary to primary (or the reverse).
+
 ## Write path (async jobs) — slice 2
 
 All write operations enqueue a job and return **`202 Accepted`** with a `job_id`; poll

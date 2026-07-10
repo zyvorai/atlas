@@ -209,6 +209,15 @@ pub enum JobSpec {
         action: String,
         weight: Option<f64>,
     },
+    /// Day-2 DR: RBD mirroring op (`enable` | `disable` | `promote` | `demote`) on a mirrored image.
+    #[serde(rename = "rbd.mirror")]
+    RbdMirror {
+        mirror_id: String,
+        pool: String,
+        image: String,
+        action: String,
+        mode: String,
+    },
     /// Snapshot a raw RBD image (`rbd snap create`).
     #[serde(rename = "rbd.snapshot")]
     RbdSnapshot {
@@ -299,6 +308,7 @@ impl JobSpec {
             JobSpec::RbdFlatten { .. } => "rbd.flatten",
             JobSpec::RbdQos { .. } => "rbd.qos",
             JobSpec::CephOsdOp { .. } => "ceph.osd.op",
+            JobSpec::RbdMirror { .. } => "rbd.mirror",
             JobSpec::RbdSnapshot { .. } => "rbd.snapshot",
             JobSpec::RbdRollback { .. } => "rbd.rollback",
             JobSpec::SourceDiscover { .. } => "databridge.source.discover",
@@ -619,6 +629,23 @@ async fn dispatch(
                 .await
                 .with_context(|| format!("ceph osd {action} {osd_id}"))?;
             Ok(serde_json::json!({ "osd_id": osd_id, "action": action, "weight": weight, "applied": true }))
+        }
+        JobSpec::RbdMirror { mirror_id, pool: rbd_pool, image, action, mode } => {
+            atlas_driver_ceph::rbd_mirror_op(&action, &rbd_pool, &image, &mode)
+                .await
+                .with_context(|| format!("rbd mirror {action} {rbd_pool}/{image}"))?;
+            // Reflect the resulting role/state in the DR catalog.
+            let (role, state) = match action.as_str() {
+                "promote" => ("primary", "enabled"),
+                "demote" => ("secondary", "enabled"),
+                "disable" => ("primary", "disabled"),
+                _ => ("primary", "enabled"),
+            };
+            atlas_inventory::dr::set_mirror(pool, &mirror_id, role, state).await?;
+            Ok(serde_json::json!({
+                "mirror_id": mirror_id, "rbd": format!("{rbd_pool}/{image}"),
+                "action": action, "role": role, "state": state
+            }))
         }
         JobSpec::RbdSnapshot {
             pool: rbd_pool,
