@@ -125,6 +125,7 @@ impl SourceConnector for SqlServerSourceConnector {
                  JOIN sys.schemas s ON s.schema_id = t.schema_id \
                  JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0,1) \
                  JOIN sys.allocation_units a ON a.container_id = p.partition_id \
+                 WHERE t.is_ms_shipped = 0 AND s.name NOT IN ('cdc','sys') \
                  GROUP BY s.name, t.name, t.object_id \
                  ORDER BY 1,2",
                 &[],

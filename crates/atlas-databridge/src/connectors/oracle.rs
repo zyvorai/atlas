@@ -12,10 +12,6 @@ use async_trait::async_trait;
 
 use crate::connector::{DiscoveredSchema, SourceConnector, TableInfo};
 
-/// Oracle-maintained schemas excluded from discovery.
-const SYSTEM_SCHEMAS: &str = "'SYS','SYSTEM','XDB','OUTLN','DBSNMP','APPQOSSYS','CTXSYS','MDSYS',\
-'ORDSYS','WMSYS','GSMADMIN_INTERNAL','LBACSYS','OJVMSYS','DVSYS','AUDSYS','ORDDATA','OLAPSYS'";
-
 pub struct OracleSourceConnector {
     source_id: String,
     host: String,
@@ -76,28 +72,27 @@ impl SourceConnector for OracleSourceConnector {
 
             let databases: Vec<String> = conn
                 .query_as::<String>(
-                    &format!(
-                        "SELECT username FROM all_users WHERE username NOT IN ({SYSTEM_SCHEMAS}) \
-                         ORDER BY username"
-                    ),
+                    // `oracle_maintained='N'` is Oracle's own flag for non-internal (user) schemas —
+                    // robust across versions where a hardcoded denylist misses new internal schemas
+                    // (e.g. 23ai/26ai add VECSYS, DBSFWUSER, BAASSYS, GGSYS, …).
+                    "SELECT username FROM all_users WHERE oracle_maintained = 'N' ORDER BY username",
                     &[],
                 )
                 .map(|rows| rows.filter_map(|r| r.ok()).collect())
                 .unwrap_or_default();
 
-            let sql = format!(
-                "SELECT t.owner AS OWNER, t.table_name AS TABLE_NAME, \
+            // Restrict to user (non-Oracle-maintained) schemas — see the databases query above.
+            let sql = "SELECT t.owner AS OWNER, t.table_name AS TABLE_NAME, \
                         NVL(t.num_rows, 0) AS EST_ROWS, \
                         NVL(t.blocks, 0) * 8192 AS SIZE_BYTES, \
                         CASE WHEN (SELECT COUNT(*) FROM all_constraints c \
                                    WHERE c.owner = t.owner AND c.table_name = t.table_name \
                                      AND c.constraint_type = 'P') > 0 THEN 1 ELSE 0 END AS HAS_PK \
                  FROM all_tables t \
-                 WHERE t.owner NOT IN ({SYSTEM_SCHEMAS}) \
-                 ORDER BY t.owner, t.table_name"
-            );
+                 WHERE t.owner IN (SELECT username FROM all_users WHERE oracle_maintained = 'N') \
+                 ORDER BY t.owner, t.table_name";
             let mut tables = Vec::new();
-            let rows = conn.query(&sql, &[]).context("introspect Oracle tables")?;
+            let rows = conn.query(sql, &[]).context("introspect Oracle tables")?;
             for row_result in rows {
                 let row = row_result?;
                 tables.push(TableInfo {

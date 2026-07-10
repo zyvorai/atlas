@@ -14,19 +14,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compil
 WORKDIR /build
 COPY . .
 COPY --from=ui /ui/dist crates/atlas-gateway/ui/dist
-# Build the real MongoDB (pure Rust) + SQL Server (tiberius) connectors and precise CDC lag in.
-# Oracle stays off — it links the Oracle Instant Client, which isn't in this image.
+# Build the real MongoDB (pure Rust) + SQL Server (tiberius) + Oracle connectors and precise CDC lag in.
+# The `oracle` crate vendors ODPI-C (compiles with the toolchain here) and dlopens the Oracle Instant
+# Client at *runtime* — so no OCI libs are needed at build time, only in the runtime stage below.
 RUN cargo build --release -p atlas-gateway -p atlas-cli \
-    --features atlas-databridge/mongodb,atlas-databridge/sqlserver,atlas-databridge/kafka-lag
+    --features atlas-databridge/mongodb,atlas-databridge/sqlserver,atlas-databridge/oracle,atlas-databridge/kafka-lag
 
 # ---- runtime ----
 FROM debian:bookworm-slim AS runtime
 # ceph/rbd CLIs are only needed when ATLAS_CEPH_DRIVER_MODE=real against a real cluster.
+# Oracle Instant Client (Basic Lite) + libaio provide libclntsh.so, which ODPI-C dlopens at runtime
+# for the DataBridge `oracle` connector; freely redistributable, downloaded from Oracle's OTN mirror.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates curl unzip libaio1 \
+    && curl -fsSL -o /tmp/ic.zip https://download.oracle.com/otn_software/linux/instantclient/2113000/instantclient-basiclite-linux.x64-21.13.0.0.0dbru.zip \
+    && mkdir -p /opt/oracle && unzip -q /tmp/ic.zip -d /opt/oracle && rm /tmp/ic.zip \
+    && apt-get purge -y --auto-remove curl unzip \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --home /var/lib/atlas atlas \
     && mkdir -p /var/lib/atlas && chown atlas:atlas /var/lib/atlas
+ENV LD_LIBRARY_PATH=/opt/oracle/instantclient_21_13
 COPY --from=builder /build/target/release/atlas-gateway /usr/local/bin/atlas-gateway
 COPY --from=builder /build/target/release/atlasctl /usr/local/bin/atlasctl
 COPY --from=builder /build/migrations /usr/local/share/atlas/migrations

@@ -226,15 +226,20 @@ stream reports caught-up (0).
   returned correctly. The MySQL/MariaDB run surfaced and fixed a real bug: sqlx-mysql won't decode
   `information_schema` string columns (binary-ish collation) as `String`, so the names came back empty
   until the queries were changed to `CAST(... AS CHAR)` (the fake tests couldn't catch it — canned data).
-- **Known follow-up (SQL Server discovery filtering)**: the SQL Server connector currently lists the
-  `cdc.*` bookkeeping tables and `dbo.systranschemas` as user tables — it should exclude the `cdc`/`sys`
-  system schemas and known replication system tables from the migratable set. Surfaced by the live run.
-- **Follow-ups (verify on live infra)**: the MySQL/MariaDB/MongoDB/SQL Server **full-load + CDC + cutover**
-  stages (only discovery is live-verified so far — the CDC stack, edge operators, and Kafka/Debezium are
-  not installed on the shared k3s lab), and the heterogeneous Oracle → Postgres path are wired and
+- **Oracle real-connector discovery — verified live** (2026-07): the gateway image now bundles the OCI
+  Instant Client (Basic Lite) and builds the `oracle` feature; discovery against a real Oracle 23ai/26ai
+  Free (`gvenzl/oracle-free`) returned engine/version, supplemental-log-min `cdc_capable`, real user
+  schemas, and the real user tables with PKs. **All six source engines are now discovery-verified live.**
+- **System-schema filtering — fixed (surfaced live)**: real Oracle/SQL Server discovery leaked internal
+  objects (Oracle 23ai/26ai `VECSYS`/`DBSFWUSER`/`BAASSYS`/…; SQL Server `cdc.*` + `dbo.systranschemas`)
+  as migratable tables. Fixed to use each engine's own metadata flag — Oracle `all_users.oracle_maintained
+  = 'N'` and SQL Server `sys.tables.is_ms_shipped = 0` (+ excluding the `cdc`/`sys` schemas) — instead of
+  a fragile hardcoded denylist.
+- **Follow-ups (verify on live infra)**: **full-load + CDC + cutover** for every non-Postgres engine
+  (MySQL/MariaDB/MongoDB/SQL Server/Oracle) — only discovery is live-verified so far; the CDC stack (edge
+  operators + Kafka/Debezium) is not installed on the shared k3s lab, so these deeper stages are wired and
   unit-tested but **not yet verified against live instances** (Postgres is the one verified through CDC on
-  real Ceph so far). Oracle discovery additionally needs the gateway rebuilt with the `oracle` feature +
-  the OCI Instant Client native lib. cross-engine per-table row-count
+  real Ceph so far). cross-engine per-table row-count
   validation for heterogeneous plans is advisory (parity confirmed by snapshot/stream convergence
   rather than a source-vs-edge count Job). Real MongoDB CDC needs a Connect image bundling the Debezium
   MongoDB connector + the MongoDB Kafka sink.
