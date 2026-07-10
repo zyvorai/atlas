@@ -172,8 +172,31 @@ async fn reconcile_once(
                     )
                     .await?;
                 } else {
-                    atlas_inventory::databridge::cdc::set_state(pool, &stream.id, "error").await?;
-                    tracing::warn!("CDC stream {} connector {connector} is not RUNNING", stream.id);
+                    // Self-heal: auto-restart a stalled stream a bounded number of times before
+                    // giving up (→ `error`, which the monitor's CDC rule then alerts on).
+                    const MAX_CDC_RESTARTS: i64 = 3;
+                    if stream.restart_count < MAX_CDC_RESTARTS {
+                        match stream.plan_id.as_deref() {
+                            Some(plan_id) => match crate::pipeline::restart_cdc(pool, Some(k8s), plan_id).await {
+                                Ok(_) => tracing::info!(
+                                    "auto-restarted CDC stream {} (attempt {}/{MAX_CDC_RESTARTS})",
+                                    stream.id,
+                                    stream.restart_count + 1
+                                ),
+                                Err(e) => tracing::warn!("CDC auto-restart for {} failed: {e:#}", stream.id),
+                            },
+                            None => {
+                                atlas_inventory::databridge::cdc::set_state(pool, &stream.id, "error").await?;
+                            }
+                        }
+                    } else {
+                        atlas_inventory::databridge::cdc::set_state(pool, &stream.id, "error").await?;
+                        tracing::warn!(
+                            "CDC stream {} connector {connector} not RUNNING; giving up after {} restarts",
+                            stream.id,
+                            stream.restart_count
+                        );
+                    }
                 }
             }
             Ok(None) => {} // fake stream — handled by the synthesized drain

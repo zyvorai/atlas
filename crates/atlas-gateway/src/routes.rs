@@ -118,6 +118,7 @@ pub fn router(state: AppState) -> Router {
         .route("/databridge/plans/{id}/full-load", post(db_full_load))
         .route("/databridge/plans/{id}/cdc/start", post(db_cdc_start))
         .route("/databridge/plans/{id}/cdc/stop", post(db_cdc_stop))
+        .route("/databridge/plans/{id}/cdc/restart", post(db_cdc_restart))
         .route("/databridge/plans/{id}/validate", post(db_validate))
         .route("/databridge/plans/{id}/cutover", post(db_cutover))
         .route("/databridge/plans/{id}/rollback", post(db_rollback))
@@ -2629,6 +2630,15 @@ async fn db_cdc_stop(
     Path(id): Path<String>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
     db_stage_job(&s, &actor, &id, JobSpec::CdcStop { plan_id: id.clone() }).await
+}
+
+/// `POST /databridge/plans/{id}/cdc/restart` — re-establish a stalled/errored CDC stream (self-heal).
+async fn db_cdc_restart(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    db_stage_job(&s, &actor, &id, JobSpec::CdcRestart { plan_id: id.clone() }).await
 }
 
 async fn db_validate(

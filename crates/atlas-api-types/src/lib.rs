@@ -510,6 +510,8 @@ pub struct CdcStream {
     pub last_applied_lsn: Option<String>,
     pub events_total: i64,
     pub lag_updated_at: Option<String>,
+    #[serde(default)]
+    pub restart_count: i64,
     pub created_at: Option<String>,
 }
 

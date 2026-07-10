@@ -42,6 +42,19 @@ pub async fn set_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
     Ok(())
 }
 
+/// Increment a stream's restart counter (day-2 self-heal) and return the new count.
+pub async fn bump_restart(pool: &SqlitePool, id: &str) -> Result<i64> {
+    sqlx::query("UPDATE cdc_streams SET restart_count = restart_count + 1 WHERE id=?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    let n: i64 = sqlx::query_scalar("SELECT restart_count FROM cdc_streams WHERE id=?")
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
+    Ok(n)
+}
+
 /// Update the live replication-lag fields (called by the reconciler each tick).
 #[allow(clippy::too_many_arguments)]
 pub async fn update_lag(
@@ -95,7 +108,7 @@ fn select(tail: &str) -> String {
     format!(
         "SELECT id, tenant_id, plan_id, engine, connect_name, connector_name, topic_prefix, state,
                 lag_bytes, lag_seconds, last_source_lsn, last_applied_lsn, events_total,
-                lag_updated_at, created_at
+                lag_updated_at, restart_count, created_at
          FROM cdc_streams {tail}"
     )
 }
@@ -116,6 +129,7 @@ fn row_to_stream(r: sqlx::sqlite::SqliteRow) -> CdcStream {
         last_applied_lsn: r.get("last_applied_lsn"),
         events_total: r.get("events_total"),
         lag_updated_at: r.get("lag_updated_at"),
+        restart_count: r.get("restart_count"),
         created_at: r.get("created_at"),
     }
 }

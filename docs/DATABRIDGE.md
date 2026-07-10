@@ -88,7 +88,7 @@ for stage in assess provision full-load cdc/start validate cutover; do curl -sX 
 | POST | `/databridge/plans/{id}/assess` | score readiness (job) |
 | POST | `/databridge/plans/{id}/provision` | provision edge DB (job) |
 | POST | `/databridge/plans/{id}/full-load` | full-load (job) |
-| POST | `/databridge/plans/{id}/cdc/start` · `/cdc/stop` | CDC control (job) |
+| POST | `/databridge/plans/{id}/cdc/start` · `/cdc/stop` · `/cdc/restart` | CDC control + self-heal (job) |
 | POST | `/databridge/plans/{id}/validate` | validate source vs edge (job) |
 | POST | `/databridge/plans/{id}/cutover` | cutover — **admin, guarded** (job) |
 | POST | `/databridge/plans/{id}/rollback` | rollback within window — **admin** (job) |
@@ -214,6 +214,10 @@ stream reports caught-up (0).
   and MongoDB (`mongodb` driver) are behind cargo features; precise CDC lag is behind `kafka-lag`.
   Oracle/SQL Server are heterogeneous (→ Postgres edge, seeded by the Debezium initial snapshot);
   MongoDB is a homogeneous document migration (→ Percona Server for MongoDB, Mongo Kafka sink).
+- **Day-2 self-heal**: a stalled/errored CDC stream is re-established by `POST .../cdc/restart` (bumps
+  the stream's `restart_count` and re-applies the connector CRs); the reconciler also **auto-restarts**
+  an unhealthy stream up to 3 times before giving up (→ `error`, which the monitor's CDC-error rule then
+  alerts on).
 - **Follow-ups (verify on live infra)**: the MySQL/MariaDB, heterogeneous Oracle/SQL Server → Postgres,
   and MongoDB → PSMDB paths are wired and unit-tested but **not yet verified against live cloud
   instances** (Postgres CDC is the one verified on real Ceph so far); cross-engine per-table row-count

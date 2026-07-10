@@ -248,6 +248,9 @@ pub enum JobSpec {
     /// DataBridge: stop a plan's CDC stream.
     #[serde(rename = "databridge.cdc.stop")]
     CdcStop { plan_id: String },
+    /// DataBridge: re-establish a stalled/errored CDC stream (self-heal).
+    #[serde(rename = "databridge.cdc.restart")]
+    CdcRestart { plan_id: String },
     /// DataBridge: validate source vs edge (row counts / checksums / schema diff).
     #[serde(rename = "databridge.validate")]
     ValidateRun { plan_id: String, kind: String },
@@ -304,6 +307,7 @@ impl JobSpec {
             JobSpec::FullLoad { .. } => "databridge.fullload",
             JobSpec::CdcStart { .. } => "databridge.cdc.start",
             JobSpec::CdcStop { .. } => "databridge.cdc.stop",
+            JobSpec::CdcRestart { .. } => "databridge.cdc.restart",
             JobSpec::ValidateRun { .. } => "databridge.validate",
             JobSpec::Cutover { .. } => "databridge.cutover",
             JobSpec::Rollback { .. } => "databridge.rollback",
@@ -1111,6 +1115,9 @@ async fn dispatch(
         }
         JobSpec::CdcStart { plan_id } => {
             atlas_databridge::pipeline::start_cdc(pool, k8s.as_deref(), &plan_id).await
+        }
+        JobSpec::CdcRestart { plan_id } => {
+            atlas_databridge::pipeline::restart_cdc(pool, k8s.as_deref(), &plan_id).await
         }
         JobSpec::CdcStop { plan_id } => {
             atlas_databridge::pipeline::stop_cdc(pool, &plan_id).await

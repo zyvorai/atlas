@@ -479,6 +479,104 @@ pub async fn stop_cdc(pool: &SqlitePool, plan_id: &str) -> Result<serde_json::Va
     Ok(serde_json::json!({ "plan_id": plan_id, "state": "stopped" }))
 }
 
+/// Day-2 self-heal: re-establish a stalled/errored CDC stream. Bumps the stream's restart counter,
+/// then (fake) resets it to `streaming` with a fresh backlog to drain, or (real) re-applies the
+/// Debezium source + JDBC sink `KafkaConnector` CRs — an idempotent apply that restarts the failed
+/// connectors (mirrors `start_cdc`'s real applies; the KafkaConnect cluster stays up).
+pub async fn restart_cdc(
+    pool: &SqlitePool,
+    k8s: Option<&atlas_driver_k8s::K8sDriver>,
+    plan_id: &str,
+) -> Result<serde_json::Value> {
+    let plan = atlas_inventory::databridge::plans::get_plan(pool, plan_id)
+        .await?
+        .ok_or_else(|| anyhow!("plan {plan_id} not found"))?;
+    let cdc_id = plan
+        .cdc_stream_id
+        .clone()
+        .ok_or_else(|| anyhow!("plan has no CDC stream; start CDC first"))?;
+    let source = atlas_inventory::databridge::sources::get_source(pool, &plan.source_id)
+        .await?
+        .ok_or_else(|| anyhow!("source not found"))?;
+    let restart_count = atlas_inventory::databridge::cdc::bump_restart(pool, &cdc_id).await?;
+
+    if source.driver_mode == "fake" || k8s.is_none() {
+        // Fake: re-establish with a fresh backlog so the reconciler drains it back to caught-up.
+        atlas_inventory::databridge::cdc::set_state(pool, &cdc_id, "streaming").await?;
+        atlas_inventory::databridge::cdc::update_lag(
+            pool, &cdc_id, 256 * 1024 * 1024, 30, Some("0/1000"), Some("0/0"), 0,
+        )
+        .await?;
+        return Ok(serde_json::json!({
+            "plan_id": plan_id, "cdc_stream_id": cdc_id, "state": "streaming",
+            "restart_count": restart_count, "mode": "fake"
+        }));
+    }
+
+    // Real: re-apply the two Debezium connector CRs to restart the failed connectors.
+    let k8s = k8s.expect("k8s present in real branch");
+    let kind = crate::SourceKind::parse(&source.kind)
+        .ok_or_else(|| anyhow!("unsupported engine: {}", source.kind))?;
+    let s = short(plan_id).to_string();
+    let edge_id = plan
+        .edge_cluster_id
+        .as_deref()
+        .ok_or_else(|| anyhow!("plan has no edge cluster"))?;
+    let edge = atlas_inventory::databridge::edge_clusters::get_edge_cluster(pool, edge_id)
+        .await?
+        .ok_or_else(|| anyhow!("edge cluster not found"))?;
+    let ns = EDGE_NAMESPACE;
+    let src_secret = source.secret_ref.as_deref().ok_or_else(|| anyhow!("source has no secret_ref"))?;
+    let src_secret_ns = source.secret_namespace.as_deref().unwrap_or(ns);
+    let edge_secret = edge.secret_ref.as_deref().ok_or_else(|| anyhow!("edge cluster has no secret"))?;
+    let cr_name = edge.cr_name.as_deref().unwrap_or("");
+    let db = source.database.as_deref().unwrap_or("appdb");
+    let connect = crate::cr::streaming::connect_name(&s);
+
+    use crate::cr::streaming;
+    let mut labels = std::collections::BTreeMap::new();
+    labels.insert("strimzi.io/cluster".to_string(), connect.clone());
+    let src_spec = streaming::debezium_source_spec(
+        kind, &s, source.endpoint.as_deref().unwrap_or(""),
+        source.port.unwrap_or_else(|| kind.default_port()), db, src_secret_ns, src_secret,
+    );
+    k8s.apply_cr_labeled(
+        streaming::GROUP, streaming::VERSION, streaming::CONNECTOR_KIND, ns,
+        &streaming::source_connector_name(&s), &labels, src_spec,
+    )
+    .await
+    .map_err(|e| anyhow!("re-apply Debezium source connector: {e}"))?;
+
+    let edge_db = if kind.homogeneous() { db } else { "appdb" };
+    let pk_fields = std::env::var("ATLAS_DATABRIDGE_SINK_PK_FIELDS").unwrap_or_else(|_| "id".into());
+    let sink_spec = match kind.edge_operator() {
+        crate::connector::EdgeOperator::Cnpg => streaming::jdbc_sink_spec(
+            &s, &format!("jdbc:postgresql://{cr_name}-rw.{ns}.svc:5432/{edge_db}"),
+            ns, edge_secret, "app", "password", &pk_fields, !kind.homogeneous(),
+        ),
+        crate::connector::EdgeOperator::Percona => streaming::jdbc_sink_spec(
+            &s, &format!("jdbc:mysql://{cr_name}-haproxy.{ns}.svc:3306/{edge_db}"),
+            ns, edge_secret, "root", "root", &pk_fields, !kind.homogeneous(),
+        ),
+        crate::connector::EdgeOperator::Psmdb => streaming::mongo_sink_spec(
+            &s, &format!("{cr_name}-rs0.{ns}.svc:27017"), edge_db, ns, edge_secret,
+            "MONGODB_DATABASE_ADMIN_USER", "MONGODB_DATABASE_ADMIN_PASSWORD",
+        ),
+    };
+    k8s.apply_cr_labeled(
+        streaming::GROUP, streaming::VERSION, streaming::CONNECTOR_KIND, ns,
+        &streaming::sink_connector_name(&s), &labels, sink_spec,
+    )
+    .await
+    .map_err(|e| anyhow!("re-apply sink connector: {e}"))?;
+
+    atlas_inventory::databridge::cdc::set_state(pool, &cdc_id, "streaming").await?;
+    Ok(serde_json::json!({
+        "plan_id": plan_id, "cdc_stream_id": cdc_id, "state": "streaming",
+        "restart_count": restart_count, "mode": "real"
+    }))
+}
+
 /// Validate source vs edge (row counts / checksums). Fake mode reports matching counts per table.
 pub async fn validate(
     pool: &SqlitePool,
