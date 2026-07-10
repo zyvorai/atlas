@@ -161,6 +161,9 @@ Run the alert rules on demand (also runs every `ATLAS_MONITOR_INTERVAL_SECS`).
   (`rbd config image set rbd_qos_*_limit`); `0` clears a cap; `202 + job id` (operator).
 - `GET /api/atlas/v1/maintenance/orphans` — day-2 hygiene: backups whose source volume no longer
   exists (dangling catalog rows). Clean each via `DELETE /backups/{id}`.
+- `GET /api/atlas/v1/upgrade/preflight` — health-gated "safe to upgrade?" verdict: no HEALTH_ERR
+  cluster, no open critical alerts, no in-flight jobs, no lagging CDC → `{ "ready": bool, "checks":
+  [...], "blockers": [...] }`. `scripts/deploy-remote.sh` gates on this (and supports `--rollback`).
 
 ## Write path (async jobs) — slice 2
 

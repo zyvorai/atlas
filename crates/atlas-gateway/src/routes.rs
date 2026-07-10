@@ -31,6 +31,7 @@ pub fn router(state: AppState) -> Router {
         .route("/backends/{id}/uncordon", post(uncordon_backend))
         .route("/maintenance", get(get_maintenance).post(set_maintenance))
         .route("/maintenance/orphans", get(list_orphans))
+        .route("/upgrade/preflight", get(upgrade_preflight))
         .route("/clusters", get(list_clusters))
         .route("/clusters/{id}/health", get(cluster_health))
         .route("/clusters/{id}/capabilities", get(cluster_capabilities))
@@ -1017,6 +1018,83 @@ async fn list_orphans(
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
     let orphan_backups = atlas_inventory::backups::list_orphans(&s.pool).await?;
     Ok(Json(json!({ "orphan_backups": orphan_backups, "count": orphan_backups.len() })))
+}
+
+/// `GET /upgrade/preflight` — health-gated "is it safe to upgrade / take the control plane down?"
+/// Aggregates cluster health, open critical alerts, in-flight jobs, and CDC lag into a ready verdict
+/// so an upgrade isn't rolled during an incident. Report-only (200 always); `ready` is the gate.
+async fn upgrade_preflight(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let mut checks: Vec<Value> = Vec::new();
+    let mut blockers: Vec<String> = Vec::new();
+    let mut add = |name: &str, ok: bool, detail: String, blocker: Option<String>| {
+        checks.push(json!({ "check": name, "ok": ok, "detail": detail }));
+        if let (false, Some(b)) = (ok, blocker) {
+            blockers.push(b);
+        }
+    };
+
+    // No cluster in HEALTH_ERR.
+    let critical_clusters: Vec<String> = atlas_inventory::list_clusters(&s.pool)
+        .await?
+        .into_iter()
+        .filter(|c| matches!(c.health, atlas_api_types::Health::Critical))
+        .map(|c| c.id)
+        .collect();
+    let ok = critical_clusters.is_empty();
+    add(
+        "cluster_health",
+        ok,
+        if ok { "no cluster in HEALTH_ERR".into() } else { format!("critical: {critical_clusters:?}") },
+        Some(format!("cluster(s) unhealthy: {critical_clusters:?}")),
+    );
+
+    // No open critical alerts.
+    let crit = atlas_inventory::alerts::list(&s.pool, Some("open"))
+        .await?
+        .into_iter()
+        .filter(|a| a.severity == "critical")
+        .count();
+    add(
+        "critical_alerts",
+        crit == 0,
+        format!("{crit} open critical alert(s)"),
+        Some(format!("{crit} open critical alert(s) — resolve or silence first")),
+    );
+
+    // No in-flight jobs (anything not yet terminal — pause + drain via /maintenance first).
+    let active: i64 = atlas_inventory::jobs::count_by_state(&s.pool)
+        .await?
+        .into_iter()
+        .filter(|(st, _)| !matches!(st.as_str(), "succeeded" | "failed"))
+        .map(|(_, n)| n)
+        .sum();
+    add(
+        "active_jobs",
+        active == 0,
+        format!("{active} active job(s)"),
+        Some(format!("{active} job(s) in flight — pause + drain via /maintenance first")),
+    );
+
+    // No CDC stream lagging (an upgrade window shouldn't lose replication progress).
+    const CDC_LAG_THRESHOLD_SECS: i64 = 60;
+    let lagging = atlas_inventory::databridge::cdc::list_by_state(&s.pool, "streaming")
+        .await?
+        .into_iter()
+        .filter(|st| st.lag_seconds > CDC_LAG_THRESHOLD_SECS)
+        .count();
+    add(
+        "cdc_lag",
+        lagging == 0,
+        format!("{lagging} CDC stream(s) lagging > {CDC_LAG_THRESHOLD_SECS}s"),
+        Some(format!("{lagging} CDC stream(s) lagging — let them catch up first")),
+    );
+
+    let ready = blockers.is_empty();
+    Ok(Json(json!({ "ready": ready, "checks": checks, "blockers": blockers })))
 }
 
 // ---- jobs ----

@@ -52,7 +52,13 @@ same-tag `:dev` image actually rolls out) → verify `/health` + `/storage-class
 scripts/deploy-remote.sh <host> <user>                  # e.g. 212.8.248.187 sus
 scripts/deploy-remote.sh <host> <user> --with-ceph      # also run the Rook Ceph lab (DESTRUCTIVE: consumes a disk)
 scripts/deploy-remote.sh <host> <user> --with-k3s-disk  # move the k3s data-dir onto a carved partition
+scripts/deploy-remote.sh <host> <user> --rollback       # revert the gateway to its previous revision (rollout undo)
+scripts/deploy-remote.sh <host> <user> --force          # deploy even if GET /upgrade/preflight reports blockers
 ```
+
+Before rolling, it gates on the gateway's `GET /upgrade/preflight` (no HEALTH_ERR cluster / open
+critical alerts / in-flight jobs / lagging CDC) — pass `--force` to override, or drain first via
+`POST /maintenance {"paused":true}`.
 
 Needs local `ssh`+`rsync` and remote `podman`+`k3s`+`kubectl`. The built image runs **default cargo
 features** (real Postgres/MySQL/MariaDB + fake for all); SQL Server/Oracle/MongoDB real connectors and

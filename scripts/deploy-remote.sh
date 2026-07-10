@@ -19,28 +19,61 @@
 #                    free tail left by resize-osd.sh and move the k3s data-dir onto it, so the
 #                    big disk carries the k3s load instead of the small root FS. Off by default.
 #
+# Day-2 upgrade orchestration:
+#   --rollback       revert the gateway Deployment to its previous ReplicaSet (`kubectl rollout undo`)
+#                    instead of building/deploying — for a bad upgrade. Skips build/import.
+#   --force          proceed even if the upgrade pre-flight (`GET /upgrade/preflight`) reports blockers.
+#
 # Usage:
 #   ./scripts/deploy-remote.sh 212.8.248.187 sus
 #   ./scripts/deploy-remote.sh 212.8.248.187 sus --with-ceph
-#   ./scripts/deploy-remote.sh 212.8.248.187 sus --with-k3s-disk
+#   ./scripts/deploy-remote.sh 212.8.248.187 sus --rollback
 set -euo pipefail
 
 HOST="${1:-${DEPLOY_HOST:-}}"
 USER="${2:-${DEPLOY_USER:-sus}}"
 WITH_CEPH=0
 WITH_K3S_DISK=0
+ROLLBACK=0
+FORCE=0
 for a in "$@"; do
   [[ "$a" == "--with-ceph" ]] && WITH_CEPH=1
   [[ "$a" == "--with-k3s-disk" ]] && WITH_K3S_DISK=1
+  [[ "$a" == "--rollback" ]] && ROLLBACK=1
+  [[ "$a" == "--force" ]] && FORCE=1
 done
-[[ -z "$HOST" ]] && { echo "usage: $0 <host> <user> [--with-ceph] [--with-k3s-disk]" >&2; exit 2; }
+[[ -z "$HOST" ]] && { echo "usage: $0 <host> <user> [--with-ceph] [--with-k3s-disk] [--rollback] [--force]" >&2; exit 2; }
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REMOTE_DIR=".deployment/atlas"
 SSH="ssh -o StrictHostKeyChecking=accept-new ${USER}@${HOST}"
+NS="zyvor-system"
+DEPLOY="atlas-gateway"
 NODEPORT=30510
 
-log() { printf '\033[1;36m==> %s\033[0m\n' "$*"; }
+log()  { printf '\033[1;36m==> %s\033[0m\n' "$*"; }
+warn() { printf '\033[1;33m!! %s\033[0m\n' "$*"; }
+
+# --rollback: revert to the previous ReplicaSet and exit (skip build/import).
+if [[ "$ROLLBACK" == "1" ]]; then
+  log "rollback: reverting ${DEPLOY} to its previous revision"
+  $SSH "kubectl -n ${NS} rollout undo deploy/${DEPLOY} && kubectl -n ${NS} rollout status deploy/${DEPLOY} --timeout=180s"
+  $SSH "curl -fsS http://127.0.0.1:${NODEPORT}/version; echo" || true
+  log "rollback done."
+  exit 0
+fi
+
+# Pre-flight: if the gateway is already up, gate the upgrade on its readiness (no upgrade mid-incident).
+if $SSH "curl -fsS http://127.0.0.1:${NODEPORT}/api/atlas/v1/upgrade/preflight" >/tmp/atlas-preflight.json 2>/dev/null; then
+  if grep -q '"ready":false' /tmp/atlas-preflight.json; then
+    warn "upgrade pre-flight reported blockers:"; cat /tmp/atlas-preflight.json; echo
+    [[ "$FORCE" == "1" ]] || { warn "aborting (pass --force to override, or drain via POST /maintenance)"; exit 3; }
+    warn "--force set; proceeding despite blockers"
+  else
+    log "upgrade pre-flight: ready"
+  fi
+fi
+rm -f /tmp/atlas-preflight.json
 
 log "1/5 rsync repo -> ${USER}@${HOST}:~/${REMOTE_DIR}"
 $SSH "mkdir -p ~/${REMOTE_DIR}"
