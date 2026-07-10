@@ -222,6 +222,25 @@ pub async fn set_volume_size(pool: &SqlitePool, id: &str, size_bytes: i64) -> Re
     Ok(())
 }
 
+/// Record a volume's applied QoS limits under `metadata.qos` (day-2 throttling).
+pub async fn set_volume_qos(
+    pool: &SqlitePool,
+    id: &str,
+    iops_limit: Option<i64>,
+    bps_limit: Option<i64>,
+) -> Result<()> {
+    let qos = serde_json::json!({ "iops_limit": iops_limit, "bps_limit": bps_limit });
+    sqlx::query(
+        "UPDATE storage_volumes SET metadata = json_set(metadata, '$.qos', json(?)),
+         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+    )
+    .bind(qos.to_string())
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Update a volume's actual used (allocated) bytes.
 pub async fn set_volume_used(pool: &SqlitePool, id: &str, used_bytes: i64) -> Result<()> {
     sqlx::query(

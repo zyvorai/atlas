@@ -157,6 +157,10 @@ Run the alert rules on demand (also runs every `ATLAS_MONITOR_INTERVAL_SECS`).
   resume the job engine. Paused jobs stay `queued` (the worker holds them) and drain when resumed.
 - `POST /api/atlas/v1/osds/{osd_id}/out` · `/in` · `/reweight?weight=0.8` — OSD maintenance as async
   jobs (`ceph osd out|in|reweight`); `202 + job id`.
+- `POST /api/atlas/v1/rbd-images/{pool}/{image}/qos?iops=&bps=` — per-image QoS throttle
+  (`rbd config image set rbd_qos_*_limit`); `0` clears a cap; `202 + job id` (operator).
+- `GET /api/atlas/v1/maintenance/orphans` — day-2 hygiene: backups whose source volume no longer
+  exists (dangling catalog rows). Clean each via `DELETE /backups/{id}`.
 
 ## Write path (async jobs) — slice 2
 

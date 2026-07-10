@@ -92,6 +92,19 @@ pub async fn list_backups(pool: &SqlitePool, volume_id: Option<&str>) -> Result<
     Ok(rows.into_iter().map(row_to_backup).collect())
 }
 
+/// Backups whose source volume no longer exists — orphans. `storage_backups.volume_id` has no FK
+/// (unlike snapshots, which cascade), so deleting a volume leaves its backups dangling in the
+/// catalog. Day-2 hygiene surfaces these so an operator can reclaim them.
+pub async fn list_orphans(pool: &SqlitePool) -> Result<Vec<BackupRecord>> {
+    let rows = sqlx::query(&select(
+        "WHERE NOT EXISTS (SELECT 1 FROM storage_volumes v WHERE v.id = storage_backups.volume_id) \
+         ORDER BY created_at DESC",
+    ))
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(row_to_backup).collect())
+}
+
 /// List completed backups (`verified`/`completed`) for a volume created strictly before `cutoff`
 /// (RFC3339 UTC, DB format `YYYY-MM-DDTHH:MM:SS.mmmZ`), oldest first — used by age-based retention.
 pub async fn list_older_than(

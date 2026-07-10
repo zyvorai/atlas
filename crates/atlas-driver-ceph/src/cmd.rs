@@ -33,6 +33,36 @@ pub async fn rbd_snap_create(pool: &str, image: &str, snap: &str) -> Result<(), 
     Ok(())
 }
 
+/// Day-2 per-image QoS: `rbd config image set <pool>/<image> rbd_qos_{iops,bps}_limit <n>` to cap a
+/// noisy volume's IOPS / bandwidth. A limit of `0` removes that cap. Only the provided limits are set.
+pub async fn rbd_qos_set(
+    pool: &str,
+    image: &str,
+    iops_limit: Option<i64>,
+    bps_limit: Option<i64>,
+) -> Result<(), DriverError> {
+    let spec = format!("{pool}/{image}");
+    for (key, val) in [
+        ("rbd_qos_iops_limit", iops_limit),
+        ("rbd_qos_bps_limit", bps_limit),
+    ] {
+        let Some(v) = val else { continue };
+        let vs = v.to_string();
+        let output = tokio::process::Command::new("rbd")
+            .args(["config", "image", "set", &spec, key, &vs])
+            .output()
+            .await
+            .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            return Err(DriverError::Backend(format!(
+                "rbd config image set {spec} {key} {vs}: {stderr}"
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Day-2 OSD maintenance op: `ceph osd out|in <id>` (drain / return an OSD) or
 /// `ceph osd reweight <id> <weight>` (rebalance data off/onto an OSD; weight in [0,1]).
 pub async fn ceph_osd_op(op: &str, osd_id: i64, weight: Option<f64>) -> Result<(), DriverError> {

@@ -193,6 +193,15 @@ pub enum JobSpec {
     /// Flatten a cloned RBD image so it no longer depends on its parent (`rbd flatten`).
     #[serde(rename = "rbd.flatten")]
     RbdFlatten { pool: String, image: String },
+    /// Day-2 per-image QoS throttle (IOPS / bandwidth caps; `0` clears a cap).
+    #[serde(rename = "rbd.qos")]
+    RbdQos {
+        volume_id: String,
+        pool: String,
+        image: String,
+        iops_limit: Option<i64>,
+        bps_limit: Option<i64>,
+    },
     /// Day-2 OSD maintenance op: `out` | `in` | `reweight` (weight in [0,1] for reweight).
     #[serde(rename = "ceph.osd.op")]
     CephOsdOp {
@@ -285,6 +294,7 @@ impl JobSpec {
             JobSpec::RbdClone { .. } => "rbd.clone",
             JobSpec::RbdResize { .. } => "rbd.resize",
             JobSpec::RbdFlatten { .. } => "rbd.flatten",
+            JobSpec::RbdQos { .. } => "rbd.qos",
             JobSpec::CephOsdOp { .. } => "ceph.osd.op",
             JobSpec::RbdSnapshot { .. } => "rbd.snapshot",
             JobSpec::RbdRollback { .. } => "rbd.rollback",
@@ -587,6 +597,18 @@ async fn dispatch(
                 .await
                 .with_context(|| format!("rbd flatten {rbd_pool}/{image}"))?;
             Ok(serde_json::json!({ "rbd": format!("{rbd_pool}/{image}"), "flattened": true }))
+        }
+        JobSpec::RbdQos { volume_id, pool: rbd_pool, image, iops_limit, bps_limit } => {
+            atlas_driver_ceph::rbd_qos_set(&rbd_pool, &image, iops_limit, bps_limit)
+                .await
+                .with_context(|| format!("rbd qos {rbd_pool}/{image}"))?;
+            if !volume_id.is_empty() {
+                atlas_inventory::set_volume_qos(pool, &volume_id, iops_limit, bps_limit).await?;
+            }
+            Ok(serde_json::json!({
+                "rbd": format!("{rbd_pool}/{image}"),
+                "iops_limit": iops_limit, "bps_limit": bps_limit
+            }))
         }
         JobSpec::CephOsdOp { osd_id, action, weight } => {
             atlas_driver_ceph::ceph_osd_op(&action, osd_id, weight)

@@ -30,6 +30,7 @@ pub fn router(state: AppState) -> Router {
         .route("/backends/{id}/cordon", post(cordon_backend))
         .route("/backends/{id}/uncordon", post(uncordon_backend))
         .route("/maintenance", get(get_maintenance).post(set_maintenance))
+        .route("/maintenance/orphans", get(list_orphans))
         .route("/clusters", get(list_clusters))
         .route("/clusters/{id}/health", get(cluster_health))
         .route("/clusters/{id}/capabilities", get(cluster_capabilities))
@@ -57,6 +58,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/rbd-images/{pool}/{image}/clone", post(clone_rbd_image))
         .route("/rbd-images/{pool}/{image}/resize", post(resize_rbd_image))
+        .route("/rbd-images/{pool}/{image}/qos", post(qos_rbd_image))
         .route(
             "/rbd-images/{pool}/{image}/flatten",
             post(flatten_rbd_image),
@@ -960,6 +962,60 @@ async fn enqueue_osd_op(
         )
         .await?;
     Ok(accepted(&job, json!({ "osd_id": osd_id, "op": op, "weight": weight })))
+}
+
+#[derive(Debug, Deserialize)]
+struct QosQuery {
+    iops: Option<i64>,
+    bps: Option<i64>,
+}
+
+/// `POST /rbd-images/{pool}/{image}/qos?iops=&bps=` — cap a volume's IOPS / bandwidth (async job).
+/// `0` clears a cap. At least one of `iops`/`bps` is required.
+async fn qos_rbd_image(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path((pool_name, image)): Path<(String, String)>,
+    Query(q): Query<QosQuery>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    if q.iops.is_none() && q.bps.is_none() {
+        return Err(AppError::Validation("at least one of iops/bps is required".into()));
+    }
+    if q.iops.is_some_and(|v| v < 0) || q.bps.is_some_and(|v| v < 0) {
+        return Err(AppError::Validation("qos limits must be >= 0 (0 clears the cap)".into()));
+    }
+    let native = format!("rbd:{pool_name}/{image}");
+    let volume_id = atlas_inventory::list_volumes(&s.pool)
+        .await?
+        .into_iter()
+        .find(|v| v.backend_native_id.as_deref() == Some(native.as_str()))
+        .map(|v| v.id)
+        .unwrap_or_default();
+    let job_id = ids::job_id();
+    let spec = JobSpec::RbdQos {
+        volume_id,
+        pool: pool_name.clone(),
+        image: image.clone(),
+        iops_limit: q.iops,
+        bps_limit: q.bps,
+    };
+    let job = s.jobs.enqueue(&job_id, "global", &actor.id, spec, None).await?;
+    Ok(accepted(
+        &job,
+        json!({ "rbd": format!("{pool_name}/{image}"), "iops_limit": q.iops, "bps_limit": q.bps }),
+    ))
+}
+
+/// `GET /maintenance/orphans` — day-2 hygiene: backups whose source volume no longer exists (their
+/// `volume_id` has no FK, so a volume delete leaves them dangling). Clean each via `DELETE /backups/{id}`.
+async fn list_orphans(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let orphan_backups = atlas_inventory::backups::list_orphans(&s.pool).await?;
+    Ok(Json(json!({ "orphan_backups": orphan_backups, "count": orphan_backups.len() })))
 }
 
 // ---- jobs ----
