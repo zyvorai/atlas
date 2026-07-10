@@ -24,10 +24,10 @@ Implemented:
   (`tiberius`)/Oracle (OCI)/MongoDB behind cargo features; precise CDC lag behind `kafka-lag`. Full
   pipeline (discover→assess→provision→full-load→CDC→validate→cutover→rollback); **Postgres verified
   end-to-end on two live Rook Ceph clusters incl. real Debezium CDC**; **MySQL (8.4) + MariaDB (11.x) +
-  MongoDB (7.0, replica set) real-connector discovery verified live** on real servers (binlog ROW /
-  replica-set change streams → `cdc_capable`, real db + table/collection names & counts) through the
-  deployed k3s gateway; remaining engines (Oracle/SQL Server) fake-first
-  (`make run-databridge`). See `docs/DATABRIDGE.md` + `deploy/databridge/`.
+  MongoDB (7.0, replica set) + SQL Server (2022) real-connector discovery verified live** on real servers
+  (binlog ROW / replica-set change streams / `is_cdc_enabled` → `cdc_capable`, real db + table/collection
+  names & counts) through the deployed k3s gateway; only Oracle remains fake-first (needs the `oracle`
+  build feature + OCI Instant Client baked into the image). See `docs/DATABRIDGE.md` + `deploy/databridge/`.
 
 Day-2 operations added (slices, all fake-first tested): control-plane durability (job recovery, graceful
 shutdown, self-state backup, deep readyz/livez), alerting maturity (ack/silence + job/CDC/quota rules),
