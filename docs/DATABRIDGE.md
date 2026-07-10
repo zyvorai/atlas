@@ -218,16 +218,18 @@ stream reports caught-up (0).
   the stream's `restart_count` and re-applies the connector CRs); the reconciler also **auto-restarts**
   an unhealthy stream up to 3 times before giving up (→ `error`, which the monitor's CDC-error rule then
   alerts on).
-- **MySQL / MariaDB real-connector discovery — verified live** (2026-07): real `MysqlSourceConnector`
-  discovery run against a real MySQL 8.4 and MariaDB 11.x on the deployed k3s gateway — engine/version,
-  binlog-ROW `cdc_capable`, real database names, and real per-table schema/name + PK all returned
-  correctly. This surfaced and fixed a real bug: sqlx-mysql won't decode `information_schema` string
-  columns (binary-ish collation) as `String`, so the names came back empty until the queries were
-  changed to `CAST(... AS CHAR)` (the fake tests couldn't catch it — canned data).
-- **Follow-ups (verify on live infra)**: the MySQL/MariaDB **full-load + CDC + cutover** stages (only
-  discovery is live-verified so far), the heterogeneous Oracle/SQL Server → Postgres, and MongoDB → PSMDB
-  paths are wired and unit-tested but **not yet verified against live instances** (Postgres is the one
-  verified through CDC on real Ceph so far); cross-engine per-table row-count
+- **MySQL / MariaDB / MongoDB real-connector discovery — verified live** (2026-07): real connector
+  discovery run against a real MySQL 8.4, MariaDB 11.x, and MongoDB 7.0 (single-member replica set) on
+  the deployed k3s gateway — engine/version, `cdc_capable` (binlog ROW for MySQL/MariaDB; replica-set
+  change streams for Mongo), real database names, and real per-table/collection schema+name with PK /
+  document counts all returned correctly. The MySQL/MariaDB run surfaced and fixed a real bug: sqlx-mysql
+  won't decode `information_schema` string columns (binary-ish collation) as `String`, so the names came
+  back empty until the queries were changed to `CAST(... AS CHAR)` (the fake tests couldn't catch it —
+  canned data).
+- **Follow-ups (verify on live infra)**: the MySQL/MariaDB/MongoDB **full-load + CDC + cutover** stages
+  (only discovery is live-verified so far), and the heterogeneous Oracle/SQL Server → Postgres paths are
+  wired and unit-tested but **not yet verified against live instances** (Postgres is the one verified
+  through CDC on real Ceph so far); cross-engine per-table row-count
   validation for heterogeneous plans is advisory (parity confirmed by snapshot/stream convergence
   rather than a source-vs-edge count Job). Real MongoDB CDC needs a Connect image bundling the Debezium
   MongoDB connector + the MongoDB Kafka sink.
