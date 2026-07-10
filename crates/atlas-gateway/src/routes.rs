@@ -136,6 +136,9 @@ pub fn router(state: AppState) -> Router {
         .route("/metrics/forecast", get(metrics_forecast))
         .route("/alerts", get(list_alerts))
         .route("/alerts/evaluate", post(evaluate_alerts))
+        .route("/alerts/{id}/ack", post(ack_alert))
+        .route("/alerts/{id}/silence", post(silence_alert))
+        .route("/alerts/{id}/resolve", post(resolve_alert))
         .route("/jobs", get(list_jobs))
         .route("/jobs/{id}", get(get_job))
         .route("/jobs/{id}/watch", get(watch_job_sse))
@@ -773,6 +776,54 @@ async fn evaluate_alerts(State(s): State<AppState>) -> AppResult<Json<Value>> {
     atlas_monitor::evaluate(&s.pool).await?;
     let open = atlas_inventory::alerts::count_open(&s.pool).await?;
     Ok(Json(json!({ "evaluated": true, "open_alerts": open })))
+}
+
+/// `POST /alerts/{id}/ack` — operator acknowledges an alert (records who saw it; not a resolve).
+async fn ack_alert(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    if !atlas_inventory::alerts::acknowledge(&s.pool, &id, &actor.id).await? {
+        return Err(AppError::NotFound(format!("alert {id}")));
+    }
+    Ok(Json(json!({ "id": id, "acknowledged_by": actor.id })))
+}
+
+#[derive(Debug, Deserialize)]
+struct SilenceQuery {
+    /// Silence window in seconds (default 1h, capped at 30d).
+    secs: Option<i64>,
+}
+
+/// `POST /alerts/{id}/silence[?secs=]` — suppress webhook notification for a window; the condition
+/// keeps being tracked and still shows in `/alerts`.
+async fn silence_alert(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+    Query(q): Query<SilenceQuery>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let secs = q.secs.unwrap_or(3600).clamp(1, 30 * 24 * 3600);
+    if !atlas_inventory::alerts::silence(&s.pool, &id, &format!("+{secs} seconds")).await? {
+        return Err(AppError::NotFound(format!("alert {id}")));
+    }
+    Ok(Json(json!({ "id": id, "silenced_secs": secs })))
+}
+
+/// `POST /alerts/{id}/resolve` — operator override to resolve an open alert.
+async fn resolve_alert(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    if !atlas_inventory::alerts::resolve_manual(&s.pool, &id).await? {
+        return Err(AppError::NotFound(format!("open alert {id}")));
+    }
+    Ok(Json(json!({ "id": id, "state": "resolved" })))
 }
 
 // ---- jobs ----

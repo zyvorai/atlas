@@ -13,7 +13,7 @@ use anyhow::Result;
 use atlas_api_types::Health;
 use atlas_driver_core::StorageDriver;
 use serde_json::json;
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 
 pub mod notify;
 pub mod prometheus;
@@ -70,11 +70,118 @@ const FORECAST_WARN_DAYS: f64 = 14.0;
 const FORECAST_CRITICAL_DAYS: f64 = 3.0;
 
 /// Evaluate all alert rules once against current inventory. Public for tests.
+/// Tenant byte-quota usage thresholds (warn/critical), so tenants get a heads-up before the hard wall.
+const QUOTA_WARN: f64 = 0.80;
+const QUOTA_CRITICAL: f64 = 0.95;
+
 pub async fn evaluate(pool: &SqlitePool) -> Result<()> {
     evaluate_clusters(pool).await?;
     evaluate_pools(pool).await?;
     evaluate_osds(pool).await?;
     evaluate_capacity_forecast(pool).await?;
+    // Day-2: conditions that previously failed silently.
+    evaluate_failed_jobs(pool).await?;
+    evaluate_cdc_streams(pool).await?;
+    evaluate_tenant_quotas(pool).await?;
+    Ok(())
+}
+
+/// Raise a rollup alert when jobs have failed in the recent window (they otherwise fail silently —
+/// the job engine has no alerting). Clears once the window passes with no new failures.
+async fn evaluate_failed_jobs(pool: &SqlitePool) -> Result<()> {
+    let id = "alert_jobs_failing";
+    let n: i64 = sqlx::query(
+        "SELECT COUNT(*) AS n FROM storage_jobs WHERE state='failed' \
+         AND completed_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-15 minutes')",
+    )
+    .fetch_one(pool)
+    .await?
+    .get("n");
+    if n > 0 {
+        atlas_inventory::alerts::upsert_open(
+            pool,
+            id,
+            "warning",
+            "monitor",
+            "jobs",
+            "recent",
+            "Jobs failing",
+            &format!("{n} job(s) failed in the last 15 minutes"),
+            &json!({ "failed_15m": n }),
+        )
+        .await?;
+    } else {
+        atlas_inventory::alerts::resolve(pool, id).await?;
+    }
+    Ok(())
+}
+
+/// Alert on CDC streams whose connector is in `error` (replication stalled/broken). The reconciler
+/// flags the state; without this rule nobody is notified that a live migration has stopped.
+async fn evaluate_cdc_streams(pool: &SqlitePool) -> Result<()> {
+    let rows = sqlx::query("SELECT id, state FROM cdc_streams")
+        .fetch_all(pool)
+        .await?;
+    for r in rows {
+        let sid: String = r.get("id");
+        let state: String = r.get("state");
+        let id = format!("alert_cdc_error_{sid}");
+        if state == "error" {
+            atlas_inventory::alerts::upsert_open(
+                pool,
+                &id,
+                "critical",
+                "monitor",
+                "cdc_stream",
+                &sid,
+                "CDC replication error",
+                &format!("CDC stream {sid} connector is not healthy — replication has stalled"),
+                &json!({ "state": state }),
+            )
+            .await?;
+        } else {
+            atlas_inventory::alerts::resolve(pool, &id).await?;
+        }
+    }
+    Ok(())
+}
+
+/// Warn a tenant approaching its byte quota (before `check_admission` hard-rejects at the wall).
+async fn evaluate_tenant_quotas(pool: &SqlitePool) -> Result<()> {
+    for q in atlas_inventory::tenants::list_overview(pool).await? {
+        let id = format!("alert_tenant_quota_{}", q.tenant_id);
+        let ratio = if q.max_bytes > 0 {
+            q.used_bytes as f64 / q.max_bytes as f64
+        } else {
+            0.0
+        };
+        if q.max_bytes > 0 && ratio >= QUOTA_WARN {
+            let severity = if ratio >= QUOTA_CRITICAL {
+                "critical"
+            } else {
+                "warning"
+            };
+            atlas_inventory::alerts::upsert_open(
+                pool,
+                &id,
+                severity,
+                "monitor",
+                "tenant",
+                &q.tenant_id,
+                "Tenant quota nearly exhausted",
+                &format!(
+                    "Tenant {} is at {:.0}% of its {}-byte volume quota",
+                    q.tenant_id,
+                    ratio * 100.0,
+                    q.max_bytes
+                ),
+                &json!({ "used_bytes": q.used_bytes, "max_bytes": q.max_bytes, "ratio": ratio }),
+            )
+            .await?;
+        } else {
+            atlas_inventory::alerts::resolve(pool, &id).await?;
+        }
+    }
     Ok(())
 }
 

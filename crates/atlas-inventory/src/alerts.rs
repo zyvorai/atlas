@@ -70,14 +70,55 @@ pub async fn list(pool: &SqlitePool, state: Option<&str>) -> Result<Vec<AlertRec
     Ok(rows.into_iter().map(row_to_alert).collect())
 }
 
-/// Open alerts that have not yet been pushed to the webhook (drives the notifier).
+/// Open alerts that have not yet been pushed to the webhook (drives the notifier). Silenced alerts
+/// (silence window still in the future) are skipped so an operator can mute known-noisy conditions.
 pub async fn list_unnotified_open(pool: &SqlitePool) -> Result<Vec<AlertRecord>> {
     let rows = sqlx::query(&select(
-        "WHERE state='open' AND notified_at IS NULL ORDER BY created_at ASC",
+        "WHERE state='open' AND notified_at IS NULL \
+         AND (silenced_until IS NULL OR silenced_until < strftime('%Y-%m-%dT%H:%M:%fZ','now')) \
+         ORDER BY created_at ASC",
     ))
     .fetch_all(pool)
     .await?;
     Ok(rows.into_iter().map(row_to_alert).collect())
+}
+
+/// Acknowledge an alert (records who saw it; does not resolve it).
+pub async fn acknowledge(pool: &SqlitePool, id: &str, by: &str) -> Result<bool> {
+    let res = sqlx::query(
+        "UPDATE storage_alerts SET acknowledged_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+         acknowledged_by=? WHERE id=?",
+    )
+    .bind(by)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected() > 0)
+}
+
+/// Silence an alert's webhook notification until `until` (a SQLite datetime modifier off `now`, e.g.
+/// `"+2 hours"`). The condition keeps being tracked; only paging is suppressed.
+pub async fn silence(pool: &SqlitePool, id: &str, until_modifier: &str) -> Result<bool> {
+    let res = sqlx::query(
+        "UPDATE storage_alerts SET silenced_until=strftime('%Y-%m-%dT%H:%M:%fZ','now', ?) WHERE id=?",
+    )
+    .bind(until_modifier)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected() > 0)
+}
+
+/// Manually resolve an alert regardless of state (operator override). Returns whether a row changed.
+pub async fn resolve_manual(pool: &SqlitePool, id: &str) -> Result<bool> {
+    let res = sqlx::query(
+        "UPDATE storage_alerts SET state='resolved', resolved_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+         WHERE id=? AND state='open'",
+    )
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected() > 0)
 }
 
 /// Stamp an alert as notified so it isn't pushed again while it stays open.
@@ -101,7 +142,8 @@ pub async fn count_open(pool: &SqlitePool) -> Result<i64> {
 
 fn select(tail: &str) -> String {
     format!(
-        "SELECT id, severity, source, resource_type, resource_id, title, description, evidence, state, created_at, resolved_at
+        "SELECT id, severity, source, resource_type, resource_id, title, description, evidence, state, \
+                created_at, resolved_at, acknowledged_at, acknowledged_by, silenced_until
          FROM storage_alerts {tail}"
     )
 }
@@ -121,5 +163,8 @@ fn row_to_alert(r: sqlx::sqlite::SqliteRow) -> AlertRecord {
         state: r.get("state"),
         created_at: r.get("created_at"),
         resolved_at: r.get("resolved_at"),
+        acknowledged_at: r.get("acknowledged_at"),
+        acknowledged_by: r.get("acknowledged_by"),
+        silenced_until: r.get("silenced_until"),
     }
 }

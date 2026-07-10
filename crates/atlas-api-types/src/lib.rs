@@ -417,6 +417,13 @@ pub struct AlertRecord {
     pub state: String,
     pub created_at: Option<String>,
     pub resolved_at: Option<String>,
+    /// Manual lifecycle (day-2): operator acknowledgement + webhook silence window.
+    #[serde(default)]
+    pub acknowledged_at: Option<String>,
+    #[serde(default)]
+    pub acknowledged_by: Option<String>,
+    #[serde(default)]
+    pub silenced_until: Option<String>,
 }
 
 /// A snapshot record as surfaced by the API.

@@ -128,7 +128,9 @@ Latest Ceph metrics scraped from the mgr Prometheus module (PDF §15.1). A curat
 
 ### `GET /api/atlas/v1/alerts[?state=open]`
 Alerts produced by the monitor worker (PDF §15.2): cluster unhealthy, pool near-full (75/85%),
-OSD down. Filter by `state` (`open`/`resolved`).
+OSD down, capacity forecast, **jobs failing (last 15m), CDC replication error, tenant quota
+approaching (80/95%)**. Filter by `state` (`open`/`resolved`). Records also carry
+`acknowledged_at`/`acknowledged_by`/`silenced_until`.
 ```json
 [{ "id": "alert_cluster_unhealthy_cls_5ace73d1-...", "severity": "warning", "source": "monitor",
    "resource_type": "cluster", "resource_id": "cls_5ace73d1-...",
@@ -141,6 +143,12 @@ Run the alert rules on demand (also runs every `ATLAS_MONITOR_INTERVAL_SECS`).
 ```json
 { "evaluated": true, "open_alerts": 1 }
 ```
+
+### Alert lifecycle (operator, day-2)
+- `POST /api/atlas/v1/alerts/{id}/ack` — record that an operator has seen it (not a resolve).
+- `POST /api/atlas/v1/alerts/{id}/silence[?secs=3600]` — suppress webhook delivery for a window
+  (default 1h, max 30d); the condition keeps being tracked and still shows in `/alerts`.
+- `POST /api/atlas/v1/alerts/{id}/resolve` — operator override to resolve an open alert.
 
 ## Write path (async jobs) — slice 2
 
