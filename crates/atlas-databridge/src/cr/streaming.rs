@@ -150,7 +150,10 @@ fn mongo_debezium_source_spec(
     let user = format!("${{secrets:{secret_ns}/{secret}:username}}");
     let pass = format!("${{secrets:{secret_ns}/{secret}:password}}");
     let prefix = topic_prefix(short);
-    let conn = format!("mongodb://{user}:{pass}@{host}:{port}/?replicaSet=rs0");
+    // authSource=admin, explicit for consistency with the full-load/validate Jobs (the admin user
+    // lives in `admin`). The Java driver defaults path-less URIs to admin, but pinning it removes any
+    // ambiguity across Mongo tooling — see the loader `authSource` fix.
+    let conn = format!("mongodb://{user}:{pass}@{host}:{port}/?replicaSet=rs0&authSource=admin");
     let config = json!({
         "connector.class": "io.debezium.connector.mongodb.MongoDbConnector",
         "tasks.max": 1,
@@ -180,7 +183,8 @@ pub fn mongo_sink_spec(
     let prefix = topic_prefix(short);
     let user = format!("${{secrets:{secret_ns}/{edge_secret}:{user_key}}}");
     let pass = format!("${{secrets:{secret_ns}/{edge_secret}:{pass_key}}}");
-    let uri = format!("mongodb://{user}:{pass}@{edge_host}/?replicaSet=rs0");
+    // authSource=admin, explicit — see mongo_debezium_source_spec / the loader authSource fix.
+    let uri = format!("mongodb://{user}:{pass}@{edge_host}/?replicaSet=rs0&authSource=admin");
     let config = json!({
         "connector.class": "com.mongodb.kafka.connect.MongoSinkConnector",
         "tasks.max": 1,
@@ -320,6 +324,7 @@ mod tests {
         let conn = s["config"]["mongodb.connection.string"].as_str().unwrap();
         assert!(conn.contains("mongo.rds.aws:27017"));
         assert!(conn.contains("replicaSet=rs0"));
+        assert!(conn.contains("authSource=admin"));
         assert!(s["config"].get("database.hostname").is_none());
     }
 
@@ -329,6 +334,7 @@ mod tests {
         assert_eq!(s["config"]["connector.class"], "com.mongodb.kafka.connect.MongoSinkConnector");
         assert_eq!(s["config"]["database"], "appdb");
         assert!(s["config"]["connection.uri"].as_str().unwrap().contains("edge-rs0"));
+        assert!(s["config"]["connection.uri"].as_str().unwrap().contains("authSource=admin"));
         assert_eq!(s["config"]["change.data.capture.handler"], "com.mongodb.kafka.connect.sink.cdc.debezium.mongodb.MongoDbHandler");
         assert_eq!(s["config"]["transforms.route.replacement"], "$1");
     }

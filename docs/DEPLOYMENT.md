@@ -174,6 +174,16 @@ The control plane survives restarts and rollouts cleanly:
 `localhost/atlas-gateway:dev` (and `:ceph`). The Deployments reference those names with
 `imagePullPolicy: Never`. If you push to a registry instead, update the `image:` fields.
 
+## Air-gapped builds (Oracle Instant Client)
+
+The gateway image bundles the Oracle Instant Client (for the DataBridge `oracle` connector),
+downloaded at build time from Oracle's public mirror. For an air-gapped build, mirror the
+`instantclient-basiclite` zip internally and point the build at it:
+
+```bash
+podman build --build-arg ORACLE_IC_URL=https://mirror.corp/instantclient-basiclite-linux.x64-21.13…zip -t atlas-gateway:dev .
+```
+
 ## Teardown
 
 ```bash
