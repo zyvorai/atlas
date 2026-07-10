@@ -389,6 +389,13 @@ pub async fn upsert_discovery(
         .await?;
     }
 
+    // Marker taken before upserting this discovery's volumes: every volume the pass touches gets
+    // a newer `updated_at`, so anything left older is stale (deleted from the backend) and can be
+    // pruned below.
+    let discovery_ts: String = sqlx::query_scalar("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now')")
+        .fetch_one(&mut *tx)
+        .await?;
+
     for v in &d.volumes {
         sqlx::query(
             "INSERT INTO storage_volumes
@@ -423,6 +430,29 @@ pub async fn upsert_discovery(
         .bind(&v.storage_class_name)
         .execute(&mut *tx)
         .await?;
+    }
+
+    // Prune block volumes this backend no longer reports (deleted from Ceph) so orphaned inventory
+    // doesn't linger. Protective: never touch volumes a product owns (product_bindings) or that a
+    // snapshot depends on. Self-healing — a transient miss just re-adds the row next discovery.
+    let pruned = sqlx::query(
+        "DELETE FROM storage_volumes
+          WHERE backend_id = ? AND kind = 'block' AND updated_at < ?
+            AND id NOT IN (
+                SELECT storage_resource_id FROM product_bindings WHERE storage_resource_type = 'volume'
+            )
+            AND id NOT IN (SELECT volume_id FROM storage_snapshots)",
+    )
+    .bind(backend_id)
+    .bind(&discovery_ts)
+    .execute(&mut *tx)
+    .await?;
+    if pruned.rows_affected() > 0 {
+        tracing::info!(
+            backend = backend_id,
+            pruned = pruned.rows_affected(),
+            "discovery.pruned_stale_volumes"
+        );
     }
 
     tx.commit().await?;
