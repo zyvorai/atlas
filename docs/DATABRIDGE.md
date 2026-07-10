@@ -235,11 +235,17 @@ stream reports caught-up (0).
   as migratable tables. Fixed to use each engine's own metadata flag — Oracle `all_users.oracle_maintained
   = 'N'` and SQL Server `sys.tables.is_ms_shipped = 0` (+ excluding the `cdc`/`sys` schemas) — instead of
   a fragile hardcoded denylist.
-- **Follow-ups (verify on live infra)**: **full-load + CDC + cutover** for every non-Postgres engine
-  (MySQL/MariaDB/MongoDB/SQL Server/Oracle) — only discovery is live-verified so far; the CDC stack (edge
-  operators + Kafka/Debezium) is not installed on the shared k3s lab, so these deeper stages are wired and
-  unit-tested but **not yet verified against live instances** (Postgres is the one verified through CDC on
-  real Ceph so far). cross-engine per-table row-count
+- **MySQL full-load + validate — verified live** (2026-07): drove the real gateway pipeline
+  register → discover → assess → provision → full-load → validate against a lightweight edge MySQL
+  (standing in for the Percona edge: the gateway created the real `PerconaXtraDBCluster` CR, and the
+  reconciler advanced the edge to `ready` off the CR's status). The **full-load ran the real
+  `mysqldump→mysql` batch Job and physically copied the data** (3 customers + 2 orders) source→edge, and
+  the **validate row-count-compare Job passed** (plan → `validated`). Streaming CDC + cutover were not
+  run — they need Kafka/Debezium, which is not installed on the shared lab.
+- **Follow-ups (verify on live infra)**: **streaming CDC + cutover** for the non-Postgres engines, and
+  full-load for MariaDB/MongoDB/SQL Server/Oracle (MySQL is the one verified through full-load+validate;
+  Postgres through CDC) — the Kafka/Debezium/edge-operator stack is not installed on the shared k3s lab,
+  so these remain wired + unit-tested but not yet live-verified. cross-engine per-table row-count
   validation for heterogeneous plans is advisory (parity confirmed by snapshot/stream convergence
   rather than a source-vs-edge count Job). Real MongoDB CDC needs a Connect image bundling the Debezium
   MongoDB connector + the MongoDB Kafka sink.
