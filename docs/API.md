@@ -395,6 +395,12 @@ Mint a scoped service-account JWT for a product (admin). The shared secret never
 is clamped to `[60, 7776000]` (90 days). The product sends the token as `Authorization: Bearer <jwt>`.
 The response `jti` identifies the token for revocation.
 
+### Governance reports (operator, day-2)
+- `GET /api/atlas/v1/audit.csv` — export the audit trail as CSV (SIEM/compliance). Retention:
+  `ATLAS_AUDIT_RETENTION_DAYS` prunes rows older than N days (0 = keep forever).
+- `GET /api/atlas/v1/chargeback` — per-tenant usage + optional cost (`ATLAS_CHARGEBACK_USD_PER_GIB_MONTH`).
+- `GET /api/atlas/v1/policy-drift` — volumes whose applied StorageClass no longer matches their policy.
+
 ### Token revocation & rate limiting (admin, day-2)
 - `POST /api/atlas/v1/auth/tokens/{jti}/revoke` — kill a minted token before its TTL; the auth
   middleware then rejects it with **401** (a deny-list, checked per request).

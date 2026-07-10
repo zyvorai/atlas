@@ -161,7 +161,10 @@ pub fn router(state: AppState) -> Router {
         .route("/jobs/{id}", get(get_job))
         .route("/jobs/{id}/watch", get(watch_job_sse))
         .route("/audit", get(list_audit))
+        .route("/audit.csv", get(export_audit_csv))
         .route("/events", get(list_events))
+        .route("/chargeback", get(chargeback))
+        .route("/policy-drift", get(policy_drift))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
@@ -1972,6 +1975,75 @@ async fn list_audit(
     )
     .await?;
     Ok(Json(json!(rows)))
+}
+
+fn csv_field(v: &Value, key: &str) -> String {
+    let s = v.get(key).and_then(|x| x.as_str()).unwrap_or("");
+    format!("\"{}\"", s.replace('"', "\"\""))
+}
+
+/// `GET /audit.csv` — export the audit trail as CSV (operator; for SIEM / compliance archival).
+async fn export_audit_csv(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+) -> AppResult<axum::response::Response> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let rows = atlas_inventory::audit::list(&s.pool, None, None, None, None, 1000).await?;
+    let mut csv = String::from("created_at,actor_id,action,resource_type,resource_id,status\n");
+    for r in &rows {
+        csv.push_str(&format!(
+            "{},{},{},{},{},{}\n",
+            csv_field(r, "created_at"),
+            csv_field(r, "actor_id"),
+            csv_field(r, "action"),
+            csv_field(r, "resource_type"),
+            csv_field(r, "resource_id"),
+            csv_field(r, "status"),
+        ));
+    }
+    use axum::response::IntoResponse;
+    Ok(([(axum::http::header::CONTENT_TYPE, "text/csv")], csv).into_response())
+}
+
+/// `GET /chargeback` — per-tenant usage + optional cost (showback). Rate from
+/// `ATLAS_CHARGEBACK_USD_PER_GIB_MONTH` (0 = usage only). Point-in-time snapshot.
+async fn chargeback(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let rate: f64 = std::env::var("ATLAS_CHARGEBACK_USD_PER_GIB_MONTH")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0.0);
+    let gib = 1024.0 * 1024.0 * 1024.0;
+    let tenants: Vec<Value> = atlas_inventory::tenants::list_overview(&s.pool)
+        .await?
+        .into_iter()
+        .map(|t| {
+            let used_gib = t.used_bytes as f64 / gib;
+            json!({
+                "tenant_id": t.tenant_id,
+                "used_bytes": t.used_bytes,
+                "used_gib": (used_gib * 100.0).round() / 100.0,
+                "volume_count": t.volume_count,
+                "quota_bytes": t.max_bytes,
+                "estimated_usd_month": (used_gib * rate * 100.0).round() / 100.0,
+            })
+        })
+        .collect();
+    Ok(Json(json!({ "usd_per_gib_month": rate, "tenants": tenants })))
+}
+
+/// `GET /policy-drift` — volumes whose applied StorageClass no longer matches their policy (or whose
+/// policy was deleted). Day-2 governance: catch configuration drift from the intended policy.
+async fn policy_drift(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let drift = atlas_inventory::list_policy_drift(&s.pool).await?;
+    Ok(Json(json!({ "drift": drift, "count": drift.len() })))
 }
 
 #[derive(Debug, Deserialize)]

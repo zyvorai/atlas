@@ -92,6 +92,17 @@ pub async fn list(
 }
 
 /// Count audit rows for a given action — handy for tests.
+/// Delete audit rows older than `keep_days` (day-2 retention). Returns how many were pruned.
+pub async fn prune(pool: &SqlitePool, keep_days: i64) -> Result<u64> {
+    let res = sqlx::query(
+        "DELETE FROM storage_audit_logs WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ','now', ?)",
+    )
+    .bind(format!("-{} days", keep_days.max(1)))
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected())
+}
+
 pub async fn count_for_action(pool: &SqlitePool, action: &str) -> Result<i64> {
     let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM storage_audit_logs WHERE action = ?")
         .bind(action)

@@ -484,6 +484,38 @@ pub async fn upsert_discovery(
 // Reads
 // ---------------------------------------------------------------------------
 
+/// Policy drift (day-2 governance): volumes whose applied StorageClass no longer matches the
+/// StorageClass their assigned policy resolves to, or whose policy was deleted.
+pub async fn list_policy_drift(pool: &SqlitePool) -> Result<Vec<serde_json::Value>> {
+    let rows = sqlx::query(
+        "SELECT v.id AS volume_id, v.name AS name, v.storage_class_name AS actual, v.policy_id AS policy_id,
+                json_extract(p.placement,'$.storage_class') AS expected,
+                CASE WHEN p.id IS NULL THEN 1 ELSE 0 END AS policy_missing
+         FROM storage_volumes v LEFT JOIN storage_policies p ON p.id = v.policy_id
+         WHERE v.policy_id IS NOT NULL",
+    )
+    .fetch_all(pool)
+    .await?;
+    let mut drift = Vec::new();
+    for r in rows {
+        let actual: Option<String> = r.get("actual");
+        let expected: Option<String> = r.get("expected");
+        let missing: i64 = r.get("policy_missing");
+        let drifted = missing == 1 || (expected.is_some() && actual != expected);
+        if drifted {
+            drift.push(serde_json::json!({
+                "volume_id": r.get::<String, _>("volume_id"),
+                "name": r.get::<String, _>("name"),
+                "policy_id": r.get::<Option<String>, _>("policy_id"),
+                "expected_storage_class": expected,
+                "actual_storage_class": actual,
+                "reason": if missing == 1 { "policy deleted" } else { "storage class differs from policy" },
+            }));
+        }
+    }
+    Ok(drift)
+}
+
 /// Cordon or uncordon a backend (day-2 maintenance). Returns whether a row changed.
 pub async fn set_backend_cordoned(pool: &SqlitePool, id: &str, cordoned: bool) -> Result<bool> {
     let res = sqlx::query(

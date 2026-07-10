@@ -250,7 +250,33 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
     // disabled unless ATLAS_STATE_BACKUP_SECS > 0).
     spawn_state_backup(state.pool.clone(), state.workers.clone());
 
+    // Audit retention: prune audit rows older than ATLAS_AUDIT_RETENTION_DAYS (0 = keep forever).
+    spawn_audit_retention(state.pool.clone());
+
     Ok(state)
+}
+
+/// Periodically prune audit rows older than `ATLAS_AUDIT_RETENTION_DAYS` (day-2 governance). Runs
+/// every 6h; disabled when the var is unset/0 (keep forever).
+fn spawn_audit_retention(pool: sqlx::SqlitePool) {
+    let days: i64 = std::env::var("ATLAS_AUDIT_RETENTION_DAYS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    if days <= 0 {
+        return;
+    }
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(6 * 3600));
+        loop {
+            tick.tick().await;
+            match atlas_inventory::audit::prune(&pool, days).await {
+                Ok(n) if n > 0 => tracing::info!("audit retention: pruned {n} row(s) older than {days}d"),
+                Ok(_) => {}
+                Err(e) => tracing::warn!("audit retention prune failed: {e:#}"),
+            }
+        }
+    });
 }
 
 /// Periodically snapshot the control-plane SQLite DB and upload it to S3/RGW so Atlas can restore its
