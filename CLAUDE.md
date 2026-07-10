@@ -23,7 +23,9 @@ Implemented:
   MongoDB, Mongo Kafka sink) on Ceph. Real connectors: Postgres/MySQL/MariaDB default, SQL Server
   (`tiberius`)/Oracle (OCI)/MongoDB behind cargo features; precise CDC lag behind `kafka-lag`. Full
   pipeline (discover→assess→provision→full-load→CDC→validate→cutover→rollback); **Postgres verified
-  end-to-end on two live Rook Ceph clusters incl. real Debezium CDC**, all engines fake-first
+  end-to-end on two live Rook Ceph clusters incl. real Debezium CDC**; **MySQL (8.4) + MariaDB (11.x)
+  real-connector discovery verified live** on real servers (binlog ROW → `cdc_capable`, real schema/table
+  names) through the deployed k3s gateway; remaining engines (Oracle/SQL Server/MongoDB) fake-first
   (`make run-databridge`). See `docs/DATABRIDGE.md` + `deploy/databridge/`.
 
 Day-2 operations added (slices, all fake-first tested): control-plane durability (job recovery, graceful
