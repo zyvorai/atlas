@@ -17,10 +17,14 @@ Implemented:
   Ceph-native `/ceph/{status,osd-tree,osd-df,df}`, unified `/events`, `/readyz`; `deploy/observability/`.
 - **Zeus OS React console** embedded in the gateway (HTTPS, login, Observatory, Ceph page, Nebula theme).
 - `deploy/rook-ceph-lab/` (single-node overlay + day-2 ops scripts) + `deploy/k8s/` ceph deployment.
-- **DataBridge** (`atlas-databridge`): cloud-to-edge DB migration control plane (RDS/Cloud SQL PG+MySQL
-  → CloudNativePG/Percona on Ceph). Full pipeline (discover→assess→provision→full-load→CDC→validate→
-  cutover→rollback); **verified end-to-end on two live Rook Ceph clusters incl. real Debezium CDC**,
-  and fake-first (`make run-databridge`). See `docs/DATABRIDGE.md` + `deploy/databridge/`.
+- **DataBridge** (`atlas-databridge`): cloud-to-edge DB migration control plane. **Six source engines**
+  — Postgres, MySQL, MariaDB (homogeneous → CNPG/Percona) + Oracle, SQL Server (heterogeneous → Postgres
+  edge, seeded by Debezium's initial snapshot) + MongoDB (homogeneous document → Percona Server for
+  MongoDB, Mongo Kafka sink) on Ceph. Real connectors: Postgres/MySQL/MariaDB default, SQL Server
+  (`tiberius`)/Oracle (OCI)/MongoDB behind cargo features; precise CDC lag behind `kafka-lag`. Full
+  pipeline (discover→assess→provision→full-load→CDC→validate→cutover→rollback); **Postgres verified
+  end-to-end on two live Rook Ceph clusters incl. real Debezium CDC**, all engines fake-first
+  (`make run-databridge`). See `docs/DATABRIDGE.md` + `deploy/databridge/`.
 
 Deferred: RBD mirroring/DR (needs a 2nd cluster), per-product integrations beyond the gRPC surface.
 

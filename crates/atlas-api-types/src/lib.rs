@@ -444,7 +444,7 @@ pub struct MigrationSource {
     pub id: String,
     pub tenant_id: String,
     pub name: String,
-    /// postgres | mysql
+    /// postgres | mysql | mariadb | oracle | sqlserver | mongodb
     pub kind: String,
     /// rds | aurora | cloudsql | generic
     pub cloud: String,
@@ -470,9 +470,9 @@ pub struct EdgeDbCluster {
     pub id: String,
     pub tenant_id: String,
     pub plan_id: Option<String>,
-    /// postgres | mysql
+    /// postgres | mysql | mongodb
     pub engine: String,
-    /// cnpg | percona | oracle
+    /// cnpg | percona | psmdb
     pub operator: String,
     pub namespace: String,
     pub cr_name: Option<String>,

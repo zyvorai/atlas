@@ -14,12 +14,33 @@ atlas-driver-k8s = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
 tokio-postgres = "0.7"
-sqlx = { workspace = true }
+# MySQL/MariaDB discovery rides the workspace sqlx with the `mysql` protocol feature added on top.
+sqlx = { workspace = true, features = ["mysql"] }
 anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 chrono = { workspace = true }
+
+# --- optional real connectors / lag, behind cargo features so a missing native lib never breaks the
+# default build. Fake mode (and Postgres/MySQL/MariaDB real) work without any of these. ---
+# SQL Server (pure-Rust TDS; needs a TLS backend). Enable with `--features sqlserver`.
+tiberius = { version = "0.12", default-features = false, features = ["tds73", "rustls", "chrono"], optional = true }
+tokio-util = { version = "0.7", features = ["compat"], optional = true }
+# Oracle (links the Oracle Instant Client / OCI). Enable with `--features oracle`.
+oracle = { version = "0.6", optional = true }
+# MongoDB (async pure-Rust driver + bson + TLS). Enable with `--features mongodb`.
+mongodb = { version = "3", optional = true }
+# Precise CDC offset-lag via an embedded Kafka AdminClient (vendored librdkafka via cmake).
+# Enable with `--features kafka-lag`.
+rdkafka = { version = "0.36", default-features = false, features = ["cmake-build", "tokio"], optional = true }
+
+[features]
+default = []
+sqlserver = ["dep:tiberius", "dep:tokio-util"]
+oracle = ["dep:oracle"]
+mongodb = ["dep:mongodb"]
+kafka-lag = ["dep:rdkafka"]
 
 [dev-dependencies]
 tokio = { workspace = true }

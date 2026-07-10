@@ -108,6 +108,48 @@ exit $fail
     )
 }
 
+/// MongoDB: compare `countDocuments` per collection between source and edge; exit non-zero on
+/// mismatch. Uses `mongosh` (source creds `username`/`password`, edge creds from the PSMDB Secret).
+#[allow(clippy::too_many_arguments)]
+pub fn mongo_validate_job_spec(
+    source_secret: &str,
+    edge_secret: &str,
+    src_host: &str,
+    src_port: i64,
+    src_db: &str,
+    edge_host: &str,
+    edge_db: &str,
+) -> Value {
+    let script = r#"set -euo pipefail
+SRC="mongodb://${SRC_USER}:${SRC_PASS}@${SRC_HOST}:${SRC_PORT}/${SRC_DB}?replicaSet=rs0"
+EDGE="mongodb://${EDGE_USER}:${EDGE_PASS}@${EDGE_HOST}:27017/${EDGE_DB}?replicaSet=rs0"
+cols=$(mongosh "$SRC" --quiet --eval 'db.getCollectionNames().join("\n")')
+fail=0
+for c in $cols; do
+  sc=$(mongosh "$SRC" --quiet --eval "db.getCollection('$c').countDocuments({})")
+  ec=$(mongosh "$EDGE" --quiet --eval "db.getCollection('$c').countDocuments({})")
+  echo "$c source=$sc edge=$ec"
+  if [ "$sc" != "$ec" ]; then echo "MISMATCH $c"; fail=1; fi
+done
+exit $fail
+"#;
+    container_job(
+        "percona/percona-server-mongodb:7.0",
+        script,
+        vec![
+            env_val("SRC_HOST", src_host),
+            env_val("SRC_PORT", &src_port.to_string()),
+            env_val("SRC_DB", src_db),
+            env_val("EDGE_HOST", edge_host),
+            env_val("EDGE_DB", edge_db),
+            env_secret("SRC_USER", source_secret, "username"),
+            env_secret("SRC_PASS", source_secret, "password"),
+            env_secret("EDGE_USER", edge_secret, "MONGODB_DATABASE_ADMIN_USER"),
+            env_secret("EDGE_PASS", edge_secret, "MONGODB_DATABASE_ADMIN_PASSWORD"),
+        ],
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,5 +174,13 @@ mod tests {
         let spec = mysql_validate_job_spec("src", "edge-secrets", "h", 3306, "appdb", "edge-haproxy", "appdb");
         let args = spec["template"]["spec"]["containers"][0]["args"][0].as_str().unwrap();
         assert!(args.contains("information_schema.tables"));
+    }
+
+    #[test]
+    fn mongo_validate_counts_documents() {
+        let spec = mongo_validate_job_spec("src", "edge-secrets", "h", 27017, "appdb", "edge-rs0", "appdb");
+        let args = spec["template"]["spec"]["containers"][0]["args"][0].as_str().unwrap();
+        assert!(args.contains("countDocuments"));
+        assert!(args.contains("MISMATCH"));
     }
 }

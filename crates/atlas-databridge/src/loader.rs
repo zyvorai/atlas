@@ -127,6 +127,44 @@ echo "full-load complete"
     )
 }
 
+/// MongoDB full-load: `mongodump` the source database, pipe the archive into `mongorestore` against
+/// the edge PSMDB replica set, remapping the namespace to the edge database. Source creds come from
+/// the source Secret (`username`/`password`); edge creds from the PSMDB users Secret.
+#[allow(clippy::too_many_arguments)]
+pub fn mongo_job_spec(
+    source_secret: &str,
+    edge_secret: &str,
+    src_host: &str,
+    src_port: i64,
+    src_db: &str,
+    edge_host: &str,
+    edge_db: &str,
+) -> Value {
+    let script = r#"set -euo pipefail
+SRC_URI="mongodb://${SRC_USER}:${SRC_PASS}@${SRC_HOST}:${SRC_PORT}/?replicaSet=rs0"
+EDGE_URI="mongodb://${EDGE_USER}:${EDGE_PASS}@${EDGE_HOST}:27017/?replicaSet=rs0"
+echo "full-load: mongodump ${SRC_HOST}:${SRC_PORT}/${SRC_DB} -> ${EDGE_HOST}/${EDGE_DB}"
+mongodump --uri="$SRC_URI" --db="$SRC_DB" --archive \
+  | mongorestore --uri="$EDGE_URI" --archive --nsFrom="${SRC_DB}.*" --nsTo="${EDGE_DB}.*"
+echo "full-load complete"
+"#;
+    container_job(
+        "percona/percona-server-mongodb:7.0",
+        script,
+        vec![
+            env_val("SRC_HOST", src_host),
+            env_val("SRC_PORT", &src_port.to_string()),
+            env_val("SRC_DB", src_db),
+            env_val("EDGE_HOST", edge_host),
+            env_val("EDGE_DB", edge_db),
+            env_secret("SRC_USER", source_secret, "username"),
+            env_secret("SRC_PASS", source_secret, "password"),
+            env_secret("EDGE_USER", edge_secret, "MONGODB_DATABASE_ADMIN_USER"),
+            env_secret("EDGE_PASS", edge_secret, "MONGODB_DATABASE_ADMIN_PASSWORD"),
+        ],
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -168,5 +206,17 @@ mod tests {
         let env = c["env"].as_array().unwrap();
         assert!(env.iter().any(|e| e["name"] == "EDGE_PASS"
             && e["valueFrom"]["secretKeyRef"]["key"] == "root"));
+    }
+
+    #[test]
+    fn mongo_job_pipes_dump_to_restore() {
+        let spec = mongo_job_spec("src-creds", "edge-secrets", "mongo.rds.aws", 27017, "appdb", "edge-rs0", "appdb");
+        let c = &spec["template"]["spec"]["containers"][0];
+        let args = c["args"][0].as_str().unwrap();
+        assert!(args.contains("mongodump"));
+        assert!(args.contains("mongorestore"));
+        let env = c["env"].as_array().unwrap();
+        assert!(env.iter().any(|e| e["name"] == "EDGE_USER"
+            && e["valueFrom"]["secretKeyRef"]["key"] == "MONGODB_DATABASE_ADMIN_USER"));
     }
 }

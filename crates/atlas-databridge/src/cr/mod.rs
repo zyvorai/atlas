@@ -4,6 +4,7 @@
 
 pub mod cnpg;
 pub mod mysql_operator;
+pub mod psmdb;
 pub mod streaming;
 
 #[cfg(test)]

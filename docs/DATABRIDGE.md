@@ -1,13 +1,35 @@
 <!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved. -->
 # Zyvor DataBridge — cloud-to-edge database mobility
 
-DataBridge migrates **managed cloud databases** (AWS RDS/Aurora, GCP Cloud SQL — PostgreSQL & MySQL)
-to **open, self-managed engines at the edge** on Kubernetes, with **Ceph (via Atlas/Rook) as the
-storage layer**. It runs from Atlas as a migration control plane, reusing the job engine, inventory,
-gateway, and Zeus OS console. Ceph is the *storage*, not the database engine.
+DataBridge migrates **managed cloud databases** to **open, self-managed engines at the edge** on
+Kubernetes, with **Ceph (via Atlas/Rook) as the storage layer**. It runs from Atlas as a migration
+control plane, reusing the job engine, inventory, gateway, and Zeus OS console. Ceph is the *storage*,
+not the database engine.
 
-> Positioning: *"Migrate managed cloud databases to open engines running on Zyvor Edge, backed by
-> Ceph — with continuous replication, validation, cutover, and rollback from one control plane."*
+**Supported source engines** (`kind`):
+
+| Source engine | Aliases | Edge target | Migration | Real connector |
+|---|---|---|---|---|
+| PostgreSQL | `postgres`, `postgresql`, `pg` | CloudNativePG (Postgres) | homogeneous | `tokio-postgres` (default) |
+| MySQL | `mysql` | Percona XtraDB (MySQL) | homogeneous | `sqlx` (default) |
+| MariaDB | `mariadb`, `maria` | Percona XtraDB (MySQL) | homogeneous | `sqlx` (default) |
+| Oracle | `oracle`, `ora` | CloudNativePG (Postgres) | **heterogeneous** | `oracle`/OCI (feature `oracle`) |
+| SQL Server | `sqlserver`, `mssql`, `sql-server` | CloudNativePG (Postgres) | **heterogeneous** | `tiberius` (feature `sqlserver`) |
+| MongoDB | `mongodb`, `mongo` | Percona Server for MongoDB (**document**) | homogeneous | `mongodb` driver (feature `mongodb`) |
+
+*Homogeneous* migrations (Postgres/MySQL/MariaDB/MongoDB) copy the data with a `dump→restore` full-load
+Job, then Debezium streams changes (`snapshot.mode=never`). *Heterogeneous* migrations (Oracle / SQL
+Server → Postgres) have **no dump full-load**: Debezium's `initial` snapshot seeds the edge and the JDBC
+sink `auto.create`s the tables, then it streams (the standard cross-engine pattern). **MongoDB** is the
+one document engine — it lands on a Percona Server for MongoDB replica set (`rs0`, required for change
+streams), full-loads with `mongodump | mongorestore`, and uses the **MongoDB Kafka sink** (with the
+Debezium Mongo CDC handler) instead of the JDBC sink. Every engine runs the whole pipeline
+**fake-first** with no cloud creds; the real Oracle / SQL Server / MongoDB connectors are behind cargo
+features because they link a native client (OCI) / TLS stack / driver.
+
+> Positioning: *"Migrate managed cloud databases (RDS/Aurora, Cloud SQL, Azure SQL, on-prem Oracle)
+> to open engines running on Zyvor Edge, backed by Ceph — with continuous replication, validation,
+> cutover, and rollback from one control plane."*
 > DynamoDB / Firestore / Spanner are **out of scope** — those are data-model migrations, not storage
 > migrations.
 
@@ -19,9 +41,11 @@ Discover → Assess → Provision (edge DB on Ceph) → Full-load → CDC (Debez
 Each stage is an async job (`202 + job id`, progress via `/jobs/{id}/watch`). Long-running work
 (edge CR readiness, CDC lag) is advanced by the **DataBridge reconciler** worker.
 
-- **Edge runtime**: CloudNativePG (Postgres) / Percona XtraDB (MySQL), data + WAL on the
-  `zyvor-rbd-prod` Ceph RBD StorageClass.
-- **CDC**: Debezium on Strimzi/Kafka (cloud-neutral, reads WAL/binlog).
+- **Edge runtime**: CloudNativePG (Postgres) / Percona XtraDB (MySQL) / Percona Server for MongoDB,
+  data + WAL on the `zyvor-rbd-prod` Ceph RBD StorageClass.
+- **CDC**: Debezium on Strimzi/Kafka (cloud-neutral, reads WAL/binlog/redo/oplog — Postgres, MySQL,
+  MariaDB, Oracle LogMiner, SQL Server, MongoDB change streams) → Aiven JDBC sink (relational) or the
+  MongoDB Kafka sink (document) → edge DB.
 - **Cutover** is admin-guarded: plan `validated` + last validation `passed` + CDC `lag_seconds` under
   threshold; **rollback** only within the plan's rollback window.
 
@@ -36,8 +60,8 @@ install the edge operators to run it for real.
 make run-databridge          # gateway with fake Ceph driver + DataBridge reconciler @5s
 ```
 Then open the console at http://127.0.0.1:5110/ → **DataBridge → Cloud Databases**, register a
-source (kind `postgres`/`mysql`, driver mode `fake`), and walk the plan through the stepper. Or over
-REST:
+source (kind `postgres`/`mysql`/`mariadb`/`oracle`/`sqlserver`, driver mode `fake`), and walk the plan
+through the stepper. Or over REST:
 ```bash
 B=http://127.0.0.1:5110/api/atlas/v1
 SID=$(curl -sX POST $B/databridge/sources -d '{"name":"orders","kind":"postgres","cloud":"rds"}' | jq -r .id)
@@ -80,6 +104,21 @@ for stage in assess provision full-load cdc/start validate cutover; do curl -sX 
 Source `driver_mode` (`fake`/`real`) is per-source, set at registration. Edge namespace is
 `zyvor-databridge`; edge storage class is `zyvor-rbd-prod`. Real CDC also expects a Strimzi Kafka named
 `zyvor-kafka` in the edge namespace (bootstrap `zyvor-kafka-kafka-bootstrap:9092`).
+
+### Cargo features (`atlas-databridge`)
+The default build supports **fake mode for all engines** and **real Postgres / MySQL / MariaDB** (no
+extra system libraries). The real connectors that need a native dependency, and precise CDC lag, are
+behind features so a missing lib never breaks the default build:
+
+| Feature | Enables | Native dependency |
+|---|---|---|
+| *(default)* | fake all engines + real Postgres (`tokio-postgres`), MySQL/MariaDB (`sqlx`) | none |
+| `sqlserver` | real SQL Server source connector (`tiberius`, TDS) | a TLS backend (rustls, bundled) |
+| `oracle` | real Oracle source connector (`oracle`/ODPI-C) | Oracle Instant Client at runtime |
+| `mongodb` | real MongoDB source connector (`mongodb` async driver) | none (bundled bson + TLS) |
+| `kafka-lag` | precise CDC offset-lag (embedded Kafka client) in the reconciler | `librdkafka` via `cmake` |
+
+Build the gateway with, e.g., `cargo build -p atlas-gateway --features atlas-databridge/sqlserver,atlas-databridge/oracle,atlas-databridge/mongodb,atlas-databridge/kafka-lag`.
 
 ## Data model
 `migration_sources`, `migration_plans`, `edge_db_clusters`, `cdc_streams`, `validation_runs`,
@@ -132,10 +171,12 @@ connectors RUNNING and replicated a row to the edge with **zero manual patching*
     a table's Debezium topic (created on the first change) promptly, without a restart.
 
 Real CDC is **health-tracked** by the reconciler: a streaming stream backed by a real Debezium
-`KafkaConnector` follows the connector's state (RUNNING → live/caught-up, else → `error`); fake
+`KafkaConnector` follows the connector's state (RUNNING → live, else → `error`); fake
 streams keep the synthesized lag drain. The sink `pk.fields` is configurable via
-`ATLAS_DATABRIDGE_SINK_PK_FIELDS` (default `id`). Precise numeric offset-lag (topic end − sink
-consumer offset) would need an embedded Kafka AdminClient — a scoped future addition.
+`ATLAS_DATABRIDGE_SINK_PK_FIELDS` (default `id`). With the **`kafka-lag`** feature, a healthy real
+stream also reports its **precise offset-lag** (∑ per-partition `high_watermark − committed_offset` of
+the sink consumer group `connect-<sink-connector>`) via an embedded Kafka client; without it, a healthy
+stream reports caught-up (0).
 
 ## Status
 - **Done + verified end-to-end on two live Rook Ceph clusters** (and CI-locked by
@@ -145,9 +186,18 @@ consumer offset) would need an embedded Kafka AdminClient — a scoped future ad
   `KafkaConnect` + Debezium source + JDBC-sink connectors, live source→edge replication) → validate
   (row-count-compare Job) → cutover (guarded) → rollback.
 - Real CDC is **health-tracked** by the reconciler; the JDBC sink `pk.fields` is configurable.
-- **Follow-ups**: real **MySQL** source connector + TLS for cloud SSL; **precise numeric CDC lag**
-  (topic end − sink consumer offset) via an embedded Kafka AdminClient — today a real streaming stream
-  reports caught-up (0) while its connectors are healthy.
+- **Engine coverage**: all six source engines (Postgres, MySQL, MariaDB, Oracle, SQL Server, MongoDB)
+  run the full pipeline; the fake path for every engine is exercised end-to-end (discover→…→cutover).
+  Real Postgres/MySQL/MariaDB connectors are default; real SQL Server (`tiberius`), Oracle (`oracle`/OCI)
+  and MongoDB (`mongodb` driver) are behind cargo features; precise CDC lag is behind `kafka-lag`.
+  Oracle/SQL Server are heterogeneous (→ Postgres edge, seeded by the Debezium initial snapshot);
+  MongoDB is a homogeneous document migration (→ Percona Server for MongoDB, Mongo Kafka sink).
+- **Follow-ups (verify on live infra)**: the MySQL/MariaDB, heterogeneous Oracle/SQL Server → Postgres,
+  and MongoDB → PSMDB paths are wired and unit-tested but **not yet verified against live cloud
+  instances** (Postgres CDC is the one verified on real Ceph so far); cross-engine per-table row-count
+  validation for heterogeneous plans is advisory (parity confirmed by snapshot/stream convergence
+  rather than a source-vs-edge count Job). Real MongoDB CDC needs a Connect image bundling the Debezium
+  MongoDB connector + the MongoDB Kafka sink.
 
 ### Full-load secret assumptions
 The real full-load Job runs in `zyvor-databridge`, so the **source Secret must exist in that

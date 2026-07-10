@@ -1,0 +1,153 @@
+// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+//! Live MongoDB source connector (Atlas / DocumentDB / any mongod or replica set). Introspects the
+//! databases + collections over a real `mongodb` (async, pure-Rust) connection so the pipeline can
+//! assess readiness for a real migration.
+//!
+//! Behind the `mongodb` cargo feature (the driver pulls in bson + a TLS stack). "Tables" map to
+//! collections; every document has an `_id`, so `has_primary_key` is always true. CDC capability
+//! requires the source to be a **replica set** (Debezium reads change streams / the oplog) — a
+//! standalone mongod can't serve change streams.
+
+use anyhow::{Context, Result};
+use async_trait::async_trait;
+use mongodb::bson::{doc, Document};
+
+use crate::connector::{DiscoveredSchema, SourceConnector, TableInfo};
+
+pub struct MongoSourceConnector {
+    source_id: String,
+    host: String,
+    port: i64,
+    database: String,
+    user: String,
+    password: String,
+    tls: bool,
+}
+
+impl MongoSourceConnector {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        source_id: impl Into<String>,
+        host: &str,
+        port: i64,
+        database: &str,
+        user: &str,
+        password: &str,
+        tls_mode: &str,
+    ) -> Self {
+        let tls = !matches!(
+            tls_mode.to_ascii_lowercase().as_str(),
+            "disable" | "disabled" | "off"
+        );
+        Self {
+            source_id: source_id.into(),
+            host: host.to_string(),
+            port,
+            database: database.to_string(),
+            user: user.to_string(),
+            password: password.to_string(),
+            tls,
+        }
+    }
+
+    fn uri(&self) -> String {
+        let tls = if self.tls { "&tls=true" } else { "" };
+        format!(
+            "mongodb://{}:{}@{}:{}/?authSource=admin{tls}",
+            self.user, self.password, self.host, self.port
+        )
+    }
+}
+
+/// Read an integer field that a server command may return as i32 or i64.
+fn get_int(d: &Document, key: &str) -> i64 {
+    d.get_i64(key)
+        .ok()
+        .or_else(|| d.get_i32(key).ok().map(|v| v as i64))
+        .unwrap_or(0)
+}
+
+#[async_trait]
+impl SourceConnector for MongoSourceConnector {
+    fn source_id(&self) -> &str {
+        &self.source_id
+    }
+
+    async fn discover(&self) -> Result<DiscoveredSchema> {
+        let client = mongodb::Client::with_uri_str(self.uri())
+            .await
+            .context("connect to source MongoDB")?;
+        let admin = client.database("admin");
+
+        let version = admin
+            .run_command(doc! { "buildInfo": 1 })
+            .await
+            .ok()
+            .and_then(|d| d.get_str("version").ok().map(|s| s.to_string()))
+            .unwrap_or_else(|| "unknown".to_string());
+
+        // A replica set (hello.setName present) can serve change streams => Debezium-capable.
+        let cdc_capable = admin
+            .run_command(doc! { "hello": 1 })
+            .await
+            .ok()
+            .map(|d| d.get_str("setName").is_ok())
+            .unwrap_or(false);
+
+        let databases: Vec<String> = client
+            .list_database_names()
+            .await
+            .context("list databases")?
+            .into_iter()
+            .filter(|n| !matches!(n.as_str(), "admin" | "local" | "config"))
+            .collect();
+
+        // Collections of the target database, with document counts + sizes from collStats.
+        let db = client.database(&self.database);
+        let collections = db
+            .list_collection_names()
+            .await
+            .context("list collections")?;
+        let mut tables = Vec::new();
+        for coll in collections {
+            let stats = db.run_command(doc! { "collStats": &coll }).await.ok();
+            let (count, size) = stats
+                .as_ref()
+                .map(|s| (get_int(s, "count"), get_int(s, "size")))
+                .unwrap_or((0, 0));
+            tables.push(TableInfo {
+                schema: self.database.clone(),
+                name: coll,
+                est_rows: count.max(0),
+                size_bytes: size.max(0),
+                has_primary_key: true, // every Mongo document has _id
+            });
+        }
+        let total_size_bytes = tables.iter().map(|t| t.size_bytes).sum();
+
+        Ok(DiscoveredSchema {
+            engine: "mongodb".to_string(),
+            version,
+            databases: if databases.is_empty() { vec![self.database.clone()] } else { databases },
+            tables,
+            extensions: vec![],
+            total_size_bytes,
+            cdc_capable,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn uri_embeds_creds_and_tls() {
+        let c = MongoSourceConnector::new("s1", "mongo.host", 27017, "appdb", "u", "p", "require");
+        let uri = c.uri();
+        assert!(uri.starts_with("mongodb://u:p@mongo.host:27017/"));
+        assert!(uri.contains("tls=true"));
+        let c2 = MongoSourceConnector::new("s1", "h", 27017, "appdb", "u", "p", "disable");
+        assert!(!c2.uri().contains("tls=true"));
+    }
+}

@@ -2019,7 +2019,7 @@ async fn list_pvs(State(s): State<AppState>) -> AppResult<Json<Value>> {
 #[derive(Debug, Deserialize)]
 struct CreateSourceBody {
     name: String,
-    /// postgres | mysql
+    /// postgres | mysql | mariadb | oracle | sqlserver | mongodb
     kind: String,
     /// rds | aurora | cloudsql | generic
     #[serde(default)]
@@ -2060,7 +2060,7 @@ async fn db_create_source(
     }
     if atlas_databridge::SourceKind::parse(&body.kind).is_none() {
         return Err(AppError::Validation(
-            "kind must be postgres or mysql".into(),
+            "kind must be one of: postgres, mysql, mariadb, oracle, sqlserver, mongodb".into(),
         ));
     }
     let source_id = ids::source_id();

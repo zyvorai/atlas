@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use sqlx::SqlitePool;
 
-use crate::cr::{cnpg, mysql_operator};
+use crate::cr::{cnpg, mysql_operator, psmdb};
 
 /// Spawn the reconciler loop. `interval_secs == 0` disables it (the test/Default config).
 pub fn spawn_reconciler(
@@ -62,6 +62,12 @@ async fn reconcile_once(
                 mysql_operator::is_ready as fn(&serde_json::Value) -> bool,
                 mysql_operator::endpoint(cr_name, &edge.namespace),
                 mysql_operator::secret_ref(cr_name),
+            ),
+            "mongodb" => (
+                psmdb::GROUP, psmdb::VERSION, psmdb::KIND,
+                psmdb::is_ready as fn(&serde_json::Value) -> bool,
+                psmdb::endpoint(cr_name, &edge.namespace),
+                psmdb::secret_ref(cr_name),
             ),
             other => {
                 tracing::warn!("edge cluster {} has unknown engine {other}", edge.id);
@@ -119,12 +125,13 @@ async fn reconcile_once(
     }
 
     // Real CDC tracking: a streaming stream backed by a real Debezium `KafkaConnector` (status
-    // present) is driven by the connector's health — RUNNING refreshes liveness (lag caught-up),
-    // anything else flags the stream `error`. Fake streams have no CR (status None) and are left to
-    // the synthesized drain above.
+    // present) is driven by the connector's health — RUNNING refreshes liveness, anything else flags
+    // the stream `error`. Fake streams have no CR (status None) and are left to the synthesized drain
+    // above.
     //
-    // NOTE: a precise numeric offset-lag (topic end offset − sink consumer offset) needs a Kafka
-    // AdminClient, which the gateway does not embed; once streaming and healthy we report lag 0.
+    // With the `kafka-lag` feature, a healthy real stream also reports its precise offset-lag
+    // (topic end offset − sink consumer offset) measured via an embedded Kafka client; without it,
+    // a healthy stream reports caught-up (0).
     for stream in atlas_inventory::databridge::cdc::list_by_state(pool, "streaming").await? {
         let Some(connector) = stream.connector_name.as_deref() else { continue };
         match k8s
@@ -139,12 +146,26 @@ async fn reconcile_once(
         {
             Ok(Some(status)) => {
                 if crate::cr::streaming::connector_running(&status) {
-                    // Healthy real stream: refresh lag_updated_at (liveness) and report caught-up.
+                    // Healthy real stream: measure sink lag (0 unless the kafka-lag feature is on).
+                    let short = stream
+                        .plan_id
+                        .as_deref()
+                        .map(|p| p[p.len().saturating_sub(8)..].to_string())
+                        .unwrap_or_default();
+                    let group = crate::kafka_lag::sink_consumer_group(
+                        &crate::cr::streaming::sink_connector_name(&short),
+                    );
+                    let lag_msgs = crate::kafka_lag::measure(
+                        "zyvor-kafka-kafka-bootstrap:9092".to_string(),
+                        group,
+                        crate::cr::streaming::topic_prefix(&short),
+                    )
+                    .await;
                     atlas_inventory::databridge::cdc::update_lag(
                         pool,
                         &stream.id,
-                        0,
-                        0,
+                        lag_msgs,
+                        if lag_msgs > 0 { 1 } else { 0 },
                         stream.last_source_lsn.as_deref(),
                         stream.last_applied_lsn.as_deref(),
                         stream.events_total,
