@@ -44,6 +44,8 @@ Deferred: RBD mirroring/DR (needs a 2nd cluster), per-product integrations beyon
 - `crates/atlas-cli` — `atlasctl` REST client.
 - `migrations/` — SQLite schema.
 - `deploy/rook-ceph-lab/` — lab manifests + `up.sh`.
+- `scripts/deploy-remote.sh <host> <user>` — build (`Dockerfile`) + deploy the fake/k8s gateway to `zyvor-system`.
+- `scripts/deploy-ceph-gateway-remote.sh <host> [user]` — build (`Dockerfile.ceph`, bundles the Ceph client) + roll out the **real-Ceph** gateway `atlas-gateway-ceph` in `rook-ceph` (NodePort 30511, `imagePullPolicy: Never`).
 
 ## Conventions
 - Every source file begins with `// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.`
