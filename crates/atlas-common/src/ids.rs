@@ -12,6 +12,11 @@ fn prefixed(prefix: &str) -> String {
     format!("{prefix}_{}", short())
 }
 
+/// A JWT id (`jti`) for a minted token, so it can be revoked by id later.
+pub fn token_jti() -> String {
+    prefixed("jti")
+}
+
 pub fn backend_id() -> String {
     prefixed("bkd")
 }

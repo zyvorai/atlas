@@ -35,6 +35,43 @@ impl WorkerHealth {
     }
 }
 
+/// Per-actor fixed-window rate limiter (day-2 governance). `rpm == 0` disables it. Keyed by actor id;
+/// each 60s window resets the count. In-process (single-replica); a distributed limiter is a later
+/// slice. Configured from `ATLAS_RATE_LIMIT_RPM` at startup.
+#[derive(Clone)]
+pub struct RateLimiter {
+    rpm: u32,
+    windows: Arc<Mutex<HashMap<String, (u64, u32)>>>,
+}
+
+impl RateLimiter {
+    pub fn new(rpm: u32) -> Self {
+        Self { rpm, windows: Arc::new(Mutex::new(HashMap::new())) }
+    }
+
+    /// Whether the request is allowed. Increments the actor's count for the current minute and
+    /// returns false once it exceeds `rpm`. Always true when disabled (`rpm == 0`).
+    pub fn allow(&self, actor: &str) -> bool {
+        if self.rpm == 0 {
+            return true;
+        }
+        let minute = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() / 60)
+            .unwrap_or(0);
+        let mut g = match self.windows.lock() {
+            Ok(g) => g,
+            Err(_) => return true, // never lock out on a poisoned mutex
+        };
+        let entry = g.entry(actor.to_string()).or_insert((minute, 0));
+        if entry.0 != minute {
+            *entry = (minute, 0);
+        }
+        entry.1 += 1;
+        entry.1 <= self.rpm
+    }
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub pool: SqlitePool,
@@ -47,6 +84,8 @@ pub struct AppState {
     pub jobs: atlas_jobs::JobEngine,
     /// Periodic-worker heartbeats for `/readyz`.
     pub workers: WorkerHealth,
+    /// Per-actor request rate limiter (day-2 governance).
+    pub rate: RateLimiter,
 }
 
 impl AppState {

@@ -373,11 +373,19 @@ Mint a scoped service-account JWT for a product (admin). The shared secret never
 ```json
 // body
 { "subject": "veyron", "role": "operator", "ttl_secs": 3600 }
-// 201 → { "token": "<jwt>", "subject": "veyron", "role": "operator", "level": 1,
-//         "expires_at": 1783480966, "ttl_secs": 3600 }
+// 201 → { "token": "<jwt>", "jti": "jti_...", "subject": "veyron", "role": "operator",
+//         "level": 1, "expires_at": 1783480966, "ttl_secs": 3600 }
 ```
 `role`: `viewer` (default), `operator`, `admin`, or `product.service.<name>` (→ operator). `ttl_secs`
 is clamped to `[60, 7776000]` (90 days). The product sends the token as `Authorization: Bearer <jwt>`.
+The response `jti` identifies the token for revocation.
+
+### Token revocation & rate limiting (admin, day-2)
+- `POST /api/atlas/v1/auth/tokens/{jti}/revoke` — kill a minted token before its TTL; the auth
+  middleware then rejects it with **401** (a deny-list, checked per request).
+- `GET /api/atlas/v1/auth/tokens/revoked` — the current revocation list.
+- **Rate limiting**: set `ATLAS_RATE_LIMIT_RPM=N` (default `0` = off) to cap requests **per actor per
+  minute** across `/api/atlas/v1/*`; over-limit requests get **429**.
 
 ### `GET /api/atlas/v1/tenants/{id}/quota` · `PUT .../quota`
 Per-tenant storage quota + live usage (PDF §14 multi-tenancy). `PUT` (admin) sets the limits.

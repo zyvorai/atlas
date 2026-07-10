@@ -190,6 +190,7 @@ async fn grpc_enforces_jwt_when_auth_required() {
         sub: "alice".into(),
         role: "admin".into(),
         exp,
+        jti: String::new(),
     };
     let token = encode(
         &Header::default(),

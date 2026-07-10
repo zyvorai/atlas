@@ -194,8 +194,8 @@ async fn events_and_audit_are_operator_gated() {
     let (addr, _) = spawn_with(Opts { auth_required: true, ..Default::default() }).await;
     let base = format!("http://{addr}/api/atlas/v1");
     let c = client();
-    let (op, _) = atlas_gateway::auth::mint_token(secret, "svc", "operator", 600).unwrap();
-    let (vw, _) = atlas_gateway::auth::mint_token(secret, "svc", "viewer", 600).unwrap();
+    let (op, _, _) = atlas_gateway::auth::mint_token(secret, "svc", "operator", 600).unwrap();
+    let (vw, _, _) = atlas_gateway::auth::mint_token(secret, "svc", "viewer", 600).unwrap();
 
     for feed in ["events", "audit"] {
         let anon = c.get(format!("{base}/{feed}")).send().await.unwrap();

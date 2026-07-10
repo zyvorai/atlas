@@ -26,6 +26,7 @@ pub mod jobs;
 pub mod metrics;
 pub mod schedules;
 pub mod snapshots;
+pub mod tokens;
 pub mod tenants;
 
 /// Open the SQLite pool with WAL + foreign keys, creating the file if missing.

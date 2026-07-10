@@ -127,6 +127,8 @@ pub fn router(state: AppState) -> Router {
         .route("/databridge/cutovers", get(db_list_cutovers))
         .route("/policies", get(list_policies))
         .route("/auth/tokens", post(issue_token))
+        .route("/auth/tokens/revoked", get(list_revoked_tokens))
+        .route("/auth/tokens/{jti}/revoke", post(revoke_token))
         .route(
             "/tenants/{id}/quota",
             get(get_tenant_quota).put(put_tenant_quota),
@@ -1153,7 +1155,7 @@ async fn issue_token(
     // Cap the lifetime so a leaked token has a bounded blast radius.
     const MAX_TTL: u64 = 90 * 24 * 3600;
     let ttl_secs = body.ttl_secs.unwrap_or(3600).clamp(60, MAX_TTL);
-    let (token, exp) =
+    let (token, exp, jti) =
         crate::auth::mint_token(&s.config.jwt_secret, &body.subject, &role, ttl_secs)?;
     let _ = atlas_inventory::audit::record(
         &s.pool,
@@ -1163,17 +1165,41 @@ async fn issue_token(
         "service_account",
         &body.subject,
         "ok",
-        Some(json!({ "role": role, "ttl_secs": ttl_secs })),
+        Some(json!({ "role": role, "ttl_secs": ttl_secs, "jti": jti })),
         None,
     )
     .await;
     Ok((
         StatusCode::CREATED,
         Json(json!({
-            "token": token, "subject": body.subject, "role": role,
+            "token": token, "jti": jti, "subject": body.subject, "role": role,
             "level": crate::auth::role_level(&role), "expires_at": exp, "ttl_secs": ttl_secs
         })),
     ))
+}
+
+/// `GET /auth/tokens/revoked` — the current token deny-list (admin).
+async fn list_revoked_tokens(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    Ok(Json(json!(atlas_inventory::tokens::list(&s.pool).await?)))
+}
+
+/// `POST /auth/tokens/{jti}/revoke` — kill a minted token by its id before it expires (admin).
+async fn revoke_token(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(jti): Path<String>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    atlas_inventory::tokens::revoke(&s.pool, &jti, &actor.id).await?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool, None, &actor.id, "auth.token.revoked", "service_account", &jti, "ok", None, None,
+    )
+    .await;
+    Ok(Json(json!({ "jti": jti, "revoked": true })))
 }
 
 #[derive(Debug, Deserialize)]

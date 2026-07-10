@@ -1,0 +1,75 @@
+// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+//! Day-2 governance: per-actor rate limiting. In its own test binary so setting the
+//! `ATLAS_RATE_LIMIT_RPM` env var doesn't race other tests. Auth off → all requests share the
+//! `anonymous` bucket, so flooding one client past the limit trips 429.
+
+use atlas_common::config::CephDriverMode;
+use atlas_common::Config;
+use atlas_gateway::routes;
+use atlas_gateway::startup::{build_state, BuildOptions};
+
+fn config(db: &str) -> Config {
+    Config {
+        bind_addr: "127.0.0.1:0".into(),
+        grpc_addr: "127.0.0.1:0".into(),
+        database_url: format!("sqlite://{db}?mode=rwc"),
+        ceph_driver_mode: CephDriverMode::Fake,
+        kubeconfig_path: None,
+        jwt_secret: "rl-test-secret-key-at-least-32-bytes!!!".into(),
+        auth_required: false,
+        monitor_interval_secs: 0,
+        ceph_prometheus_url: None,
+        alert_webhook_url: None,
+        backup_keep: 0,
+        backup_max_age_secs: 0,
+        rgw_public_endpoint: None,
+        snapshot_tick_secs: 0,
+        databridge_reconcile_secs: 0,
+        https_addr: None,
+        tls_cert_path: None,
+        tls_key_path: None,
+        tls_self_signed: false,
+        nfs_enable: false,
+        nfs_server: None,
+        nfs_exports: Vec::new(),
+        zfs_enable: false,
+        zfs_host: None,
+        zfs_pools: Vec::new(),
+    }
+}
+
+#[tokio::test]
+async fn rate_limit_trips_429() {
+    let db = format!("{}/atlas-rl-{}.db", std::env::temp_dir().display(), std::process::id());
+    let _ = std::fs::remove_file(&db);
+    // build_state reads ATLAS_RATE_LIMIT_RPM at startup; set it before, clear it after (value captured).
+    std::env::set_var("ATLAS_RATE_LIMIT_RPM", "5");
+    let state = build_state(
+        config(&db),
+        BuildOptions { enable_k8s: false, initial_discovery: false, enable_monitor: false },
+    )
+    .await
+    .unwrap();
+    std::env::remove_var("ATLAS_RATE_LIMIT_RPM");
+
+    let app = routes::router(state);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let c = reqwest::Client::new();
+    let mut ok = 0;
+    let mut limited = 0;
+    for _ in 0..12 {
+        let r = c.get(format!("http://{addr}/api/atlas/v1/alerts")).send().await.unwrap();
+        match r.status().as_u16() {
+            200 => ok += 1,
+            429 => limited += 1,
+            other => panic!("unexpected status {other}"),
+        }
+    }
+    assert_eq!(ok, 5, "the first 5 requests/min are allowed");
+    assert_eq!(limited, 7, "the rest are rate-limited (429)");
+}

@@ -178,6 +178,11 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
     // Start the async job engine (write path) over the same pool + k8s driver.
     let jobs = atlas_jobs::JobEngine::start(pool.clone(), k8s.clone());
 
+    // Rate limiter (day-2 governance): per-actor requests/min from ATLAS_RATE_LIMIT_RPM (0 = off).
+    let rpm: u32 = std::env::var("ATLAS_RATE_LIMIT_RPM")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
     let state = AppState {
         pool,
         config: Arc::new(config),
@@ -185,6 +190,7 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
         k8s,
         jobs,
         workers: crate::state::WorkerHealth::default(),
+        rate: crate::state::RateLimiter::new(rpm),
     };
 
     if opts.initial_discovery {

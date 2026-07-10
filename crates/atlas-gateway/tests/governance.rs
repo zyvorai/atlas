@@ -1,0 +1,140 @@
+// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+//! Day-2 governance: token revocation. A minted token works until its `jti` is revoked, after which
+//! the auth middleware rejects it (401) before its TTL expires. Revocation is admin-only. Auth on.
+
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use atlas_common::config::CephDriverMode;
+use atlas_common::Config;
+use atlas_gateway::routes;
+use atlas_gateway::startup::{build_state, BuildOptions};
+use serde_json::Value;
+
+static NEXT: AtomicU64 = AtomicU64::new(0);
+
+async fn spawn_auth(secret: &str) -> String {
+    let db = format!(
+        "{}/atlas-gov-{}-{}.db",
+        std::env::temp_dir().display(),
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::SeqCst),
+    );
+    let _ = std::fs::remove_file(&db);
+    let config = Config {
+        bind_addr: "127.0.0.1:0".into(),
+        grpc_addr: "127.0.0.1:0".into(),
+        database_url: format!("sqlite://{db}?mode=rwc"),
+        ceph_driver_mode: CephDriverMode::Fake,
+        kubeconfig_path: None,
+        jwt_secret: secret.into(),
+        auth_required: true,
+        monitor_interval_secs: 0,
+        ceph_prometheus_url: None,
+        alert_webhook_url: None,
+        backup_keep: 0,
+        backup_max_age_secs: 0,
+        rgw_public_endpoint: None,
+        snapshot_tick_secs: 0,
+        databridge_reconcile_secs: 0,
+        https_addr: None,
+        tls_cert_path: None,
+        tls_key_path: None,
+        tls_self_signed: false,
+        nfs_enable: false,
+        nfs_server: None,
+        nfs_exports: Vec::new(),
+        zfs_enable: false,
+        zfs_host: None,
+        zfs_pools: Vec::new(),
+    };
+    let state = build_state(
+        config,
+        BuildOptions {
+            enable_k8s: false,
+            initial_discovery: false,
+            enable_monitor: false,
+        },
+    )
+    .await
+    .unwrap();
+    let app = routes::router(state);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    format!("http://{addr}")
+}
+
+#[tokio::test]
+async fn revoked_token_is_rejected() {
+    let secret = "gov-test-secret-key-at-least-32-bytes!!";
+    let base = format!("{}/api/atlas/v1", spawn_auth(secret).await);
+    let c = reqwest::Client::new();
+    let (admin, _, _) = atlas_gateway::auth::mint_token(secret, "boot", "admin", 3600).unwrap();
+
+    // Admin issues two operator tokens; the response carries the jti used for revocation.
+    let issue = |c: &reqwest::Client, admin: &str| {
+        let base = base.clone();
+        let admin = admin.to_string();
+        let c = c.clone();
+        async move {
+            c.post(format!("{base}/auth/tokens"))
+                .bearer_auth(&admin)
+                .json(&serde_json::json!({ "subject": "svc", "role": "operator", "ttl_secs": 600 }))
+                .send()
+                .await
+                .unwrap()
+                .json::<Value>()
+                .await
+                .unwrap()
+        }
+    };
+    let t1 = issue(&c, &admin).await;
+    let t2 = issue(&c, &admin).await;
+    let (op1, jti1) = (t1["token"].as_str().unwrap(), t1["jti"].as_str().unwrap());
+    let op2 = t2["token"].as_str().unwrap();
+
+    // The token works before revocation.
+    let ok = c.get(format!("{base}/alerts")).bearer_auth(op1).send().await.unwrap();
+    assert_eq!(ok.status(), 200);
+
+    // A non-admin cannot revoke.
+    let denied = c
+        .post(format!("{base}/auth/tokens/{jti1}/revoke"))
+        .bearer_auth(op2)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), 403, "operator must not revoke tokens");
+
+    // Admin revokes token 1.
+    let rev = c
+        .post(format!("{base}/auth/tokens/{jti1}/revoke"))
+        .bearer_auth(&admin)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(rev.status(), 200);
+
+    // Token 1 is now rejected (401) even though it hasn't expired; token 2 still works.
+    let after = c.get(format!("{base}/alerts")).bearer_auth(op1).send().await.unwrap();
+    assert_eq!(after.status(), 401, "revoked token must be rejected");
+    let still = c.get(format!("{base}/alerts")).bearer_auth(op2).send().await.unwrap();
+    assert_eq!(still.status(), 200, "an unrevoked token keeps working");
+
+    // The deny-list lists the revoked jti.
+    let revoked: Value = c
+        .get(format!("{base}/auth/tokens/revoked"))
+        .bearer_auth(&admin)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(
+        revoked.as_array().unwrap().iter().any(|r| r["jti"] == jti1),
+        "revoked jti should be listed"
+    );
+}

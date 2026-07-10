@@ -16,7 +16,8 @@ use serde_json::json;
 
 use crate::state::AppState;
 
-/// JWT claims. `sub` is the actor id used in audit logs; `role` gates future write actions.
+/// JWT claims. `sub` is the actor id used in audit logs; `role` gates write actions; `jti` is the
+/// token id used for revocation (empty on legacy tokens, which are simply not revocable).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: String,
@@ -24,6 +25,8 @@ pub struct Claims {
     pub role: String,
     #[serde(default)]
     pub exp: usize,
+    #[serde(default)]
+    pub jti: String,
 }
 
 /// The authenticated actor, injected as a request extension.
@@ -63,23 +66,26 @@ pub fn role_level(role: &str) -> u8 {
 }
 
 /// Mint a signed HS256 service-account token for `subject` with `role`, expiring in `ttl_secs`.
-/// Returns `(token, exp_unix_secs)`. Used by the token-issuance endpoint so products (Veyron,
-/// Hyper2KVM, …) get least-privilege credentials without the shared secret ever leaving Atlas.
+/// Returns `(token, exp_unix_secs, jti)`. The `jti` identifies the token for later revocation. Used
+/// by the token-issuance endpoint so products (Veyron, Hyper2KVM, …) get least-privilege credentials
+/// without the shared secret ever leaving Atlas.
 pub fn mint_token(
     secret: &str,
     subject: &str,
     role: &str,
     ttl_secs: u64,
-) -> atlas_common::AppResult<(String, usize)> {
+) -> atlas_common::AppResult<(String, usize, String)> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| atlas_common::AppError::Internal(e.to_string()))?
         .as_secs();
     let exp = (now + ttl_secs) as usize;
+    let jti = atlas_common::ids::token_jti();
     let claims = Claims {
         sub: subject.to_string(),
         role: role.to_string(),
         exp,
+        jti: jti.clone(),
     };
     let token = encode(
         &Header::default(),
@@ -87,7 +93,7 @@ pub fn mint_token(
         &EncodingKey::from_secret(secret.as_bytes()),
     )
     .map_err(|e| atlas_common::AppError::Internal(format!("mint token: {e}")))?;
-    Ok((token, exp))
+    Ok((token, exp, jti))
 }
 
 /// Enforce a minimum role. No-op when auth is disabled (dev), so open-dev keeps working.
@@ -106,43 +112,62 @@ pub async fn auth_middleware(
     mut req: Request<Body>,
     next: Next,
 ) -> Response {
-    if !state.config.auth_required {
-        req.extensions_mut().insert(Actor::anonymous());
-        return next.run(req).await;
-    }
-
-    let token = req
-        .headers()
-        .get(http::header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok())
-        .and_then(|s| s.strip_prefix("Bearer "));
-
-    let Some(token) = token else {
-        return unauthorized("missing bearer token");
+    // Resolve the actor: anonymous when auth is disabled, else a valid non-revoked Bearer token.
+    let actor = if !state.config.auth_required {
+        Actor::anonymous()
+    } else {
+        let token = req
+            .headers()
+            .get(http::header::AUTHORIZATION)
+            .and_then(|h| h.to_str().ok())
+            .and_then(|s| s.strip_prefix("Bearer "));
+        let Some(token) = token else {
+            return unauthorized("missing bearer token");
+        };
+        let mut validation = Validation::new(Algorithm::HS256);
+        validation.validate_exp = true;
+        match decode::<Claims>(
+            token,
+            &DecodingKey::from_secret(state.config.jwt_secret.as_bytes()),
+            &validation,
+        ) {
+            Ok(data) => {
+                // Deny-list check: a revoked token is rejected even before it expires. Fail open on a
+                // DB error (readiness already gates on the DB) so a transient blip can't lock everyone out.
+                if !data.claims.jti.is_empty() {
+                    match atlas_inventory::tokens::is_revoked(&state.pool, &data.claims.jti).await {
+                        Ok(true) => return unauthorized("token has been revoked"),
+                        Ok(false) => {}
+                        Err(e) => tracing::warn!("token revocation check failed: {e}"),
+                    }
+                }
+                Actor { id: data.claims.sub, role: data.claims.role }
+            }
+            Err(e) => return unauthorized(&format!("invalid token: {e}")),
+        }
     };
 
-    let mut validation = Validation::new(Algorithm::HS256);
-    validation.validate_exp = true;
-    match decode::<Claims>(
-        token,
-        &DecodingKey::from_secret(state.config.jwt_secret.as_bytes()),
-        &validation,
-    ) {
-        Ok(data) => {
-            req.extensions_mut().insert(Actor {
-                id: data.claims.sub,
-                role: data.claims.role,
-            });
-            next.run(req).await
-        }
-        Err(e) => unauthorized(&format!("invalid token: {e}")),
+    // Rate limit per actor (day-2 governance; disabled unless ATLAS_RATE_LIMIT_RPM > 0).
+    if !state.rate.allow(&actor.id) {
+        return too_many_requests(&actor.id);
     }
+
+    req.extensions_mut().insert(actor);
+    next.run(req).await
 }
 
 fn unauthorized(msg: &str) -> Response {
     (
         StatusCode::UNAUTHORIZED,
         Json(json!({ "error": { "code": "AUTH_ERROR", "message": msg } })),
+    )
+        .into_response()
+}
+
+fn too_many_requests(actor: &str) -> Response {
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        Json(json!({ "error": { "code": "RATE_LIMITED", "message": format!("rate limit exceeded for '{actor}'") } })),
     )
         .into_response()
 }
