@@ -9,11 +9,15 @@ RUN npm run build
 
 # ---- builder ----
 FROM rust:1.88-bookworm AS builder
-RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler && rm -rf /var/lib/apt/lists/*
+# protoc for the gRPC crates; cmake for the vendored librdkafka (kafka-lag feature).
+RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler cmake && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 COPY . .
 COPY --from=ui /ui/dist crates/atlas-gateway/ui/dist
-RUN cargo build --release -p atlas-gateway -p atlas-cli
+# Build the real MongoDB (pure Rust) + SQL Server (tiberius) connectors and precise CDC lag in.
+# Oracle stays off — it links the Oracle Instant Client, which isn't in this image.
+RUN cargo build --release -p atlas-gateway -p atlas-cli \
+    --features atlas-databridge/mongodb,atlas-databridge/sqlserver,atlas-databridge/kafka-lag
 
 # ---- runtime ----
 FROM debian:bookworm-slim AS runtime
