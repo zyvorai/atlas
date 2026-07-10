@@ -17,6 +17,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      # The gRPC crates compile .proto at build time, so protoc must be present (mirrors the
+      # deployment Dockerfile). Without it clippy/test/build fail before any Rust runs.
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
       - uses: Swatinem/rust-cache@v2
       # Non-blocking: the codebase uses an intentionally dense one-line style that stable rustfmt
       # would rewrite. Surface formatting drift as a warning without failing the build; clippy, test,
