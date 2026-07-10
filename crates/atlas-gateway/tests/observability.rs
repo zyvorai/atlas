@@ -1,0 +1,282 @@
+// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+//! Fake-driver coverage for the observability / read surface and cross-cutting guards that the
+//! existing suites don't touch: Ceph-native passthrough, Prometheus + JSON metrics, the unified
+//! events/audit feeds, `/readyz`, per-tenant quota admission (409), and NFS/ZFS drivers flowing
+//! through discovery → inventory → REST. No Ceph, no Kubernetes.
+
+use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use atlas_common::config::CephDriverMode;
+use atlas_common::Config;
+use atlas_gateway::routes;
+use atlas_gateway::startup::{build_state, BuildOptions};
+use serde_json::Value;
+
+static NEXT: AtomicU64 = AtomicU64::new(0);
+
+/// Knobs for the handful of variations the tests need.
+#[derive(Default, Clone, Copy)]
+struct Opts {
+    auth_required: bool,
+    initial_discovery: bool,
+    extra_backends: bool, // enable the NFS + ZFS drivers
+}
+
+fn base_config(db: &str, o: Opts) -> Config {
+    Config {
+        bind_addr: "127.0.0.1:0".into(),
+        grpc_addr: "127.0.0.1:0".into(),
+        database_url: format!("sqlite://{db}?mode=rwc"),
+        ceph_driver_mode: CephDriverMode::Fake,
+        kubeconfig_path: None,
+        jwt_secret: "obs-test-secret-key-at-least-32-bytes!".into(),
+        auth_required: o.auth_required,
+        monitor_interval_secs: 0,
+        ceph_prometheus_url: None,
+        alert_webhook_url: None,
+        backup_keep: 0,
+        backup_max_age_secs: 0,
+        rgw_public_endpoint: None,
+        snapshot_tick_secs: 0,
+        databridge_reconcile_secs: 0,
+        https_addr: None,
+        tls_cert_path: None,
+        tls_key_path: None,
+        tls_self_signed: false,
+        nfs_enable: o.extra_backends,
+        nfs_server: None,
+        nfs_exports: Vec::new(),
+        zfs_enable: o.extra_backends,
+        zfs_host: None,
+        zfs_pools: Vec::new(),
+    }
+}
+
+async fn spawn_with(o: Opts) -> (SocketAddr, sqlx::SqlitePool) {
+    let db = format!(
+        "{}/atlas-obs-{}-{}.db",
+        std::env::temp_dir().display(),
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::SeqCst),
+    );
+    let _ = std::fs::remove_file(&db);
+    let state = build_state(
+        base_config(&db, o),
+        BuildOptions {
+            enable_k8s: false,
+            initial_discovery: o.initial_discovery,
+            enable_monitor: false,
+        },
+    )
+    .await
+    .expect("build_state");
+    let pool = state.pool.clone();
+    let app = routes::router(state);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    (addr, pool)
+}
+
+async fn spawn() -> SocketAddr {
+    spawn_with(Opts { initial_discovery: true, ..Default::default() })
+        .await
+        .0
+}
+
+fn client() -> reqwest::Client {
+    reqwest::Client::new()
+}
+
+/// The four Ceph-native passthrough endpoints return the FakeCephDriver's canned JSON (200 + body).
+#[tokio::test]
+async fn ceph_native_passthrough_returns_json() {
+    let base = format!("http://{}/api/atlas/v1", spawn().await);
+    let c = client();
+    for path in ["ceph/status", "ceph/osd-tree", "ceph/df", "ceph/osd-df"] {
+        let r = c.get(format!("{base}/{path}")).send().await.unwrap();
+        assert_eq!(r.status(), 200, "{path} should be 200");
+        let v: Value = r.json().await.unwrap();
+        assert!(v.is_object() || v.is_array(), "{path} should return JSON");
+    }
+    // ceph status is the HEALTH_WARN fixture (1 OSD down) — sanity-check a known field is present.
+    let status: Value = c
+        .get(format!("{base}/ceph/status"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(status.get("health").is_some(), "ceph status should carry health");
+}
+
+/// `GET /metrics` (unauthenticated Prometheus text) exposes the atlas_* gauges.
+#[tokio::test]
+async fn prometheus_text_metrics_exposed() {
+    let addr = spawn().await;
+    let body = client()
+        .get(format!("http://{addr}/metrics"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    for needle in ["atlas_build_info", "atlas_pools", "atlas_volumes", "atlas_alerts_open"] {
+        assert!(body.contains(needle), "/metrics should expose {needle}");
+    }
+}
+
+/// The JSON metrics endpoints all answer 200 (ceph/history are empty-but-OK without a scrape/sampler).
+#[tokio::test]
+async fn json_metrics_endpoints_ok() {
+    let base = format!("http://{}/api/atlas/v1", spawn().await);
+    let c = client();
+    for path in ["metrics/summary", "metrics/ceph", "metrics/history?minutes=60", "metrics/forecast"] {
+        let r = c.get(format!("{base}/{path}")).send().await.unwrap();
+        assert_eq!(r.status(), 200, "{path} should be 200");
+    }
+    // summary reflects the fake cluster (1 cluster, 3 pools from discovery).
+    let summary: Value = c
+        .get(format!("{base}/metrics/summary"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(summary["clusters"], 1);
+    assert_eq!(summary["pools"], 3);
+}
+
+/// `/readyz` is a deep check reporting the driver mode; `/health`+`/version` are the shallow ones.
+#[tokio::test]
+async fn readyz_reports_driver_mode() {
+    let addr = spawn().await;
+    let c = client();
+    let r = c.get(format!("http://{addr}/readyz")).send().await.unwrap();
+    assert_eq!(r.status(), 200);
+    let v: Value = r.json().await.unwrap();
+    assert_eq!(v["components"]["ceph_driver"]["mode"], "fake");
+
+    let ver: Value = c
+        .get(format!("http://{addr}/version"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(ver["name"], "atlas-gateway");
+}
+
+/// The unified `/events` and `/audit` feeds are operator-gated: viewer → 403, operator → 200,
+/// no token → 401.
+#[tokio::test]
+async fn events_and_audit_are_operator_gated() {
+    let secret = "obs-test-secret-key-at-least-32-bytes!";
+    let (addr, _) = spawn_with(Opts { auth_required: true, ..Default::default() }).await;
+    let base = format!("http://{addr}/api/atlas/v1");
+    let c = client();
+    let (op, _) = atlas_gateway::auth::mint_token(secret, "svc", "operator", 600).unwrap();
+    let (vw, _) = atlas_gateway::auth::mint_token(secret, "svc", "viewer", 600).unwrap();
+
+    for feed in ["events", "audit"] {
+        let anon = c.get(format!("{base}/{feed}")).send().await.unwrap();
+        assert_eq!(anon.status(), 401, "{feed} without a token → 401");
+
+        let viewer = c.get(format!("{base}/{feed}")).bearer_auth(&vw).send().await.unwrap();
+        assert_eq!(viewer.status(), 403, "{feed} as viewer → 403");
+
+        let operator = c.get(format!("{base}/{feed}")).bearer_auth(&op).send().await.unwrap();
+        assert_eq!(operator.status(), 200, "{feed} as operator → 200");
+    }
+}
+
+/// Per-tenant quota admission rejects an over-limit volume with 409 before any job is enqueued —
+/// pure gateway + SQLite logic, no cluster needed.
+#[tokio::test]
+async fn quota_admission_rejects_oversized_volume() {
+    let base = format!("http://{}/api/atlas/v1", spawn().await);
+    let c = client();
+    let gib = 1_073_741_824i64;
+
+    // Cap tenant "t" at 1 GiB.
+    let q = c
+        .put(format!("{base}/tenants/t/quota"))
+        .json(&serde_json::json!({ "max_bytes": gib, "max_volumes": 100 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(q.status(), 200, "setting quota should succeed");
+
+    // A 2 GiB volume for tenant "t" exceeds the byte quota → 409, no job created.
+    let over = c
+        .post(format!("{base}/volumes"))
+        .json(&serde_json::json!({
+            "tenant_id": "t", "name": "too-big", "size_bytes": 2 * gib,
+            "policy": "database", "kubernetes": { "namespace": "default" }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(over.status(), 409, "over-quota volume must be rejected");
+
+    // A within-quota volume is admitted (202 — the job then fails without k8s, which is fine here).
+    let ok = c
+        .post(format!("{base}/volumes"))
+        .json(&serde_json::json!({
+            "tenant_id": "t", "name": "small", "size_bytes": gib / 2,
+            "policy": "database", "kubernetes": { "namespace": "default" }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), 202, "within-quota volume should be accepted");
+}
+
+/// The NFS + ZFS pluggable drivers flow through discovery → inventory → REST: their pools
+/// (`nfs_export` / `zpool`) and filesystem volumes appear on `/pools` and `/volumes`.
+#[tokio::test]
+async fn nfs_and_zfs_backends_surface_over_http() {
+    let (addr, _) = spawn_with(Opts {
+        initial_discovery: true,
+        extra_backends: true,
+        ..Default::default()
+    })
+    .await;
+    let base = format!("http://{addr}/api/atlas/v1");
+    let c = client();
+
+    let pools: Value = c.get(format!("{base}/pools")).send().await.unwrap().json().await.unwrap();
+    let kinds: Vec<&str> = pools
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|p| p["kind"].as_str())
+        .collect();
+    assert!(kinds.contains(&"nfs_export"), "NFS export pool should be discovered: {kinds:?}");
+    assert!(kinds.contains(&"zpool"), "ZFS zpool should be discovered: {kinds:?}");
+
+    // Each driver contributes at least one filesystem volume — filter the inventory by backend.
+    for backend in ["bkd_nfs_lab", "bkd_zfs_lab"] {
+        let vols: Value = c
+            .get(format!("{base}/volumes?backend={backend}"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let list = vols.as_array().unwrap();
+        assert!(!list.is_empty(), "{backend} should contribute volumes");
+        assert!(
+            list.iter().any(|v| v["kind"] == "filesystem"),
+            "{backend} volumes should be filesystem shares: {list:?}"
+        );
+    }
+}

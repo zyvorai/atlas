@@ -156,3 +156,39 @@ impl SourceConnector for SqlServerSourceConnector {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::connector::SourceConnector;
+
+    /// Integration test against a real SQL Server. Set `DATABRIDGE_TEST_MSSQL` to
+    /// `host,port,database,user,password` (see `scripts/test-connectors.sh`); skipped when unset.
+    /// Expects a `customers` table; `cdc_capable` reflects whether CDC is enabled on the database.
+    #[tokio::test]
+    async fn discovers_real_sqlserver() {
+        let Ok(spec) = std::env::var("DATABRIDGE_TEST_MSSQL") else {
+            eprintln!("skipping: set DATABRIDGE_TEST_MSSQL to run");
+            return;
+        };
+        let p: Vec<&str> = spec.split(',').collect();
+        assert_eq!(p.len(), 5, "DATABRIDGE_TEST_MSSQL must be host,port,database,user,password");
+        let conn = SqlServerSourceConnector::new(
+            "src_test",
+            p[0],
+            p[1].parse().expect("port"),
+            p[2],
+            p[3],
+            p[4],
+            "require",
+        );
+        let schema = conn.discover().await.expect("discover");
+        assert_eq!(schema.engine, "sqlserver");
+        let customers = schema
+            .tables
+            .iter()
+            .find(|t| t.name == "customers")
+            .expect("customers table");
+        assert!(customers.has_primary_key, "customers should have a PK");
+    }
+}

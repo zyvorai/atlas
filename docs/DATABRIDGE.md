@@ -120,6 +120,28 @@ behind features so a missing lib never breaks the default build:
 
 Build the gateway with, e.g., `cargo build -p atlas-gateway --features atlas-databridge/sqlserver,atlas-databridge/oracle,atlas-databridge/mongodb,atlas-databridge/kafka-lag`.
 
+## Testing
+- **Fake pipeline (no infra)**: `cargo test --workspace` covers the unit tests plus the gateway
+  integration suites — `tests/databridge_pipeline.rs` (Postgres state machine + cutover guard) and
+  `tests/databridge_engines.rs` (all six engines discover→validate + correct edge routing:
+  cnpg/percona/psmdb).
+- **Real source connectors (containers)**: each engine has an env-gated `#[tokio::test]` that runs only
+  when its `DATABRIDGE_TEST_*` var is set (skips otherwise), mirroring `discovers_real_postgres`:
+
+  | Engine | Var (value: `host,port,database,user,password`) | Feature |
+  |---|---|---|
+  | Postgres | `DATABRIDGE_TEST_PG` (libpq conn string) | *(default)* |
+  | MySQL | `DATABRIDGE_TEST_MYSQL` | *(default)* |
+  | MariaDB | `DATABRIDGE_TEST_MARIADB` | *(default)* |
+  | MongoDB | `DATABRIDGE_TEST_MONGO` | `mongodb` |
+  | SQL Server | `DATABRIDGE_TEST_MSSQL` | `sqlserver` |
+
+  **`scripts/test-connectors.sh`** automates this: it spins each engine as an ephemeral podman/docker
+  container, seeds a `customers`/`orders` schema, exports the var, runs the gated test, and tears the
+  container down (`scripts/test-connectors.sh [pg mysql mariadb mongo mssql]`). Oracle is compile-only
+  (needs the OCI client). **`scripts/test-all.sh`** runs the whole gate (clippy + workspace tests +
+  feature compiles + the container connector tests).
+
 ## Data model
 `migration_sources`, `migration_plans`, `edge_db_clusters`, `cdc_streams`, `validation_runs`,
 `cutovers` (SQLite; migration `0011_databridge.sql`). Plan state machine:

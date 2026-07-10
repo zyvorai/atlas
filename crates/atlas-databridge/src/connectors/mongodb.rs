@@ -52,6 +52,10 @@ impl MongoSourceConnector {
 
     fn uri(&self) -> String {
         let tls = if self.tls { "&tls=true" } else { "" };
+        // Omit the credentials block entirely for an unauthenticated server (empty user).
+        if self.user.is_empty() {
+            return format!("mongodb://{}:{}/?{}", self.host, self.port, tls.trim_start_matches('&'));
+        }
         format!(
             "mongodb://{}:{}@{}:{}/?authSource=admin{tls}",
             self.user, self.password, self.host, self.port
@@ -149,5 +153,34 @@ mod tests {
         assert!(uri.contains("tls=true"));
         let c2 = MongoSourceConnector::new("s1", "h", 27017, "appdb", "u", "p", "disable");
         assert!(!c2.uri().contains("tls=true"));
+    }
+
+    /// Integration test against a real MongoDB replica set. Set `DATABRIDGE_TEST_MONGO` to
+    /// `host,port,database,user,password` (see `scripts/test-connectors.sh`); skipped when unset.
+    /// Expects a `customers` collection and a replica set (`cdc_capable`).
+    #[tokio::test]
+    async fn discovers_real_mongodb() {
+        let Ok(spec) = std::env::var("DATABRIDGE_TEST_MONGO") else {
+            eprintln!("skipping: set DATABRIDGE_TEST_MONGO to run");
+            return;
+        };
+        let p: Vec<&str> = spec.split(',').collect();
+        assert_eq!(p.len(), 5, "DATABRIDGE_TEST_MONGO must be host,port,database,user,password");
+        let conn = MongoSourceConnector::new(
+            "src_test",
+            p[0],
+            p[1].parse().expect("port"),
+            p[2],
+            p[3],
+            p[4],
+            "disable",
+        );
+        let schema = conn.discover().await.expect("discover");
+        assert_eq!(schema.engine, "mongodb");
+        assert!(
+            schema.tables.iter().any(|t| t.name == "customers"),
+            "customers collection should be discovered"
+        );
+        assert!(schema.cdc_capable, "a replica set should be CDC-capable");
     }
 }

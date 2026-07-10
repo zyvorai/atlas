@@ -191,4 +191,46 @@ mod tests {
         assert_eq!(c.engine, "mariadb");
         assert_eq!(c.port, 3306);
     }
+
+    /// Integration tests against a real MySQL/MariaDB. Set `DATABRIDGE_TEST_MYSQL` /
+    /// `DATABRIDGE_TEST_MARIADB` to `host,port,database,user,password` (see
+    /// `scripts/test-connectors.sh`); skipped when unset. Expects a `customers` table with a PK and
+    /// the binlog on in ROW format (`cdc_capable`).
+    async fn run_real_discovery(env: &str, engine: &'static str) {
+        let Ok(spec) = std::env::var(env) else {
+            eprintln!("skipping: set {env} to run");
+            return;
+        };
+        let p: Vec<&str> = spec.split(',').collect();
+        assert_eq!(p.len(), 5, "{env} must be host,port,database,user,password");
+        let conn = MysqlSourceConnector::new(
+            "src_test",
+            engine,
+            p[0],
+            p[1].parse().expect("port"),
+            p[2],
+            p[3],
+            p[4],
+            "disable",
+        );
+        let schema = conn.discover().await.expect("discover");
+        assert_eq!(schema.engine, engine);
+        let customers = schema
+            .tables
+            .iter()
+            .find(|t| t.name == "customers")
+            .expect("customers table");
+        assert!(customers.has_primary_key, "customers should have a PK");
+        assert!(schema.cdc_capable, "binlog should be ROW-format enabled for CDC");
+    }
+
+    #[tokio::test]
+    async fn discovers_real_mysql() {
+        run_real_discovery("DATABRIDGE_TEST_MYSQL", "mysql").await;
+    }
+
+    #[tokio::test]
+    async fn discovers_real_mariadb() {
+        run_real_discovery("DATABRIDGE_TEST_MARIADB", "mariadb").await;
+    }
 }
