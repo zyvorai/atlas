@@ -66,20 +66,17 @@ async fn interrupted_running_job_is_recovered_on_restart() {
     );
     let _ = std::fs::remove_file(&db);
 
-    // First boot: a job is mid-flight (running) when the process "crashes".
+    // First boot: a job is mid-flight (running) when the process "crashes". Seed it directly in the
+    // `running` state (not via insert_job's `pending`→`running`, whose brief `pending` window the
+    // boot-recovery could otherwise grab and re-run — we want to observe the fail-safe path only).
     let s1 = boot(&db).await;
-    atlas_inventory::jobs::insert_job(
-        &s1.pool,
-        "j_stuck",
-        "t",
-        "volume.create",
-        "tester",
-        &serde_json::json!({}),
-        None,
+    sqlx::query(
+        "INSERT INTO storage_jobs (id, tenant_id, job_type, state, requested_by, request)
+         VALUES ('j_stuck', 't', 'volume.create', 'running', 'tester', '{}')",
     )
+    .execute(&s1.pool)
     .await
     .unwrap();
-    atlas_inventory::jobs::mark_running(&s1.pool, "j_stuck").await.unwrap();
     drop(s1); // simulate the crash / rollout
 
     // Second boot on the same DB: JobEngine::start runs recovery.
