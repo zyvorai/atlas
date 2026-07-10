@@ -257,8 +257,13 @@ stream reports caught-up (0).
   the Kafka/Debezium/edge-operator stack is not installed on the shared k3s lab, so these remain
   wired + unit-tested but not yet live-verified. cross-engine per-table row-count
   validation for heterogeneous plans is advisory (parity confirmed by snapshot/stream convergence
-  rather than a source-vs-edge count Job). Real MongoDB CDC needs a Connect image bundling the Debezium
-  MongoDB connector + the MongoDB Kafka sink.
+  rather than a source-vs-edge count Job).
+- **CDC Connect image — now multi-engine** (`deploy/databridge/connect/Dockerfile`, build-validated): one
+  Strimzi-based image bundles the Debezium PostgreSQL + MySQL/MariaDB + MongoDB source connectors, the
+  Aiven JDBC sink (with Postgres/MySQL/SQL Server/Oracle drivers), and the MongoDB Kafka sink — so every
+  engine's CDC can run from a single `ATLAS_DATABRIDGE_CONNECT_IMAGE`. Live CDC for the non-Postgres
+  engines still needs the Kafka/Debezium *stack running* (Strimzi operator + a Kafka cluster), which is
+  not installed on the shared lab cluster — the image is the buildable prerequisite, not the running stack.
 
 ### Full-load secret assumptions
 The real full-load Job runs in `zyvor-databridge`, so the **source Secret must exist in that
