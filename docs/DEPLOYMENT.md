@@ -140,6 +140,31 @@ curl -s http://<host>:30511/api/atlas/v1/volumes | grep -o '"name":"[^"]*"'   # 
 ```
 For multi-replica HA, switch `ATLAS_DATABASE_URL` to Postgres (the `sqlx` layer abstracts the driver).
 
+## Day-2 durability & health
+
+The control plane survives restarts and rollouts cleanly:
+
+- **Job recovery on boot** — the job engine re-scans `storage_jobs`: a job left `running` when the
+  process died is failed-safe (`"interrupted by control-plane restart"`, never stuck), and `queued`
+  jobs are re-enqueued. Opt-in bounded retry-with-backoff per job (`max_retries`).
+- **Graceful shutdown** — on `SIGTERM` (k8s rollout / `docker stop`) the REST + gRPC servers drain
+  in-flight requests before exiting. The Deployment sets `terminationGracePeriodSeconds: 30`.
+- **Liveness vs readiness** — `GET /livez` is process-alive (k8s `livenessProbe` → restart);
+  `GET /readyz` deep-checks the DB **and probes the backend driver** (no longer a hardcoded `ok`) and
+  reports worker heartbeats (k8s `readinessProbe` → depool without killing). Both are wired in
+  `deploy/k8s/atlas-gateway.yaml`.
+- **Self-state backup** — Atlas can back up its *own* SQLite state (inventory, jobs, audit, quotas,
+  DataBridge plans) to S3/RGW via `VACUUM INTO` snapshots. Disabled unless configured:
+
+  | Env | Default | Meaning |
+  |---|---|---|
+  | `ATLAS_STATE_BACKUP_SECS` | `0` (off) | snapshot interval; `0` disables |
+  | `ATLAS_STATE_BACKUP_ENDPOINT` / `_BUCKET` | — | S3/RGW endpoint + bucket (required to enable) |
+  | `ATLAS_STATE_BACKUP_ACCESS_KEY` / `_SECRET_KEY` | — | S3 credentials |
+  | `ATLAS_STATE_BACKUP_REGION` | `us-east-1` | S3 region |
+  | `ATLAS_STATE_BACKUP_PREFIX` | `atlas-state` | key prefix |
+  | `ATLAS_STATE_BACKUP_KEEP` | `24` | snapshots retained (older pruned) |
+
 ## Image name note
 
 `podman save` preserves the `localhost/` prefix, so k3s imports the image as

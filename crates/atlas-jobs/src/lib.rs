@@ -300,11 +300,24 @@ pub struct JobEngine {
 }
 
 impl JobEngine {
-    /// Start the engine: spawn the worker task and return a cloneable handle.
+    /// Start the engine: spawn the worker task and return a cloneable handle. On start it recovers
+    /// work that a previous restart lost — the job channel is in-memory, so any job left `queued`/
+    /// `pending` is re-enqueued and any job stuck `running` (interrupted mid-flight) is failed-safe.
     pub fn start(pool: SqlitePool, k8s: Option<Arc<K8sDriver>>) -> Self {
         let (tx, rx) = mpsc::unbounded_channel::<String>();
         let worker_pool = pool.clone();
-        tokio::spawn(async move { run_worker(worker_pool, k8s, rx).await });
+        let worker_tx = tx.clone();
+        tokio::spawn(async move { run_worker(worker_pool, k8s, rx, worker_tx).await });
+
+        // Recover across restart (channel lost its contents); the worker above is already draining.
+        let recover_pool = pool.clone();
+        let recover_tx = tx.clone();
+        tokio::spawn(async move {
+            if let Err(e) = recover(&recover_pool, &recover_tx).await {
+                tracing::warn!("job recovery failed: {e:#}");
+            }
+        });
+
         Self { pool, tx }
     }
 
@@ -346,18 +359,62 @@ impl JobEngine {
     }
 }
 
+/// Recover jobs the in-memory channel lost across a restart: fail-safe any `running` job (it was
+/// interrupted mid-flight and may have applied partial side effects — discovery/reconcilers re-derive
+/// real state) and re-enqueue anything still `queued`/`pending`.
+pub async fn recover(pool: &SqlitePool, tx: &mpsc::UnboundedSender<String>) -> Result<()> {
+    let interrupted =
+        atlas_inventory::jobs::fail_running(pool, "interrupted by control-plane restart").await?;
+    if interrupted > 0 {
+        tracing::warn!("job recovery: reset {interrupted} interrupted running job(s) to failed");
+    }
+    let pending = atlas_inventory::jobs::ids_by_states(pool, &["queued", "pending"]).await?;
+    let n = pending.len();
+    for id in pending {
+        let _ = tx.send(id);
+    }
+    if n > 0 {
+        tracing::info!("job recovery: re-enqueued {n} pending job(s)");
+    }
+    Ok(())
+}
+
 /// The worker loop: one job at a time (storage ops are cheap to serialize and this keeps ordering
-/// simple). A failing job is marked `failed`; it never takes down the worker.
+/// simple). A failing job with retry budget left is re-queued with exponential backoff; otherwise it
+/// is marked `failed`. It never takes down the worker.
 async fn run_worker(
     pool: SqlitePool,
     k8s: Option<Arc<K8sDriver>>,
     mut rx: mpsc::UnboundedReceiver<String>,
+    tx: mpsc::UnboundedSender<String>,
 ) {
     tracing::info!("atlas-jobs worker started");
     while let Some(job_id) = rx.recv().await {
         if let Err(e) = execute_job(&pool, &k8s, &job_id).await {
-            tracing::warn!(job = %job_id, "job failed: {e:#}");
-            let _ = atlas_inventory::jobs::mark_failed(&pool, &job_id, &format!("{e:#}")).await;
+            let err = format!("{e:#}");
+            match atlas_inventory::jobs::retry_budget(&pool, &job_id).await {
+                Ok((count, max)) if count < max => {
+                    // Exponential backoff capped at 64s: 2^(attempt), attempt in [0, 6].
+                    let secs = 1u64 << (count.clamp(0, 6) as u32);
+                    let _ = atlas_inventory::jobs::bump_retry(
+                        &pool,
+                        &job_id,
+                        &format!("+{secs} seconds"),
+                    )
+                    .await;
+                    tracing::warn!(job = %job_id, "job failed, retry {}/{max} in {secs}s: {err}", count + 1);
+                    let tx = tx.clone();
+                    let id = job_id.clone();
+                    tokio::spawn(async move {
+                        tokio::time::sleep(Duration::from_secs(secs)).await;
+                        let _ = tx.send(id);
+                    });
+                }
+                _ => {
+                    tracing::warn!(job = %job_id, "job failed: {err}");
+                    let _ = atlas_inventory::jobs::mark_failed(&pool, &job_id, &err).await;
+                }
+            }
         }
     }
     tracing::warn!("atlas-jobs worker channel closed");
@@ -1667,5 +1724,69 @@ async fn prune_scheduled_backups(pool: &SqlitePool, jobs: &JobEngine, volume_id:
         let _ = jobs
             .enqueue(&job_id, &old.tenant_id, "scheduler", spec, None)
             .await;
+    }
+}
+
+#[cfg(test)]
+mod durability_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+
+    async fn migrated_pool() -> SqlitePool {
+        // Temp-file (not in-memory) so the connection pool shares one schema.
+        let db = format!(
+            "{}/atlas-jobs-test-{}-{}.db",
+            std::env::temp_dir().display(),
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::SeqCst),
+        );
+        let _ = std::fs::remove_file(&db);
+        let pool = SqlitePool::connect(&format!("sqlite://{db}?mode=rwc"))
+            .await
+            .unwrap();
+        atlas_inventory::migrate(&pool).await.unwrap();
+        pool
+    }
+
+    async fn seed(pool: &SqlitePool, id: &str, state: &str) {
+        atlas_inventory::jobs::insert_job(pool, id, "t", "volume.create", "me", &serde_json::json!({}), None)
+            .await
+            .unwrap();
+        atlas_inventory::jobs::set_state(pool, id, state, 0).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn recover_fails_interrupted_running_and_requeues_pending() {
+        let pool = migrated_pool().await;
+        seed(&pool, "j_run", "running").await;
+        seed(&pool, "j_queued", "queued").await;
+
+        let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+        recover(&pool, &tx).await.unwrap();
+
+        // The interrupted running job is failed-safe.
+        let run = atlas_inventory::jobs::get_job(&pool, "j_run").await.unwrap().unwrap();
+        assert_eq!(run.state, "failed");
+        assert!(run.error.unwrap_or_default().contains("interrupted"));
+
+        // The queued job is re-enqueued onto the channel.
+        assert_eq!(rx.try_recv().unwrap(), "j_queued");
+    }
+
+    #[tokio::test]
+    async fn retry_budget_bumps_count_and_requeues() {
+        let pool = migrated_pool().await;
+        seed(&pool, "j", "running").await;
+        atlas_inventory::jobs::set_max_retries(&pool, "j", 2).await.unwrap();
+
+        assert_eq!(atlas_inventory::jobs::retry_budget(&pool, "j").await.unwrap(), (0, 2));
+        atlas_inventory::jobs::bump_retry(&pool, "j", "+4 seconds").await.unwrap();
+
+        let (count, max) = atlas_inventory::jobs::retry_budget(&pool, "j").await.unwrap();
+        assert_eq!((count, max), (1, 2));
+        let j = atlas_inventory::jobs::get_job(&pool, "j").await.unwrap().unwrap();
+        assert_eq!(j.state, "queued", "a retried job returns to the queue");
     }
 }

@@ -89,6 +89,8 @@ spec:
         app: atlas-gateway
     spec:
       serviceAccountName: atlas-gateway
+      # Give the gateway time to drain in-flight requests on SIGTERM (graceful shutdown).
+      terminationGracePeriodSeconds: 30
       securityContext:
         # Image runs as uid/gid 10001; fsGroup makes the mounted volume writable for the SQLite file.
         runAsUser: 10001
@@ -120,9 +122,17 @@ spec:
               value: "info,atlas_gateway=debug"
           ports:
             - containerPort: 5110
+          # Liveness: process is up (restart on failure). Readiness: dependencies OK — deep-checks the
+          # DB + probes the backend driver, so a wedged gateway is depooled without being killed.
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 5110
+            initialDelaySeconds: 3
+            periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /health
+              path: /readyz
               port: 5110
             initialDelaySeconds: 3
             periodSeconds: 10

@@ -39,6 +39,7 @@ async fn main() -> anyhow::Result<()> {
     let rest_app = app.clone();
     let rest = async move {
         axum::serve(listener, rest_app)
+            .with_graceful_shutdown(shutdown_signal())
             .await
             .map_err(anyhow::Error::from)
     };
@@ -78,11 +79,38 @@ async fn main() -> anyhow::Result<()> {
         tonic::transport::Server::builder()
             .add_service(grpc::service(state))
             .add_service(reflection)
-            .serve(gaddr)
+            .serve_with_shutdown(gaddr, shutdown_signal())
             .await
             .map_err(anyhow::Error::from)
     };
 
     tokio::try_join!(rest, grpc)?;
+    info!("atlas-gateway shut down cleanly");
     Ok(())
+}
+
+/// Resolves when the process receives SIGINT (Ctrl-C) or SIGTERM (k8s rollout/`docker stop`). Both
+/// server tasks await their own copy so in-flight requests drain instead of being killed mid-flight.
+/// An interrupted background job is recovered (failed-safe + re-enqueued) on the next start.
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut s) => {
+                s.recv().await;
+            }
+            Err(_) => std::future::pending::<()>().await,
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {}
+        _ = terminate => {}
+    }
+    info!("shutdown signal received — draining in-flight requests");
 }

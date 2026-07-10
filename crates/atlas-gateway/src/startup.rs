@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use atlas_api_types::{BackendMode, BackendType, Capabilities, StorageBackend};
 use atlas_common::config::CephDriverMode;
 use atlas_common::Config;
@@ -184,6 +184,7 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
         drivers: Arc::new(registry),
         k8s,
         jobs,
+        workers: crate::state::WorkerHealth::default(),
     };
 
     if opts.initial_discovery {
@@ -223,8 +224,13 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
             state.config.snapshot_tick_secs,
         );
         // Metrics-history sampler: append a capacity/IO/job time-series row each monitor tick,
-        // pruning to a 48h window, so the Overview trend charts survive restarts + reloads.
-        spawn_metrics_sampler(state.pool.clone(), state.config.monitor_interval_secs);
+        // pruning to a 48h window, so the Overview trend charts survive restarts + reloads. It also
+        // heartbeats so /readyz can observe the periodic-worker cadence is alive.
+        spawn_metrics_sampler(
+            state.pool.clone(),
+            state.config.monitor_interval_secs,
+            state.workers.clone(),
+        );
         // DataBridge reconciler: advances migration pipelines (edge CR status, full-load/validation
         // Jobs, CDC lag) that the single-shot job engine can't hold open.
         atlas_databridge::reconcile::spawn_reconciler(
@@ -234,12 +240,107 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
         );
     }
 
+    // Self-state backup: snapshot the control-plane DB to S3/RGW (independent of the monitor block;
+    // disabled unless ATLAS_STATE_BACKUP_SECS > 0).
+    spawn_state_backup(state.pool.clone(), state.workers.clone());
+
     Ok(state)
+}
+
+/// Periodically snapshot the control-plane SQLite DB and upload it to S3/RGW so Atlas can restore its
+/// own inventory / jobs / audit / quotas / DataBridge state (it backs up tenant volumes but, until
+/// now, not itself). Disabled unless `ATLAS_STATE_BACKUP_SECS > 0` and the S3 endpoint/bucket are set.
+/// Reads its own env (kept out of `Config` so it doesn't touch every test's `Config` literal).
+fn spawn_state_backup(pool: sqlx::SqlitePool, workers: crate::state::WorkerHealth) {
+    let secs: u64 = std::env::var("ATLAS_STATE_BACKUP_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    if secs == 0 {
+        return;
+    }
+    let endpoint = std::env::var("ATLAS_STATE_BACKUP_ENDPOINT").unwrap_or_default();
+    let bucket = std::env::var("ATLAS_STATE_BACKUP_BUCKET").unwrap_or_default();
+    if endpoint.is_empty() || bucket.is_empty() {
+        tracing::warn!(
+            "ATLAS_STATE_BACKUP_SECS is set but ENDPOINT/BUCKET are not — state backup disabled"
+        );
+        return;
+    }
+    let access = std::env::var("ATLAS_STATE_BACKUP_ACCESS_KEY").unwrap_or_default();
+    let secret = std::env::var("ATLAS_STATE_BACKUP_SECRET_KEY").unwrap_or_default();
+    let region = std::env::var("ATLAS_STATE_BACKUP_REGION").unwrap_or_else(|_| "us-east-1".into());
+    let prefix = std::env::var("ATLAS_STATE_BACKUP_PREFIX").unwrap_or_else(|_| "atlas-state".into());
+    let keep: usize = std::env::var("ATLAS_STATE_BACKUP_KEEP")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(24);
+
+    tokio::spawn(async move {
+        let s3 = match atlas_driver_rgw::S3Target::new(&endpoint, &region, &bucket, &access, &secret) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("state backup disabled: invalid S3 target: {e:#}");
+                return;
+            }
+        };
+        tracing::info!(secs, bucket, prefix, keep, "state backup worker started");
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(secs));
+        loop {
+            tick.tick().await;
+            workers.beat("state_backup");
+            if let Err(e) = backup_state_once(&pool, &s3, &prefix, keep).await {
+                tracing::warn!("state backup failed: {e:#}");
+            }
+        }
+    });
+}
+
+/// One state-backup pass: `VACUUM INTO` a consistent snapshot of the live DB, upload it, prune to the
+/// newest `keep`. Object keys embed a zero-padded epoch so lexicographic order = chronological order.
+async fn backup_state_once(
+    pool: &sqlx::SqlitePool,
+    s3: &atlas_driver_rgw::S3Target,
+    prefix: &str,
+    keep: usize,
+) -> Result<()> {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let snap = std::env::temp_dir().join(format!("atlas-state-{ts}.db"));
+    // VACUUM INTO writes a transactionally-consistent copy while the DB stays in use.
+    sqlx::query(&format!("VACUUM INTO '{}'", snap.display()))
+        .execute(pool)
+        .await
+        .context("VACUUM INTO snapshot")?;
+    let bytes = tokio::fs::read(&snap).await.context("read snapshot file")?;
+    let _ = tokio::fs::remove_file(&snap).await;
+    let size = bytes.len();
+    let key = format!("{prefix}/atlas-state-{ts:020}.db");
+    s3.put_object(&key, bytes).await.context("upload snapshot")?;
+    tracing::info!("state backup: uploaded {key} ({size} bytes)");
+
+    let mut objs = s3
+        .list_objects(Some(&format!("{prefix}/")))
+        .await
+        .unwrap_or_default();
+    objs.sort_by(|a, b| a.0.cmp(&b.0));
+    if objs.len() > keep {
+        for (old, _) in &objs[..objs.len() - keep] {
+            let _ = s3.delete_object(old).await;
+        }
+    }
+    Ok(())
 }
 
 /// Periodically persist one `metrics_history` sample derived from the current summary + counters.
 /// `interval_secs == 0` disables it (mirrors the monitor/scheduler workers).
-fn spawn_metrics_sampler(pool: sqlx::SqlitePool, interval_secs: u64) {
+fn spawn_metrics_sampler(
+    pool: sqlx::SqlitePool,
+    interval_secs: u64,
+    workers: crate::state::WorkerHealth,
+) {
     if interval_secs == 0 {
         return;
     }
@@ -247,6 +348,7 @@ fn spawn_metrics_sampler(pool: sqlx::SqlitePool, interval_secs: u64) {
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
         loop {
             tick.tick().await;
+            workers.beat("metrics_sampler");
             if let Err(e) = sample_metrics_history(&pool).await {
                 tracing::debug!("metrics-history sample skipped: {e:#}");
             }

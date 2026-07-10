@@ -149,6 +149,7 @@ pub fn router(state: AppState) -> Router {
 
     Router::new()
         .route("/health", get(health))
+        .route("/livez", get(livez))
         .route("/readyz", get(readyz))
         .route("/version", get(version))
         .route("/metrics", get(prometheus_metrics))
@@ -320,11 +321,35 @@ async fn readyz(State(s): State<AppState>) -> (StatusCode, Json<Value>) {
         CephDriverMode::Real => "real",
         CephDriverMode::Fake => "fake",
     };
+
+    // Probe the actual backend driver (bounded) instead of assuming healthy. Ok/Warn = reachable and
+    // serving (possibly degraded); Critical/Unknown/error/timeout = not reachable.
+    let (driver_ok, driver_status) = match s.driver_for(CEPH_BACKEND_ID) {
+        Some(d) => match tokio::time::timeout(std::time::Duration::from_secs(5), d.health()).await {
+            Ok(Ok(h)) => (
+                matches!(h.status, atlas_api_types::Health::Ok | atlas_api_types::Health::Warn),
+                format!("{:?}", h.status).to_lowercase(),
+            ),
+            Ok(Err(e)) => (false, format!("error: {e}")),
+            Err(_) => (false, "probe timed out".into()),
+        },
+        None => (false, "no driver registered".into()),
+    };
     let k8s_ok = s.k8s.is_some();
 
-    // Readiness gates on the DB only; k8s/driver are reported but a fake-mode or k8s-less lab
-    // is still "ready" to serve the read/inventory API.
-    let ready = db_ok;
+    // Worker heartbeats — reported for visibility, not gated (a single worker hiccup shouldn't depool
+    // the read/inventory API). Stale = no beat within 5× the monitor interval + 30s.
+    let interval = s.config.monitor_interval_secs.max(1);
+    let stale_after = interval.saturating_mul(5).saturating_add(30);
+    let workers: Vec<Value> = s
+        .workers
+        .ages()
+        .into_iter()
+        .map(|(name, age)| json!({ "worker": name, "age_secs": age, "stale": age > stale_after }))
+        .collect();
+
+    // Gate readiness on the DB and a reachable backend driver.
+    let ready = db_ok && driver_ok;
     let code = if ready {
         StatusCode::OK
     } else {
@@ -336,11 +361,19 @@ async fn readyz(State(s): State<AppState>) -> (StatusCode, Json<Value>) {
             "status": if ready { "ready" } else { "not_ready" },
             "components": {
                 "database": { "ok": db_ok, "detail": db_detail },
-                "ceph_driver": { "ok": true, "mode": driver_mode },
+                "ceph_driver": { "ok": driver_ok, "mode": driver_mode, "status": driver_status },
                 "kubernetes": { "ok": k8s_ok, "detail": if k8s_ok { "attached" } else { "not attached" } },
+                "workers": workers,
             },
         })),
     )
+}
+
+/// `GET /livez` — liveness: the process + async runtime are responsive. Always 200 (a wedged runtime
+/// simply won't answer). Distinct from `/readyz`, which gates traffic on dependencies. Wire k8s
+/// livenessProbe here (restart on failure) and readinessProbe at `/readyz`.
+async fn livez() -> (StatusCode, Json<Value>) {
+    (StatusCode::OK, Json(json!({ "status": "alive" })))
 }
 
 async fn version() -> Json<Value> {

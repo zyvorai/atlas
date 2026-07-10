@@ -153,15 +153,27 @@ async fn json_metrics_endpoints_ok() {
     assert_eq!(summary["pools"], 3);
 }
 
-/// `/readyz` is a deep check reporting the driver mode; `/health`+`/version` are the shallow ones.
+/// `/readyz` is a deep check: it probes the actual driver (not a hardcoded ok) and reports worker
+/// heartbeats; `/livez` is the shallow always-alive signal; `/version` names the service.
 #[tokio::test]
-async fn readyz_reports_driver_mode() {
+async fn readyz_probes_driver_and_livez_is_alive() {
     let addr = spawn().await;
     let c = client();
+
+    // livez: process liveness, always 200 and distinct from readiness.
+    let live = c.get(format!("http://{addr}/livez")).send().await.unwrap();
+    assert_eq!(live.status(), 200);
+    assert_eq!(live.json::<Value>().await.unwrap()["status"], "alive");
+
+    // readyz: 200, driver genuinely probed (fake reports HEALTH_OK), workers component present.
     let r = c.get(format!("http://{addr}/readyz")).send().await.unwrap();
     assert_eq!(r.status(), 200);
     let v: Value = r.json().await.unwrap();
-    assert_eq!(v["components"]["ceph_driver"]["mode"], "fake");
+    let driver = &v["components"]["ceph_driver"];
+    assert_eq!(driver["mode"], "fake");
+    assert_eq!(driver["ok"], true);
+    assert_eq!(driver["status"], "ok"); // real probe result, not a hardcoded true
+    assert!(v["components"]["workers"].is_array());
 
     let ver: Value = c
         .get(format!("http://{addr}/version"))

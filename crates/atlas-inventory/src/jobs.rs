@@ -122,6 +122,71 @@ pub async fn mark_failed(pool: &SqlitePool, id: &str, error: &str) -> Result<()>
     Ok(())
 }
 
+/// Job ids currently in any of `states`, oldest first — used by boot recovery to re-enqueue work the
+/// in-memory channel lost across a restart.
+pub async fn ids_by_states(pool: &SqlitePool, states: &[&str]) -> Result<Vec<String>> {
+    if states.is_empty() {
+        return Ok(vec![]);
+    }
+    let placeholders = states.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql =
+        format!("SELECT id FROM storage_jobs WHERE state IN ({placeholders}) ORDER BY created_at ASC");
+    let mut q = sqlx::query(&sql);
+    for s in states {
+        q = q.bind(*s);
+    }
+    let rows = q.fetch_all(pool).await?;
+    Ok(rows.into_iter().map(|r| r.get::<String, _>("id")).collect())
+}
+
+/// Fail every job stuck in `running` (a crash/restart left it mid-flight; the side effects may be
+/// partial, so we fail-safe rather than blindly re-run). Returns how many were reset.
+pub async fn fail_running(pool: &SqlitePool, error: &str) -> Result<u64> {
+    let res = sqlx::query(
+        "UPDATE storage_jobs SET state='failed', error=?,
+         completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE state='running'",
+    )
+    .bind(error)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected())
+}
+
+/// A job's retry accounting: `(retry_count, max_retries)`.
+pub async fn retry_budget(pool: &SqlitePool, id: &str) -> Result<(i64, i64)> {
+    let row = sqlx::query("SELECT retry_count, max_retries FROM storage_jobs WHERE id=?")
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
+    Ok((row.get("retry_count"), row.get("max_retries")))
+}
+
+/// Set a job's retry budget (called at enqueue for retryable job types).
+pub async fn set_max_retries(pool: &SqlitePool, id: &str, max_retries: i64) -> Result<()> {
+    sqlx::query("UPDATE storage_jobs SET max_retries=? WHERE id=?")
+        .bind(max_retries)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Record a retry: bump the count, requeue the job, and stamp when the next attempt is due.
+/// `delay_modifier` is a SQLite datetime modifier applied to `now` (e.g. `"+4 seconds"`).
+pub async fn bump_retry(pool: &SqlitePool, id: &str, delay_modifier: &str) -> Result<()> {
+    sqlx::query(
+        "UPDATE storage_jobs SET state='queued', retry_count=retry_count+1,
+         next_attempt_at=strftime('%Y-%m-%dT%H:%M:%fZ','now', ?),
+         error=NULL, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+    )
+    .bind(delay_modifier)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 fn job_select(tail: &str) -> String {
     format!(
         "SELECT id, tenant_id, job_type, state, requested_by, progress_percent, error, result, created_at, updated_at
