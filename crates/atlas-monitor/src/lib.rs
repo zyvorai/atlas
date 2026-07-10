@@ -24,12 +24,14 @@ const POOL_CRITICAL: f64 = 0.85;
 
 /// Spawn the monitor loop. `interval_secs == 0` disables it. `prometheus_url`, when set, is scraped
 /// each tick for Ceph capacity/latency metrics.
+#[allow(clippy::too_many_arguments)]
 pub fn spawn(
     pool: SqlitePool,
     driver: Arc<dyn StorageDriver>,
     interval_secs: u64,
     prometheus_url: Option<String>,
     webhook_url: Option<String>,
+    is_leader: Arc<std::sync::atomic::AtomicBool>,
 ) {
     if interval_secs == 0 {
         tracing::info!("monitor disabled (interval = 0)");
@@ -40,6 +42,11 @@ pub fn spawn(
         let mut tick = tokio::time::interval(Duration::from_secs(interval_secs));
         loop {
             tick.tick().await;
+            // HA: only the leader replica evaluates alerts / runs discovery, so a multi-replica
+            // deployment doesn't duplicate work.
+            if !is_leader.load(std::sync::atomic::Ordering::Relaxed) {
+                continue;
+            }
             if let Err(e) = atlas_discovery::run_discovery(&pool, driver.clone(), None).await {
                 tracing::warn!("monitor discovery failed: {e:#}");
             }

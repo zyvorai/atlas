@@ -216,18 +216,27 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
 
     // Start the monitor/alerts worker (periodic discovery + alert-rule evaluation).
     if opts.enable_monitor {
+        // HA leader election: only the leader replica runs the mutating periodic workers, so a
+        // multi-replica deployment doesn't double-fire scheduled jobs. On single-replica SQLite this
+        // instance always wins. `is_leader` starts false and flips true on the first lease acquire.
+        let is_leader = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let lease_ttl = (state.config.monitor_interval_secs as i64 * 3).max(30);
+        spawn_leader_election(state.pool.clone(), is_leader.clone(), lease_ttl);
+
         atlas_monitor::spawn(
             state.pool.clone(),
             driver,
             state.config.monitor_interval_secs,
             state.config.ceph_prometheus_url.clone(),
             state.config.alert_webhook_url.clone(),
+            is_leader.clone(),
         );
         // Protection-schedule worker: periodic snapshots + retention (shares the job engine).
         atlas_jobs::spawn_scheduler(
             state.pool.clone(),
             state.jobs.clone(),
             state.config.snapshot_tick_secs,
+            is_leader.clone(),
         );
         // Metrics-history sampler: append a capacity/IO/job time-series row each monitor tick,
         // pruning to a 48h window, so the Overview trend charts survive restarts + reloads. It also
@@ -243,6 +252,7 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
             state.pool.clone(),
             state.k8s.clone(),
             state.config.databridge_reconcile_secs,
+            is_leader.clone(),
         );
     }
 
@@ -254,6 +264,40 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
     spawn_audit_retention(state.pool.clone());
 
     Ok(state)
+}
+
+/// HA leader election: renew the `workers` lease every `ttl/2`s and flip `is_leader`. Runs on every
+/// replica so a non-leader can take over when the current leader's lease expires. The instance id is
+/// the pod HOSTNAME (unique per replica in k8s) + pid.
+fn spawn_leader_election(
+    pool: sqlx::SqlitePool,
+    is_leader: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    ttl_secs: i64,
+) {
+    use std::sync::atomic::Ordering;
+    let instance = format!(
+        "{}-{}",
+        std::env::var("HOSTNAME").unwrap_or_else(|_| "gateway".into()),
+        std::process::id()
+    );
+    let renew = (ttl_secs / 2).max(5) as u64;
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(renew));
+        loop {
+            tick.tick().await; // fires immediately, so leadership is acquired at startup
+            match atlas_inventory::leader::try_acquire(&pool, "workers", &instance, ttl_secs).await {
+                Ok(leader) => {
+                    let was = is_leader.swap(leader, Ordering::Relaxed);
+                    if leader && !was {
+                        tracing::info!("acquired worker leadership ({instance})");
+                    } else if !leader && was {
+                        tracing::warn!("lost worker leadership ({instance})");
+                    }
+                }
+                Err(e) => tracing::warn!("leader election failed: {e:#}"),
+            }
+        }
+    });
 }
 
 /// Periodically prune audit rows older than `ATLAS_AUDIT_RETENTION_DAYS` (day-2 governance). Runs

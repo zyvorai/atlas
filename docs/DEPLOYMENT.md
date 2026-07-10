@@ -139,6 +139,9 @@ kubectl -n rook-ceph rollout status deploy/atlas-gateway-ceph
 curl -s http://<host>:30511/api/atlas/v1/volumes | grep -o '"name":"[^"]*"'   # same rows persist
 ```
 For multi-replica HA, switch `ATLAS_DATABASE_URL` to Postgres (the `sqlx` layer abstracts the driver).
+A DB-backed **leader lease** (`leader_lease` table) already gates the periodic workers so only one
+replica runs the monitor/scheduler/reconciler — on single-replica SQLite this instance always wins,
+and it makes a shared-Postgres multi-replica deployment safe (no double-fired scheduled jobs).
 
 ## Day-2 durability & health
 

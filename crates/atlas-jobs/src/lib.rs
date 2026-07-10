@@ -1597,7 +1597,12 @@ fn parse_kind(s: &str) -> VolumeKind {
 /// Spawn the protection-schedule worker: every `tick_secs`, run any due `snapshot_schedules` by
 /// enqueueing a snapshot job for their volume, advance `next_run_at`, and prune the volume's
 /// scheduled snapshots to the schedule's `keep`. `tick_secs == 0` disables it.
-pub fn spawn_scheduler(pool: SqlitePool, jobs: JobEngine, tick_secs: u64) {
+pub fn spawn_scheduler(
+    pool: SqlitePool,
+    jobs: JobEngine,
+    tick_secs: u64,
+    is_leader: Arc<AtomicBool>,
+) {
     if tick_secs == 0 {
         tracing::info!("snapshot scheduler disabled (tick = 0)");
         return;
@@ -1607,6 +1612,10 @@ pub fn spawn_scheduler(pool: SqlitePool, jobs: JobEngine, tick_secs: u64) {
         let mut tick = tokio::time::interval(Duration::from_secs(tick_secs));
         loop {
             tick.tick().await;
+            // HA: only the leader replica enqueues scheduled snapshots/backups.
+            if !is_leader.load(Ordering::Relaxed) {
+                continue;
+            }
             if let Err(e) = run_due_schedules(&pool, &jobs).await {
                 tracing::warn!("snapshot scheduler tick failed: {e:#}");
             }

@@ -24,6 +24,7 @@ pub mod buckets;
 pub mod databridge;
 pub mod events;
 pub mod jobs;
+pub mod leader;
 pub mod metrics;
 pub mod schedules;
 pub mod snapshots;

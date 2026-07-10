@@ -19,6 +19,7 @@ pub fn spawn_reconciler(
     pool: SqlitePool,
     k8s: Option<Arc<atlas_driver_k8s::K8sDriver>>,
     interval_secs: u64,
+    is_leader: Arc<std::sync::atomic::AtomicBool>,
 ) {
     if interval_secs == 0 {
         tracing::info!("databridge reconciler disabled (interval = 0)");
@@ -29,6 +30,10 @@ pub fn spawn_reconciler(
         let mut tick = tokio::time::interval(Duration::from_secs(interval_secs));
         loop {
             tick.tick().await;
+            // HA: only the leader replica advances migration pipelines.
+            if !is_leader.load(std::sync::atomic::Ordering::Relaxed) {
+                continue;
+            }
             if let Err(e) = reconcile_once(&pool, k8s.as_deref()).await {
                 tracing::warn!("databridge reconcile tick failed: {e:#}");
             }
