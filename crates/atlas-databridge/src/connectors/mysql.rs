@@ -106,8 +106,10 @@ impl SourceConnector for MysqlSourceConnector {
             .unwrap_or_default();
         let cdc_capable = log_bin == 1 && binlog_format.eq_ignore_ascii_case("ROW");
 
+        // NB: information_schema string columns use a binary-ish collation that sqlx-mysql won't
+        // decode as `String` directly — CAST them to CHAR or the names come back empty.
         let databases: Vec<String> = sqlx::query(&format!(
-            "SELECT schema_name FROM information_schema.schemata \
+            "SELECT CAST(schema_name AS CHAR) AS s FROM information_schema.schemata \
              WHERE schema_name NOT IN ({SYSTEM_SCHEMAS}) ORDER BY 1"
         ))
         .fetch_all(&mut conn)
@@ -119,7 +121,7 @@ impl SourceConnector for MysqlSourceConnector {
 
         // Active plugins stand in for Postgres "extensions" in the assessment.
         let extensions: Vec<String> = sqlx::query(
-            "SELECT plugin_name FROM information_schema.plugins \
+            "SELECT CAST(plugin_name AS CHAR) AS s FROM information_schema.plugins \
              WHERE plugin_status='ACTIVE' AND plugin_type='STORAGE ENGINE' ORDER BY 1",
         )
         .fetch_all(&mut conn)
@@ -132,7 +134,7 @@ impl SourceConnector for MysqlSourceConnector {
         .unwrap_or_default();
 
         let rows = sqlx::query(&format!(
-            "SELECT t.table_schema AS s, t.table_name AS n, \
+            "SELECT CAST(t.table_schema AS CHAR) AS s, CAST(t.table_name AS CHAR) AS n, \
                     CAST(COALESCE(t.table_rows,0) AS SIGNED) AS est_rows, \
                     CAST(COALESCE(t.data_length,0)+COALESCE(t.index_length,0) AS SIGNED) AS size_bytes, \
                     CAST(EXISTS(SELECT 1 FROM information_schema.table_constraints tc \
