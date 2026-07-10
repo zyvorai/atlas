@@ -8,7 +8,8 @@
 #   1. rsync the repo to <user>@<host>:~/.deployment/atlas
 #   2. build the atlas-gateway image on the remote with podman (no local Rust toolchain needed)
 #   3. import the image into k3s containerd
-#   4. kubectl apply deploy/k8s/atlas-gateway.yaml (+ RBAC + NodePort 30510)
+#   4. kubectl apply deploy/k8s/atlas-gateway.yaml (+ RBAC + NodePort 30510), then rollout restart so
+#      the freshly-imported same-tag (:dev) image actually rolls out
 #   5. verify /health and /storage-classes over the NodePort
 #
 # Optional:
@@ -54,8 +55,14 @@ $SSH "cd ~/${REMOTE_DIR} && podman build -t atlas-gateway:dev -f Dockerfile ."
 log "3/5 import image into k3s containerd"
 $SSH "cd ~/${REMOTE_DIR} && podman save atlas-gateway:dev -o /tmp/atlas-gateway.tar && sudo k3s ctr images import /tmp/atlas-gateway.tar && rm -f /tmp/atlas-gateway.tar"
 
-log "4/5 apply k8s manifests"
-$SSH "cd ~/${REMOTE_DIR} && kubectl apply -f deploy/k8s/atlas-gateway.yaml && kubectl -n zyvor-system rollout status deploy/atlas-gateway --timeout=180s"
+log "4/5 apply k8s manifests + roll out the new image"
+# `kubectl apply` is a no-op when only the image *content* changed (the tag stays :dev), so it won't
+# restart the pod and the old build keeps serving. `rollout restart` stamps the pod template so a new
+# pod always comes up on the freshly-imported containerd image (imagePullPolicy: Never).
+$SSH "cd ~/${REMOTE_DIR} \
+  && kubectl apply -f deploy/k8s/atlas-gateway.yaml \
+  && kubectl -n zyvor-system rollout restart deploy/atlas-gateway \
+  && kubectl -n zyvor-system rollout status deploy/atlas-gateway --timeout=180s"
 
 if [[ "$WITH_CEPH" == "1" ]]; then
   log "4b/5 installing Rook Ceph (DESTRUCTIVE: consumes an empty disk as an OSD)"
