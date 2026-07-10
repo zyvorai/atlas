@@ -28,9 +28,9 @@ Implemented:
   SQL Server 2022, Postgres, and Oracle 23ai/26ai Free — on real servers through the deployed k3s gateway
   (binlog ROW / replica-set change streams / `is_cdc_enabled` / supplemental-log-min → `cdc_capable`,
   real db + table/collection names, PKs, counts). The gateway image now bundles the OCI Instant Client
-  and builds the `oracle` feature. **Deeper stages: Postgres is verified through real CDC; MySQL is
-  verified through provision → real full-load (`mysqldump→mysql`, data physically copied source→edge) →
-  validate (row-count parity)** against a lightweight edge MySQL. Streaming CDC + cutover for the
+  and builds the `oracle` feature. **Deeper stages: Postgres is verified through real CDC; MySQL and
+  MariaDB are verified through provision → real full-load (`mysqldump→mysql`, data physically copied
+  source→edge) → validate (row-count parity)** against a lightweight edge. Streaming CDC + cutover for the
   non-Postgres engines still need the Kafka/Debezium stack (not installed on the shared lab).
   See `docs/DATABRIDGE.md` + `deploy/databridge/`.
 

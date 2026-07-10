@@ -104,9 +104,12 @@ pub fn mysql_job_spec(
     edge_host: &str,
     edge_db: &str,
 ) -> Value {
+    // `--column-statistics=0`: the MySQL-8 mysqldump client defaults to dumping column histograms
+    // from information_schema.COLUMN_STATISTICS, which MariaDB has no such table for — without this
+    // flag a MariaDB source fails with "Unknown table 'COLUMN_STATISTICS'" (1109). Harmless for MySQL.
     let script = r#"set -euo pipefail
 echo "full-load: mysqldump ${SRC_HOST}:${SRC_PORT}/${SRC_DB} -> ${EDGE_HOST}/${EDGE_DB}"
-mysqldump --single-transaction --routines --triggers \
+mysqldump --column-statistics=0 --single-transaction --routines --triggers \
   -h "$SRC_HOST" -P "$SRC_PORT" -u "$SRC_USER" -p"$SRC_PASS" "$SRC_DB" \
   | mysql -h "$EDGE_HOST" -u root -p"$EDGE_PASS" "$EDGE_DB"
 echo "full-load complete"
@@ -202,7 +205,10 @@ mod tests {
     fn mysql_job_wires_secrets() {
         let spec = mysql_job_spec("src-creds", "edge-secrets", "prod.rds.aws", 3306, "appdb", "edge-haproxy", "appdb");
         let c = &spec["template"]["spec"]["containers"][0];
-        assert!(c["args"][0].as_str().unwrap().contains("mysqldump"));
+        let script = c["args"][0].as_str().unwrap();
+        assert!(script.contains("mysqldump"));
+        // MariaDB sources fail without this (MySQL-8 mysqldump probes a table MariaDB lacks).
+        assert!(script.contains("--column-statistics=0"));
         let env = c["env"].as_array().unwrap();
         assert!(env.iter().any(|e| e["name"] == "EDGE_PASS"
             && e["valueFrom"]["secretKeyRef"]["key"] == "root"));

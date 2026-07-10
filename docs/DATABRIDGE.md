@@ -235,15 +235,17 @@ stream reports caught-up (0).
   as migratable tables. Fixed to use each engine's own metadata flag — Oracle `all_users.oracle_maintained
   = 'N'` and SQL Server `sys.tables.is_ms_shipped = 0` (+ excluding the `cdc`/`sys` schemas) — instead of
   a fragile hardcoded denylist.
-- **MySQL full-load + validate — verified live** (2026-07): drove the real gateway pipeline
-  register → discover → assess → provision → full-load → validate against a lightweight edge MySQL
-  (standing in for the Percona edge: the gateway created the real `PerconaXtraDBCluster` CR, and the
-  reconciler advanced the edge to `ready` off the CR's status). The **full-load ran the real
-  `mysqldump→mysql` batch Job and physically copied the data** (3 customers + 2 orders) source→edge, and
-  the **validate row-count-compare Job passed** (plan → `validated`). Streaming CDC + cutover were not
-  run — they need Kafka/Debezium, which is not installed on the shared lab.
+- **MySQL + MariaDB full-load + validate — verified live** (2026-07): drove the real gateway pipeline
+  register → discover → assess → provision → full-load → validate against a lightweight edge (standing in
+  for the Percona edge: the gateway created the real `PerconaXtraDBCluster` CR, and the reconciler
+  advanced the edge to `ready` off the CR's status). The **full-load ran the real `mysqldump→mysql` batch
+  Job and physically copied the data** source→edge, and the **validate row-count-compare Job passed**
+  (plan → `validated`). The MariaDB run surfaced + fixed a real loader bug: the MySQL-8 `mysqldump` client
+  fails on a MariaDB source (`Unknown table 'COLUMN_STATISTICS'`, 1109) unless `--column-statistics=0` is
+  passed — now added (harmless for MySQL). Streaming CDC + cutover were not run — they need Kafka/Debezium,
+  not installed on the shared lab.
 - **Follow-ups (verify on live infra)**: **streaming CDC + cutover** for the non-Postgres engines, and
-  full-load for MariaDB/MongoDB/SQL Server/Oracle (MySQL is the one verified through full-load+validate;
+  full-load for MongoDB/SQL Server/Oracle (MySQL + MariaDB are verified through full-load+validate;
   Postgres through CDC) — the Kafka/Debezium/edge-operator stack is not installed on the shared k3s lab,
   so these remain wired + unit-tested but not yet live-verified. cross-engine per-table row-count
   validation for heterogeneous plans is advisory (parity confirmed by snapshot/stream convergence
