@@ -78,7 +78,7 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
     };
     atlas_inventory::upsert_backend(&pool, &backend).await?;
 
-    let mut registry = DriverRegistry::new();
+    let registry = DriverRegistry::new();
     registry.register(driver.clone());
 
     // Optionally register a second NFS backend — demonstrates that a non-Ceph driver flows through

@@ -1,15 +1,16 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-//! A small registry mapping backend ids to live driver instances.
+//! A small registry mapping backend ids to live driver instances. Interior-mutable so drivers can be
+//! registered at startup *and* at runtime (e.g. `POST /backends`) through a shared `Arc`.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use crate::StorageDriver;
 
 /// Holds the set of active backend drivers, keyed by backend id.
 #[derive(Clone, Default)]
 pub struct DriverRegistry {
-    drivers: HashMap<String, Arc<dyn StorageDriver>>,
+    drivers: Arc<RwLock<HashMap<String, Arc<dyn StorageDriver>>>>,
 }
 
 impl DriverRegistry {
@@ -17,25 +18,31 @@ impl DriverRegistry {
         Self::default()
     }
 
-    /// Register (or replace) a driver for its backend id.
-    pub fn register(&mut self, driver: Arc<dyn StorageDriver>) {
-        self.drivers.insert(driver.backend_id().to_string(), driver);
+    /// Register (or replace) a driver for its backend id. Takes `&self` so it works after the
+    /// registry is shared behind an `Arc` (runtime backend registration).
+    pub fn register(&self, driver: Arc<dyn StorageDriver>) {
+        if let Ok(mut g) = self.drivers.write() {
+            g.insert(driver.backend_id().to_string(), driver);
+        }
     }
 
     pub fn get(&self, backend_id: &str) -> Option<Arc<dyn StorageDriver>> {
-        self.drivers.get(backend_id).cloned()
+        self.drivers.read().ok()?.get(backend_id).cloned()
     }
 
     /// The first registered driver, if any — convenient for the single-backend MVP.
     pub fn any(&self) -> Option<Arc<dyn StorageDriver>> {
-        self.drivers.values().next().cloned()
+        self.drivers.read().ok()?.values().next().cloned()
     }
 
     pub fn backend_ids(&self) -> Vec<String> {
-        self.drivers.keys().cloned().collect()
+        self.drivers
+            .read()
+            .map(|g| g.keys().cloned().collect())
+            .unwrap_or_default()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.drivers.is_empty()
+        self.drivers.read().map(|g| g.is_empty()).unwrap_or(true)
     }
 }

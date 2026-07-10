@@ -425,6 +425,12 @@ struct CreateBackendBody {
     backend_type: Option<String>,
     #[serde(default)]
     mode: Option<String>,
+    /// Connection host: NFS server or ZFS host (used when instantiating an nfs/zfs backend live).
+    #[serde(default)]
+    server: Option<String>,
+    /// NFS exports or ZFS zpools to surface.
+    #[serde(default)]
+    targets: Option<Vec<String>>,
 }
 
 /// Register a backend row. No cluster lifecycle happens here (PDF §8.1 keeps it 'pending').
@@ -455,16 +461,44 @@ async fn create_backend(
         Some("read_only") => BackendMode::ReadOnly,
         _ => BackendMode::External,
     };
+    let id = atlas_common::ids::backend_id();
+    // NFS/ZFS drivers can be instantiated live and registered into the running driver registry, so
+    // the backend actually discovers + serves — not just a catalog row. Others stay a `pending` row.
+    let (status, live): (&str, Option<std::sync::Arc<dyn atlas_driver_core::StorageDriver>>) =
+        match backend_type {
+            BackendType::Nfs => {
+                let server = body.server.clone().unwrap_or_else(|| "nfs01.zyvor.lab".into());
+                let exports = body.targets.clone().filter(|t| !t.is_empty()).unwrap_or_else(|| {
+                    vec!["/exports/vmstore".into(), "/exports/backups".into()]
+                });
+                ("active", Some(std::sync::Arc::new(atlas_driver_nfs::NfsDriver::new(&id, server, exports))))
+            }
+            BackendType::Zfs => {
+                let host = body.server.clone().unwrap_or_else(|| "zfs01.zyvor.lab".into());
+                let pools = body.targets.clone().filter(|t| !t.is_empty()).unwrap_or_else(|| {
+                    vec!["tank".into(), "vault".into()]
+                });
+                ("active", Some(std::sync::Arc::new(atlas_driver_zfs::ZfsDriver::new(&id, host, pools))))
+            }
+            _ => ("pending", None),
+        };
     let backend = StorageBackend {
-        id: atlas_common::ids::backend_id(),
+        id: id.clone(),
         name: body.name,
         backend_type,
         mode,
-        status: "pending".into(),
+        status: status.into(),
         capabilities: ceph_default_caps(backend_type),
         connection_ref: None,
     };
     atlas_inventory::upsert_backend(&s.pool, &backend).await?;
+    if let Some(driver) = live {
+        s.drivers.register(driver.clone());
+        // Discover immediately so the new backend's pools/volumes appear.
+        if let Err(e) = atlas_discovery::run_discovery(&s.pool, driver, None).await {
+            tracing::warn!("discovery for new backend {id} failed: {e:#}");
+        }
+    }
     let _ = atlas_inventory::audit::record(
         &s.pool,
         None,
@@ -473,7 +507,7 @@ async fn create_backend(
         "backend",
         &backend.id,
         "success",
-        Some(json!({ "name": backend.name, "type": backend.backend_type })),
+        Some(json!({ "name": backend.name, "type": backend.backend_type, "status": status })),
         None,
     )
     .await;
