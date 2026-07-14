@@ -315,10 +315,18 @@ impl S3Target {
         }
         let body = resp.text().await?;
         let parsed = ListObjectsV2::parse_response(&body).context("parse list objects")?;
+        // ListObjectsV2 is requested with encoding-type=url, so RGW/S3 return keys
+        // percent-encoded (e.g. "models/x" -> "models%2Fx"). Decode them so callers get the
+        // real key — otherwise any prefixed key 404s on the subsequent GET/PUT.
         Ok(parsed
             .contents
             .into_iter()
-            .map(|c| (c.key, c.size))
+            .map(|c| {
+                let key = percent_encoding::percent_decode_str(&c.key)
+                    .decode_utf8_lossy()
+                    .into_owned();
+                (key, c.size)
+            })
             .collect())
     }
 
