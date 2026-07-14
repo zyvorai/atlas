@@ -34,3 +34,7 @@ jobs:
         run: cargo test --workspace
       - name: Build
         run: cargo build --workspace
+      # The azure-blob object-migration connector is pure-Rust (no native deps, unlike
+      # oracle/mongodb/sqlserver), so it can be compile-checked in CI to prevent rot.
+      - name: Check azure-blob connector
+        run: cargo check -p atlas-databridge --features azure-blob
