@@ -330,6 +330,7 @@ dependencies = [
  "anyhow",
  "futures-util",
  "hex",
+ "percent-encoding",
  "reqwest",
  "rusty-s3",
  "sha2 0.10.9",
