@@ -515,6 +515,39 @@ pub struct CdcStream {
     pub created_at: Option<String>,
 }
 
+/// An object-storage migration: a cloud object store (AWS S3, Google Cloud Storage via
+/// S3-interop, or any S3-compatible endpoint) copied into a Ceph RGW bucket. Credentials
+/// live only in the referenced k8s Secrets — never in this record.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObjectMigration {
+    pub id: String,
+    pub tenant_id: String,
+    pub name: String,
+    pub source_provider: String,
+    pub source_endpoint: String,
+    pub source_region: String,
+    pub source_bucket: String,
+    pub source_prefix: Option<String>,
+    pub source_secret_ref: Option<String>,
+    pub dest_provider: String,
+    pub dest_endpoint: String,
+    pub dest_region: String,
+    pub dest_bucket: String,
+    pub dest_secret_ref: Option<String>,
+    pub secret_namespace: String,
+    pub mode: String,
+    pub state: String,
+    pub objects_total: i64,
+    pub objects_done: i64,
+    pub bytes_total: i64,
+    pub bytes_done: i64,
+    pub verified: bool,
+    pub last_error: Option<String>,
+    pub job_id: Option<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+
 /// A migration plan: source -> edge, with assessment, CDC, cutover state.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MigrationPlan {

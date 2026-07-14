@@ -94,6 +94,48 @@ for stage in assess provision full-load cdc/start validate cutover; do curl -sX 
 | POST | `/databridge/plans/{id}/rollback` | rollback within window — **admin** (job) |
 | GET | `/databridge/{edge-clusters,cdc-streams,validations,cutovers}` | read models |
 
+## Object-storage migration (the object leg)
+
+Alongside the database pipeline, DataBridge moves **object storage** — AI datasets, model
+weights, checkpoints, RAG source documents, embeddings exports — from a cloud object store
+into a **Ceph RGW** bucket, so Forge/Zeus consume data from a local S3 endpoint instead of
+the cloud. Implemented in `atlas-databridge::object` on top of `atlas-driver-rgw::S3Target`
+(SigV4, path-style, streaming sha256), driven by the same job engine + `/jobs/{id}/watch` SSE.
+
+The copy is: **list source → diff vs destination (full, or incremental by key+size) →
+stream each changed object recording its sha256 → verify every planned key landed at the
+right size**. Credentials are never stored — the record holds only a reference to a k8s
+Secret (`{access_key, secret_key}` or `{AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY}`),
+resolved in-process at run time and never logged.
+
+### Multi-cloud providers
+The mover speaks the **S3 protocol**, so it covers any S3-compatible source today. Non-S3
+clouds are recognized in the model so the API is multi-cloud from day one, but need their own
+connector (same philosophy as the DB side gating oracle/mongodb behind features):
+
+| `source_provider` / `dest_provider` | Status | How |
+|---|---|---|
+| `aws` (AWS S3) | ✅ works | S3 protocol, SigV4 |
+| `gcs` (Google Cloud Storage) | ✅ works | GCS **S3-interoperability** endpoint + HMAC keys |
+| `s3-compatible` (MinIO, Wasabi, DO Spaces, Ceph RGW, …) | ✅ works | S3 protocol |
+| `azure-blob` (Azure Blob Storage) | ✅ native connector (feature `azure-blob`) | pure-Rust Azure SDK; not S3-native, so it implements `ObjectSource` directly |
+| `vmware` (vSphere/vSAN datastores) | ❌ not an object store | VMs/VMDKs live on block storage — migrate via the block (RBD import) leg, not object copy |
+
+The source is pluggable via the `ObjectSource` trait (list + get→sha256); the destination is
+always Ceph RGW (S3). `azure-blob` is a native, feature-gated connector (below); `vmware` is
+rejected with guidance to use the volume path; any other non-S3 source errors clearly rather
+than failing silently.
+
+### Object REST endpoints (`/api/atlas/v1`, `require_role(operator)`, tenant-scoped)
+| Method | Path | Purpose |
+|---|---|---|
+| GET/POST | `/databridge/object` | list / create an object migration (create is synchronous — no copy yet) |
+| GET/DELETE | `/databridge/object/{id}` | status (counts, bytes, state, verified) / delete |
+| POST | `/databridge/object/{id}/start` | enqueue the copy job (202 + job id); stream via `/jobs/{id}/watch` |
+
+State machine: `created → planning → copying → verifying → completed | failed`, with
+`objects_{total,done}` / `bytes_{total,done}` / `verified` updated as the job runs.
+
 ## Configuration
 | Env | Default | Meaning |
 |---|---|---|
@@ -117,6 +159,7 @@ behind features so a missing lib never breaks the default build:
 | `oracle` | real Oracle source connector (`oracle`/ODPI-C) | Oracle Instant Client at runtime |
 | `mongodb` | real MongoDB source connector (`mongodb` async driver) | none (bundled bson + TLS) |
 | `kafka-lag` | precise CDC offset-lag (embedded Kafka client) in the reconciler | `librdkafka` via `cmake` |
+| `azure-blob` | native Azure Blob Storage object-migration **source** (`azure_storage_blobs`) | none (pure-Rust Azure SDK + TLS) |
 
 Build the gateway with, e.g., `cargo build -p atlas-gateway --features atlas-databridge/sqlserver,atlas-databridge/oracle,atlas-databridge/mongodb,atlas-databridge/kafka-lag`.
 

@@ -55,6 +55,9 @@ pub fn source_id() -> String {
 pub fn migration_plan_id() -> String {
     prefixed("mplan")
 }
+pub fn object_migration_id() -> String {
+    prefixed("objmig")
+}
 pub fn edge_cluster_id() -> String {
     prefixed("edb")
 }

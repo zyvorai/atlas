@@ -132,6 +132,16 @@ pub fn router(state: AppState) -> Router {
         .route("/databridge/plans/{id}/validate", post(db_validate))
         .route("/databridge/plans/{id}/cutover", post(db_cutover))
         .route("/databridge/plans/{id}/rollback", post(db_rollback))
+        // ---- DataBridge (object leg): cloud object store -> Ceph RGW ----
+        .route(
+            "/databridge/object",
+            get(db_object_list).post(db_object_create),
+        )
+        .route(
+            "/databridge/object/{id}",
+            get(db_object_get).delete(db_object_delete),
+        )
+        .route("/databridge/object/{id}/start", post(db_object_start))
         .route("/databridge/edge-clusters", get(db_list_edge_clusters))
         .route("/databridge/edge-clusters/{id}", get(db_get_edge_cluster).delete(db_delete_edge_cluster))
         .route("/databridge/cdc-streams", get(db_list_cdc_streams))
@@ -3218,6 +3228,130 @@ async fn db_list_cdc_streams(State(s): State<AppState>) -> AppResult<Json<Value>
     Ok(Json(json!(
         atlas_inventory::databridge::cdc::list_streams(&s.pool).await?
     )))
+}
+
+// ---- DataBridge object leg (S3-protocol object-store migration) ----
+
+#[derive(serde::Deserialize)]
+struct CreateObjectMigrationBody {
+    name: String,
+    /// aws | gcs | s3-compatible | azure-blob | vmware (S3-protocol providers copy today).
+    #[serde(default)]
+    source_provider: Option<String>,
+    source_endpoint: String,
+    #[serde(default)]
+    source_region: Option<String>,
+    source_bucket: String,
+    #[serde(default)]
+    source_prefix: Option<String>,
+    /// k8s Secret {access_key,secret_key} for the source; never the creds themselves.
+    source_secret_ref: Option<String>,
+    #[serde(default)]
+    dest_provider: Option<String>,
+    dest_endpoint: String,
+    #[serde(default)]
+    dest_region: Option<String>,
+    dest_bucket: String,
+    dest_secret_ref: Option<String>,
+    #[serde(default)]
+    secret_namespace: Option<String>,
+    /// full | incremental (default)
+    #[serde(default)]
+    mode: Option<String>,
+}
+
+/// `POST /databridge/object` — register an object-storage migration (synchronous; no copy yet).
+async fn db_object_create(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Json(body): Json<CreateObjectMigrationBody>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    if body.name.trim().is_empty() {
+        return Err(AppError::Validation("name is required".into()));
+    }
+    if body.source_endpoint.trim().is_empty() || body.dest_endpoint.trim().is_empty() {
+        return Err(AppError::Validation(
+            "source_endpoint and dest_endpoint are required".into(),
+        ));
+    }
+    let mode = body.mode.as_deref().unwrap_or("incremental");
+    if mode != "full" && mode != "incremental" {
+        return Err(AppError::Validation("mode must be 'full' or 'incremental'".into()));
+    }
+    let id = ids::object_migration_id();
+    let rec = atlas_inventory::databridge::object_migrations::NewObjectMigration {
+        id: id.clone(),
+        tenant_id: "global".into(),
+        name: body.name.clone(),
+        source_provider: body.source_provider.clone().unwrap_or_else(|| "s3-compatible".into()),
+        source_endpoint: body.source_endpoint.clone(),
+        source_region: body.source_region.clone().unwrap_or_else(|| "us-east-1".into()),
+        source_bucket: body.source_bucket.clone(),
+        source_prefix: body.source_prefix.clone(),
+        source_secret_ref: body.source_secret_ref.clone(),
+        dest_provider: body.dest_provider.clone().unwrap_or_else(|| "s3-compatible".into()),
+        dest_endpoint: body.dest_endpoint.clone(),
+        dest_region: body.dest_region.clone().unwrap_or_else(|| "us-east-1".into()),
+        dest_bucket: body.dest_bucket.clone(),
+        dest_secret_ref: body.dest_secret_ref.clone(),
+        secret_namespace: body.secret_namespace.clone().unwrap_or_else(|| "zyvor-databridge".into()),
+        mode: mode.into(),
+    };
+    atlas_inventory::databridge::object_migrations::insert(&s.pool, &rec).await?;
+    let created = atlas_inventory::databridge::object_migrations::get(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("object migration {id}")))?;
+    Ok((StatusCode::CREATED, Json(json!(created))))
+}
+
+/// `POST /databridge/object/{id}/start` — enqueue the copy job (returns 202 + job id).
+async fn db_object_start(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    atlas_inventory::databridge::object_migrations::get(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("object migration {id}")))?;
+    let job_id = ids::job_id();
+    let job = s
+        .jobs
+        .enqueue(
+            &job_id,
+            "global",
+            &actor.id,
+            JobSpec::ObjectMigrate { migration_id: id.clone() },
+            None,
+        )
+        .await
+        .map_err(AppError::from)?;
+    atlas_inventory::databridge::object_migrations::set_job(&s.pool, &id, &job.id).await?;
+    Ok(accepted(&job, json!({ "object_migration_id": id })))
+}
+
+async fn db_object_get(State(s): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
+    let rec = atlas_inventory::databridge::object_migrations::get(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("object migration {id}")))?;
+    Ok(Json(json!(rec)))
+}
+
+async fn db_object_list(State(s): State<AppState>) -> AppResult<Json<Value>> {
+    Ok(Json(json!(
+        atlas_inventory::databridge::object_migrations::list(&s.pool, None).await?
+    )))
+}
+
+async fn db_object_delete(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<StatusCode> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    atlas_inventory::databridge::object_migrations::delete(&s.pool, &id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn db_get_cdc_stream(
