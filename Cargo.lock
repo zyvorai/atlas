@@ -242,6 +242,7 @@ dependencies = [
  "azure_storage_blobs",
  "chrono",
  "futures",
+ "futures-util",
  "hex",
  "mongodb",
  "oracle",

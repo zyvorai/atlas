@@ -14,10 +14,12 @@
 //! fields (see [`S3Endpoint::redacted`]).
 
 use anyhow::{Context, Result};
-use atlas_driver_rgw::S3Target;
+use atlas_driver_rgw::{S3Target, MIN_PART_SIZE};
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 /// The object-store provider behind an endpoint. The S3-protocol family (AWS S3, Google
 /// Cloud Storage via its S3-interoperability HMAC keys, and any S3-compatible store such as
@@ -149,7 +151,7 @@ pub fn diff_objects(
         .iter()
         .filter(|(k, s)| match mode {
             CopyMode::Full => true,
-            CopyMode::Incremental => dest_map.get(k.as_str()).map_or(true, |ds| ds != s),
+            CopyMode::Incremental => dest_map.get(k.as_str()).is_none_or(|ds| ds != s),
         })
         .map(|(k, s)| PlannedObject {
             key: k.clone(),
@@ -158,16 +160,39 @@ pub fn diff_objects(
         .collect()
 }
 
-/// A read-only object-store source. The destination is always an [`S3Target`] (Ceph RGW),
-/// but the source is pluggable so non-S3 clouds (Azure Blob, native GCS, …) can migrate in
-/// without touching the copy/verify logic. The S3-protocol family uses [`S3ObjectSource`];
-/// Azure Blob uses the feature-gated `object_azure::AzureBlobSource`.
+/// A read-only object-store source. The source is pluggable so non-S3 clouds (Azure Blob,
+/// native GCS, …) can migrate in without touching the copy/verify logic. The S3-protocol
+/// family uses [`S3ObjectSource`]; Azure Blob uses the feature-gated `AzureBlobSource`.
+///
+/// `stream_to` writes the object to `sink` as it is read (never buffering the whole object)
+/// and returns `(bytes, sha256_hex)` — so a multi-GB model shard costs one pipe buffer, not
+/// its full size, in memory.
 #[async_trait::async_trait]
 pub trait ObjectSource: Send + Sync {
     /// List `(key, size)` under an optional prefix.
     async fn list(&self, prefix: Option<&str>) -> Result<Vec<(String, u64)>>;
-    /// Read an object fully into memory, returning `(bytes, sha256_hex)`.
-    async fn get(&self, key: &str) -> Result<(Vec<u8>, String)>;
+    /// Stream an object into `sink`, returning `(bytes, sha256_hex)`.
+    async fn stream_to(
+        &self,
+        key: &str,
+        sink: &mut (dyn AsyncWrite + Unpin + Send),
+    ) -> Result<(u64, String)>;
+}
+
+/// A write destination for the migration (Ceph RGW). Pluggable so the copy loop can be
+/// unit-tested against an in-memory sink instead of a live S3 endpoint.
+#[async_trait::async_trait]
+pub trait ObjectSink: Send + Sync {
+    /// Stream an object in from `reader` (a pipe fed by the source), returning
+    /// `(bytes, sha256_hex)`. `part_size` is the multipart chunk size.
+    async fn put_stream(
+        &self,
+        key: &str,
+        part_size: usize,
+        reader: tokio::io::DuplexStream,
+    ) -> Result<(u64, String)>;
+    /// List destination `(key, size)` for verification.
+    async fn list(&self, prefix: Option<&str>) -> Result<Vec<(String, u64)>>;
 }
 
 /// S3-protocol source (AWS S3, GCS S3-interop, MinIO/RGW/…): wraps an [`S3Target`].
@@ -178,17 +203,38 @@ impl ObjectSource for S3ObjectSource {
     async fn list(&self, prefix: Option<&str>) -> Result<Vec<(String, u64)>> {
         self.0.list_objects(prefix).await
     }
-    async fn get(&self, key: &str) -> Result<(Vec<u8>, String)> {
-        let mut buf: Vec<u8> = Vec::new();
-        let (_, sha) = self.0.get_object_streaming(key, &mut buf).await?;
-        Ok((buf, sha))
+    async fn stream_to(
+        &self,
+        key: &str,
+        sink: &mut (dyn AsyncWrite + Unpin + Send),
+    ) -> Result<(u64, String)> {
+        self.0.get_object_streaming(key, sink).await
     }
 }
 
-/// Migrates objects from any [`ObjectSource`] into an S3-compatible (Ceph RGW) destination.
+/// S3-protocol destination (Ceph RGW): wraps an [`S3Target`], streaming via multipart upload.
+pub struct S3ObjectSink(pub S3Target);
+
+#[async_trait::async_trait]
+impl ObjectSink for S3ObjectSink {
+    async fn put_stream(
+        &self,
+        key: &str,
+        part_size: usize,
+        reader: tokio::io::DuplexStream,
+    ) -> Result<(u64, String)> {
+        self.0.put_multipart_streaming(key, part_size, reader).await
+    }
+    async fn list(&self, prefix: Option<&str>) -> Result<Vec<(String, u64)>> {
+        self.0.list_objects(prefix).await
+    }
+}
+
+/// Migrates objects from any [`ObjectSource`] into any [`ObjectSink`], streaming each object
+/// and copying up to `concurrency` objects at once.
 pub struct ObjectMigrator {
     source: Box<dyn ObjectSource>,
-    dest: S3Target,
+    sink: Box<dyn ObjectSink>,
     prefix: Option<String>,
 }
 
@@ -197,14 +243,27 @@ impl ObjectMigrator {
     pub fn new(source: &S3Endpoint, dest: &S3Endpoint) -> Result<Self> {
         Ok(Self {
             source: Box::new(S3ObjectSource(source.target()?)),
-            dest: dest.target()?,
+            sink: Box::new(S3ObjectSink(dest.target()?)),
             prefix: source.prefix.clone(),
         })
     }
 
     /// Build a migrator from an arbitrary source (e.g. Azure Blob) into an RGW destination.
     pub fn with_source(source: Box<dyn ObjectSource>, dest: S3Target, prefix: Option<String>) -> Self {
-        Self { source, dest, prefix }
+        Self {
+            source,
+            sink: Box::new(S3ObjectSink(dest)),
+            prefix,
+        }
+    }
+
+    /// Build a migrator from explicit source + sink (used by tests).
+    pub fn with_source_sink(
+        source: Box<dyn ObjectSource>,
+        sink: Box<dyn ObjectSink>,
+        prefix: Option<String>,
+    ) -> Self {
+        Self { source, sink, prefix }
     }
 
     /// List both sides and compute the copy plan.
@@ -215,31 +274,43 @@ impl ObjectMigrator {
             .await
             .context("list source objects")?;
         let dst = self
-            .dest
-            .list_objects(self.prefix.as_deref())
+            .sink
+            .list(self.prefix.as_deref())
             .await
             .context("list destination objects")?;
         Ok(diff_objects(&src, &dst, mode))
     }
 
-    /// Copy a single object, returning `(bytes, sha256_hex)`. Buffers the object in memory
-    /// (first slice); large-object streaming pipe is a follow-up.
-    async fn copy_one(&self, key: &str) -> Result<(u64, String)> {
-        let (buf, sha) = self
-            .source
-            .get(key)
-            .await
-            .with_context(|| format!("read source object {key}"))?;
-        let bytes = buf.len() as u64;
-        self.dest
-            .put_object(key, buf)
-            .await
-            .with_context(|| format!("write destination object {key}"))?;
+    /// Copy a single object by piping source → dest through a bounded in-memory duplex, so
+    /// only ~`part_size` is in flight. Returns `(bytes, sha256_hex)` from the source read.
+    async fn copy_one(&self, key: &str, part_size: usize) -> Result<(u64, String)> {
+        let part_size = part_size.max(MIN_PART_SIZE);
+        let (mut writer, reader) = tokio::io::duplex(part_size * 2);
+        let read = async {
+            let res = self.source.stream_to(key, &mut writer).await;
+            // Signal EOF to the reader whether the read succeeded or failed.
+            let _ = writer.shutdown().await;
+            res.with_context(|| format!("read source object {key}"))
+        };
+        let write = async {
+            self.sink
+                .put_stream(key, part_size, reader)
+                .await
+                .with_context(|| format!("write destination object {key}"))
+        };
+        let ((bytes, sha), _dest) = tokio::try_join!(read, write)?;
         Ok((bytes, sha))
     }
 
-    /// Execute `plan`, invoking `on_progress` after each object, then verify.
-    pub async fn run<F>(&self, plan: &[PlannedObject], mut on_progress: F) -> Result<CopyReport>
+    /// Execute `plan`, copying up to `concurrency` objects concurrently and invoking
+    /// `on_progress` as each completes, then verify.
+    pub async fn run<F>(
+        &self,
+        plan: &[PlannedObject],
+        concurrency: usize,
+        part_size: usize,
+        mut on_progress: F,
+    ) -> Result<CopyReport>
     where
         F: FnMut(&CopyProgress),
     {
@@ -250,15 +321,27 @@ impl ObjectMigrator {
             ..Default::default()
         };
         let mut report = CopyReport::default();
-        for obj in plan {
-            let (bytes, sha) = self.copy_one(&obj.key).await?;
+
+        // Move owned keys into each copy future (borrowing plan items across `buffer_unordered`
+        // trips a higher-ranked-lifetime Send-inference limitation in the job worker).
+        let keys: Vec<String> = plan.iter().map(|p| p.key.clone()).collect();
+        let mut copies = futures_util::stream::iter(keys)
+            .map(|key| async move {
+                let res = self.copy_one(&key, part_size).await;
+                (key, res)
+            })
+            .buffer_unordered(concurrency.max(1));
+
+        while let Some((key, res)) = copies.next().await {
+            let (bytes, sha) = res?;
             report.objects_copied += 1;
             report.bytes_copied += bytes;
-            report.checksums.push((obj.key.clone(), sha));
+            report.checksums.push((key, sha));
             progress.objects_done = report.objects_copied;
             progress.bytes_done = report.bytes_copied;
             on_progress(&progress);
         }
+
         match self.verify(plan).await {
             Ok(()) => report.verified = true,
             Err(e) => {
@@ -272,8 +355,8 @@ impl ObjectMigrator {
     /// Confirm every planned key exists on the destination at the expected size.
     async fn verify(&self, plan: &[PlannedObject]) -> Result<()> {
         let dst = self
-            .dest
-            .list_objects(self.prefix.as_deref())
+            .sink
+            .list(self.prefix.as_deref())
             .await
             .context("verify: list destination")?;
         let dmap: HashMap<&str, u64> = dst.iter().map(|(k, s)| (k.as_str(), *s)).collect();
@@ -323,7 +406,7 @@ async fn resolve_creds(
 /// `JobSpec::ObjectMigrate` arm. Errors are recorded on the record as `failed`.
 pub async fn run_migration(
     pool: &SqlitePool,
-    k8s: Option<&atlas_driver_k8s::K8sDriver>,
+    k8s: Option<std::sync::Arc<atlas_driver_k8s::K8sDriver>>,
     id: &str,
 ) -> Result<()> {
     use atlas_inventory::databridge::object_migrations as store;
@@ -353,7 +436,7 @@ pub async fn run_migration(
 
 async fn run_migration_inner(
     pool: &SqlitePool,
-    k8s: Option<&atlas_driver_k8s::K8sDriver>,
+    k8s: Option<std::sync::Arc<atlas_driver_k8s::K8sDriver>>,
     rec: &atlas_api_types::ObjectMigration,
 ) -> Result<bool> {
     use atlas_inventory::databridge::object_migrations as store;
@@ -389,8 +472,8 @@ async fn run_migration_inner(
         .dest_secret_ref
         .as_deref()
         .ok_or_else(|| anyhow::anyhow!("dest_secret_ref is required"))?;
-    let (src_ak, src_sk) = resolve_creds(k8s, &rec.secret_namespace, src_ref).await?;
-    let (dst_ak, dst_sk) = resolve_creds(k8s, &rec.secret_namespace, dst_ref).await?;
+    let (src_ak, src_sk) = resolve_creds(&k8s, &rec.secret_namespace, src_ref).await?;
+    let (dst_ak, dst_sk) = resolve_creds(&k8s, &rec.secret_namespace, dst_ref).await?;
 
     // Destination endpoint (Ceph RGW).
     let dest = S3Endpoint {
@@ -449,15 +532,31 @@ async fn run_migration_inner(
     let bytes_total: u64 = plan.iter().map(|p| p.size).sum();
     store::set_totals(pool, &rec.id, plan.len() as i64, bytes_total as i64).await?;
 
+    // Tuning: per-migration record overrides, else env defaults. Concurrency = objects copied
+    // at once; part_size = multipart chunk (floored at the 5 MiB S3 minimum).
+    let concurrency = rec
+        .concurrency
+        .filter(|&n| n > 0)
+        .map(|n| n as usize)
+        .unwrap_or_else(|| env_usize("ATLAS_DATABRIDGE_OBJECT_CONCURRENCY", 6));
+    let part_size = rec
+        .part_size_mb
+        .filter(|&n| n > 0)
+        .map(|n| n as usize)
+        .unwrap_or_else(|| env_usize("ATLAS_DATABRIDGE_OBJECT_PART_SIZE_MB", 16))
+        .saturating_mul(1024 * 1024);
+
+    store::set_started(pool, &rec.id).await?;
     store::set_state(pool, &rec.id, "copying").await?;
     // Persist progress at most every ~2s of wall-time-equivalent (every 16 objects) to keep
     // the record fresh without a DB write per tiny object.
+    let started = std::time::Instant::now();
     let mut last_persist = 0usize;
     let report = {
         let pool = pool.clone();
         let id = rec.id.clone();
         migrator
-            .run(&plan, |progress| {
+            .run(&plan, concurrency, part_size, |progress| {
                 if progress.objects_done - last_persist >= 16
                     || progress.objects_done == progress.objects_total
                 {
@@ -466,9 +565,12 @@ async fn run_migration_inner(
                     let id = id.clone();
                     let done = progress.objects_done as i64;
                     let bytes = progress.bytes_done as i64;
+                    // Throughput in MB/s over the copy so far (decimal MB for readability).
+                    let secs = started.elapsed().as_secs_f64().max(0.001);
+                    let mbps = (progress.bytes_done as f64 / 1_000_000.0) / secs;
                     // Fire-and-forget progress write; a dropped update is re-sent on the next tick.
                     tokio::spawn(async move {
-                        let _ = store::set_progress(&pool, &id, done, bytes).await;
+                        let _ = store::set_progress(&pool, &id, done, bytes, mbps).await;
                     });
                 }
             })
@@ -476,16 +578,151 @@ async fn run_migration_inner(
     };
 
     store::set_state(pool, &rec.id, "verifying").await?;
-    store::set_progress(pool, &rec.id, report.objects_copied as i64, report.bytes_copied as i64).await?;
+    let secs = started.elapsed().as_secs_f64().max(0.001);
+    let final_mbps = (report.bytes_copied as f64 / 1_000_000.0) / secs;
+    store::set_progress(
+        pool,
+        &rec.id,
+        report.objects_copied as i64,
+        report.bytes_copied as i64,
+        final_mbps,
+    )
+    .await?;
     Ok(report.verified)
+}
+
+/// Parse a positive-usize env var, falling back to `default`.
+fn env_usize(key: &str, default: usize) -> usize {
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(default)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Mutex};
+    use tokio::io::AsyncReadExt;
 
     fn objs(pairs: &[(&str, u64)]) -> Vec<(String, u64)> {
         pairs.iter().map(|(k, s)| (k.to_string(), *s)).collect()
+    }
+
+    /// In-memory source: `stream_to` writes the stored bytes into the sink.
+    struct FakeSource {
+        objects: HashMap<String, Vec<u8>>,
+    }
+
+    #[async_trait::async_trait]
+    impl ObjectSource for FakeSource {
+        async fn list(&self, _prefix: Option<&str>) -> Result<Vec<(String, u64)>> {
+            Ok(self
+                .objects
+                .iter()
+                .map(|(k, v)| (k.clone(), v.len() as u64))
+                .collect())
+        }
+        async fn stream_to(
+            &self,
+            key: &str,
+            sink: &mut (dyn AsyncWrite + Unpin + Send),
+        ) -> Result<(u64, String)> {
+            let data = self.objects.get(key).cloned().unwrap_or_default();
+            sink.write_all(&data).await?;
+            sink.flush().await.ok();
+            Ok((data.len() as u64, format!("srcsha-{key}")))
+        }
+    }
+
+    /// In-memory sink: `put_stream` drains the reader and records the byte count.
+    struct FakeSink {
+        received: Arc<Mutex<HashMap<String, u64>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl ObjectSink for FakeSink {
+        async fn put_stream(
+            &self,
+            key: &str,
+            _part_size: usize,
+            mut reader: tokio::io::DuplexStream,
+        ) -> Result<(u64, String)> {
+            let mut buf = Vec::new();
+            reader.read_to_end(&mut buf).await?;
+            self.received
+                .lock()
+                .unwrap()
+                .insert(key.to_string(), buf.len() as u64);
+            Ok((buf.len() as u64, format!("dstsha-{key}")))
+        }
+        async fn list(&self, _prefix: Option<&str>) -> Result<Vec<(String, u64)>> {
+            Ok(self
+                .received
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|(k, v)| (k.clone(), *v))
+                .collect())
+        }
+    }
+
+    #[tokio::test]
+    async fn streams_and_copies_concurrently() {
+        let mut objects = HashMap::new();
+        for i in 0..20u64 {
+            objects.insert(format!("obj{i}"), vec![(i % 256) as u8; (100 + i) as usize]);
+        }
+        let received = Arc::new(Mutex::new(HashMap::new()));
+        let mig = ObjectMigrator::with_source_sink(
+            Box::new(FakeSource { objects: objects.clone() }),
+            Box::new(FakeSink { received: received.clone() }),
+            None,
+        );
+
+        let plan = mig.plan(CopyMode::Full).await.unwrap();
+        assert_eq!(plan.len(), 20);
+
+        let mut max_done = 0usize;
+        let report = mig
+            .run(&plan, 4, MIN_PART_SIZE, |p| max_done = max_done.max(p.objects_done))
+            .await
+            .unwrap();
+
+        assert_eq!(report.objects_copied, 20);
+        assert!(report.verified, "verify failed: {:?}", report.verify_error);
+        assert_eq!(max_done, 20);
+
+        // Every object was piped through and landed at the right size.
+        let recv = received.lock().unwrap();
+        assert_eq!(recv.len(), 20);
+        for (k, v) in &objects {
+            assert_eq!(recv.get(k), Some(&(v.len() as u64)), "size mismatch for {k}");
+        }
+    }
+
+    #[tokio::test]
+    async fn incremental_only_copies_changed() {
+        let mut objects = HashMap::new();
+        objects.insert("a".to_string(), vec![1u8; 10]);
+        objects.insert("b".to_string(), vec![2u8; 20]);
+        let received = Arc::new(Mutex::new(HashMap::new()));
+        // Destination already has "a" at the same size -> only "b" should copy.
+        received.lock().unwrap().insert("a".to_string(), 10u64);
+
+        let mig = ObjectMigrator::with_source_sink(
+            Box::new(FakeSource { objects }),
+            Box::new(FakeSink { received: received.clone() }),
+            None,
+        );
+        let plan = mig.plan(CopyMode::Incremental).await.unwrap();
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].key, "b");
+
+        let report = mig.run(&plan, 2, MIN_PART_SIZE, |_| {}).await.unwrap();
+        assert_eq!(report.objects_copied, 1);
+        assert!(report.verified);
     }
 
     #[test]

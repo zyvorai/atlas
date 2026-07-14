@@ -17,6 +17,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use futures::StreamExt;
 use sha2::{Digest, Sha256};
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 use azure_storage::prelude::*;
 use azure_storage_blobs::prelude::*;
@@ -57,10 +58,14 @@ impl ObjectSource for AzureBlobSource {
         Ok(out)
     }
 
-    async fn get(&self, key: &str) -> Result<(Vec<u8>, String)> {
+    async fn stream_to(
+        &self,
+        key: &str,
+        sink: &mut (dyn AsyncWrite + Unpin + Send),
+    ) -> Result<(u64, String)> {
         let blob_client = self.container.blob_client(key);
         let mut stream = blob_client.get().into_stream();
-        let mut data = Vec::new();
+        let mut total: u64 = 0;
         let mut hasher = Sha256::new();
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.with_context(|| format!("get azure blob {key}"))?;
@@ -70,8 +75,12 @@ impl ObjectSource for AzureBlobSource {
                 .await
                 .with_context(|| format!("read azure blob body {key}"))?;
             hasher.update(&body);
-            data.extend_from_slice(&body);
+            total += body.len() as u64;
+            sink.write_all(&body)
+                .await
+                .with_context(|| format!("write azure blob {key} to sink"))?;
         }
-        Ok((data, hex::encode(hasher.finalize())))
+        sink.flush().await.ok();
+        Ok((total, hex::encode(hasher.finalize())))
     }
 }

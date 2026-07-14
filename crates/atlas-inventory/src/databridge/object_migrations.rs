@@ -25,6 +25,8 @@ pub struct NewObjectMigration {
     pub dest_secret_ref: Option<String>,
     pub secret_namespace: String,
     pub mode: String,
+    pub concurrency: Option<i64>,
+    pub part_size_mb: Option<i64>,
 }
 
 pub async fn insert(pool: &SqlitePool, m: &NewObjectMigration) -> Result<()> {
@@ -32,8 +34,8 @@ pub async fn insert(pool: &SqlitePool, m: &NewObjectMigration) -> Result<()> {
         "INSERT INTO object_migrations
          (id, tenant_id, name, source_provider, source_endpoint, source_region, source_bucket,
           source_prefix, source_secret_ref, dest_provider, dest_endpoint, dest_region,
-          dest_bucket, dest_secret_ref, secret_namespace, mode, state)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'created')",
+          dest_bucket, dest_secret_ref, secret_namespace, mode, concurrency, part_size_mb, state)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'created')",
     )
     .bind(&m.id)
     .bind(&m.tenant_id)
@@ -51,6 +53,20 @@ pub async fn insert(pool: &SqlitePool, m: &NewObjectMigration) -> Result<()> {
     .bind(&m.dest_secret_ref)
     .bind(&m.secret_namespace)
     .bind(&m.mode)
+    .bind(m.concurrency)
+    .bind(m.part_size_mb)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Mark the copy as started (used to compute throughput).
+pub async fn set_started(pool: &SqlitePool, id: &str) -> Result<()> {
+    sqlx::query(
+        "UPDATE object_migrations SET started_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND started_at IS NULL",
+    )
+    .bind(id)
     .execute(pool)
     .await?;
     Ok(())
@@ -91,13 +107,20 @@ pub async fn set_totals(pool: &SqlitePool, id: &str, objects: i64, bytes: i64) -
     Ok(())
 }
 
-pub async fn set_progress(pool: &SqlitePool, id: &str, objects_done: i64, bytes_done: i64) -> Result<()> {
+pub async fn set_progress(
+    pool: &SqlitePool,
+    id: &str,
+    objects_done: i64,
+    bytes_done: i64,
+    throughput_mbps: f64,
+) -> Result<()> {
     sqlx::query(
-        "UPDATE object_migrations SET objects_done=?, bytes_done=?,
+        "UPDATE object_migrations SET objects_done=?, bytes_done=?, throughput_mbps=?,
          updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
     )
     .bind(objects_done)
     .bind(bytes_done)
+    .bind(throughput_mbps)
     .bind(id)
     .execute(pool)
     .await?;
@@ -157,7 +180,8 @@ fn select(tail: &str) -> String {
         "SELECT id, tenant_id, name, source_provider, source_endpoint, source_region,
                 source_bucket, source_prefix, source_secret_ref, dest_provider, dest_endpoint,
                 dest_region, dest_bucket, dest_secret_ref, secret_namespace, mode, state,
-                objects_total, objects_done, bytes_total, bytes_done, verified, last_error,
+                objects_total, objects_done, bytes_total, bytes_done, verified,
+                concurrency, part_size_mb, throughput_mbps, started_at, last_error,
                 job_id, created_at, updated_at
          FROM object_migrations {tail}"
     )
@@ -188,6 +212,10 @@ fn row_to(r: sqlx::sqlite::SqliteRow) -> ObjectMigration {
         bytes_total: r.get("bytes_total"),
         bytes_done: r.get("bytes_done"),
         verified: verified != 0,
+        concurrency: r.get("concurrency"),
+        part_size_mb: r.get("part_size_mb"),
+        throughput_mbps: r.get("throughput_mbps"),
+        started_at: r.get("started_at"),
         last_error: r.get("last_error"),
         job_id: r.get("job_id"),
         created_at: r.get("created_at"),
