@@ -81,6 +81,8 @@ mod tests {
             dest_secret_ref: Some("rgw-creds".into()),
             secret_namespace: "zyvor-databridge".into(),
             mode: "incremental".into(),
+            concurrency: Some(8),
+            part_size_mb: Some(16),
         }).await.unwrap();
 
         let rec = om::get(&pool, "objmig_test").await.unwrap().unwrap();
@@ -88,14 +90,19 @@ mod tests {
         assert_eq!(rec.source_bucket, "training-data");
         assert_eq!(rec.source_prefix.as_deref(), Some("models/"));
         assert!(!rec.verified);
+        assert_eq!(rec.concurrency, Some(8));
+        assert_eq!(rec.part_size_mb, Some(16));
 
         om::set_totals(&pool, "objmig_test", 42, 1024).await.unwrap();
+        om::set_started(&pool, "objmig_test").await.unwrap();
         om::set_state(&pool, "objmig_test", "copying").await.unwrap();
-        om::set_progress(&pool, "objmig_test", 20, 512).await.unwrap();
+        om::set_progress(&pool, "objmig_test", 20, 512, 12.5).await.unwrap();
         let rec = om::get(&pool, "objmig_test").await.unwrap().unwrap();
         assert_eq!(rec.objects_total, 42);
         assert_eq!(rec.objects_done, 20);
         assert_eq!(rec.state, "copying");
+        assert!(rec.throughput_mbps > 12.0);
+        assert!(rec.started_at.is_some());
 
         om::finish(&pool, "objmig_test", "completed", true, None).await.unwrap();
         let rec = om::get(&pool, "objmig_test").await.unwrap().unwrap();

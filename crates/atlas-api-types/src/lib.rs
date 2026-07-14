@@ -542,6 +542,14 @@ pub struct ObjectMigration {
     pub bytes_total: i64,
     pub bytes_done: i64,
     pub verified: bool,
+    #[serde(default)]
+    pub concurrency: Option<i64>,
+    #[serde(default)]
+    pub part_size_mb: Option<i64>,
+    #[serde(default)]
+    pub throughput_mbps: f64,
+    #[serde(default)]
+    pub started_at: Option<String>,
     pub last_error: Option<String>,
     pub job_id: Option<String>,
     pub created_at: Option<String>,

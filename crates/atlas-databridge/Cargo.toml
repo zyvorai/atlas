@@ -13,6 +13,7 @@ atlas-inventory = { workspace = true }
 atlas-driver-k8s = { workspace = true }
 atlas-driver-rgw = { workspace = true }
 async-trait = { workspace = true }
+futures-util = { workspace = true }
 tokio = { workspace = true }
 tokio-postgres = "0.7"
 # MySQL/MariaDB discovery rides the workspace sqlx with the `mysql` protocol feature added on top.

@@ -3258,6 +3258,12 @@ struct CreateObjectMigrationBody {
     /// full | incremental (default)
     #[serde(default)]
     mode: Option<String>,
+    /// objects copied at once (default from Atlas env)
+    #[serde(default)]
+    concurrency: Option<i64>,
+    /// multipart chunk size in MiB (default from Atlas env)
+    #[serde(default)]
+    part_size_mb: Option<i64>,
 }
 
 /// `POST /databridge/object` — register an object-storage migration (synchronous; no copy yet).
@@ -3297,6 +3303,8 @@ async fn db_object_create(
         dest_secret_ref: body.dest_secret_ref.clone(),
         secret_namespace: body.secret_namespace.clone().unwrap_or_else(|| "zyvor-databridge".into()),
         mode: mode.into(),
+        concurrency: body.concurrency,
+        part_size_mb: body.part_size_mb,
     };
     atlas_inventory::databridge::object_migrations::insert(&s.pool, &rec).await?;
     let created = atlas_inventory::databridge::object_migrations::get(&s.pool, &id)

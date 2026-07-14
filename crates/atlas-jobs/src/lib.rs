@@ -1181,7 +1181,10 @@ async fn dispatch(
         JobSpec::Cutover { plan_id } => atlas_databridge::pipeline::cutover(pool, &plan_id).await,
         JobSpec::Rollback { plan_id } => atlas_databridge::pipeline::rollback(pool, &plan_id).await,
         JobSpec::ObjectMigrate { migration_id } => {
-            atlas_databridge::object::run_migration(pool, k8s.as_deref(), &migration_id)
+            // Clone the Arc into an owned Option before awaiting so the borrow of `k8s`
+            // isn't held across the (large) copy future — keeps the future Send-inferable.
+            let k8s_owned = k8s.clone();
+            atlas_databridge::object::run_migration(pool, k8s_owned, &migration_id)
                 .await
                 .map(|()| serde_json::json!({ "migration_id": migration_id, "result": "completed" }))
         }
