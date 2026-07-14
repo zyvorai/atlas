@@ -5,6 +5,7 @@
 pub mod cdc;
 pub mod cutovers;
 pub mod edge_clusters;
+pub mod object_migrations;
 pub mod plans;
 pub mod sources;
 pub mod validations;
@@ -55,5 +56,54 @@ mod tests {
         super::cutovers::insert_cutover(&pool, "cut_test", "global", "mplan_test", Some("src"), Some("edge"), None, None).await.unwrap();
         super::cutovers::set_complete(&pool, "cut_test", "complete").await.unwrap();
         assert_eq!(super::cutovers::latest_for_plan(&pool, "mplan_test").await.unwrap().unwrap().state, "complete");
+    }
+
+    #[tokio::test]
+    async fn object_migration_round_trip() {
+        use super::object_migrations as om;
+        let pool = connect("sqlite::memory:").await.unwrap();
+        migrate(&pool).await.unwrap();
+
+        om::insert(&pool, &om::NewObjectMigration {
+            id: "objmig_test".into(),
+            tenant_id: "global".into(),
+            name: "datasets -> ceph".into(),
+            source_provider: "aws".into(),
+            source_endpoint: "https://s3.us-east-1.amazonaws.com".into(),
+            source_region: "us-east-1".into(),
+            source_bucket: "training-data".into(),
+            source_prefix: Some("models/".into()),
+            source_secret_ref: Some("aws-migration-creds".into()),
+            dest_provider: "s3-compatible".into(),
+            dest_endpoint: "http://rook-ceph-rgw.zyvor:80".into(),
+            dest_region: "us-east-1".into(),
+            dest_bucket: "ai-datasets".into(),
+            dest_secret_ref: Some("rgw-creds".into()),
+            secret_namespace: "zyvor-databridge".into(),
+            mode: "incremental".into(),
+        }).await.unwrap();
+
+        let rec = om::get(&pool, "objmig_test").await.unwrap().unwrap();
+        assert_eq!(rec.state, "created");
+        assert_eq!(rec.source_bucket, "training-data");
+        assert_eq!(rec.source_prefix.as_deref(), Some("models/"));
+        assert!(!rec.verified);
+
+        om::set_totals(&pool, "objmig_test", 42, 1024).await.unwrap();
+        om::set_state(&pool, "objmig_test", "copying").await.unwrap();
+        om::set_progress(&pool, "objmig_test", 20, 512).await.unwrap();
+        let rec = om::get(&pool, "objmig_test").await.unwrap().unwrap();
+        assert_eq!(rec.objects_total, 42);
+        assert_eq!(rec.objects_done, 20);
+        assert_eq!(rec.state, "copying");
+
+        om::finish(&pool, "objmig_test", "completed", true, None).await.unwrap();
+        let rec = om::get(&pool, "objmig_test").await.unwrap().unwrap();
+        assert_eq!(rec.state, "completed");
+        assert!(rec.verified);
+
+        assert_eq!(om::list(&pool, Some("global")).await.unwrap().len(), 1);
+        om::delete(&pool, "objmig_test").await.unwrap();
+        assert!(om::get(&pool, "objmig_test").await.unwrap().is_none());
     }
 }

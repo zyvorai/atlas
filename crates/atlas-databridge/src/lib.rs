@@ -14,6 +14,9 @@ pub mod connectors;
 pub mod cr;
 pub mod kafka_lag;
 pub mod loader;
+pub mod object;
+#[cfg(feature = "azure-blob")]
+pub mod object_azure;
 pub mod pipeline;
 pub mod reconcile;
 pub mod validate;

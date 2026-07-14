@@ -280,6 +280,9 @@ pub enum JobSpec {
     /// DataBridge: roll back a cutover within its window.
     #[serde(rename = "databridge.rollback")]
     Rollback { plan_id: String },
+    /// DataBridge (object leg): copy a cloud object store -> Ceph RGW (full | incremental).
+    #[serde(rename = "databridge.object.migrate")]
+    ObjectMigrate { migration_id: String },
     /// Delete a backup: remove its S3 manifest + data objects and the RBD snapshot (best-effort).
     #[serde(rename = "backup.delete")]
     BackupDelete {
@@ -333,6 +336,7 @@ impl JobSpec {
             JobSpec::ValidateRun { .. } => "databridge.validate",
             JobSpec::Cutover { .. } => "databridge.cutover",
             JobSpec::Rollback { .. } => "databridge.rollback",
+            JobSpec::ObjectMigrate { .. } => "databridge.object.migrate",
         }
     }
 }
@@ -1176,6 +1180,11 @@ async fn dispatch(
         }
         JobSpec::Cutover { plan_id } => atlas_databridge::pipeline::cutover(pool, &plan_id).await,
         JobSpec::Rollback { plan_id } => atlas_databridge::pipeline::rollback(pool, &plan_id).await,
+        JobSpec::ObjectMigrate { migration_id } => {
+            atlas_databridge::object::run_migration(pool, k8s.as_deref(), &migration_id)
+                .await
+                .map(|()| serde_json::json!({ "migration_id": migration_id, "result": "completed" }))
+        }
 
         JobSpec::BucketCreate {
             bucket_id,
