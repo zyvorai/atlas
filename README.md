@@ -10,6 +10,11 @@ call **stable Atlas APIs**; Atlas talks to storage backends through **pluggable 
 > internals. Atlas maps intent → backend, owns inventory/ownership/audit, and keeps every
 > product decoupled from Ceph (or any future NFS/ZFS/SAN/cloud backend).
 
+
+## 📖 Feature Guide
+
+**[Atlas — Customer Feature Guide](docs/atlas-customer-feature-guide.md)** — a complete, customer-facing reference covering all **61 features** across **11 areas**, grounded in the product's actual capabilities. Also available as a print-ready **[PDF](docs/atlas-customer-feature-guide.pdf)**.
+
 ```
  Zeus OS · Veyron · Hyper2KVM · GuestKit · PacketWolf · Aether · Ragnarok · Machina · HyperSDK
                                         │  (REST / gRPC)
