@@ -50,11 +50,57 @@ rsync -az --delete \
 log "2/4 build atlas-gateway:ceph (Dockerfile.ceph) with podman on remote"
 ${SSH} "cd ~/${REMOTE_DIR} && podman build -t atlas-gateway:ceph -f Dockerfile.ceph ."
 
-log "3/4 import image into k3s containerd"
+log "3/6 import image into k3s containerd"
 ${SSH} "cd ~/${REMOTE_DIR} && podman save atlas-gateway:ceph -o /tmp/atlas-gateway-ceph.tar \
   && sudo k3s ctr images import /tmp/atlas-gateway-ceph.tar && rm -f /tmp/atlas-gateway-ceph.tar"
 
-log "4/4 apply manifest + roll out ${DEPLOY} in ${NS}"
+# ${MANIFEST}'s own ClusterRoleBinding (atlas-gateway-readonly-cephns) already
+# targets the right ServiceAccount (rook-ceph:atlas-gateway) — it just
+# references a ClusterRole named atlas-gateway-readonly that this script never
+# created, because that ClusterRole is defined in the *sibling* deploy-remote.sh's
+# manifest (deploy/k8s/atlas-gateway.yaml), which this script doesn't apply. On a
+# cluster that only ever ran the real-Ceph path, the pod started with the
+# ClusterRole missing and every k8s API call it made came back "clusterrole ...
+# not found: Forbidden" — non-fatal (only the live k8s driver's PV/PVC reads
+# degrade) but silent, and easy to miss on a fresh install.
+log "4/6 ensure the shared atlas-gateway-readonly ClusterRole exists"
+${SSH} bash -s <<REMOTE
+set -euo pipefail
+cd ~/${REMOTE_DIR}
+rm -rf /tmp/atlas-rbac-split
+mkdir -p /tmp/atlas-rbac-split
+csplit -z -s -f /tmp/atlas-rbac-split/doc- deploy/k8s/atlas-gateway.yaml '/^---\$/' '{*}'
+for f in /tmp/atlas-rbac-split/doc-*; do
+  if grep -q '^kind: ClusterRole\$' "\$f"; then
+    sudo kubectl apply -f "\$f"
+  fi
+done
+rm -rf /tmp/atlas-rbac-split
+REMOTE
+
+# ${MANIFEST}'s Deployment mounts a `tls` volume from a Secret named atlas-tls
+# (deploy/k8s/atlas-gateway-ceph.yaml) that nothing creates — on a fresh
+# install the pod crash-loops on "load TLS cert/key: ... No such file or
+# directory" until someone notices and creates it by hand. Self-signed and
+# idempotent: left alone once it exists, so re-running this script never
+# rotates a cert a browser has already been told to trust.
+log "5/6 ensure the atlas-tls secret exists (self-signed, HTTPS listener)"
+${SSH} bash -s <<REMOTE
+set -euo pipefail
+if ! sudo kubectl -n ${NS} get secret atlas-tls >/dev/null 2>&1; then
+  tmpdir="\$(mktemp -d)"
+  trap 'rm -rf "\$tmpdir"' EXIT
+  openssl req -x509 -newkey rsa:2048 -nodes \
+    -keyout "\$tmpdir/tls.key" -out "\$tmpdir/tls.crt" \
+    -days 365 -subj "/CN=atlas-gateway" >/dev/null 2>&1
+  sudo kubectl -n ${NS} create secret tls atlas-tls \
+    --cert="\$tmpdir/tls.crt" --key="\$tmpdir/tls.key"
+else
+  echo "atlas-tls already exists — left alone"
+fi
+REMOTE
+
+log "6/6 apply manifest + roll out ${DEPLOY} in ${NS}"
 if [[ "${ATLAS_SKIP_APPLY:-0}" != "1" ]]; then
   ${SSH} "cd ~/${REMOTE_DIR} && sudo kubectl apply -f ${MANIFEST}"
 fi
