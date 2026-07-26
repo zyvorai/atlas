@@ -42,47 +42,54 @@ pub fn service(
     let secret = state.config.jwt_secret.clone();
     let required = state.config.auth_required;
     let bootstrap = state.config.bootstrap_admin_token.clone();
+    let rate = state.rate.clone();
     AtlasStorageServer::with_interceptor(
         GrpcService { state },
         move |mut req: Request<()>| -> Result<Request<()>, Status> {
-            if !required {
-                req.extensions_mut().insert(GrpcActor {
+            let actor = if !required {
+                GrpcActor {
                     id: "anonymous".into(),
                     role: "viewer".into(),
-                });
-                return Ok(req);
-            }
-            let token = req
-                .metadata()
-                .get("authorization")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.strip_prefix("Bearer "));
-            let Some(token) = token else {
-                return Err(Status::unauthenticated("missing bearer token"));
-            };
-            if bootstrap.as_deref().is_some_and(|boot| boot == token) {
-                req.extensions_mut().insert(GrpcActor {
-                    id: "bootstrap".into(),
-                    role: "admin".into(),
-                });
-                return Ok(req);
-            }
-            let mut validation = Validation::new(Algorithm::HS256);
-            validation.validate_exp = true;
-            match decode::<Claims>(
-                token,
-                &DecodingKey::from_secret(secret.as_bytes()),
-                &validation,
-            ) {
-                Ok(data) => {
-                    req.extensions_mut().insert(GrpcActor {
-                        id: data.claims.sub,
-                        role: data.claims.role,
-                    });
-                    Ok(req)
                 }
-                Err(e) => Err(Status::unauthenticated(format!("invalid token: {e}"))),
+            } else {
+                let token = req
+                    .metadata()
+                    .get("authorization")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|s| s.strip_prefix("Bearer "));
+                let Some(token) = token else {
+                    return Err(Status::unauthenticated("missing bearer token"));
+                };
+                if bootstrap.as_deref().is_some_and(|boot| boot == token) {
+                    GrpcActor {
+                        id: "bootstrap".into(),
+                        role: "admin".into(),
+                    }
+                } else {
+                    let mut validation = Validation::new(Algorithm::HS256);
+                    validation.validate_exp = true;
+                    match decode::<Claims>(
+                        token,
+                        &DecodingKey::from_secret(secret.as_bytes()),
+                        &validation,
+                    ) {
+                        Ok(data) => GrpcActor {
+                            id: data.claims.sub,
+                            role: data.claims.role,
+                        },
+                        Err(e) => {
+                            return Err(Status::unauthenticated(format!("invalid token: {e}")))
+                        }
+                    }
+                }
+            };
+            // Per-actor rate limit (mirrors the REST auth_middleware; disabled unless
+            // ATLAS_RATE_LIMIT_RPM > 0), so the gRPC edge can't bypass the REST governance limit.
+            if !rate.allow(&actor.id) {
+                return Err(Status::resource_exhausted("rate limit exceeded"));
             }
+            req.extensions_mut().insert(actor);
+            Ok(req)
         },
     )
 }

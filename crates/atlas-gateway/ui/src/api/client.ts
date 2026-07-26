@@ -115,6 +115,9 @@ async function pollJob(jobId: string, _label: string, finish: (s: string, e?: st
       /* keep trying */
     }
   }
+  // Give up after 90s of polling — without this the job stays "running" in the UI forever with
+  // no toast and no way to tell it's not actually being tracked anymore.
+  finish("failed", "Timed out waiting for job status");
 }
 
 // Extract the job id from a 202 response body (varies by endpoint).

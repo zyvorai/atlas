@@ -53,29 +53,40 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Optional HTTPS listener (same app), enabled by ATLAS_HTTPS_ADDR + cert/key PEM paths.
-    if let (Some(haddr), Some(cert), Some(key)) = (https_addr, tls_cert, tls_key) {
+    let https_task = if let (Some(haddr), Some(cert), Some(key)) = (https_addr, tls_cert, tls_key) {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let tls = axum_server::tls_rustls::RustlsConfig::from_pem_file(&cert, &key)
             .await
             .map_err(|e| anyhow::anyhow!("load TLS cert/key: {e}"))?;
         let saddr: SocketAddr = haddr.parse()?;
         info!("atlas-gateway REST (TLS) listening on https://{saddr}");
-        let https = async move {
+        // Wire the same shutdown signal as the REST/gRPC listeners so in-flight HTTPS requests
+        // drain instead of being killed when the process exits.
+        let handle = axum_server::Handle::new();
+        let shutdown_handle = handle.clone();
+        tokio::spawn(async move {
+            shutdown_signal().await;
+            shutdown_handle.graceful_shutdown(Some(std::time::Duration::from_secs(30)));
+        });
+        Some(tokio::spawn(async move {
             axum_server::bind_rustls(saddr, tls)
+                .handle(handle)
                 .serve(app.into_make_service())
                 .await
                 .map_err(anyhow::Error::from)
-        };
-        tokio::spawn(async move {
-            if let Err(e) = https.await {
-                tracing::error!("https server error: {e:#}");
-            }
-        });
-    }
+        }))
+    } else {
+        None
+    };
 
     // gRPC edge (served concurrently). Empty ATLAS_GRPC_ADDR disables it.
     if grpc_addr.trim().is_empty() {
         rest.await?;
+        if let Some(t) = https_task {
+            if let Err(e) = t.await? {
+                tracing::error!("https server error: {e:#}");
+            }
+        }
         return Ok(());
     }
     let gaddr: SocketAddr = grpc_addr.parse()?;
@@ -93,6 +104,11 @@ async fn main() -> anyhow::Result<()> {
     };
 
     tokio::try_join!(rest, grpc)?;
+    if let Some(t) = https_task {
+        if let Err(e) = t.await? {
+            tracing::error!("https server error: {e:#}");
+        }
+    }
     info!("atlas-gateway shut down cleanly");
     Ok(())
 }

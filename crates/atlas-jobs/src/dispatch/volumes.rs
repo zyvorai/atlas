@@ -44,9 +44,14 @@ pub(crate) async fn dispatch_volumes(
                 labels,
                 data_source_snapshot: None,
             };
-            k8s.create_pvc(&create)
-                .await
-                .with_context(|| format!("create PVC {namespace}/{name}"))?;
+            // Idempotent retry: if a prior attempt already created the PVC (e.g. dispatch
+            // succeeded but the job's mark-succeeded write failed, forcing a full re-run), the
+            // k8s API errors on a PVC that already exists — skip it and just verify/record.
+            if k8s.get_pvc(&namespace, &name).await.ok().flatten().is_none() {
+                k8s.create_pvc(&create)
+                    .await
+                    .with_context(|| format!("create PVC {namespace}/{name}"))?;
+            }
 
             // Verify: poll for Bound (Immediate SCs bind quickly; WaitForFirstConsumer stays Pending).
             let phase = poll_pvc_phase(&k8s, &namespace, &name).await;
@@ -151,20 +156,33 @@ pub(crate) async fn dispatch_volumes(
             snapshot_class,
         } => {
             let k8s = require_k8s(k8s)?;
-            atlas_inventory::snapshots::insert_snapshot(
-                pool,
-                &snapshot_id,
-                tenant_id,
-                &volume_id,
-                &name,
-                None,
-                "crash",
-                "creating",
-            )
-            .await?;
-            k8s.create_volume_snapshot(&namespace, &name, &pvc_name, &snapshot_class)
-                .await
-                .with_context(|| format!("create VolumeSnapshot {namespace}/{name}"))?;
+            // Idempotent retry: only insert the tracking row once — `insert_snapshot` is a plain
+            // INSERT, so re-running it after a prior attempt already got this far (e.g. dispatch
+            // succeeded but the job's mark-succeeded write failed, forcing a full re-run) would
+            // hit a UNIQUE constraint and fail forever.
+            let already_tracked = atlas_inventory::snapshots::get_snapshot(pool, &snapshot_id)
+                .await?
+                .is_some();
+            if !already_tracked {
+                atlas_inventory::snapshots::insert_snapshot(
+                    pool,
+                    &snapshot_id,
+                    tenant_id,
+                    &volume_id,
+                    &name,
+                    None,
+                    "crash",
+                    "creating",
+                )
+                .await?;
+            }
+            // Likewise, skip re-creating the VolumeSnapshot if a prior attempt already put it in
+            // place — the k8s API errors on a name that already exists.
+            if !matches!(k8s.volume_snapshot_ready(&namespace, &name).await, Ok(Some(_))) {
+                k8s.create_volume_snapshot(&namespace, &name, &pvc_name, &snapshot_class)
+                    .await
+                    .with_context(|| format!("create VolumeSnapshot {namespace}/{name}"))?;
+            }
             let ready = poll_snapshot_ready(&k8s, &namespace, &name).await;
             atlas_inventory::snapshots::set_state(
                 pool,

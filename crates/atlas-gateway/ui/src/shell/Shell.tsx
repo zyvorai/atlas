@@ -43,6 +43,9 @@ function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
   const paused = useUi((s) => s.paused);
   const togglePaused = useUi((s) => s.togglePaused);
   const [draft, setDraft] = useState(token);
+  useEffect(() => {
+    if (tokenOpen) setDraft(token);
+  }, [tokenOpen, token]);
   const nav = useNavigate();
   return (
     <div className="h-9 shrink-0 flex items-center gap-3 px-3 glass border-b border-white/[0.06] text-[13px]">

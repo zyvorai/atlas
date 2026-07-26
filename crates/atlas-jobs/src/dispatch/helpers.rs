@@ -111,9 +111,13 @@ pub(crate) async fn provision_from_snapshot(
         labels,
         data_source_snapshot: Some(snapshot_k8s_name.to_string()),
     };
-    k8s.create_pvc(&create)
-        .await
-        .with_context(|| format!("{provenance} PVC {namespace}/{new_name} from snapshot"))?;
+    // Idempotent retry: skip re-creating the PVC if a prior attempt already got it in place (the
+    // k8s API errors on a name that already exists).
+    if k8s.get_pvc(namespace, new_name).await.ok().flatten().is_none() {
+        k8s.create_pvc(&create)
+            .await
+            .with_context(|| format!("{provenance} PVC {namespace}/{new_name} from snapshot"))?;
+    }
 
     let phase = poll_pvc_phase(k8s, namespace, new_name).await;
     let vol = StorageVolume {

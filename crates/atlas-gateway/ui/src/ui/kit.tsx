@@ -168,9 +168,13 @@ export function Copyable({ text, className }: { text: string; className?: string
       title="Click to copy"
       onClick={(e) => {
         e.stopPropagation();
-        navigator.clipboard?.writeText(text);
-        setOk(true);
-        setTimeout(() => setOk(false), 1000);
+        navigator.clipboard
+          ?.writeText(text)
+          .then(() => {
+            setOk(true);
+            setTimeout(() => setOk(false), 1000);
+          })
+          .catch(() => {});
       }}
     >
       {ok ? "copied ✓" : text}

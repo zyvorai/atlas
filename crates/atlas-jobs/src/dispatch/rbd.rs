@@ -21,9 +21,14 @@ pub(crate) async fn dispatch_rbd(
             image,
             size_bytes,
         } => {
-            atlas_driver_ceph::rbd_create(&rbd_pool, &image, size_bytes)
-                .await
-                .with_context(|| format!("rbd create {rbd_pool}/{image}"))?;
+            // Idempotent retry: if a prior attempt already created the image (e.g. dispatch
+            // succeeded but the job's mark-succeeded write failed, forcing a full re-run), `rbd
+            // create` errors on an image that already exists — skip it and just re-record.
+            if atlas_driver_ceph::rbd_info_size(&rbd_pool, &image).await.is_err() {
+                atlas_driver_ceph::rbd_create(&rbd_pool, &image, size_bytes)
+                    .await
+                    .with_context(|| format!("rbd create {rbd_pool}/{image}"))?;
+            }
             let vol = StorageVolume {
                 id: volume_id.clone(),
                 cluster_id: None,
@@ -66,19 +71,36 @@ pub(crate) async fn dispatch_rbd(
             snap,
             clone_image,
         } => {
-            // Snapshot the source, protect it (required for cloning), then create the COW clone.
-            atlas_driver_ceph::rbd_snap_create(&rbd_pool, &image, &snap)
-                .await
-                .with_context(|| format!("rbd snap create {rbd_pool}/{image}@{snap}"))?;
-            atlas_driver_ceph::rbd_snap_protect(&rbd_pool, &image, &snap)
-                .await
-                .with_context(|| format!("rbd snap protect {rbd_pool}/{image}@{snap}"))?;
-            atlas_driver_ceph::rbd_clone(&rbd_pool, &image, &snap, &rbd_pool, &clone_image)
-                .await
-                .with_context(|| format!("rbd clone {rbd_pool}/{image}@{snap} -> {clone_image}"))?;
-            let size_bytes = atlas_driver_ceph::rbd_info_size(&rbd_pool, &clone_image)
-                .await
-                .unwrap_or(0);
+            // Idempotent retry: if the clone image already exists, a prior attempt already
+            // finished (only the job's own bookkeeping failed afterwards) — re-running `rbd snap
+            // create`/`rbd snap protect` on an already-existing/protected snapshot errors, so skip
+            // straight to recording it.
+            let already_cloned = atlas_driver_ceph::rbd_info_size(&rbd_pool, &clone_image).await;
+            let size_bytes = if let Ok(size_bytes) = already_cloned {
+                size_bytes
+            } else {
+                // Snapshot the source (unless a prior attempt already created it), protect it
+                // (required for cloning), then create the COW clone.
+                let existing_snaps = atlas_driver_ceph::rbd_snap_list(&rbd_pool, &image)
+                    .await
+                    .unwrap_or_default();
+                if !existing_snaps.iter().any(|s| s == &snap) {
+                    atlas_driver_ceph::rbd_snap_create(&rbd_pool, &image, &snap)
+                        .await
+                        .with_context(|| format!("rbd snap create {rbd_pool}/{image}@{snap}"))?;
+                }
+                atlas_driver_ceph::rbd_snap_protect(&rbd_pool, &image, &snap)
+                    .await
+                    .with_context(|| format!("rbd snap protect {rbd_pool}/{image}@{snap}"))?;
+                atlas_driver_ceph::rbd_clone(&rbd_pool, &image, &snap, &rbd_pool, &clone_image)
+                    .await
+                    .with_context(|| {
+                        format!("rbd clone {rbd_pool}/{image}@{snap} -> {clone_image}")
+                    })?;
+                atlas_driver_ceph::rbd_info_size(&rbd_pool, &clone_image)
+                    .await
+                    .unwrap_or(0)
+            };
             let vol = StorageVolume {
                 id: volume_id.clone(),
                 cluster_id: None,
@@ -117,9 +139,29 @@ pub(crate) async fn dispatch_rbd(
             }))
         }
         JobSpec::RbdMigrate { volume_id, pool: rbd_pool, image, dest_pool } => {
-            atlas_driver_ceph::rbd_migrate(&rbd_pool, &image, &dest_pool)
+            // Idempotent retry: once `rbd migration commit` lands, the image no longer resolves
+            // under the source pool, so a re-run of `rbd migrate` would fail `prepare` against a
+            // vanished source — detect an already-completed migration and skip straight through.
+            let already_migrated = atlas_driver_ceph::rbd_info_size(&dest_pool, &image)
                 .await
-                .with_context(|| format!("rbd migrate {rbd_pool}/{image} -> {dest_pool}"))?;
+                .is_ok()
+                && atlas_driver_ceph::rbd_info_size(&rbd_pool, &image).await.is_err();
+            if !already_migrated {
+                atlas_driver_ceph::rbd_migrate(&rbd_pool, &image, &dest_pool)
+                    .await
+                    .with_context(|| format!("rbd migrate {rbd_pool}/{image} -> {dest_pool}"))?;
+            }
+            // Record the new pool/image location — otherwise the catalog keeps pointing at the
+            // now-defunct source pool.
+            if !volume_id.is_empty() {
+                sqlx::query(
+                    "UPDATE storage_volumes SET backend_native_id=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+                )
+                .bind(format!("rbd:{dest_pool}/{image}"))
+                .bind(&volume_id)
+                .execute(pool)
+                .await?;
+            }
             Ok(serde_json::json!({
                 "volume_id": volume_id, "from": format!("{rbd_pool}/{image}"),
                 "to": format!("{dest_pool}/{image}")
@@ -129,10 +171,19 @@ pub(crate) async fn dispatch_rbd(
             pool: rbd_pool,
             image,
         } => {
-            atlas_driver_ceph::rbd_flatten(&rbd_pool, &image)
+            // Idempotent retry: `rbd flatten` errors on an image with no parent, which is exactly
+            // the state a prior successful attempt leaves behind.
+            let spec = format!("{rbd_pool}/{image}");
+            let has_parent = atlas_driver_ceph::rbd_cmd(&["info", &spec])
                 .await
-                .with_context(|| format!("rbd flatten {rbd_pool}/{image}"))?;
-            Ok(serde_json::json!({ "rbd": format!("{rbd_pool}/{image}"), "flattened": true }))
+                .map(|info| info.get("parent").is_some())
+                .unwrap_or(true);
+            if has_parent {
+                atlas_driver_ceph::rbd_flatten(&rbd_pool, &image)
+                    .await
+                    .with_context(|| format!("rbd flatten {spec}"))?;
+            }
+            Ok(serde_json::json!({ "rbd": spec, "flattened": true }))
         }
         JobSpec::RbdQos { volume_id, pool: rbd_pool, image, iops_limit, bps_limit } => {
             atlas_driver_ceph::rbd_qos_set(&rbd_pool, &image, iops_limit, bps_limit)

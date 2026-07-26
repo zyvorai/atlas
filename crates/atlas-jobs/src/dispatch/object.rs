@@ -90,9 +90,13 @@ pub(crate) async fn dispatch_object(
                     labels,
                     data_source_snapshot: None,
                 };
-                k8s.create_pvc(&create)
-                    .await
-                    .with_context(|| format!("create restore PVC {namespace}/{new_name}"))?;
+                // Idempotent retry: skip re-creating the PVC if a prior attempt already got it in
+                // place (the k8s API errors on a name that already exists).
+                if k8s.get_pvc(&namespace, &new_name).await.ok().flatten().is_none() {
+                    k8s.create_pvc(&create)
+                        .await
+                        .with_context(|| format!("create restore PVC {namespace}/{new_name}"))?;
+                }
                 let phase = poll_pvc_phase(&k8s, &namespace, &new_name).await;
                 if phase.as_deref() != Some("Bound") {
                     anyhow::bail!(
@@ -278,9 +282,19 @@ pub(crate) async fn dispatch_object(
             if let Some(sz) = &max_size {
                 additional_config.insert("maxSize".to_string(), sz.clone());
             }
-            k8s.create_obc(&namespace, &obc_name, &storage_class, &additional_config)
+            // Idempotent retry: skip re-creating the OBC if a prior attempt already bound one
+            // (the k8s API errors on a name that already exists).
+            if k8s
+                .get_configmap(&namespace, &obc_name)
                 .await
-                .with_context(|| format!("create OBC {namespace}/{obc_name}"))?;
+                .ok()
+                .flatten()
+                .is_none()
+            {
+                k8s.create_obc(&namespace, &obc_name, &storage_class, &additional_config)
+                    .await
+                    .with_context(|| format!("create OBC {namespace}/{obc_name}"))?;
+            }
 
             // Rook writes a ConfigMap (same name) with BUCKET_* once the OBC binds.
             let cm = poll_configmap(&k8s, &namespace, &obc_name)
@@ -350,15 +364,22 @@ pub(crate) async fn dispatch_object(
             mode,
         } => {
             let k8s = require_k8s(k8s)?;
-            // 1. point-in-time CSI snapshot of the source volume.
-            k8s.create_volume_snapshot(
-                &volume_namespace,
-                &snapshot_name,
-                &pvc_name,
-                &snapshot_class,
-            )
-            .await
-            .with_context(|| format!("snapshot {volume_namespace}/{snapshot_name} for backup"))?;
+            // 1. point-in-time CSI snapshot of the source volume. Idempotent retry: skip
+            // re-creating it if a prior attempt already put it in place (the k8s API errors on a
+            // name that already exists).
+            if !matches!(
+                k8s.volume_snapshot_ready(&volume_namespace, &snapshot_name).await,
+                Ok(Some(_))
+            ) {
+                k8s.create_volume_snapshot(
+                    &volume_namespace,
+                    &snapshot_name,
+                    &pvc_name,
+                    &snapshot_class,
+                )
+                .await
+                .with_context(|| format!("snapshot {volume_namespace}/{snapshot_name} for backup"))?;
+            }
             let ready = poll_snapshot_ready(&k8s, &volume_namespace, &snapshot_name).await;
             atlas_inventory::snapshots::set_state(
                 pool,
@@ -401,9 +422,17 @@ pub(crate) async fn dispatch_object(
                         anyhow!("could not resolve RBD image for {volume_namespace}/{pvc_name}")
                     })?;
                 let rbd_snap = format!("atlasbkp-{}", &backup_id[4..]);
-                atlas_driver_ceph::rbd_snap_create(&pool_name, &image, &rbd_snap)
+                // Idempotent retry: skip re-creating the snapshot if a prior attempt already made
+                // it (e.g. the upload below failed after this succeeded) — `rbd snap create`
+                // errors on a name that already exists.
+                let existing_snaps = atlas_driver_ceph::rbd_snap_list(&pool_name, &image)
                     .await
-                    .with_context(|| format!("rbd snap {pool_name}/{image}@{rbd_snap}"))?;
+                    .unwrap_or_default();
+                if !existing_snaps.iter().any(|s| s == &rbd_snap) {
+                    atlas_driver_ceph::rbd_snap_create(&pool_name, &image, &rbd_snap)
+                        .await
+                        .with_context(|| format!("rbd snap {pool_name}/{image}@{rbd_snap}"))?;
+                }
                 let data_key = format!("{object_key}.rbd-diff");
                 let mut child =
                     atlas_driver_ceph::rbd_export_diff_child(&pool_name, &image, &rbd_snap)

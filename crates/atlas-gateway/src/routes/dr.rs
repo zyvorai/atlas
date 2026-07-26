@@ -313,12 +313,13 @@ pub(crate) async fn dr_failover(
             pre["blockers"]
         )));
     }
+    let result = mirror_role_op(&s, &actor, &body.mirror_id, "promote", body.force).await?;
     let _ = atlas_inventory::audit::record(
         &s.pool, None, &actor.id, "dr.failover", "dr_mirror", &body.mirror_id, "ok",
         Some(json!({ "force": body.force, "preflight": pre })), None,
     )
     .await;
-    mirror_role_op(&s, &actor, &body.mirror_id, "promote", body.force).await
+    Ok(result)
 }
 
 #[derive(Debug, Deserialize)]

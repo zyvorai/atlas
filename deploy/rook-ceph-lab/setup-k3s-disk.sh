@@ -87,7 +87,13 @@ UUID="$(sudo blkid -s UUID -o value "/dev/$PART")"
 [ -n "$UUID" ] || { echo "could not read UUID of /dev/$PART"; exit 1; }
 
 say "3/5 stop $K3S_SERVICE to release open files under $RANCHER_DIR"
-sudo systemctl stop "$K3S_SERVICE" 2>/dev/null || warn "could not stop $K3S_SERVICE (not installed yet?) — continuing"
+if ! sudo systemctl stop "$K3S_SERVICE" 2>/dev/null; then
+  if [ -d "$RANCHER_DIR" ]; then
+    echo "could not stop $K3S_SERVICE and $RANCHER_DIR exists — refusing to rsync/move a directory a live service may still be writing to" >&2
+    exit 1
+  fi
+  warn "could not stop $K3S_SERVICE (not installed yet?) — $RANCHER_DIR doesn't exist yet, continuing"
+fi
 
 say "4/5 move $RANCHER_DIR onto /dev/$PART and mount it there (UUID=$UUID)"
 sudo bash -c '

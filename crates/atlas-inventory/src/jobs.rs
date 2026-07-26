@@ -99,7 +99,7 @@ pub async fn set_state(pool: &SqlitePool, id: &str, state: &str, progress: i64) 
 pub async fn mark_succeeded(pool: &SqlitePool, id: &str, result: &serde_json::Value) -> Result<()> {
     sqlx::query(
         "UPDATE storage_jobs SET state='succeeded', progress_percent=100, result=?,
-         locked_by=NULL, locked_at=NULL,
+         locked_by=NULL, locked_at=NULL, error=NULL,
          completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
          updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
     )
@@ -190,7 +190,7 @@ pub async fn reclaim_stale_running(pool: &SqlitePool, stale_secs: i64) -> Result
          next_attempt_at=NULL,
          updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
          WHERE state='running'
-           AND COALESCE(locked_at, updated_at, started_at, created_at)
+           AND MAX(COALESCE(locked_at, updated_at, started_at, created_at), updated_at)
                < strftime('%Y-%m-%dT%H:%M:%fZ','now', ?)",
     )
     .bind(format!("-{} seconds", stale_secs))
