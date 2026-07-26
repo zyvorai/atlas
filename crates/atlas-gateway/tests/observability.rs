@@ -105,7 +105,7 @@ async fn ceph_native_passthrough_returns_json() {
         let v: Value = r.json().await.unwrap();
         assert!(v.is_object() || v.is_array(), "{path} should return JSON");
     }
-    // ceph status is the HEALTH_WARN fixture (1 OSD down) — sanity-check a known field is present.
+    // ceph status is the HEALTH_WARN fixture (1 OSD down) — check the actual value, not just presence.
     let status: Value = c
         .get(format!("{base}/ceph/status"))
         .send()
@@ -114,7 +114,8 @@ async fn ceph_native_passthrough_returns_json() {
         .json()
         .await
         .unwrap();
-    assert!(status.get("health").is_some(), "ceph status should carry health");
+    assert_eq!(status["health"]["status"], "HEALTH_WARN", "fixture cluster should report HEALTH_WARN: {status}");
+    assert_eq!(status["osdmap"]["num_up_osds"], 5, "fixture has exactly 1 OSD down: {status}");
 }
 
 /// `GET /metrics` (Prometheus text) exposes the atlas_* gauges when auth is disabled (dev default).
@@ -256,6 +257,17 @@ async fn quota_admission_rejects_oversized_volume() {
         .await
         .unwrap();
     assert_eq!(over.status(), 409, "over-quota volume must be rejected");
+
+    // The rejection must happen before enqueue — no job should exist for tenant "t" yet.
+    let jobs_after_reject: Value = c.get(format!("{base}/jobs")).send().await.unwrap().json().await.unwrap();
+    assert!(
+        jobs_after_reject
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|j| j["tenant_id"] != "t"),
+        "an over-quota create must not enqueue a job: {jobs_after_reject}"
+    );
 
     // A within-quota volume is admitted (202 — the job then fails without k8s, which is fine here).
     let ok = c

@@ -23,6 +23,15 @@ export function timeAgo(iso?: string | null): string {
   const d = new Date(iso).getTime();
   if (Number.isNaN(d)) return iso;
   const s = Math.floor((Date.now() - d) / 1000);
+  // A future timestamp (e.g. a schedule's next_run_at) makes `s` negative — "-3595s ago" instead
+  // of "in 59m" otherwise, since every unit branch below treated any s < 60 as "just now, past".
+  if (s < 0) {
+    const f = -s;
+    if (f < 60) return `in ${f}s`;
+    if (f < 3600) return `in ${Math.floor(f / 60)}m`;
+    if (f < 86400) return `in ${Math.floor(f / 3600)}h`;
+    return `in ${Math.floor(f / 86400)}d`;
+  }
   if (s < 60) return `${s}s ago`;
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;

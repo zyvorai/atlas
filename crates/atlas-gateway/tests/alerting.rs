@@ -148,6 +148,25 @@ async fn ack_silence_resolve_lifecycle() {
     // Acknowledge.
     let ack = c.post(format!("{base}/alerts/{id}/ack")).send().await.unwrap();
     assert_eq!(ack.status(), 200);
+    let ack_body: Value = ack.json().await.unwrap();
+    assert_eq!(ack_body["acknowledged_by"], "anonymous", "ack response should name the acking actor");
+    // The ack must actually be persisted, not just accepted — fetch it back and check the row.
+    let acked: Value = c
+        .get(format!("{base}/alerts?state=open"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let row = acked
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["id"] == id)
+        .expect("acked alert should still be open and listed");
+    assert_eq!(row["acknowledged_by"], "anonymous", "alert record should persist who acknowledged it");
+    assert!(!row["acknowledged_at"].is_null(), "alert record should persist when it was acknowledged");
 
     // Silence for 60s → the notifier should skip it.
     let sil = c.post(format!("{base}/alerts/{id}/silence?secs=60")).send().await.unwrap();

@@ -140,6 +140,19 @@ async fn resize_down_and_migrate() {
     let base = format!("http://{}/api/atlas/v1", spawn().await.0);
     let c = reqwest::Client::new();
 
+    // Omitting allow_shrink defaults to false — the opt-in itself must default closed.
+    let default_shrink = c
+        .post(format!("{base}/rbd-images/nvme/img1/resize"))
+        .json(&json!({ "size_bytes": 1073741824i64 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(default_shrink.status(), 202);
+    assert_eq!(
+        default_shrink.json::<Value>().await.unwrap()["resource"]["allow_shrink"], false,
+        "allow_shrink must default to false when omitted"
+    );
+
     // Shrink with allow_shrink → 202, echoed.
     let shrink = c
         .post(format!("{base}/rbd-images/nvme/img1/resize"))
