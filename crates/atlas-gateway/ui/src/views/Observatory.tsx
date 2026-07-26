@@ -81,7 +81,7 @@ function Orbital({ data }: { data: any }) {
       const orbit = half * 0.52;
       ctx.strokeStyle = "rgba(56,90,140,.16)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(cx, cy, orbit, 0, 6.283); ctx.stroke();
       // core gauge
-      const used = s.raw_capacity_bytes > 0 ? s.used_capacity_bytes / s.raw_capacity_bytes : 0;
+      const used = s.raw_capacity_bytes > 0 ? Math.min(1, Math.max(0, s.used_capacity_bytes / s.raw_capacity_bytes)) : 0;
       const coreR = half * 0.20;
       ctx.strokeStyle = "rgba(56,90,140,.28)"; ctx.lineWidth = 7; ctx.beginPath(); ctx.arc(cx, cy, coreR, 0, 6.283); ctx.stroke();
       const g = ctx.createLinearGradient(cx - coreR, cy - coreR, cx + coreR, cy + coreR); g.addColorStop(0, "#38BDF8"); g.addColorStop(1, "#2563EB");
@@ -175,7 +175,7 @@ function Terminal({ data }: { data: any }) {
   const ceph = backends.find((b: any) => b.backend_type === "ceph") || {};
   const cephCl = clusters.find((c: any) => c.backend_id === ceph.backend_id);
   const health = cephCl ? String(cephCl.health).toUpperCase() : "OK";
-  const used = s.raw_capacity_bytes > 0 ? s.used_capacity_bytes / s.raw_capacity_bytes : 0;
+  const used = s.raw_capacity_bytes > 0 ? Math.min(1, Math.max(0, s.used_capacity_bytes / s.raw_capacity_bytes)) : 0;
   const io = s.client_io || {};
   const [booted, setBooted] = useState(reduced());
   const logRef = useRef<HTMLPreElement>(null);
@@ -288,7 +288,10 @@ function Fabric({ data }: { data: any }) {
     let raf = 0; const loop = () => { anchors(); step(); draw(); raf = requestAnimationFrame(loop); };
     if (red) { for (let i = 0; i < 400; i++) step(); draw(); } else loop();
     return () => { cancelAnimationFrame(raf); c.removeEventListener("mousemove", mm); c.removeEventListener("mousedown", md); window.removeEventListener("mouseup", mu); c.removeEventListener("mouseleave", ml); };
-  }, []);
+    // nodes/links are built once from `backends`/`pools` above (not re-read from the ref each
+    // frame like the other lenses), so the graph must rebuild when those inputs actually change —
+    // otherwise newly discovered/removed backends or pools never appear after the initial mount.
+  }, [data.backends, data.pools, data.clusters]);
   return <div ref={box} className="absolute inset-0"><canvas ref={cv} className="w-full h-full block cursor-grab active:cursor-grabbing" /></div>;
 }
 
@@ -298,7 +301,9 @@ function Treemap({ data }: { data: any }) {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = box.current!; const red = reduced();
-    const items = pools.map((p: any) => ({ n: p.name, k: p.kind, max: p.max_bytes || 1, used: p.used_bytes || 0 }));
+    // p.max_bytes is Ceph's MAX AVAIL (headroom beyond what's used), not total capacity — add used
+    // back in to get the provisioned total, matching Overview's pool-utilization calc.
+    const items = pools.map((p: any) => { const used = p.used_bytes || 0; return { n: p.name, k: p.kind, max: (p.max_bytes || 0) + used || 1, used }; });
     const squarify = (dt: any[], x: number, y: number, w: number, h: number) => {
       dt = dt.map((d) => ({ ...d })); const total = dt.reduce((s, d) => s + d.max, 0) || 1, area = w * h; dt.forEach((d) => (d._a = d.max / total * area));
       const out: any[] = []; let i = 0; const n = dt.length; let cx = x, cy = y, cw = w, ch = h;
@@ -343,7 +348,7 @@ function Iso({ data }: { data: any }) {
       for (let j = -4; j <= 8; j++) { const a = proj(-6, j, 0), b = proj(8, j, 0); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); }
       const towers = build();
       towers.sort((a, b) => a.bx + a.by - (b.bx + b.by)).forEach((T) => { const bob = red ? 0 : Math.sin(ts * 0.0011 + T.phase) * 4 * scale;
-        T.slabs.forEach((sp: any, i: number) => { const z0 = i * (SLAB + GAP) + bob, z1 = z0 + SLAB, col = kc(sp.kind), used = sp.used_bytes || 0, max = sp.max_bytes || 1, em = 0.28 + 0.72 * Math.min(1, used / max);
+        T.slabs.forEach((sp: any, i: number) => { const z0 = i * (SLAB + GAP) + bob, z1 = z0 + SLAB, col = kc(sp.kind), used = sp.used_bytes || 0, max = (sp.max_bytes || 0) + used || 1, em = 0.28 + 0.72 * Math.min(1, used / max);
           const t = [proj(T.bx, T.by, z1), proj(T.bx + S, T.by, z1), proj(T.bx + S, T.by + S, z1), proj(T.bx, T.by + S, z1)];
           const rF = [proj(T.bx + S, T.by, z0), proj(T.bx + S, T.by + S, z0), proj(T.bx + S, T.by + S, z1), proj(T.bx + S, T.by, z1)];
           const lF = [proj(T.bx, T.by + S, z0), proj(T.bx + S, T.by + S, z0), proj(T.bx + S, T.by + S, z1), proj(T.bx, T.by + S, z1)];
@@ -355,7 +360,7 @@ function Iso({ data }: { data: any }) {
       raf = requestAnimationFrame(frame);
     };
     const mm = (e: MouseEvent) => { const r = c.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top; let h: any = null; for (let i = hit.length - 1; i >= 0; i--) { if (inPoly(mx, my, hit[i].poly)) { h = hit[i]; break; } } hover = h; const fx = focus.current;
-      if (h && fx) { const sp = h.sp, pct = (sp.used_bytes || 0) / (sp.max_bytes || 1) * 100; fx.style.opacity = "1"; fx.innerHTML = '<div class="fnm" style="color:' + kc(sp.kind) + '">' + sp.name + '</div><div class="fmeta">' + h.name + " · " + sp.kind + " · " + tb(sp.max_bytes || 0) + " · used " + (pct < 1 ? pct.toFixed(2) : pct.toFixed(0)) + "%</div>"; }
+      if (h && fx) { const sp = h.sp, used = sp.used_bytes || 0, mx = (sp.max_bytes || 0) + used, pct = mx > 0 ? used / mx * 100 : 0; fx.style.opacity = "1"; fx.innerHTML = '<div class="fnm" style="color:' + kc(sp.kind) + '">' + sp.name + '</div><div class="fmeta">' + h.name + " · " + sp.kind + " · " + tb(mx) + " · used " + (pct < 1 ? pct.toFixed(2) : pct.toFixed(0)) + "%</div>"; }
       else if (fx) fx.style.opacity = "0"; };
     c.addEventListener("mousemove", mm);
     raf = requestAnimationFrame(frame);

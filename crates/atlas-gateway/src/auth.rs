@@ -126,11 +126,14 @@ pub async fn auth_middleware(
         };
         // Bootstrap admin: raw bearer accepted until the operator mints real JWTs and unsets
         // ATLAS_BOOTSTRAP_ADMIN_TOKEN. Checked before JWT decode so it need not be a valid JWT.
+        // Compared in constant time: this is a long-lived shared secret, and `==` on `&str`
+        // short-circuits on the first mismatched byte, which leaks timing an attacker could use
+        // to recover it byte-by-byte.
         if state
             .config
             .bootstrap_admin_token
             .as_deref()
-            .is_some_and(|boot| boot == token)
+            .is_some_and(|boot| constant_time_eq(boot.as_bytes(), token.as_bytes()))
         {
             Actor {
                 id: "bootstrap".into(),
@@ -172,6 +175,19 @@ pub async fn auth_middleware(
 
     req.extensions_mut().insert(actor);
     next.run(req).await
+}
+
+/// Constant-time byte comparison for the bootstrap shared secret, so a mismatch can't be
+/// distinguished by how many leading bytes matched.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
 }
 
 fn unauthorized(msg: &str) -> Response {

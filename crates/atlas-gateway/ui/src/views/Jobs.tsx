@@ -3,7 +3,6 @@ import { useState } from "react";
 import { Clock } from "lucide-react";
 import { useJobs } from "../api/hooks";
 import { useUi } from "../store/ui";
-import type { JobRecord } from "../api/types";
 import { Badge, Copyable, GlassSection, PageHeader, SlideOver } from "../ui/kit";
 import { Table } from "../ui/Table";
 import { stateKind, timeAgo } from "../lib/format";
@@ -20,7 +19,8 @@ function Bar({ pct, kind }: { pct: number; kind: string }) {
 export default function Jobs() {
   const { data } = useJobs();
   const live = Object.values(useUi((s) => s.jobs));
-  const [sel, setSel] = useState<JobRecord | null>(null);
+  const [selId, setSelId] = useState<string | null>(null);
+  const sel = (data || []).find((j) => j.id === selId) || null;
   return (
     <div>
       <PageHeader icon={Clock} title="Jobs" subtitle="Async storage operations — live progress via server-sent events" />
@@ -42,7 +42,7 @@ export default function Jobs() {
         <Table
           rows={data}
           rowKey={(j) => j.id}
-          onRow={setSel}
+          onRow={(j) => setSelId(j.id)}
           cols={[
             { h: "ID", f: (j) => <Copyable text={j.id} />, mono: true },
             { h: "Type", f: (j) => j.job_type, mono: true, sortKey: (j) => j.job_type },
@@ -54,7 +54,7 @@ export default function Jobs() {
         />
       </GlassSection>
 
-      <SlideOver open={!!sel} onClose={() => setSel(null)} title={<span className="mono">{sel?.id}</span>} width={520}>
+      <SlideOver open={!!selId} onClose={() => setSelId(null)} title={<span className="mono">{sel?.id}</span>} width={520}>
         {sel && (
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-2">
