@@ -15,6 +15,8 @@ call **stable Atlas APIs**; Atlas talks to storage backends through **pluggable 
 
 **[Atlas — Customer Feature Guide](docs/atlas-customer-feature-guide.md)** — a complete, customer-facing reference covering all **61 features** across **11 areas**, grounded in the product's actual capabilities. Also available as a print-ready **[PDF](docs/atlas-customer-feature-guide.pdf)**.
 
+**[Customer manual (page-by-page)](docs/customer/README.md)** — getting started, admin basics, and a guide for every Storage Center route (PDFs under `docs/customer/pdf/`).
+
 ```
  Zeus OS · Veyron · Hyper2KVM · GuestKit · PacketWolf · Aether · Ragnarok · Machina · HyperSDK
                                         │  (REST / gRPC)
