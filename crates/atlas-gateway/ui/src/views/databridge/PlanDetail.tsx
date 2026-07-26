@@ -78,7 +78,7 @@ export default function PlanDetail() {
                   {STAGE_LABEL[stage]}
                   {!IMPLEMENTED.has(stage) && <span className="ml-2 text-xs text-muted-foreground/50">(coming soon)</span>}
                 </span>
-                {actionable && <Button size="sm" variant="primary" onClick={() => act(stage)}>Run</Button>}
+                {actionable && <Button size="sm" variant="primary" onClick={() => act(stage)?.catch(() => {})}>Run</Button>}
                 {status === "done" && <Badge kind="success">done</Badge>}
               </li>
             );

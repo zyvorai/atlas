@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Cloud, Download, Plus, Upload } from "lucide-react";
 import { http, submitJob, toast } from "../api/client";
 import { useBuckets, useInvalidate } from "../api/hooks";
@@ -71,7 +71,7 @@ function ObjectBrowser({ bucket, onClose }: { bucket: StorageBucket | null; onCl
   const [keep, setKeep] = useState(0); // 0 = overwrite in place; >0 = keep N timestamped versions
   const fileRef = useRef<HTMLInputElement>(null);
   const load = (p = "") => bucket && http.get(`/buckets/${bucket.id}/objects${p ? "?prefix=" + encodeURIComponent(p) : ""}`).then((r) => setObjs(r.data.objects || [])).catch(() => setObjs([]));
-  if (bucket && objs === null) load();
+  useEffect(() => { if (bucket) load(); }, [bucket]);
   const close = () => { setObjs(null); setPrefix(""); onClose(); };
   if (!bucket) return null;
 
@@ -117,7 +117,7 @@ function ObjectBrowser({ bucket, onClose }: { bucket: StorageBucket | null; onCl
         <Button variant="primary" icon={Upload} loading={busy} onClick={() => fileRef.current?.click()}>Upload</Button>
         <input ref={fileRef} type="file" multiple hidden onChange={(e) => { upload(e.target.files); e.currentTarget.value = ""; }} />
       </div>
-      <Table rows={objs || []} rowKey={(o) => o.key}
+      <Table rows={objs ?? undefined} rowKey={(o) => o.key}
         cols={[{ h: "Key", f: (o) => o.key, mono: true }, { h: "Size", f: (o) => fmtBytes(o.size_bytes) }]}
         actions={(o) => (
           <>

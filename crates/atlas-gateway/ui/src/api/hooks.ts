@@ -12,12 +12,13 @@ import type {
 
 const g = async <T,>(path: string): Promise<T> => (await http.get<T>(path)).data;
 
-function q<T>(key: unknown[], path: string, refetch = 8000) {
+function q<T>(key: unknown[], path: string, refetch = 8000, enabled = true) {
   // Pause auto-refresh globally when the user toggles it (menu bar).
   return useQuery<T>({
     queryKey: key,
     queryFn: () => g<T>(path),
     refetchInterval: () => (useUi.getState().paused ? false : refetch),
+    enabled,
   });
 }
 
@@ -53,7 +54,7 @@ export const useEvents = (limit = 100) =>
   q<ActivityEvent[]>(["events", limit], `/events?limit=${limit}`, 8000);
 export const useTenants = () => q<TenantQuota[]>(["tenants"], "/tenants", 10000);
 export const useTenantPolicies = (id: string) =>
-  q<TenantPolicy[]>(["tenantPolicies", id], `/tenants/${id}/policies`, 15000);
+  q<TenantPolicy[]>(["tenantPolicies", id], `/tenants/${id}/policies`, 15000, !!id);
 export const useCephMetrics = (prefix?: string) =>
   q<MetricSample[]>(["cephMetrics", prefix], `/metrics/ceph${prefix ? "?prefix=" + prefix : ""}`, 8000);
 export const usePolicies = () => q<any[]>(["policies"], "/policies", 60000);
@@ -84,7 +85,7 @@ export const useRbdImages = (pool: string) =>
 
 // ---- DataBridge ----
 export const useSources = () => q<MigrationSource[]>(["db-sources"], "/databridge/sources", 6000);
-export const useSource = (id: string) => q<MigrationSource>(["db-source", id], `/databridge/sources/${id}`, 4000);
+export const useSource = (id: string) => q<MigrationSource>(["db-source", id], `/databridge/sources/${id}`, 4000, !!id);
 export const usePlans = () => q<MigrationPlan[]>(["db-plans"], "/databridge/plans", 6000);
 export const usePlan = (id: string) => q<MigrationPlan>(["db-plan", id], `/databridge/plans/${id}`, 4000);
 export const useEdgeClusters = () => q<EdgeDbCluster[]>(["db-edge"], "/databridge/edge-clusters", 8000);

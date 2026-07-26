@@ -394,12 +394,14 @@ pub(crate) async fn restore_snapshot(
     Path(id): Path<String>,
     Json(body): Json<CloneBody>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
-    // Default restore name derives from the snapshot id when not supplied.
+    // Default restore name derives from the snapshot id when not supplied. `id` is client-supplied
+    // (URL path), so strip the "snap_" prefix defensively instead of slicing — a short/malformed id
+    // would otherwise panic before the not-found check below runs.
     let name = body
         .name
         .clone()
         .filter(|n| !n.trim().is_empty())
-        .unwrap_or_else(|| format!("restore-{}", &id[5..]));
+        .unwrap_or_else(|| format!("restore-{}", id.strip_prefix("snap_").unwrap_or(&id)));
     enqueue_clone(&s, &actor, &id, "restore", name, body).await
 }
 
@@ -431,6 +433,27 @@ pub(crate) async fn enqueue_clone(
         .ok_or_else(|| {
             AppError::Validation("size_bytes is required (source volume unknown)".into())
         })?;
+    if size_bytes <= 0 {
+        return Err(AppError::Validation("size_bytes must be > 0".into()));
+    }
+
+    // Tenant quota admission (PDF §14): a clone/restore provisions a new volume just like
+    // `POST /volumes` does, so it must be admission-checked the same way.
+    match atlas_inventory::tenants::check_admission(&s.pool, &snap.tenant_id, size_bytes).await? {
+        atlas_inventory::tenants::QuotaCheck::Ok => {}
+        atlas_inventory::tenants::QuotaCheck::Bytes { limit, would_be } => {
+            return Err(AppError::Conflict(format!(
+                "tenant {} byte quota exceeded: {would_be} > {limit}",
+                snap.tenant_id
+            )));
+        }
+        atlas_inventory::tenants::QuotaCheck::Count { limit, current } => {
+            return Err(AppError::Conflict(format!(
+                "tenant {} volume-count quota exceeded: {current} already at limit {limit}",
+                snap.tenant_id
+            )));
+        }
+    }
 
     let new_volume_id = ids::volume_id();
     let job_id = ids::job_id();

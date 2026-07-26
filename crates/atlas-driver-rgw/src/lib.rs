@@ -299,35 +299,45 @@ impl S3Target {
     }
 
     /// List objects in the bucket (optionally under `prefix`) as `(key, size_bytes)` pairs.
+    /// Follows `next_continuation_token` so buckets/prefixes with more than one page (>1000
+    /// objects by default) are returned in full rather than silently truncated at page one.
     pub async fn list_objects(&self, prefix: Option<&str>) -> Result<Vec<(String, u64)>> {
-        let mut action = self.bucket.list_objects_v2(Some(&self.creds));
-        if let Some(p) = prefix {
-            action.query_mut().insert("prefix", p.to_owned());
-        }
-        let resp = self
-            .http
-            .get(action.sign(SIGN_TTL))
-            .send()
-            .await
-            .context("list objects")?;
-        if !resp.status().is_success() {
-            anyhow::bail!("list objects failed: HTTP {}", resp.status());
-        }
-        let body = resp.text().await?;
-        let parsed = ListObjectsV2::parse_response(&body).context("parse list objects")?;
-        // ListObjectsV2 is requested with encoding-type=url, so RGW/S3 return keys
-        // percent-encoded (e.g. "models/x" -> "models%2Fx"). Decode them so callers get the
-        // real key — otherwise any prefixed key 404s on the subsequent GET/PUT.
-        Ok(parsed
-            .contents
-            .into_iter()
-            .map(|c| {
+        let mut out = Vec::new();
+        let mut continuation_token: Option<String> = None;
+        loop {
+            let mut action = self.bucket.list_objects_v2(Some(&self.creds));
+            if let Some(p) = prefix {
+                action.query_mut().insert("prefix", p.to_owned());
+            }
+            if let Some(ref tok) = continuation_token {
+                action.with_continuation_token(tok.clone());
+            }
+            let resp = self
+                .http
+                .get(action.sign(SIGN_TTL))
+                .send()
+                .await
+                .context("list objects")?;
+            if !resp.status().is_success() {
+                anyhow::bail!("list objects failed: HTTP {}", resp.status());
+            }
+            let body = resp.text().await?;
+            let parsed = ListObjectsV2::parse_response(&body).context("parse list objects")?;
+            // ListObjectsV2 is requested with encoding-type=url, so RGW/S3 return keys
+            // percent-encoded (e.g. "models/x" -> "models%2Fx"). Decode them so callers get the
+            // real key — otherwise any prefixed key 404s on the subsequent GET/PUT.
+            out.extend(parsed.contents.into_iter().map(|c| {
                 let key = percent_encoding::percent_decode_str(&c.key)
                     .decode_utf8_lossy()
                     .into_owned();
                 (key, c.size)
-            })
-            .collect())
+            }));
+            match parsed.next_continuation_token {
+                Some(tok) => continuation_token = Some(tok),
+                None => break,
+            }
+        }
+        Ok(out)
     }
 
     /// DELETE an object. S3 delete is idempotent (deleting a missing key returns success).

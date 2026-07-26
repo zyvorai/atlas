@@ -181,10 +181,17 @@ pub(crate) async fn volumes_csv(
         "id,name,kind,state,size_bytes,used_bytes,cluster_id,pool_id,namespace,pvc,storage_class\n",
     );
     let cell = |o: &mut String, v: &str, last: bool| {
-        if v.contains([',', '"', '\n']) {
-            let _ = write!(o, "\"{}\"", v.replace('"', "\"\""));
+        // Neutralize CSV formula injection: a cell starting with =/+/-/@ can be interpreted as a
+        // formula by spreadsheet apps (Excel/Sheets) when this export is opened.
+        let guarded = if matches!(v.as_bytes().first(), Some(b'=' | b'+' | b'-' | b'@')) {
+            format!("'{v}")
         } else {
-            let _ = write!(o, "{v}");
+            v.to_string()
+        };
+        if guarded.contains([',', '"', '\n']) {
+            let _ = write!(o, "\"{}\"", guarded.replace('"', "\"\""));
+        } else {
+            let _ = write!(o, "{guarded}");
         }
         o.push(if last { '\n' } else { ',' });
     };

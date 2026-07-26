@@ -21,7 +21,11 @@ pub(crate) fn accepted(job: &atlas_api_types::JobRecord, resource: Value) -> (St
 
 pub(crate) fn csv_field(v: &Value, key: &str) -> String {
     let s = v.get(key).and_then(|x| x.as_str()).unwrap_or("");
-    format!("\"{}\"", s.replace('"', "\"\""))
+    // Neutralize CSV formula injection: a cell starting with =/+/-/@ can be interpreted as a
+    // formula by spreadsheet apps (Excel/Sheets) when this export is opened.
+    let needs_guard = matches!(s.as_bytes().first(), Some(b'=' | b'+' | b'-' | b'@'));
+    let guarded = if needs_guard { format!("'{s}") } else { s.to_string() };
+    format!("\"{}\"", guarded.replace('"', "\"\""))
 }
 
 pub(crate) fn ceph_default_caps(t: BackendType) -> Capabilities {

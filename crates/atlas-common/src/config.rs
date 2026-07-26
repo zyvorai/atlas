@@ -164,12 +164,16 @@ impl Config {
             tls_self_signed: matches!(
                 std::env::var("ATLAS_TLS_SELF_SIGNED")
                     .unwrap_or_default()
+                    .trim()
+                    .to_lowercase()
                     .as_str(),
                 "1" | "true" | "yes"
             ),
             nfs_enable: matches!(
                 std::env::var("ATLAS_NFS_ENABLE")
                     .unwrap_or_default()
+                    .trim()
+                    .to_lowercase()
                     .as_str(),
                 "1" | "true" | "yes"
             ),
@@ -188,6 +192,8 @@ impl Config {
             zfs_enable: matches!(
                 std::env::var("ATLAS_ZFS_ENABLE")
                     .unwrap_or_default()
+                    .trim()
+                    .to_lowercase()
                     .as_str(),
                 "1" | "true" | "yes"
             ),

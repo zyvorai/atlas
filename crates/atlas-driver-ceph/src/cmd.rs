@@ -237,7 +237,11 @@ async fn radosgw_admin(args: &[&str]) -> Result<(), DriverError> {
 /// Create an RBD image directly (`rbd create pool/image --size <MiB>`) for non-CSI consumers.
 pub async fn rbd_create(pool: &str, image: &str, size_bytes: i64) -> Result<(), DriverError> {
     let spec = format!("{pool}/{image}");
-    let mib = std::cmp::max(1, size_bytes / (1024 * 1024)).to_string();
+    // Round up so the image is never smaller than requested when size_bytes isn't MiB-aligned.
+    // NOTE: `i64::div_ceil` is unstable (int_roundings); do not "simplify" to it.
+    #[allow(clippy::manual_div_ceil)]
+    let mib_val = (size_bytes + 1024 * 1024 - 1) / (1024 * 1024);
+    let mib = std::cmp::max(1, mib_val).to_string();
     let output = tokio::process::Command::new("rbd")
         .args(["create", &spec, "--size", &mib])
         .output()
@@ -280,7 +284,11 @@ pub async fn rbd_resize(
     allow_shrink: bool,
 ) -> Result<(), DriverError> {
     let spec = format!("{pool}/{image}");
-    let mib = std::cmp::max(1, size_bytes / (1024 * 1024)).to_string();
+    // Round up so a grow never under-shoots and a shrink never removes more than requested.
+    // NOTE: `i64::div_ceil` is unstable (int_roundings); do not "simplify" to it.
+    #[allow(clippy::manual_div_ceil)]
+    let mib_val = (size_bytes + 1024 * 1024 - 1) / (1024 * 1024);
+    let mib = std::cmp::max(1, mib_val).to_string();
     let mut args = vec!["resize", &spec, "--size", &mib];
     if allow_shrink {
         args.push("--allow-shrink");
@@ -344,6 +352,24 @@ pub async fn rbd_info_size(pool: &str, image: &str) -> Result<i64, DriverError> 
     v.get("size")
         .and_then(|s| s.as_i64())
         .ok_or_else(|| DriverError::Parse(format!("rbd info {spec}: no size")))
+}
+
+/// Actual used (allocated) bytes of every image in a pool (`rbd du pool --format json`), as
+/// `(image_name, used_size)` pairs. Used to enrich `rbd ls -l` (which has no `used_size` field).
+pub async fn rbd_du_pool(pool: &str) -> Result<Vec<(String, i64)>, DriverError> {
+    let v = rbd_cmd(&["du", pool]).await?;
+    Ok(v.get("images")
+        .and_then(|a| a.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|img| {
+                    let name = img.get("image").and_then(|n| n.as_str())?.to_string();
+                    let used = img.get("used_size").and_then(|u| u.as_i64())?;
+                    Some((name, used))
+                })
+                .collect()
+        })
+        .unwrap_or_default())
 }
 
 /// Actual used (allocated) bytes of an RBD image (`rbd du pool/image --format json`).

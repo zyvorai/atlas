@@ -56,11 +56,31 @@ impl MongoSourceConnector {
         if self.user.is_empty() {
             return format!("mongodb://{}:{}/?{}", self.host, self.port, tls.trim_start_matches('&'));
         }
+        // Credentials must be percent-encoded in the userinfo component — a raw ':', '@', '/', or
+        // '%' in the password (common in generated secrets) would otherwise be parsed as a URI
+        // delimiter and either break the connection string or point auth at the wrong host.
         format!(
             "mongodb://{}:{}@{}:{}/?authSource=admin{tls}",
-            self.user, self.password, self.host, self.port
+            percent_encode_userinfo(&self.user),
+            percent_encode_userinfo(&self.password),
+            self.host,
+            self.port
         )
     }
+}
+
+/// Percent-encode a URI userinfo component (RFC 3986): escape everything but unreserved
+/// characters, so a username/password containing ':', '@', '/', '%', etc. can't be misparsed as
+/// a URI delimiter.
+fn percent_encode_userinfo(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => out.push(b as char),
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
 }
 
 /// Read an integer field that a server command may return as i32 or i64.
@@ -153,6 +173,15 @@ mod tests {
         assert!(uri.contains("tls=true"));
         let c2 = MongoSourceConnector::new("s1", "h", 27017, "appdb", "u", "p", "disable");
         assert!(!c2.uri().contains("tls=true"));
+    }
+
+    #[test]
+    fn uri_percent_encodes_special_chars_in_credentials() {
+        // A password containing ':', '@', or '/' must not be parsed as a URI delimiter — a raw
+        // '@' here would otherwise shift the host to whatever follows it.
+        let c = MongoSourceConnector::new("s1", "mongo.host", 27017, "appdb", "u@1", "p:a/s@s", "require");
+        let uri = c.uri();
+        assert!(uri.starts_with("mongodb://u%401:p%3Aa%2Fs%40s@mongo.host:27017/"));
     }
 
     /// Integration test against a real MongoDB replica set. Set `DATABRIDGE_TEST_MONGO` to

@@ -79,7 +79,7 @@ function PolicyDrawer({ tenant, onClose }: { tenant: TenantQuota | null; onClose
           <input className="field" placeholder="storage class" value={sc} onChange={(e) => setSc(e.target.value)} />
           <input className="field" placeholder="access mode" value={am} onChange={(e) => setAm(e.target.value)} />
         </div>
-        <Button variant="primary" onClick={async () => { await submit("put", `/tenants/${id}/policies/${intent}`, { storage_class: sc, access_mode: am, volume_mode: "Filesystem" }, "override set"); refetch(); }}>Save override</Button>
+        <Button variant="primary" onClick={async () => { try { await submit("put", `/tenants/${id}/policies/${intent}`, { storage_class: sc, access_mode: am, volume_mode: "Filesystem" }, "override set"); refetch(); } catch { /* toasted */ } }}>Save override</Button>
       </div>
     </SlideOver>
   );

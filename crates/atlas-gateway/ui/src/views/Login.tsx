@@ -178,7 +178,11 @@ export function Login() {
   const go = (e?: FormEvent) => {
     e?.preventDefault();
     const t = token.trim();
-    if (t) setToken(t);
+    // `remember` also decides where the *session itself* lives (localStorage vs. sessionStorage) —
+    // an unchecked box must mean the sign-in doesn't outlive this tab, not just that the form field
+    // won't be pre-filled next time.
+    if (t) setToken(t, remember);
+    enter(remember);
     if (remember && t) {
       localStorage.setItem(REMEMBER_TOKEN_KEY, t);
       localStorage.setItem(REMEMBER_FLAG_KEY, "true");
@@ -186,7 +190,6 @@ export function Login() {
       localStorage.removeItem(REMEMBER_TOKEN_KEY);
       localStorage.removeItem(REMEMBER_FLAG_KEY);
     }
-    enter();
   };
 
   const heroLogo = (

@@ -16,9 +16,9 @@ export type Density = "comfortable" | "compact";
 
 interface UiState {
   token: string;
-  setToken: (t: string) => void;
+  setToken: (t: string, persist?: boolean) => void;
   entered: boolean;
-  enter: () => void;
+  enter: (persist?: boolean) => void;
   signOut: () => void;
   theme: Theme;
   setTheme: (t: Theme) => void;
@@ -37,7 +37,14 @@ interface UiState {
 }
 
 const ls = typeof localStorage !== "undefined" ? localStorage : null;
-const savedToken = ls?.getItem("atlas.token") || "";
+const ss = typeof sessionStorage !== "undefined" ? sessionStorage : null;
+
+// The Login screen's "Remember token on this device" checkbox is a promise that an unchecked
+// session doesn't survive the browser closing. `localStorage` alone can't keep that promise (it's
+// unconditionally durable), so an unremembered sign-in lives in `sessionStorage` instead — a fresh
+// tab session must never see a token/entered flag neither of us asked to persist.
+const savedToken = ls?.getItem("atlas.token") || ss?.getItem("atlas.token") || "";
+const savedEntered = ls?.getItem("atlas.entered") === "1" || ss?.getItem("atlas.entered") === "1";
 const savedTheme = (ls?.getItem("atlas.theme") as Theme) || "nebula";
 const savedDensity = (ls?.getItem("atlas.density") as Density) || "comfortable";
 
@@ -52,18 +59,22 @@ applyDensity(savedDensity);
 
 export const useUi = create<UiState>((set) => ({
   token: savedToken,
-  setToken: (t) => {
-    ls?.setItem("atlas.token", t);
+  setToken: (t, persist = true) => {
+    (persist ? ls : ss)?.setItem("atlas.token", t);
+    (persist ? ss : ls)?.removeItem("atlas.token");
     set({ token: t });
   },
-  entered: ls?.getItem("atlas.entered") === "1",
-  enter: () => {
-    ls?.setItem("atlas.entered", "1");
+  entered: savedEntered,
+  enter: (persist = true) => {
+    (persist ? ls : ss)?.setItem("atlas.entered", "1");
+    (persist ? ss : ls)?.removeItem("atlas.entered");
     set({ entered: true });
   },
   signOut: () => {
     ls?.removeItem("atlas.entered");
     ls?.removeItem("atlas.token");
+    ss?.removeItem("atlas.entered");
+    ss?.removeItem("atlas.token");
     set({ entered: false, token: "" });
   },
   theme: savedTheme,

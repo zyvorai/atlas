@@ -344,6 +344,9 @@ pub(crate) async fn rollback_rbd_image(
     Json(body): Json<RbdSnapBody>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    if body.name.trim().is_empty() {
+        return Err(AppError::Validation("name is required".into()));
+    }
     let job_id = ids::job_id();
     let spec = JobSpec::RbdRollback {
         pool: pool_name.clone(),

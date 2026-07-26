@@ -17,7 +17,7 @@ export default function Snapshots() {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const toggle = (k: string) => setPicked((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
   const toggleAll = (keys: string[]) => setPicked((s) => (keys.every((k) => s.has(k)) ? new Set() : new Set(keys)));
-  const bulkDelete = () => del(`${picked.size} snapshot(s)`, () => { const ids = [...picked]; setPicked(new Set()); ids.forEach((id) => submitJob("delete", `/snapshots/${id}?force=true`, null, "delete snapshot", refetch)); });
+  const bulkDelete = () => del(`${picked.size} snapshot(s)`, () => { const ids = [...picked]; setPicked(new Set()); ids.forEach((id) => submitJob("delete", `/snapshots/${id}?force=true`, null, "delete snapshot", refetch).catch(() => {})); });
   return (
     <div>
       <PageHeader icon={Camera} title="Snapshots" subtitle="Point-in-time VolumeSnapshots — clone or restore into new volumes" />

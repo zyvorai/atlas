@@ -813,6 +813,24 @@ pub(crate) async fn create_restore(
         .unwrap_or_else(|| atlas_policy::DEFAULT_BLOCK_SC.to_string());
     let size_bytes = src.as_ref().map(|v| v.size_bytes).unwrap_or(1_073_741_824);
 
+    // Tenant quota admission (PDF §14): a restore provisions a new volume just like `POST /volumes`
+    // does, so it must be admission-checked the same way.
+    match atlas_inventory::tenants::check_admission(&s.pool, &backup.tenant_id, size_bytes).await? {
+        atlas_inventory::tenants::QuotaCheck::Ok => {}
+        atlas_inventory::tenants::QuotaCheck::Bytes { limit, would_be } => {
+            return Err(AppError::Conflict(format!(
+                "tenant {} byte quota exceeded: {would_be} > {limit}",
+                backup.tenant_id
+            )));
+        }
+        atlas_inventory::tenants::QuotaCheck::Count { limit, current } => {
+            return Err(AppError::Conflict(format!(
+                "tenant {} volume-count quota exceeded: {current} already at limit {limit}",
+                backup.tenant_id
+            )));
+        }
+    }
+
     // Bucket details to read + verify the manifest.
     let bucket = atlas_inventory::buckets::get_bucket(&s.pool, &backup.bucket_id)
         .await?

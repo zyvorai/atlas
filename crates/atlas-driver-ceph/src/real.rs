@@ -8,7 +8,7 @@ use atlas_api_types::{
 };
 use atlas_driver_core::{DriverError, StorageDriver};
 
-use crate::cmd::{ceph_cmd, rbd_cmd};
+use crate::cmd::{ceph_cmd, rbd_cmd, rbd_du_pool};
 
 /// Live Ceph backend accessed through the `ceph`/`rbd` CLIs.
 pub struct RealCephDriver {
@@ -198,6 +198,10 @@ impl StorageDriver for RealCephDriver {
         let out = rbd_cmd(&["ls", "-l", pool]).await?;
         let empty = vec![];
         let images = out.as_array().unwrap_or(&empty);
+        // `rbd ls -l` has no `used_size` field (only `size`, the provisioned size); fetch actual
+        // usage separately via `rbd du`.
+        let used: std::collections::HashMap<String, i64> =
+            rbd_du_pool(pool).await.unwrap_or_default().into_iter().collect();
         Ok(images
             .iter()
             // `rbd ls -l` also lists snapshot rows (with a "snapshot" field); keep base images.
@@ -209,11 +213,11 @@ impl StorageDriver for RealCephDriver {
                     id: format!("vol_{pool}_{name}"),
                     cluster_id: None,
                     pool_id: Some(format!("pool_{pool}")),
+                    backend_native_id: Some(format!("{pool}/{name}")),
+                    size_bytes: size,
+                    used_bytes: used.get(&name).copied(),
                     name,
                     kind: VolumeKind::Block,
-                    backend_native_id: Some(format!("{pool}/{}", img.get("image")?.as_str()?)),
-                    size_bytes: size,
-                    used_bytes: img.get("used_size").and_then(|v| v.as_i64()),
                     state: "available".into(),
                     health: Health::Ok,
                     kubernetes_namespace: None,

@@ -231,8 +231,12 @@ function VolumeDrawer({ vol, onClose, refetch }: { vol: StorageVolume | null; on
             <input className="field" placeholder="key" value={lk} onChange={(e) => setLk(e.target.value)} />
             <input className="field" placeholder="value" value={lv} onChange={(e) => setLv(e.target.value)} />
             <Button variant="primary" size="sm" disabled={!lk} onClick={async () => {
-              const r = await http.put(`/volumes/${vol.id}/labels`, { [lk]: lv });
-              setLabels(r.data); setLk(""); setLv(""); inv("volumes");
+              try {
+                const r = await http.put(`/volumes/${vol.id}/labels`, { [lk]: lv });
+                setLabels(r.data); setLk(""); setLv(""); inv("volumes");
+              } catch (e) {
+                if (!isUnauthorized(e)) toast(`set label: ${apiError(e)}`, "err");
+              }
             }}>Set</Button>
           </div>
         </div>

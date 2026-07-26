@@ -54,6 +54,26 @@ fn is_ceph_provisioner(p: &str) -> bool {
     CEPH_PROVISIONERS.iter().any(|c| p.ends_with(c))
 }
 
+/// List every item of `api`, following the `continue` token so results aren't silently truncated
+/// at the page `limit` on clusters with more objects than fit in one page.
+async fn list_all<K>(api: &Api<K>, page_limit: u32) -> Result<Vec<K>, kube::Error>
+where
+    K: Clone + serde::de::DeserializeOwned + std::fmt::Debug,
+{
+    let mut items = Vec::new();
+    let mut lp = ListParams::default().limit(page_limit);
+    loop {
+        let list = api.list(&lp).await?;
+        let cont = list.metadata.continue_.clone();
+        items.extend(list.items);
+        match cont {
+            Some(token) if !token.is_empty() => lp = lp.continue_token(&token),
+            _ => break,
+        }
+    }
+    Ok(items)
+}
+
 /// Thin wrapper over a `kube::Client` exposing read-only storage discovery.
 #[derive(Clone)]
 pub struct K8sDriver {
@@ -72,9 +92,8 @@ impl K8sDriver {
     /// List all StorageClasses, tagging Ceph-backed ones.
     pub async fn list_storage_classes(&self) -> Result<Vec<StorageClassInfo>, K8sError> {
         let api: Api<StorageClass> = Api::all(self.client.clone());
-        let list = api.list(&ListParams::default().limit(500)).await?;
-        Ok(list
-            .items
+        let items = list_all(&api, 500).await?;
+        Ok(items
             .into_iter()
             .map(|sc| {
                 let provisioner = sc.provisioner;
@@ -97,15 +116,15 @@ impl K8sDriver {
             Some(ns) => Api::namespaced(self.client.clone(), ns),
             None => Api::all(self.client.clone()),
         };
-        let list = api.list(&ListParams::default().limit(500)).await?;
-        Ok(list.items.into_iter().map(PvcSummary::from).collect())
+        let items = list_all(&api, 500).await?;
+        Ok(items.into_iter().map(PvcSummary::from).collect())
     }
 
     /// List cluster PersistentVolumes.
     pub async fn list_pvs(&self) -> Result<Vec<PvSummary>, K8sError> {
         let api: Api<PersistentVolume> = Api::all(self.client.clone());
-        let list = api.list(&ListParams::default().limit(500)).await?;
-        Ok(list.items.into_iter().map(PvSummary::from).collect())
+        let items = list_all(&api, 500).await?;
+        Ok(items.into_iter().map(PvSummary::from).collect())
     }
 
     // ---- write path (slice 2) ----
@@ -453,9 +472,9 @@ impl K8sDriver {
         &self,
     ) -> Result<std::collections::HashMap<String, RbdImageOwner>, K8sError> {
         let api: Api<PersistentVolume> = Api::all(self.client.clone());
-        let list = api.list(&ListParams::default().limit(1000)).await?;
+        let items = list_all(&api, 1000).await?;
         let mut out = std::collections::HashMap::new();
-        for pv in list.items {
+        for pv in items {
             let Some(spec) = pv.spec else { continue };
             let storage_class = spec.storage_class_name.clone();
             let image = spec

@@ -20,7 +20,7 @@ export default function Backups() {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const toggle = (k: string) => setPicked((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
   const toggleAll = (keys: string[]) => setPicked((s) => (keys.every((k) => s.has(k)) ? new Set() : new Set(keys)));
-  const bulkDelete = () => del(`${picked.size} backup(s)`, () => { const ids = [...picked]; setPicked(new Set()); ids.forEach((id) => submitJob("delete", `/backups/${id}`, null, "delete backup", refetch)); });
+  const bulkDelete = () => del(`${picked.size} backup(s)`, () => { const ids = [...picked]; setPicked(new Set()); ids.forEach((id) => submitJob("delete", `/backups/${id}`, null, "delete backup", refetch).catch(() => {})); });
 
   return (
     <div>

@@ -103,7 +103,7 @@ export default function DR() {
                 if (raw == null || raw.trim() === "") return;
                 const rpo_seconds = Number(raw);
                 if (!Number.isFinite(rpo_seconds) || rpo_seconds < 0) return;
-                submit("post", `/dr/mirrors/${m.id}/rpo`, { rpo_seconds }, "rpo recorded", refresh);
+                submit("post", `/dr/mirrors/${m.id}/rpo`, { rpo_seconds }, "rpo recorded", refresh).catch(() => {});
               }}>Set RPO</Button>
             </div>
           )} />

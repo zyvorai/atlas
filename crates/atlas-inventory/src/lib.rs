@@ -552,11 +552,12 @@ pub async fn is_backend_cordoned(pool: &SqlitePool, id: &str) -> Result<bool> {
 
 /// Number of volumes still referencing a backend — a guard against deleting an in-use backend.
 pub async fn backend_volume_count(pool: &SqlitePool, id: &str) -> Result<i64> {
-    Ok(sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM storage_volumes WHERE backend_id=?")
-        .bind(id)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(0))
+    Ok(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM storage_volumes WHERE backend_id=?")
+            .bind(id)
+            .fetch_one(pool)
+            .await?,
+    )
 }
 
 /// Delete a backend inventory row (e.g. a decommissioned or fixture backend). Callers should refuse
@@ -925,7 +926,7 @@ pub async fn metrics_summary(pool: &SqlitePool) -> Result<serde_json::Value> {
     let raw = row.get::<i64, _>("raw");
     let used = row.get::<i64, _>("used");
     let used_pct = if raw > 0 {
-        (used as f64 / raw as f64 * 100.0).round() / 100.0
+        (used as f64 / raw as f64 * 10_000.0).round() / 100.0
     } else {
         0.0
     };

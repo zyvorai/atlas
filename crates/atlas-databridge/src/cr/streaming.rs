@@ -31,6 +31,19 @@ pub fn topic_prefix(short: &str) -> String {
     format!("db{short}")
 }
 
+/// FNV-1a hash of a plan's short id, used to derive a MySQL/MariaDB `database.server.id` that's
+/// unique per plan (short ids are all the same length, so hashing the length is not unique).
+fn server_id_hash(short: &str) -> i64 {
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    let mut hash = OFFSET;
+    for b in short.as_bytes() {
+        hash ^= *b as u64;
+        hash = hash.wrapping_mul(PRIME);
+    }
+    (hash % 1_000_000_000) as i64
+}
+
 /// A `KafkaConnect` cluster spec (Strimzi v1). `groupId` + the three storage topics are top-level
 /// required fields; the Secret config-provider lets connectors reference `${secrets:…}`.
 ///
@@ -111,8 +124,10 @@ pub fn debezium_source_spec(
             config["publication.autocreate.mode"] = json!("filtered");
         }
         SourceKind::Mysql | SourceKind::Mariadb => {
-            // MySqlConnector / MariaDbConnector share the config keys.
-            config["database.server.id"] = json!(184000 + (short.len() as i64));
+            // MySqlConnector / MariaDbConnector share the config keys. Must be unique per plan —
+            // `short` is fixed-length, so hashing it (not `.len()`, which is constant) is required
+            // or every plan collides on the same binlog replication client id.
+            config["database.server.id"] = json!(184_000_000 + (server_id_hash(short) % 1_000_000));
             config["schema.history.internal.kafka.bootstrap.servers"] = json!(bootstrap);
             config["schema.history.internal.kafka.topic"] = json!(format!("dbz-history-{short}"));
         }
