@@ -32,6 +32,7 @@ fn base_config(db: &str, o: Opts) -> Config {
         kubeconfig_path: None,
         jwt_secret: "obs-test-secret-key-at-least-32-bytes!".into(),
         auth_required: o.auth_required,
+        bootstrap_admin_token: None,
         monitor_interval_secs: 0,
         ceph_prometheus_url: None,
         alert_webhook_url: None,
@@ -40,6 +41,8 @@ fn base_config(db: &str, o: Opts) -> Config {
         rgw_public_endpoint: None,
         snapshot_tick_secs: 0,
         databridge_reconcile_secs: 0,
+        job_poll_secs: 0,
+        job_stale_secs: 0,
         https_addr: None,
         tls_cert_path: None,
         tls_key_path: None,
@@ -114,7 +117,7 @@ async fn ceph_native_passthrough_returns_json() {
     assert!(status.get("health").is_some(), "ceph status should carry health");
 }
 
-/// `GET /metrics` (unauthenticated Prometheus text) exposes the atlas_* gauges.
+/// `GET /metrics` (Prometheus text) exposes the atlas_* gauges when auth is disabled (dev default).
 #[tokio::test]
 async fn prometheus_text_metrics_exposed() {
     let addr = spawn().await;
@@ -129,6 +132,22 @@ async fn prometheus_text_metrics_exposed() {
     for needle in ["atlas_build_info", "atlas_pools", "atlas_volumes", "atlas_alerts_open"] {
         assert!(body.contains(needle), "/metrics should expose {needle}");
     }
+}
+
+/// `GET /metrics` leaks backend names, volume/pool counts, and capacity — it must require the same
+/// bearer token as the rest of the API once `ATLAS_AUTH_REQUIRED=1`, not be scrapeable anonymously.
+#[tokio::test]
+async fn prometheus_text_metrics_requires_auth_when_required() {
+    let addr = spawn_with(Opts { auth_required: true, initial_discovery: true, ..Default::default() })
+        .await
+        .0;
+    let status = client()
+        .get(format!("http://{addr}/metrics"))
+        .send()
+        .await
+        .unwrap()
+        .status();
+    assert_eq!(status, 401, "/metrics should reject anonymous scrapes once auth is required");
 }
 
 /// The JSON metrics endpoints all answer 200 (ceph/history are empty-but-OK without a scrape/sampler).

@@ -26,7 +26,7 @@ export default function Rbd() {
         actions={
           <>
             <input className="field w-44" value={pool} onChange={(e) => setPool(e.target.value)} />
-            <Button icon={RefreshCw} onClick={() => submit("post", "/rbd-usage/refresh", null, "usage refresh", () => inv("volumes"))}>Refresh usage</Button>
+            <Button icon={RefreshCw} onClick={() => submit("post", "/rbd-usage/refresh", null, "usage refresh", () => inv("volumes")).catch(() => {})}>Refresh usage</Button>
             <Button variant="primary" icon={Plus} onClick={() => setCreate(true)}>Image</Button>
           </>
         }

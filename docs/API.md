@@ -14,8 +14,8 @@
 Base path: `/api/atlas/v1`. All responses are JSON. Errors use
 `{ "error": { "code": "...", "message": "..." } }` with an appropriate HTTP status.
 
-MVP slice 1 is **read-only** plus backend registration/discovery. Write endpoints
-(`POST /volumes`, snapshots, clones) arrive in slice 2 — see [ROADMAP.md](ROADMAP.md).
+MVP covers the full control plane: inventory, async write path, day-2 ops, DR scaffolding,
+DataBridge, and the embedded console. See [ROADMAP.md](ROADMAP.md) for deferred items.
 
 Auth: when `ATLAS_AUTH_REQUIRED=1`, send `Authorization: Bearer <HS256 JWT>`.
 When `0` (dev default), routes are open and the actor is `anonymous`.
@@ -27,10 +27,23 @@ When `0` (dev default), routes are open and the actor is `anonymous`.
 { "status": "ok" }
 ```
 
+### `GET /livez`
+Liveness probe — process is up (always `200` when the listener accepts).
+
+### `GET /readyz`
+Readiness deep-check: SQLite open, Ceph/fake driver, optional k8s. Returns `200` when ready,
+`503` with per-check detail when not.
+
 ### `GET /version`
 ```json
 { "name": "atlas-gateway", "version": "0.1.0", "api": "v1" }
 ```
+
+### `GET /metrics`
+Prometheus text exposition of Atlas's own gauges (unauthenticated, like `/health`).
+
+### `GET /api/atlas/v1/events`
+Unified activity feed (audit + jobs + alerts). Optional `?limit=`.
 
 ## Backends
 
@@ -170,12 +183,14 @@ Run the alert rules on demand (also runs every `ATLAS_MONITOR_INTERVAL_SECS`).
   [...], "blockers": [...] }`. `scripts/deploy-remote.sh` gates on this (and supports `--rollback`).
 
 ### Cross-cluster DR (RBD mirroring, admin, day-2)
-> **Scaffolding** — the control-plane catalog + API are here; the real `rbd mirror` operations run as
-> jobs and are **UNVERIFIED** without a live second Ceph cluster (DR was deferred in `CLAUDE.md`).
-- `POST /api/atlas/v1/dr/peers` · `GET /dr/peers` — register / list a mirroring peer (bootstrap token via a k8s Secret ref).
-- `POST /api/atlas/v1/volumes/{id}/mirror?mode=snapshot&peer=<id>` · `DELETE .../mirror` — enable / disable RBD mirroring for a volume.
-- `GET /api/atlas/v1/dr/mirrors` · `GET /dr/status` — mirrored images + DR posture (roles, worst RPO).
-- `POST /api/atlas/v1/dr/mirrors/{id}/promote` · `/demote` — failover: promote a secondary to primary (or the reverse).
+> Control-plane catalog + hardened failover API. Live `rbd mirror` still needs a second Ceph cluster
+> (see [DR.md](DR.md)). Fake mode skips the CLI so drills succeed.
+- `POST /api/atlas/v1/dr/peers` · `GET /dr/peers` · `DELETE /dr/peers/{id}` — peer catalog (`secret_ref` only).
+- `POST /api/atlas/v1/volumes/{id}/mirror?mode=snapshot&peer=<id>` · `DELETE .../mirror` — enable / disable (peer required).
+- `GET /api/atlas/v1/dr/mirrors` · `GET /dr/status` · `GET /dr/preflight` — catalog, posture, checklist.
+- `POST /api/atlas/v1/dr/mirrors/{id}/promote?force=0|1` · `/demote` — failover with role guards.
+- `POST /api/atlas/v1/dr/failover` `{ mirror_id, confirm: true, force? }` — confirm-gated runbook.
+- `POST /api/atlas/v1/dr/mirrors/{id}/rpo` `{ rpo_seconds }` — record observed RPO.
 
 ## Write path (async jobs) — slice 2
 
@@ -320,29 +335,36 @@ is used. The signature binds to the host, so the client must connect to the endp
 
 ## DataBridge — cloud-to-edge DB migration
 
-Migrate managed cloud databases (PostgreSQL/MySQL) to edge databases on Ceph. Stage triggers return
-`202 + job id` (track via `/jobs/{id}/watch`); reads return the inventory rows. Full reference +
-runbook: [DATABRIDGE.md](DATABRIDGE.md).
+Migrate managed cloud databases to edge databases on Ceph RBD. Source kinds:
+`postgres` · `mysql` · `mariadb` · `oracle` · `sqlserver` · `mongodb` (homogeneous or
+heterogeneous per [DATABRIDGE.md](DATABRIDGE.md)). Stage triggers return `202 + job id`
+(track via `/jobs/{id}/watch`); reads return inventory rows.
 
 ### Sources
-- `GET /api/atlas/v1/databridge/sources` · `POST /api/atlas/v1/databridge/sources` — list / register a source
-  (`{name, kind: postgres|mysql, cloud, endpoint, port, database, secret_ref, secret_namespace, tls_mode, driver_mode: fake|real}`).
+- `GET /api/atlas/v1/databridge/sources` · `POST` — list / register
+  (`{name, kind, cloud, endpoint, port, database, secret_ref, secret_namespace, tls_mode, driver_mode: fake|real}`).
 - `GET`/`DELETE /api/atlas/v1/databridge/sources/{id}` — get / delete.
-- `POST /api/atlas/v1/databridge/sources/{id}/discover` — introspect the source schema (job).
+- `POST /api/atlas/v1/databridge/sources/{id}/discover` — introspect schema (job).
 
 ### Plans & pipeline
 - `GET /api/atlas/v1/databridge/plans` · `POST` — list / create (`{name, source_id, rollback_window_secs?}`).
-- `GET /api/atlas/v1/databridge/plans/{id}` — plan detail (state, readiness_score, assessment).
-- `POST /api/atlas/v1/databridge/plans/{id}/assess` — score readiness (job).
-- `POST .../provision` — provision the edge DB (CloudNativePG/Percona) on Ceph (job).
-- `POST .../full-load` — dump+load source → edge (batch job).
-- `POST .../cdc/start` · `.../cdc/stop` — Debezium CDC control (job).
+- `GET`/`DELETE /api/atlas/v1/databridge/plans/{id}`
+- `POST .../assess` · `.../provision` · `.../full-load` — readiness, edge CR, dump→load (jobs).
+- `POST .../cdc/start` · `.../cdc/stop` · `.../cdc/restart` — Debezium CDC control (jobs).
+  Real `stop` deletes the source/sink `KafkaConnector` CRs (KafkaConnect stays up); `restart`
+  re-applies them (self-heal; also auto-triggered by the reconciler up to 3 times).
 - `POST .../validate` — row-count/checksum compare (job).
-- `POST .../cutover` — **admin, guarded** (validated + validation passed + CDC lag under threshold) (job).
+- `POST .../cutover` — **admin, guarded** (validated + validation passed + CDC lag under threshold).
+  Real mode leaves the cutover `draining`; the reconciler completes once lag is **zero** (tears down
+  connectors + KafkaConnect) or fails past the 5-minute drain deadline and returns the plan to
+  `validated`. Fake mode drains instantly.
 - `POST .../rollback` — **admin**, within the rollback window (job).
 
+### Object leg (cloud object store → Ceph RGW)
+- `GET`/`POST /api/atlas/v1/databridge/object` · `GET`/`DELETE .../{id}` · `POST .../{id}/start`
+
 ### Read models
-- `GET /api/atlas/v1/databridge/edge-clusters` · `/{id}`
+- `GET /api/atlas/v1/databridge/edge-clusters` · `/{id}` · `DELETE /{id}`
 - `GET /api/atlas/v1/databridge/cdc-streams` · `/{id}` (live lag)
 - `GET /api/atlas/v1/databridge/validations[?plan_id=]`
 - `GET /api/atlas/v1/databridge/cutovers`
@@ -462,37 +484,28 @@ Live PVC/PV listings (namespace/phase/storage class/capacity/csi driver).
 
 ## `atlasctl` equivalents
 
+Thin REST client (`ATLAS_BASE_URL`, `ATLAS_TOKEN`). Full list: `atlasctl --help` and
+[crates/atlas-cli/README.md](../crates/atlas-cli/README.md).
+
 ```bash
-atlasctl health                     # GET /health
-atlasctl ready                      # GET /readyz (DB + driver + k8s deep-check)
-atlasctl version                    # GET /version
-atlasctl backends                   # GET /backends
-atlasctl discover [backend]         # POST /backends/{backend}/discover  (default bkd_ceph_lab)
-atlasctl clusters | pools | osds | volumes
-atlasctl storage-classes            # GET /storage-classes (live k8s)
-atlasctl metrics                    # GET /metrics/summary
-atlasctl ceph-metrics [--prefix P]  # GET /metrics/ceph
-atlasctl history [--minutes 60]     # GET /metrics/history (persisted time-series)
-atlasctl forecast [--minutes 1440]  # GET /metrics/forecast (days-until-full projection)
-atlasctl self-metrics               # GET /metrics (Prometheus text-exposition)
-atlasctl ceph-status               # GET /ceph/status (live ceph status)
-atlasctl ceph-osd-tree             # GET /ceph/osd-tree (CRUSH map)
-atlasctl ceph-osd-df               # GET /ceph/osd-df (per-OSD utilization)
-atlasctl ceph-df                   # GET /ceph/df (per-pool usage)
-# write path (slice 2):
-atlasctl policies                   # GET /policies
-atlasctl create-volume NAME --size-gib 5 --policy database --namespace default
-atlasctl snapshot-volume VOLUME_ID [--name NAME]
-atlasctl clone-snapshot SNAPSHOT_ID --name NAME [--namespace NS]
-atlasctl restore-snapshot SNAPSHOT_ID [--name NAME]
-atlasctl delete-volume VOLUME_ID
-atlasctl delete-snapshot SNAPSHOT_ID [--force]
-atlasctl create-bucket NAME [--namespace rook-ceph]
-atlasctl buckets
-atlasctl backup-volume VOLUME_ID --bucket-id BUCKET_ID
-atlasctl restore-backup BACKUP_ID [--name NAME]
-atlasctl backups
-atlasctl jobs [ID]                  # GET /jobs (or a single job)
-atlasctl snapshots                  # GET /snapshots
-# global flags: --base-url (ATLAS_BASE_URL), --token (ATLAS_TOKEN)
+# Meta / inventory
+atlasctl health | ready | version | backends | backends-summary | discover [backend]
+atlasctl clusters | pools | osds | volumes | storage-classes | metrics | alerts
+atlasctl ceph-status | ceph-osd-tree | ceph-osd-df | ceph-df | history | forecast | self-metrics
+
+# Write path / RBD / object
+atlasctl create-volume NAME --size-gib 5 --policy database
+atlasctl snapshot-volume | clone-snapshot | restore-snapshot | delete-volume | delete-snapshot
+atlasctl create-rbd-image | rbd-images | flatten-rbd-image | rbd-snaps | rollback-rbd-image
+atlasctl create-bucket | buckets | backup-volume | restore-backup | backups
+
+# Day-2 / DR / DataBridge
+atlasctl maintenance | set-maintenance --paused true|false
+atlasctl cordon-backend ID | uncordon-backend ID | upgrade-preflight | orphans
+atlasctl dr-peers | dr-register-peer NAME | dr-preflight | dr-status | dr-mirrors
+atlasctl dr-promote ID [--force] | dr-demote ID | dr-failover MIRROR_ID [--force]
+atlasctl dr-set-rpo ID --rpo-seconds 60
+atlasctl volume-mirror-enable ID --peer PEER | volume-mirror-disable ID
+atlasctl databridge-sources | databridge-plans
+atlasctl databridge-stage PLAN_ID assess|provision|full-load|cdc-start|cdc-stop|cdc-restart|validate|cutover|rollback
 ```

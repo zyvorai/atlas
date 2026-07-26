@@ -34,18 +34,32 @@ pub async fn rbd_snap_create(pool: &str, image: &str, snap: &str) -> Result<(), 
 }
 
 /// Day-2 cross-cluster DR: per-image RBD mirroring op — `rbd mirror image enable <pool>/<image>
-/// <mode>` / `disable` / `promote` (failover to this cluster) / `demote`. **UNVERIFIED** against a
-/// live second Ceph cluster (needs a mirroring peer; see docs/CLAUDE.md — DR was deferred for this).
+/// <mode>` / `disable` / `promote` [`--force`] / `demote`. Real ops need a live second Ceph cluster
+/// (see `docs/DR.md`). `force` only applies to `promote` (split-brain / non-clean failover).
 pub async fn rbd_mirror_op(
     op: &str,
     pool: &str,
     image: &str,
     mode: &str,
+    force: bool,
 ) -> Result<(), DriverError> {
     let spec = format!("{pool}/{image}");
     let args: Vec<String> = match op {
-        "enable" => vec!["mirror".into(), "image".into(), "enable".into(), spec.clone(), mode.into()],
+        "enable" => vec![
+            "mirror".into(),
+            "image".into(),
+            "enable".into(),
+            spec.clone(),
+            mode.into(),
+        ],
         "disable" => vec!["mirror".into(), "image".into(), "disable".into(), spec.clone()],
+        "promote" if force => vec![
+            "mirror".into(),
+            "image".into(),
+            "promote".into(),
+            spec.clone(),
+            "--force".into(),
+        ],
         "promote" => vec!["mirror".into(), "image".into(), "promote".into(), spec.clone()],
         "demote" => vec!["mirror".into(), "image".into(), "demote".into(), spec.clone()],
         other => return Err(DriverError::Backend(format!("unknown mirror op: {other}"))),

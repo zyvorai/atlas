@@ -42,9 +42,9 @@ export default function Maintenance() {
       <GlassSection title={<>Job engine {maint && <Badge kind={paused ? "warning" : "success"} dot>{paused ? "paused" : "running"}</Badge>}</>}
         actions={
           paused ? (
-            <Button icon={PlayCircle} onClick={() => submit("post", "/maintenance", { paused: false }, "resumed", () => inv("maintenance"))}>Resume</Button>
+            <Button icon={PlayCircle} onClick={() => submit("post", "/maintenance", { paused: false }, "resumed", () => inv("maintenance")).catch(() => {})}>Resume</Button>
           ) : (
-            <Button icon={PauseCircle} variant="secondary" onClick={() => submit("post", "/maintenance", { paused: true }, "paused", () => inv("maintenance"))}>Pause</Button>
+            <Button icon={PauseCircle} variant="secondary" onClick={() => submit("post", "/maintenance", { paused: true }, "paused", () => inv("maintenance")).catch(() => {})}>Pause</Button>
           )
         }>
         <p className="text-sm text-muted-foreground">
@@ -63,7 +63,7 @@ export default function Maintenance() {
           ]}
           actions={(b) =>
             b.cordoned ? (
-              <Button size="sm" onClick={() => submit("post", `/backends/${b.id}/uncordon`, null, "uncordoned", () => inv("backends"))}>Uncordon</Button>
+              <Button size="sm" onClick={() => submit("post", `/backends/${b.id}/uncordon`, null, "uncordoned", () => inv("backends")).catch(() => {})}>Uncordon</Button>
             ) : (
               <Button size="sm" variant="secondary" onClick={() => confirmThen({ title: "Cordon backend?", message: `${b.name} will reject new provisioning (existing volumes untouched).`, confirmLabel: "Cordon" }, () => submit("post", `/backends/${b.id}/cordon`, null, "cordoned", () => inv("backends")))}>Cordon</Button>
             )

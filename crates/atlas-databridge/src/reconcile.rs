@@ -209,6 +209,52 @@ async fn reconcile_once(
         }
     }
 
+    // Advance draining cutovers: once the plan's CDC stream reports zero lag, tear the streaming
+    // stack down (source + sink connectors + the per-plan KafkaConnect cluster), switch, and
+    // complete. Past the drain deadline with lag still outstanding, fail the cutover and return the
+    // plan to `validated` so the operator can retry once the source quiesces.
+    for cut in atlas_inventory::databridge::cutovers::list_by_state(pool, "draining").await? {
+        let Some(plan) = atlas_inventory::databridge::plans::get_plan(pool, &cut.plan_id).await?
+        else {
+            continue;
+        };
+        let stream = match plan.cdc_stream_id.as_deref() {
+            Some(cdc_id) => atlas_inventory::databridge::cdc::get_stream(pool, cdc_id).await?,
+            None => None,
+        };
+        let drained = stream
+            .as_ref()
+            .map(|st| st.lag_seconds <= 0 && st.lag_bytes <= 0)
+            .unwrap_or(true); // no stream to drain
+        if drained {
+            let s = crate::pipeline::plan_short(&plan.id);
+            if let Err(e) = crate::pipeline::teardown_streaming(k8s, s, true).await {
+                tracing::warn!("cutover {} streaming teardown failed (retrying next tick): {e:#}", cut.id);
+                continue;
+            }
+            atlas_inventory::databridge::cutovers::set_state(pool, &cut.id, "switching").await?;
+            atlas_inventory::databridge::cutovers::set_complete(pool, &cut.id, "complete").await?;
+            atlas_inventory::databridge::plans::set_state(pool, &plan.id, "cutover_complete").await?;
+            if let Some(cdc_id) = plan.cdc_stream_id.as_deref() {
+                atlas_inventory::databridge::cdc::set_state(pool, cdc_id, "stopped").await?;
+            }
+            tracing::info!("cutover {} complete for plan {}", cut.id, plan.id);
+        } else if cut
+            .drain_deadline
+            .as_deref()
+            .and_then(|d| chrono::DateTime::parse_from_rfc3339(d).ok())
+            .is_some_and(|dl| chrono::Utc::now() > dl)
+        {
+            atlas_inventory::databridge::cutovers::set_complete(pool, &cut.id, "failed").await?;
+            atlas_inventory::databridge::plans::set_state(pool, &plan.id, "validated").await?;
+            tracing::warn!(
+                "cutover {} for plan {} failed: CDC lag did not drain before the deadline",
+                cut.id,
+                plan.id
+            );
+        }
+    }
+
     // Watch validation Jobs -> record passed/failed and advance the plan.
     for v in atlas_inventory::databridge::validations::list_by_state(pool, "running").await? {
         let job = crate::validate::job_name(&v.id);

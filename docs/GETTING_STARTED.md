@@ -76,10 +76,15 @@ What's covered:
 ## Lint & format
 
 ```bash
-make fmt          # cargo fmt --all
-make lint         # cargo clippy --workspace --all-targets -- -D warnings
-make dev          # fmt + lint + test
+make lint         # cargo clippy --workspace --all-targets -- -D warnings  (enforced in CI)
+make fmt          # cargo fmt --all  (informational in CI — style is denser than rustfmt defaults)
+make features     # compile-check optional DataBridge connectors
+make ui           # React console production build (enforced in CI)
+make ci           # lint + test + features + ui (local static gate)
+./scripts/test-all.sh   # full local gate incl. optional connector containers
 ```
+
+CI (`.github/workflows/ci.yml`) also builds the Docker UI stages and the full `Dockerfile.ceph` image.
 
 ## Common env vars
 
@@ -91,4 +96,11 @@ loaded automatically (`dotenvy`).
 
 `ATLAS_CEPH_DRIVER_MODE=real` makes the driver shell out to `ceph`/`rbd`. You need those CLIs
 installed and a reachable cluster with `/etc/ceph/ceph.conf` + keyring. For a full real setup
-see [DEPLOYMENT.md](DEPLOYMENT.md) (which runs it inside Kubernetes with the Rook keyring).
+(Rook Squid + CSI drivers + remote gateway script) see [DEPLOYMENT.md](DEPLOYMENT.md).
+
+Quick remote path once k3s is up:
+
+```bash
+cd deploy/rook-ceph-lab && ./up.sh --single-node          # or --cluster-only if operator exists
+./scripts/deploy-ceph-gateway-remote.sh <host> <user>     # NodePort 30511
+```

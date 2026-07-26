@@ -15,10 +15,18 @@ async fn main() -> anyhow::Result<()> {
     atlas_common::init_tracing();
 
     let config = Config::from_env();
+    if let Err(msg) = config.validate_for_start() {
+        anyhow::bail!("{msg}");
+    }
     info!(?config, "starting atlas-gateway");
     if config.jwt_secret_is_weak() {
         tracing::warn!(
             "ATLAS_JWT_SECRET is the dev default or shorter than 32 bytes — set a strong secret in production"
+        );
+    }
+    if config.auth_required && config.bootstrap_admin_token.is_some() {
+        tracing::warn!(
+            "ATLAS_BOOTSTRAP_ADMIN_TOKEN is set — use it once to mint service-account JWTs, then remove it from the Secret"
         );
     }
 

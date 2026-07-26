@@ -139,8 +139,9 @@ atlas/
 │   ├── rook-ceph-lab/      # Rook Ceph + KubeVirt/CDI manifests + up.sh
 │   └── k8s/                # atlas-gateway Deployment/RBAC/Service (fake + real ceph)
 ├── scripts/deploy-remote.sh
+├── scripts/deploy-ceph-gateway-remote.sh  # real Ceph gateway → remote k3s (NodePort 30511)
 ├── Dockerfile              # gateway image (fake/k8s modes)
-└── Dockerfile.ceph         # gateway image + Ceph Reef client (real mode)
+└── Dockerfile.ceph         # gateway image + Ceph Squid client (real mode)
 ```
 
 ## Design authority

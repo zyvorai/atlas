@@ -19,12 +19,12 @@ jobs:
           components: rustfmt, clippy
       # The gRPC crates compile .proto at build time, so protoc must be present (mirrors the
       # deployment Dockerfile). Without it clippy/test/build fail before any Rust runs.
-      - name: Install protoc
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - name: Install protoc + cmake
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake
       - uses: Swatinem/rust-cache@v2
-      # Non-blocking: the codebase uses an intentionally dense one-line style that stable rustfmt
-      # would rewrite. Surface formatting drift as a warning without failing the build; clippy, test,
-      # and build below are the enforced gates.
+      # Non-blocking: the committed style is denser than stable rustfmt's defaults (~280 files of
+      # drift). Clippy (-D warnings), tests, and build below are the enforced Rust gates; fmt is
+      # surfaced so drift is visible without failing every PR. Prefer `make fmt` on touched files.
       - name: Format check (informational)
         run: cargo fmt --all --check
         continue-on-error: true
@@ -34,7 +34,76 @@ jobs:
         run: cargo test --workspace
       - name: Build
         run: cargo build --workspace
-      # The azure-blob object-migration connector is pure-Rust (no native deps, unlike
-      # oracle/mongodb/sqlserver), so it can be compile-checked in CI to prevent rot.
-      - name: Check azure-blob connector
-        run: cargo check -p atlas-databridge --features azure-blob
+      # Optional DataBridge connectors / lag — compile-checked so feature gates don't rot.
+      # sqlserver/mongodb/azure-blob are pure-Rust (or rustls); kafka-lag needs cmake (installed
+      # above); oracle vendors ODPI-C and only needs Instant Client at *runtime*.
+      - name: Check optional DataBridge features
+        run: |
+          set -euo pipefail
+          for f in sqlserver mongodb azure-blob oracle kafka-lag; do
+            echo "=== --features $f ==="
+            cargo check -p atlas-databridge --features "$f"
+          done
+          echo "=== combined (no kafka-lag — long link) ==="
+          cargo check -p atlas-databridge --features sqlserver,mongodb,azure-blob,oracle
+
+  ui:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crates/atlas-gateway/ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: crates/atlas-gateway/ui/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Typecheck + production build
+        run: npm run build
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-ui-dist
+          path: crates/atlas-gateway/ui/dist
+          retention-days: 7
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      # UI stage of both images — fast, catches broken node/npm/lockfile paths used by deploy.
+      - name: Build Dockerfile UI stage
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          target: ui
+          push: false
+          tags: atlas-gateway:ui
+          cache-from: type=gha,scope=ui
+          cache-to: type=gha,mode=max,scope=ui
+      - name: Build Dockerfile.ceph UI stage
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.ceph
+          target: ui
+          push: false
+          tags: atlas-gateway-ceph:ui
+          cache-from: type=gha,scope=ui-ceph
+          cache-to: type=gha,mode=max,scope=ui-ceph
+      # Full Ceph deploy image (no Instant Client / optional features) — mirrors
+      # scripts/deploy-ceph-gateway-remote.sh. Uses GHA cache so subsequent PRs are faster.
+      - name: Build Dockerfile.ceph (full image)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.ceph
+          push: false
+          tags: atlas-gateway:ceph
+          cache-from: type=gha,scope=ceph
+          cache-to: type=gha,mode=max,scope=ceph

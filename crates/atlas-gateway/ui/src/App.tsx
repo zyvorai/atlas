@@ -40,7 +40,7 @@ export default function App() {
         <Route path="/observatory" element={<Observatory />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/alerts" element={<Alerts />} />
-        <Route path="/metrics" element={<Metrics />} />
+        <Route path="/metrics-dashboard" element={<Metrics />} />
         <Route path="/jobs" element={<Jobs />} />
         <Route path="/audit" element={<Audit />} />
         <Route path="/tenants" element={<Tenants />} />

@@ -50,8 +50,14 @@ export default function PlanDetail() {
       <PageHeader icon={RouteIcon} title={plan.name}
         subtitle={`Plan ${plan.id} · source ${source?.name || plan.source_id}`}
         actions={<div className="flex gap-2 items-center">
+          {plan.state === "cdc_streaming" && (
+            <>
+              <Button size="sm" variant="secondary" onClick={() => submitJob("post", `/databridge/plans/${plan.id}/cdc/stop`, null, "stop CDC", refresh).catch(() => {})}>Stop CDC</Button>
+              <Button size="sm" variant="secondary" onClick={() => submitJob("post", `/databridge/plans/${plan.id}/cdc/restart`, null, "restart CDC", refresh).catch(() => {})}>Restart CDC</Button>
+            </>
+          )}
           {plan.state === "cutover_complete" && (
-            <Button size="sm" variant="danger" onClick={() => submitJob("post", `/databridge/plans/${plan.id}/rollback`, null, "rollback", refresh)}>Rollback</Button>
+            <Button size="sm" variant="danger" onClick={() => submitJob("post", `/databridge/plans/${plan.id}/rollback`, null, "rollback", refresh).catch(() => {})}>Rollback</Button>
           )}
           <Badge kind={planStateKind(plan.state)} dot>{plan.state}</Badge>
         </div>} />

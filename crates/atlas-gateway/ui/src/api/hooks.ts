@@ -67,10 +67,13 @@ export const usePreflight = () =>
     ["preflight"], "/upgrade/preflight", 10000);
 export const useOrphans = () => q<{ orphan_backups: any[]; count: number }>(["orphans"], "/maintenance/orphans", 20000);
 export const useDrStatus = () =>
-  q<{ peers: number; mirrors: number; primary: number; secondary: number; worst_rpo_seconds: number | null }>(
+  q<{ peers: number; mirrors: number; primary: number; secondary: number; worst_rpo_seconds: number | null; note?: string }>(
     ["dr-status"], "/dr/status", 10000);
 export const useDrPeers = () => q<any[]>(["dr-peers"], "/dr/peers", 15000);
 export const useDrMirrors = () => q<any[]>(["dr-mirrors"], "/dr/mirrors", 10000);
+export const useDrPreflight = () =>
+  q<{ ready: boolean; checks: { id: string; ok: boolean; detail: string }[]; blockers: string[] }>(
+    ["dr-preflight"], "/dr/preflight", 10000);
 export const useCephStatus = () => q<any>(["ceph-status"], "/ceph/status", 8000);
 export const useCephOsdTree = () => q<any>(["ceph-osd-tree"], "/ceph/osd-tree", 15000);
 export const useCephOsdDf = () => q<any>(["ceph-osd-df"], "/ceph/osd-df", 12000);

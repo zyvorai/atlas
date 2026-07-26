@@ -4,14 +4,18 @@
 # Deploy the **real-Ceph** Atlas gateway (`atlas-gateway-ceph` in `rook-ceph`) to a
 # remote k3s host. The sibling `deploy-remote.sh` builds the fake/k8s image
 # (`Dockerfile`) and deploys to `zyvor-system`; THIS one builds `Dockerfile.ceph`
-# (bundles the Ceph Reef client) and rolls out the rook-ceph deployment, whose pod
+# (bundles the Ceph Squid client) and rolls out the rook-ceph deployment, whose pod
 # runs `localhost/atlas-gateway:ceph` with `imagePullPolicy: Never`.
 #
 # What it does:
 #   1. rsync the repo to <user>@<host>:~/.deployment/atlas
-#   2. podman build -t atlas-gateway:ceph -f Dockerfile.ceph .
+#   2. ensure podman (+ docker.io short-name registries) and build Dockerfile.ceph
 #   3. import the image into k3s containerd
-#   4. kubectl apply deploy/k8s/atlas-gateway-ceph.yaml + rollout restart/status
+#   4. ensure ClusterRole / atlas-tls / atlas-gateway-auth
+#   5. kubectl apply deploy/k8s/atlas-gateway-ceph.yaml + rollout restart/status
+#
+# Prereq: CephCluster Ready + ceph-csi-drivers installed so zyvor-rbd-prod can Bind
+# (see deploy/rook-ceph-lab/up.sh --single-node and docs/DEPLOYMENT.md).
 #
 # Usage:
 #   ./scripts/deploy-ceph-gateway-remote.sh <host> [user]
@@ -22,6 +26,7 @@
 #   ATLAS_NS                    Gateway namespace       (default rook-ceph)
 #   ATLAS_DEPLOY                Deployment name         (default atlas-gateway-ceph)
 #   ATLAS_SKIP_APPLY=1          Skip `kubectl apply` of the manifest (rollout only)
+#   ATLAS_SSH_KEY / SSH_KEY     SSH identity (falls back to ~/.ssh/id_ed25519_hyper2kvm)
 #   ATLAS_SSH_TIMEOUT           ssh ConnectTimeout secs (default 90)
 set -euo pipefail
 
@@ -35,23 +40,49 @@ MANIFEST="deploy/k8s/atlas-gateway-ceph.yaml"
 REMOTE_DIR=".deployment/atlas"
 TIMEOUT="${ATLAS_SSH_TIMEOUT:-90}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SSH="ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=${TIMEOUT} ${USER}@${HOST}"
+
+# Prefer explicit ATLAS_SSH_KEY / SSH_KEY; fall back to the hyper2kvm lab key, then agent default.
+SSH_KEY_FILE="${ATLAS_SSH_KEY:-${SSH_KEY:-}}"
+if [[ -z "${SSH_KEY_FILE}" && -f "${HOME}/.ssh/id_ed25519_hyper2kvm" ]]; then
+  SSH_KEY_FILE="${HOME}/.ssh/id_ed25519_hyper2kvm"
+fi
+SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout="${TIMEOUT}")
+if [[ -n "${SSH_KEY_FILE}" ]]; then
+  SSH_OPTS+=(-o IdentitiesOnly=yes -i "${SSH_KEY_FILE}")
+fi
+SSH=(ssh "${SSH_OPTS[@]}" "${USER}@${HOST}")
+RSYNC_SSH="ssh ${SSH_OPTS[*]}"
 
 log() { printf '\033[1;36m==> %s\033[0m\n' "$*"; }
 
 log "1/4 rsync repo -> ${USER}@${HOST}:~/${REMOTE_DIR}"
-${SSH} "mkdir -p ~/${REMOTE_DIR}"
+"${SSH[@]}" "mkdir -p ~/${REMOTE_DIR}"
 rsync -az --delete \
   --exclude target --exclude .git --exclude '*.db' --exclude '*.db-wal' --exclude '*.db-shm' \
   --exclude node_modules \
-  -e "ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=${TIMEOUT}" \
+  -e "${RSYNC_SSH}" \
   "${HERE}/" "${USER}@${HOST}:${REMOTE_DIR}/"
 
-log "2/4 build atlas-gateway:ceph (Dockerfile.ceph) with podman on remote"
-${SSH} "cd ~/${REMOTE_DIR} && podman build -t atlas-gateway:ceph -f Dockerfile.ceph ."
+log "2/4 ensure podman, then build atlas-gateway:ceph (Dockerfile.ceph) on remote"
+"${SSH[@]}" bash -s <<'REMOTE'
+set -euo pipefail
+if ! command -v podman >/dev/null 2>&1; then
+  echo "podman missing — installing via apt"
+  sudo apt-get update -qq
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq podman
+fi
+# Ubuntu's podman defaults to empty unqualified-search-registries; docker.io is required.
+if [[ ! -f /etc/containers/registries.conf.d/999-atlas-dockerio.conf ]]; then
+  sudo tee /etc/containers/registries.conf.d/999-atlas-dockerio.conf >/dev/null <<'EOF'
+unqualified-search-registries = ["docker.io"]
+EOF
+fi
+cd ~/.deployment/atlas
+podman build -t atlas-gateway:ceph -f Dockerfile.ceph .
+REMOTE
 
 log "3/6 import image into k3s containerd"
-${SSH} "cd ~/${REMOTE_DIR} && podman save atlas-gateway:ceph -o /tmp/atlas-gateway-ceph.tar \
+"${SSH[@]}" "cd ~/${REMOTE_DIR} && podman save atlas-gateway:ceph -o /tmp/atlas-gateway-ceph.tar \
   && sudo k3s ctr images import /tmp/atlas-gateway-ceph.tar && rm -f /tmp/atlas-gateway-ceph.tar"
 
 # ${MANIFEST}'s own ClusterRoleBinding (atlas-gateway-readonly-cephns) already
@@ -64,7 +95,7 @@ ${SSH} "cd ~/${REMOTE_DIR} && podman save atlas-gateway:ceph -o /tmp/atlas-gatew
 # not found: Forbidden" — non-fatal (only the live k8s driver's PV/PVC reads
 # degrade) but silent, and easy to miss on a fresh install.
 log "4/6 ensure the shared atlas-gateway-readonly ClusterRole exists"
-${SSH} bash -s <<REMOTE
+"${SSH[@]}" bash -s <<REMOTE
 set -euo pipefail
 cd ~/${REMOTE_DIR}
 rm -rf /tmp/atlas-rbac-split
@@ -84,8 +115,8 @@ REMOTE
 # directory" until someone notices and creates it by hand. Self-signed and
 # idempotent: left alone once it exists, so re-running this script never
 # rotates a cert a browser has already been told to trust.
-log "5/6 ensure the atlas-tls secret exists (self-signed, HTTPS listener)"
-${SSH} bash -s <<REMOTE
+log "5/7 ensure the atlas-tls secret exists (self-signed, HTTPS listener)"
+"${SSH[@]}" bash -s <<REMOTE
 set -euo pipefail
 if ! sudo kubectl -n ${NS} get secret atlas-tls >/dev/null 2>&1; then
   tmpdir="\$(mktemp -d)"
@@ -100,11 +131,20 @@ else
 fi
 REMOTE
 
-log "6/6 apply manifest + roll out ${DEPLOY} in ${NS}"
+# Auth Secret: strong JWT signing key + optional bootstrap admin bearer. Required because the
+# Ceph gateway Deployment sets ATLAS_AUTH_REQUIRED=1 and refuses to start on the weak default.
+log "6/7 ensure atlas-gateway-auth Secret (jwt-secret + bootstrap-admin-token)"
+"${SSH[@]}" "cd ~/${REMOTE_DIR} && NAMESPACE=${NS} KUBECTL='sudo kubectl' bash scripts/ensure-atlas-auth-secret.sh"
+
+log "7/7 apply manifest + roll out ${DEPLOY} in ${NS}"
 if [[ "${ATLAS_SKIP_APPLY:-0}" != "1" ]]; then
-  ${SSH} "cd ~/${REMOTE_DIR} && sudo kubectl apply -f ${MANIFEST}"
+  "${SSH[@]}" "cd ~/${REMOTE_DIR} && sudo kubectl apply -f ${MANIFEST}"
 fi
-${SSH} "sudo kubectl -n ${NS} rollout restart deploy/${DEPLOY} \
+"${SSH[@]}" "sudo kubectl -n ${NS} rollout restart deploy/${DEPLOY} \
   && sudo kubectl -n ${NS} rollout status deploy/${DEPLOY} --timeout=180s"
 
-log "done — verify: curl -s http://<node>:30511/api/atlas/v1/volumes?kind=block"
+BOOT="$("${SSH[@]}" "sudo kubectl -n ${NS} get secret atlas-gateway-auth -o jsonpath='{.data.bootstrap-admin-token}' 2>/dev/null | base64 -d || true")"
+log "done — verify: curl -s -H \"Authorization: Bearer <bootstrap-or-jwt>\" http://<node>:30511/api/atlas/v1/volumes?kind=block"
+if [[ -n "$BOOT" ]]; then
+  echo "  bootstrap token still present in secret/${NS}/atlas-gateway-auth (mint JWTs, then remove it)"
+fi

@@ -7,14 +7,20 @@ Start at the top-level [README](../README.md) for the overview and quickstart.
 - **[GETTING_STARTED.md](GETTING_STARTED.md)** — build, run locally (fake driver), `atlasctl`, tests.
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — control-plane design, driver model, data model, request flow, config.
 - **[API.md](API.md)** — REST v1 reference with real request/response examples.
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** — deploy to k3s, `deploy-remote.sh`, real Ceph mode end-to-end.
-- **[ROADMAP.md](ROADMAP.md)** — what's done (slice 1) and what's next (slices 2/3+).
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** — k3s + Rook (Squid / CSI drivers) + gateway scripts; pitfalls table.
+- **[DAY2.md](DAY2.md)** — day-2 ops (alerts, maintenance, governance, DR).
+- **[DR.md](DR.md)** — cross-cluster RBD mirroring, failover runbook, live two-site checklist.
+- **[HA.md](HA.md)** — durable job queue, leader lease, Postgres cutover plan.
+- **[DATABRIDGE.md](DATABRIDGE.md)** — cloud-to-edge DB / object migration control plane.
+- **[ROADMAP.md](ROADMAP.md)** — what's shipped and what's deferred.
 - **[../CONTRIBUTING.md](../CONTRIBUTING.md)** — conventions; how to add an endpoint / driver / migration.
 
 ## Deploy assets
-- **[../deploy/rook-ceph-lab/README.md](../deploy/rook-ceph-lab/README.md)** — Rook Ceph + KubeVirt/CDI lab.
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** — end-to-end k3s deploy; version lockstep + pitfalls.
+- **[../deploy/rook-ceph-lab/README.md](../deploy/rook-ceph-lab/README.md)** — Rook Ceph + KubeVirt/CDI lab (`up.sh --single-node`).
 - `../deploy/rook-ceph-lab/single-node/` — single-OSD overlay for a one-node k3s.
 - `../deploy/k8s/` — gateway Deployment/RBAC/Service (fake + real ceph variants).
+- **[../scripts/README.md](../scripts/README.md)** — `deploy-remote.sh` / `deploy-ceph-gateway-remote.sh`.
 
 ## Per-crate docs
 Each crate has its own `README.md`:

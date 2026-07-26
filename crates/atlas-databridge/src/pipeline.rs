@@ -207,7 +207,7 @@ pub async fn provision_edge(
 }
 
 /// Short suffix of a plan id, for naming derived k8s objects.
-fn short(plan_id: &str) -> &str {
+pub(crate) fn plan_short(plan_id: &str) -> &str {
     &plan_id[plan_id.len().saturating_sub(8)..]
 }
 
@@ -356,7 +356,7 @@ pub async fn start_cdc(
     let kind = crate::SourceKind::parse(&source.kind)
         .ok_or_else(|| anyhow!("unsupported engine: {}", source.kind))?;
     let engine = source.kind.clone();
-    let s = short(plan_id).to_string();
+    let s = plan_short(plan_id).to_string();
     let cdc_id = atlas_common::ids::cdc_stream_id();
     let connect = crate::cr::streaming::connect_name(&s);
     let connector = crate::cr::streaming::source_connector_name(&s);
@@ -468,11 +468,58 @@ pub async fn start_cdc(
     }))
 }
 
-/// Stop a plan's CDC stream.
-pub async fn stop_cdc(pool: &SqlitePool, plan_id: &str) -> Result<serde_json::Value> {
+/// Delete a plan's streaming CRs: the Debezium source + sink `KafkaConnector`s and (optionally) the
+/// per-plan `KafkaConnect` cluster itself. Idempotent — `delete_cr` treats 404 as success — so it is
+/// safe to call from both stop-CDC and cutover teardown.
+pub(crate) async fn teardown_streaming(
+    k8s: &atlas_driver_k8s::K8sDriver,
+    plan_short: &str,
+    delete_connect: bool,
+) -> Result<()> {
+    use crate::cr::streaming;
+    let ns = EDGE_NAMESPACE;
+    k8s.delete_cr(
+        streaming::GROUP, streaming::VERSION, streaming::CONNECTOR_KIND, ns,
+        &streaming::source_connector_name(plan_short),
+    )
+    .await
+    .map_err(|e| anyhow!("delete Debezium source connector: {e}"))?;
+    k8s.delete_cr(
+        streaming::GROUP, streaming::VERSION, streaming::CONNECTOR_KIND, ns,
+        &streaming::sink_connector_name(plan_short),
+    )
+    .await
+    .map_err(|e| anyhow!("delete sink connector: {e}"))?;
+    if delete_connect {
+        k8s.delete_cr(
+            streaming::GROUP, streaming::VERSION, streaming::CONNECT_KIND, ns,
+            &streaming::connect_name(plan_short),
+        )
+        .await
+        .map_err(|e| anyhow!("delete KafkaConnect cluster: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Stop a plan's CDC stream. Real mode deletes the two `KafkaConnector` CRs (the per-plan
+/// `KafkaConnect` cluster stays up so a later start/restart re-instantiates quickly); fake mode just
+/// flips the stream state.
+pub async fn stop_cdc(
+    pool: &SqlitePool,
+    k8s: Option<&atlas_driver_k8s::K8sDriver>,
+    plan_id: &str,
+) -> Result<serde_json::Value> {
     let plan = atlas_inventory::databridge::plans::get_plan(pool, plan_id)
         .await?
         .ok_or_else(|| anyhow!("plan {plan_id} not found"))?;
+    let source = atlas_inventory::databridge::sources::get_source(pool, &plan.source_id)
+        .await?
+        .ok_or_else(|| anyhow!("source not found"))?;
+    if source.driver_mode != "fake" {
+        if let Some(k8s) = k8s {
+            teardown_streaming(k8s, plan_short(plan_id), false).await?;
+        }
+    }
     if let Some(cdc_id) = plan.cdc_stream_id.as_deref() {
         atlas_inventory::databridge::cdc::set_state(pool, cdc_id, "stopped").await?;
     }
@@ -517,7 +564,7 @@ pub async fn restart_cdc(
     let k8s = k8s.expect("k8s present in real branch");
     let kind = crate::SourceKind::parse(&source.kind)
         .ok_or_else(|| anyhow!("unsupported engine: {}", source.kind))?;
-    let s = short(plan_id).to_string();
+    let s = plan_short(plan_id).to_string();
     let edge_id = plan
         .edge_cluster_id
         .as_deref()
@@ -687,8 +734,14 @@ pub async fn validate(
 }
 
 /// Cutover: freeze source, drain CDC, switch endpoint, open the rollback window. Fake mode drains
-/// instantly. Guards (validated + validation passed + lag under threshold) are enforced in the route.
-pub async fn cutover(pool: &SqlitePool, plan_id: &str) -> Result<serde_json::Value> {
+/// and switches instantly; real mode leaves the cutover `draining` and the reconciler completes it
+/// once the CDC stream reports zero lag (tearing the streaming stack down at the switch). Guards
+/// (validated, validation passed, lag under threshold) are enforced in the route.
+pub async fn cutover(
+    pool: &SqlitePool,
+    k8s: Option<&atlas_driver_k8s::K8sDriver>,
+    plan_id: &str,
+) -> Result<serde_json::Value> {
     let plan = atlas_inventory::databridge::plans::get_plan(pool, plan_id)
         .await?
         .ok_or_else(|| anyhow!("plan {plan_id} not found"))?;
@@ -715,6 +768,18 @@ pub async fn cutover(pool: &SqlitePool, plan_id: &str) -> Result<serde_json::Val
     )
     .await?;
     atlas_inventory::databridge::plans::set_state(pool, plan_id, "cutover_in_progress").await?;
+
+    // Real mode: hand the drain to the reconciler — it switches once the stream reports zero lag
+    // (or fails the cutover past the drain deadline). The route already verified lag is under the
+    // threshold, but "under threshold" is not "drained".
+    if source.driver_mode != "fake" && k8s.is_some() {
+        atlas_inventory::databridge::cutovers::set_state(pool, &cut_id, "draining").await?;
+        return Ok(serde_json::json!({
+            "plan_id": plan_id, "cutover_id": cut_id, "from": from, "to": to,
+            "drain_deadline": drain, "rollback_deadline": rollback,
+            "state": "draining", "mode": "real",
+        }));
+    }
 
     // Fake: drain + switch complete immediately.
     atlas_inventory::databridge::cutovers::set_state(pool, &cut_id, "switching").await?;

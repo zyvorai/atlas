@@ -1,6 +1,8 @@
 # Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 # Grafana with the Atlas Prometheus datasource + the Atlas overview dashboard auto-provisioned.
 # The dashboard JSON ConfigMap (atlas-grafana-dashboard) is created by up.sh from atlas-overview.json.
+# Admin password comes from Secret `atlas-grafana-admin` (created by up.sh if missing) — never
+# hard-code a shared lab password in the Deployment.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -47,9 +49,15 @@ spec:
         - name: grafana
           image: grafana/grafana:11.2.0
           env:
-            - { name: GF_SECURITY_ADMIN_USER, value: admin }
-            - { name: GF_SECURITY_ADMIN_PASSWORD, value: atlas }
-            - { name: GF_USERS_ALLOW_SIGN_UP, value: "false" }
+            - name: GF_SECURITY_ADMIN_USER
+              value: admin
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-grafana-admin
+                  key: admin-password
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
           ports:
             - { name: web, containerPort: 3000 }
           volumeMounts:

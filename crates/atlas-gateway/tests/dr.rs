@@ -1,8 +1,8 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-//! Day-2 cross-cluster DR — control-plane scaffolding. Register a peer, enable RBD mirroring on a
-//! volume, and fail over (promote/demote). Fake driver: the `rbd mirror` jobs fail without a real
-//! second cluster, but the DR catalog + API + role transitions are exercised. Real mirroring is
-//! UNVERIFIED here by design (needs a live peer cluster).
+//! Day-2 cross-cluster DR — hardened control-plane. Register a peer, enable RBD mirroring on a
+//! volume, and fail over (promote/demote) with transition guards, preflight, and a confirm-gated
+//! failover runbook. Fake driver: `rbd mirror` CLI is skipped so jobs succeed; live mirroring still
+//! needs a second Ceph cluster (see docs/DR.md).
 
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -31,6 +31,7 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
         kubeconfig_path: None,
         jwt_secret: "dr-test-secret-at-least-32-bytes-long!!".into(),
         auth_required: false,
+        bootstrap_admin_token: None,
         monitor_interval_secs: 0,
         ceph_prometheus_url: None,
         alert_webhook_url: None,
@@ -39,6 +40,8 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
         rgw_public_endpoint: None,
         snapshot_tick_secs: 0,
         databridge_reconcile_secs: 0,
+        job_poll_secs: 0,
+        job_stale_secs: 0,
         https_addr: None,
         tls_cert_path: None,
         tls_key_path: None,
@@ -84,8 +87,8 @@ async fn dr_peer_mirror_and_failover() {
         .await
         .unwrap();
     assert_eq!(peer.status(), 201);
-    let peers: Value = c.get(format!("{base}/dr/peers")).send().await.unwrap().json().await.unwrap();
-    assert!(peers.as_array().unwrap().iter().any(|p| p["name"] == "dc2"));
+    let peer_body: Value = peer.json().await.unwrap();
+    let peer_id = peer_body["id"].as_str().unwrap().to_string();
 
     // A direct-RBD volume to mirror.
     sqlx::query(
@@ -96,10 +99,17 @@ async fn dr_peer_mirror_and_failover() {
     .await
     .unwrap();
 
-    // Enable mirroring → recorded (fake reports enabled) with role primary.
-    let en = c.post(format!("{base}/volumes/v1/mirror?mode=snapshot&peer=drp_test")).send().await.unwrap();
+    // Enable mirroring with a real peer id.
+    let en = c
+        .post(format!("{base}/volumes/v1/mirror?mode=snapshot&peer={peer_id}"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(en.status(), 202);
-    let mirror_id = en.json::<Value>().await.unwrap()["resource"]["mirror_id"].as_str().unwrap().to_string();
+    let mirror_id = en.json::<Value>().await.unwrap()["resource"]["mirror_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
 
     let mirror = |c: &reqwest::Client| {
         let base = base.clone();
@@ -116,18 +126,79 @@ async fn dr_peer_mirror_and_failover() {
     assert_eq!(m["pool"], "nvme");
     assert_eq!(m["image"], "img1");
 
+    // Unknown peer on enable → 400.
+    let bad = c
+        .post(format!("{base}/volumes/v1/mirror?mode=snapshot&peer=nope"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bad.status(), 400);
+
     // Failover drill: demote → secondary, then promote → primary.
     assert_eq!(c.post(format!("{base}/dr/mirrors/{mirror_id}/demote")).send().await.unwrap().status(), 202);
     assert_eq!(mirror(&c).await["role"], "secondary");
+    // Demoting again is a conflict.
+    assert_eq!(c.post(format!("{base}/dr/mirrors/{mirror_id}/demote")).send().await.unwrap().status(), 409);
+
     assert_eq!(c.post(format!("{base}/dr/mirrors/{mirror_id}/promote")).send().await.unwrap().status(), 202);
     assert_eq!(mirror(&c).await["role"], "primary");
+    // Promoting an already-primary without force → 409.
+    assert_eq!(c.post(format!("{base}/dr/mirrors/{mirror_id}/promote")).send().await.unwrap().status(), 409);
+    // Force promote allowed for split-brain drills.
+    assert_eq!(
+        c.post(format!("{base}/dr/mirrors/{mirror_id}/promote?force=true"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        202
+    );
 
     // Promoting an unknown mirror → 404.
     assert_eq!(c.post(format!("{base}/dr/mirrors/nope/promote")).send().await.unwrap().status(), 404);
+
+    // Preflight + confirm-gated failover runbook.
+    let pre: Value = c.get(format!("{base}/dr/preflight")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(pre["ready"], true);
+    assert_eq!(pre["peers"], 1);
+
+    // Demote again so failover has a secondary to promote.
+    assert_eq!(c.post(format!("{base}/dr/mirrors/{mirror_id}/demote")).send().await.unwrap().status(), 202);
+    let fo = c
+        .post(format!("{base}/dr/failover"))
+        .json(&json!({ "mirror_id": mirror_id, "confirm": true }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(fo.status(), 202);
+    assert_eq!(mirror(&c).await["role"], "primary");
+    assert!(mirror(&c).await["last_failover_at"].as_str().is_some());
+
+    // Unconfirmed failover rejected.
+    assert_eq!(
+        c.post(format!("{base}/dr/failover"))
+            .json(&json!({ "mirror_id": mirror_id, "confirm": false }))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        400
+    );
+
+    // RPO stamp.
+    let rpo = c
+        .post(format!("{base}/dr/mirrors/{mirror_id}/rpo"))
+        .json(&json!({ "rpo_seconds": 45 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(rpo.status(), 200);
+    assert_eq!(mirror(&c).await["rpo_seconds"], 45);
 
     // DR status summarizes the posture.
     let status: Value = c.get(format!("{base}/dr/status")).send().await.unwrap().json().await.unwrap();
     assert_eq!(status["peers"], 1);
     assert_eq!(status["mirrors"], 1);
     assert_eq!(status["primary"], 1);
+    assert_eq!(status["verified"], false);
 }

@@ -35,6 +35,9 @@ pub struct Config {
     pub jwt_secret: String,
     /// When true, protected REST routes AND the gRPC edge require a valid JWT; false (dev) = open.
     pub auth_required: bool,
+    /// Optional one-shot bootstrap admin bearer (raw string, not a JWT). Accepted only when
+    /// `auth_required` so a fresh deploy can mint real service-account tokens, then unset this.
+    pub bootstrap_admin_token: Option<String>,
     /// Monitor loop interval in seconds (0 disables the monitor/alerts worker).
     pub monitor_interval_secs: u64,
     /// Ceph mgr Prometheus `/metrics` URL to scrape (None disables metric collection).
@@ -54,6 +57,13 @@ pub struct Config {
     /// How often (seconds) the DataBridge reconciler advances migration pipelines / CDC lag
     /// (0 disables it).
     pub databridge_reconcile_secs: u64,
+    /// How often (seconds) the job engine polls SQLite for due `queued`/`pending` work. The
+    /// in-memory channel is a fast wake-up; the DB poller is the durable source of truth
+    /// (survives channel loss, honors `next_attempt_at`). `0` disables the poller (tests).
+    pub job_poll_secs: u64,
+    /// Reclaim `running` jobs whose `locked_at`/`updated_at` is older than this many seconds
+    /// (stale mid-flight after a hard kill that never ran boot recovery). `0` disables reclaim.
+    pub job_stale_secs: u64,
     /// Optional HTTPS listen address (empty disables TLS). Served alongside the plain HTTP listener.
     pub https_addr: Option<String>,
     /// PEM cert/key paths for HTTPS (both required unless `tls_self_signed`).
@@ -101,6 +111,10 @@ impl Config {
             jwt_secret: std::env::var("ATLAS_JWT_SECRET")
                 .unwrap_or_else(|_| DEV_JWT_DEFAULT.into()),
             auth_required,
+            bootstrap_admin_token: std::env::var("ATLAS_BOOTSTRAP_ADMIN_TOKEN")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
             monitor_interval_secs: std::env::var("ATLAS_MONITOR_INTERVAL_SECS")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -130,6 +144,14 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(15),
+            job_poll_secs: std::env::var("ATLAS_JOB_POLL_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(2),
+            job_stale_secs: std::env::var("ATLAS_JOB_STALE_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(900),
             https_addr: std::env::var("ATLAS_HTTPS_ADDR")
                 .ok()
                 .filter(|s| !s.trim().is_empty()),
@@ -188,6 +210,18 @@ impl Config {
     pub fn jwt_secret_is_weak(&self) -> bool {
         self.jwt_secret == DEV_JWT_DEFAULT || self.jwt_secret.len() < 32
     }
+
+    /// Refuse to start in authenticated mode with a forgeable secret. Local `make run` keeps
+    /// `ATLAS_AUTH_REQUIRED` unset/false so the weak default remains fine for lab use.
+    pub fn validate_for_start(&self) -> Result<(), String> {
+        if self.auth_required && self.jwt_secret_is_weak() {
+            return Err(
+                "ATLAS_AUTH_REQUIRED is set but ATLAS_JWT_SECRET is the shipped dev default or shorter than 32 bytes — refuse to start"
+                    .into(),
+            );
+        }
+        Ok(())
+    }
 }
 
 impl Default for Config {
@@ -200,6 +234,7 @@ impl Default for Config {
             kubeconfig_path: None,
             jwt_secret: DEV_JWT_DEFAULT.into(),
             auth_required: false,
+            bootstrap_admin_token: None,
             monitor_interval_secs: 0,
             ceph_prometheus_url: None,
             alert_webhook_url: None,
@@ -208,6 +243,8 @@ impl Default for Config {
             rgw_public_endpoint: None,
             snapshot_tick_secs: 0,
             databridge_reconcile_secs: 0,
+            job_poll_secs: 0,
+            job_stale_secs: 0,
             https_addr: None,
             tls_cert_path: None,
             tls_key_path: None,
@@ -232,6 +269,31 @@ impl fmt::Debug for Config {
             .field("kubeconfig_path", &self.kubeconfig_path)
             .field("jwt_secret", &"<redacted>")
             .field("auth_required", &self.auth_required)
+            .field(
+                "bootstrap_admin_token",
+                &self.bootstrap_admin_token.as_ref().map(|_| "<redacted>"),
+            )
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_rejects_weak_secret_when_auth_required() {
+        let mut c = Config::default();
+        c.auth_required = true;
+        assert!(c.validate_for_start().is_err());
+        c.jwt_secret = "a-strong-enough-secret-at-least-32b!".into();
+        assert!(c.validate_for_start().is_ok());
+    }
+
+    #[test]
+    fn validate_allows_weak_secret_when_auth_open() {
+        let c = Config::default();
+        assert!(!c.auth_required);
+        assert!(c.validate_for_start().is_ok());
     }
 }

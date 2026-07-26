@@ -73,6 +73,7 @@ pub async fn mark_running(pool: &SqlitePool, id: &str) -> Result<()> {
     sqlx::query(
         "UPDATE storage_jobs SET state='running', progress_percent=MAX(progress_percent,5),
          started_at=COALESCE(started_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+         locked_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
          updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
     )
     .bind(id)
@@ -98,6 +99,7 @@ pub async fn set_state(pool: &SqlitePool, id: &str, state: &str, progress: i64) 
 pub async fn mark_succeeded(pool: &SqlitePool, id: &str, result: &serde_json::Value) -> Result<()> {
     sqlx::query(
         "UPDATE storage_jobs SET state='succeeded', progress_percent=100, result=?,
+         locked_by=NULL, locked_at=NULL,
          completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
          updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
     )
@@ -111,7 +113,7 @@ pub async fn mark_succeeded(pool: &SqlitePool, id: &str, result: &serde_json::Va
 /// Terminal failure: state `failed`, store error message.
 pub async fn mark_failed(pool: &SqlitePool, id: &str, error: &str) -> Result<()> {
     sqlx::query(
-        "UPDATE storage_jobs SET state='failed', error=?,
+        "UPDATE storage_jobs SET state='failed', error=?, locked_by=NULL, locked_at=NULL,
          completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
          updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
     )
@@ -139,11 +141,69 @@ pub async fn ids_by_states(pool: &SqlitePool, states: &[&str]) -> Result<Vec<Str
     Ok(rows.into_iter().map(|r| r.get::<String, _>("id")).collect())
 }
 
+/// Due `queued`/`pending` job ids whose `next_attempt_at` is null or already reached. Honors retry
+/// backoff so a boot/poller does not fire a job early. Oldest first, capped at `limit`.
+pub async fn due_ids(pool: &SqlitePool, limit: i64) -> Result<Vec<String>> {
+    let rows = sqlx::query(
+        "SELECT id FROM storage_jobs
+         WHERE state IN ('queued', 'pending')
+           AND (next_attempt_at IS NULL
+                OR next_attempt_at <= strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+         ORDER BY created_at ASC
+         LIMIT ?",
+    )
+    .bind(limit.max(1))
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| r.get::<String, _>("id")).collect())
+}
+
+/// Atomically claim a due job for `worker_id`: transitions `queued`/`pending` → `running` and
+/// stamps `locked_by`/`locked_at`. Returns `true` if this caller won the claim (so two workers /
+/// a channel wake + poller race cannot double-execute).
+pub async fn try_claim(pool: &SqlitePool, id: &str, worker_id: &str) -> Result<bool> {
+    let res = sqlx::query(
+        "UPDATE storage_jobs SET state='running', progress_percent=MAX(progress_percent,5),
+         locked_by=?, locked_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+         started_at=COALESCE(started_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+         WHERE id=? AND state IN ('queued', 'pending')
+           AND (next_attempt_at IS NULL
+                OR next_attempt_at <= strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+    )
+    .bind(worker_id)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected() == 1)
+}
+
+/// Re-queue `running` jobs whose lock/update is older than `stale_secs` (worker died without boot
+/// recovery). Clears the lock and stamps an error note. Returns how many were reclaimed.
+pub async fn reclaim_stale_running(pool: &SqlitePool, stale_secs: i64) -> Result<u64> {
+    if stale_secs <= 0 {
+        return Ok(0);
+    }
+    let res = sqlx::query(
+        "UPDATE storage_jobs SET state='queued', locked_by=NULL, locked_at=NULL,
+         error=COALESCE(error, 'reclaimed: stale running lock'),
+         next_attempt_at=NULL,
+         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+         WHERE state='running'
+           AND COALESCE(locked_at, updated_at, started_at, created_at)
+               < strftime('%Y-%m-%dT%H:%M:%fZ','now', ?)",
+    )
+    .bind(format!("-{} seconds", stale_secs))
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected())
+}
+
 /// Fail every job stuck in `running` (a crash/restart left it mid-flight; the side effects may be
 /// partial, so we fail-safe rather than blindly re-run). Returns how many were reset.
 pub async fn fail_running(pool: &SqlitePool, error: &str) -> Result<u64> {
     let res = sqlx::query(
-        "UPDATE storage_jobs SET state='failed', error=?,
+        "UPDATE storage_jobs SET state='failed', error=?, locked_by=NULL, locked_at=NULL,
          completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
          updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE state='running'",
     )
@@ -177,6 +237,7 @@ pub async fn set_max_retries(pool: &SqlitePool, id: &str, max_retries: i64) -> R
 pub async fn bump_retry(pool: &SqlitePool, id: &str, delay_modifier: &str) -> Result<()> {
     sqlx::query(
         "UPDATE storage_jobs SET state='queued', retry_count=retry_count+1,
+         locked_by=NULL, locked_at=NULL,
          next_attempt_at=strftime('%Y-%m-%dT%H:%M:%fZ','now', ?),
          error=NULL, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
     )

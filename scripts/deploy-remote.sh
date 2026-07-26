@@ -88,14 +88,20 @@ $SSH "cd ~/${REMOTE_DIR} && podman build -t atlas-gateway:dev -f Dockerfile ."
 log "3/5 import image into k3s containerd"
 $SSH "cd ~/${REMOTE_DIR} && podman save atlas-gateway:dev -o /tmp/atlas-gateway.tar && sudo k3s ctr images import /tmp/atlas-gateway.tar && rm -f /tmp/atlas-gateway.tar"
 
-log "4/5 apply k8s manifests + roll out the new image"
+log "4/5 ensure auth Secret + apply k8s manifests + roll out the new image"
+# Auth is required in-cluster; create a strong jwt-secret (+ one-shot bootstrap token) if missing.
 # `kubectl apply` is a no-op when only the image *content* changed (the tag stays :dev), so it won't
 # restart the pod and the old build keeps serving. `rollout restart` stamps the pod template so a new
 # pod always comes up on the freshly-imported containerd image (imagePullPolicy: Never).
+#
+# Namespace must exist before we can create the auth Secret — apply once first (idempotent).
 $SSH "cd ~/${REMOTE_DIR} \
   && kubectl apply -f deploy/k8s/atlas-gateway.yaml \
+  && NAMESPACE=zyvor-system bash scripts/ensure-atlas-auth-secret.sh \
   && kubectl -n zyvor-system rollout restart deploy/atlas-gateway \
   && kubectl -n zyvor-system rollout status deploy/atlas-gateway --timeout=180s"
+
+BOOT="$($SSH "kubectl -n zyvor-system get secret atlas-gateway-auth -o jsonpath='{.data.bootstrap-admin-token}' 2>/dev/null | base64 -d || true")"
 
 if [[ "$WITH_CEPH" == "1" ]]; then
   log "4b/5 installing Rook Ceph (DESTRUCTIVE: consumes an empty disk as an OSD)"
@@ -109,11 +115,14 @@ fi
 
 log "5/5 verify over NodePort ${NODEPORT}"
 $SSH "set -e
+  BOOT='${BOOT}'
+  AUTH=()
+  [[ -n \"\$BOOT\" ]] && AUTH=(-H \"Authorization: Bearer \$BOOT\")
   echo '--- /health ---'; curl -fsS http://127.0.0.1:${NODEPORT}/health; echo
   echo '--- /version ---'; curl -fsS http://127.0.0.1:${NODEPORT}/version; echo
-  echo '--- trigger discovery ---'; curl -fsS -X POST http://127.0.0.1:${NODEPORT}/api/atlas/v1/backends/bkd_ceph_lab/discover; echo
-  echo '--- /pools ---'; curl -fsS http://127.0.0.1:${NODEPORT}/api/atlas/v1/pools; echo
-  echo '--- /storage-classes (LIVE from k3s) ---'; curl -fsS http://127.0.0.1:${NODEPORT}/api/atlas/v1/storage-classes; echo
+  echo '--- trigger discovery ---'; curl -fsS \"\${AUTH[@]}\" -X POST http://127.0.0.1:${NODEPORT}/api/atlas/v1/backends/bkd_ceph_lab/discover; echo
+  echo '--- /pools ---'; curl -fsS \"\${AUTH[@]}\" http://127.0.0.1:${NODEPORT}/api/atlas/v1/pools; echo
+  echo '--- /storage-classes (LIVE from k3s) ---'; curl -fsS \"\${AUTH[@]}\" http://127.0.0.1:${NODEPORT}/api/atlas/v1/storage-classes; echo
 "
 
-log "done. Atlas gateway on http://${HOST}:${NODEPORT}"
+log "done. Atlas gateway on http://${HOST}:${NODEPORT} (auth required; use bootstrap token or a minted JWT)"

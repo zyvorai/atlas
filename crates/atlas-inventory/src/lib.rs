@@ -32,7 +32,19 @@ pub mod tokens;
 pub mod tenants;
 
 /// Open the SQLite pool with WAL + foreign keys, creating the file if missing.
+///
+/// Postgres URLs (`postgres://` / `postgresql://`) are rejected with a clear error until the
+/// sqlx port lands — see `docs/HA.md`. The durable job queue + leader lease already assume a
+/// shared DB and are the HA foundation for that cutover.
 pub async fn connect(database_url: &str) -> Result<SqlitePool> {
+    let lower = database_url.to_ascii_lowercase();
+    if lower.starts_with("postgres://") || lower.starts_with("postgresql://") {
+        anyhow::bail!(
+            "PostgreSQL is not wired yet (ATLAS_DATABASE_URL={database_url}). \
+             Atlas still uses SQLite; the durable job queue + leader lease are ready for a shared DB. \
+             See docs/HA.md for the migration plan and deploy/postgres/ for a lab Postgres."
+        );
+    }
     let options = SqliteConnectOptions::from_str(database_url)?
         .create_if_missing(true)
         .journal_mode(SqliteJournalMode::Wal)
@@ -945,4 +957,17 @@ pub async fn metrics_summary(pool: &SqlitePool) -> Result<serde_json::Value> {
             "objects_unfound": sum(pool, "ceph_num_objects_unfound").await,
         },
     }))
+}
+
+#[cfg(test)]
+mod connect_tests {
+    #[tokio::test]
+    async fn postgres_url_is_rejected_with_ha_pointer() {
+        let err = super::connect("postgres://atlas:atlas@127.0.0.1:5432/atlas")
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("PostgreSQL is not wired yet"), "{err}");
+        assert!(err.contains("docs/HA.md"), "{err}");
+    }
 }

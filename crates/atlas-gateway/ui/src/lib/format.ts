@@ -34,7 +34,7 @@ export const gib = (g: number) => g * 1024 * 1024 * 1024;
 export function healthKind(h?: string): "success" | "warning" | "danger" | "neutral" {
   if (h === "ok") return "success";
   if (h === "warn" || h === "warning") return "warning";
-  if (h === "critical") return "danger";
+  if (h === "critical" || h === "unauthenticated") return "danger";
   return "neutral";
 }
 

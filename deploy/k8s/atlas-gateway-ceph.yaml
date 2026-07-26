@@ -2,6 +2,9 @@
 # Atlas gateway in ATLAS_CEPH_DRIVER_MODE=real. Runs in the rook-ceph namespace so it can mount
 # the mon endpoints ConfigMap + admin keyring Secret; an initContainer renders /etc/ceph/{ceph.conf,keyring}
 # so the credential never leaves the cluster. Live k8s driver also works via the mounted SA.
+#
+# Auth: ATLAS_AUTH_REQUIRED=1 with jwt-secret from Secret `atlas-gateway-auth` (created by
+# scripts/deploy-ceph-gateway-remote.sh). Optional bootstrap-admin-token for first mint.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -42,11 +45,16 @@ spec:
         app: atlas-gateway-ceph
     spec:
       serviceAccountName: atlas-gateway
+      # Non-root: initContainer writes keyring as uid 10001; main process matches Dockerfile.ceph.
       securityContext:
-        runAsUser: 0                       # lab: read the rendered keyring + run ceph/rbd freely
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
       initContainers:
         - name: render-ceph-config
           image: busybox:1.36
+          securityContext:
+            runAsUser: 0
           command:
             - sh
             - -c
@@ -64,8 +72,10 @@ spec:
               [$CEPH_USER]
               key = $CEPH_KEY
               KR
-              chmod 0644 /etc/ceph/ceph.conf /etc/ceph/keyring
-              echo "rendered /etc/ceph for mon_host=$mon_host user=$CEPH_USER"
+              chown -R 10001:10001 /etc/ceph
+              chmod 0644 /etc/ceph/ceph.conf
+              chmod 0600 /etc/ceph/keyring
+              echo "rendered /etc/ceph for mon_host=$mon_host user=$CEPH_USER (uid 10001)"
           env:
             - name: MON_ENDPOINTS
               valueFrom:
@@ -89,6 +99,10 @@ spec:
         - name: atlas-gateway
           image: localhost/atlas-gateway:ceph
           imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           env:
             - name: ATLAS_BIND_ADDR
               value: "0.0.0.0:5110"
@@ -99,13 +113,28 @@ spec:
             - name: ATLAS_CEPH_DRIVER_MODE
               value: "real"
             - name: ATLAS_AUTH_REQUIRED
-              value: "0"
+              value: "1"
+            - name: ATLAS_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-gateway-auth
+                  key: jwt-secret
+            - name: ATLAS_BOOTSTRAP_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-gateway-auth
+                  key: bootstrap-admin-token
+                  optional: true
             - name: ATLAS_CEPH_PROMETHEUS_URL
               value: "http://rook-ceph-mgr.rook-ceph.svc:9283/metrics"
             # Public RGW endpoint so presigned backup-download URLs are reachable off-cluster.
-            # Signature binds to this host, so clients must connect to the same node:port.
+            # Bound to this node's hostIP (not a hard-coded lab address).
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
             - name: ATLAS_RGW_PUBLIC_ENDPOINT
-              value: "http://212.8.248.187:30513"
+              value: "http://$(NODE_IP):30513"
             # Protection-schedule worker: check for due snapshot schedules this often (seconds).
             - name: ATLAS_SNAPSHOT_TICK_SECS
               value: "15"

@@ -17,9 +17,11 @@ export function confirm(o: ConfirmOpts): Promise<boolean> {
   return opener ? opener(o) : Promise.resolve(window.confirm(o.message));
 }
 
-/** Confirm a destructive action, then run it. */
+/** Confirm a destructive action, then run it. `run` is typically submit()/submitJob(), which already
+ * toasts on failure and rejects; that rejection has no other listener here, so without this catch
+ * every failed delete/action throws an unhandled promise rejection. */
 export async function confirmThen(o: ConfirmOpts, run: () => void) {
-  if (await confirm(o)) run();
+  if (await confirm(o)) Promise.resolve(run()).catch(() => {});
 }
 export const del = (what: string, run: () => void) =>
   confirmThen({ title: `Delete ${what}?`, message: "This action cannot be undone.", confirmLabel: "Delete", danger: true }, run);

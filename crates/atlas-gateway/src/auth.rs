@@ -124,26 +124,44 @@ pub async fn auth_middleware(
         let Some(token) = token else {
             return unauthorized("missing bearer token");
         };
-        let mut validation = Validation::new(Algorithm::HS256);
-        validation.validate_exp = true;
-        match decode::<Claims>(
-            token,
-            &DecodingKey::from_secret(state.config.jwt_secret.as_bytes()),
-            &validation,
-        ) {
-            Ok(data) => {
-                // Deny-list check: a revoked token is rejected even before it expires. Fail open on a
-                // DB error (readiness already gates on the DB) so a transient blip can't lock everyone out.
-                if !data.claims.jti.is_empty() {
-                    match atlas_inventory::tokens::is_revoked(&state.pool, &data.claims.jti).await {
-                        Ok(true) => return unauthorized("token has been revoked"),
-                        Ok(false) => {}
-                        Err(e) => tracing::warn!("token revocation check failed: {e}"),
+        // Bootstrap admin: raw bearer accepted until the operator mints real JWTs and unsets
+        // ATLAS_BOOTSTRAP_ADMIN_TOKEN. Checked before JWT decode so it need not be a valid JWT.
+        if state
+            .config
+            .bootstrap_admin_token
+            .as_deref()
+            .is_some_and(|boot| boot == token)
+        {
+            Actor {
+                id: "bootstrap".into(),
+                role: "admin".into(),
+            }
+        } else {
+            let mut validation = Validation::new(Algorithm::HS256);
+            validation.validate_exp = true;
+            match decode::<Claims>(
+                token,
+                &DecodingKey::from_secret(state.config.jwt_secret.as_bytes()),
+                &validation,
+            ) {
+                Ok(data) => {
+                    // Deny-list check: a revoked token is rejected even before it expires. Fail open on a
+                    // DB error (readiness already gates on the DB) so a transient blip can't lock everyone out.
+                    if !data.claims.jti.is_empty() {
+                        match atlas_inventory::tokens::is_revoked(&state.pool, &data.claims.jti).await
+                        {
+                            Ok(true) => return unauthorized("token has been revoked"),
+                            Ok(false) => {}
+                            Err(e) => tracing::warn!("token revocation check failed: {e}"),
+                        }
+                    }
+                    Actor {
+                        id: data.claims.sub,
+                        role: data.claims.role,
                     }
                 }
-                Actor { id: data.claims.sub, role: data.claims.role }
+                Err(e) => return unauthorized(&format!("invalid token: {e}")),
             }
-            Err(e) => return unauthorized(&format!("invalid token: {e}")),
         }
     };
 

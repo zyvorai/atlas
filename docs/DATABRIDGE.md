@@ -47,7 +47,12 @@ Each stage is an async job (`202 + job id`, progress via `/jobs/{id}/watch`). Lo
   MariaDB, Oracle LogMiner, SQL Server, MongoDB change streams) → Aiven JDBC sink (relational) or the
   MongoDB Kafka sink (document) → edge DB.
 - **Cutover** is admin-guarded: plan `validated` + last validation `passed` + CDC `lag_seconds` under
-  threshold; **rollback** only within the plan's rollback window.
+  threshold; **rollback** only within the plan's rollback window. In real mode the cutover job leaves
+  the record `draining`; the reconciler completes the switch once the CDC stream reports **zero** lag
+  (tearing down the Debezium source/sink connectors + the per-plan KafkaConnect cluster), or fails the
+  cutover and returns the plan to `validated` if the lag hasn't drained by the 5-minute drain deadline.
+  Stopping CDC (`cdc/stop`) in real mode deletes the two `KafkaConnector` CRs (the KafkaConnect cluster
+  stays up so a later start/restart re-instantiates quickly).
 
 ## Fake vs real
 The whole pipeline runs **fake-first** with no cloud creds or operators — connectors serve a canned
@@ -183,7 +188,9 @@ Build the gateway with, e.g., `cargo build -p atlas-gateway --features atlas-dat
   container, seeds a `customers`/`orders` schema, exports the var, runs the gated test, and tears the
   container down (`scripts/test-connectors.sh [pg mysql mariadb mongo mssql]`). Oracle is compile-only
   (needs the OCI client). **`scripts/test-all.sh`** runs the whole gate (clippy + workspace tests +
-  feature compiles + the container connector tests).
+  feature compiles for sqlserver/mongodb/azure-blob/oracle[/kafka-lag] + optional UI build + the
+  container connector tests). CI additionally builds the Docker UI stages and the full
+  `Dockerfile.ceph` image.
 
 ## Data model
 `migration_sources`, `migration_plans`, `edge_db_clusters`, `cdc_streams`, `validation_runs`,

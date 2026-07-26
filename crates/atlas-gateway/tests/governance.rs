@@ -1,6 +1,7 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-//! Day-2 governance: token revocation. A minted token works until its `jti` is revoked, after which
-//! the auth middleware rejects it (401) before its TTL expires. Revocation is admin-only. Auth on.
+//! Day-2 governance: token revocation + bootstrap admin bearer. A minted token works until its
+//! `jti` is revoked, after which the auth middleware rejects it (401) before its TTL expires.
+//! Revocation is admin-only. Auth on.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -13,6 +14,10 @@ use serde_json::Value;
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
 async fn spawn_auth(secret: &str) -> String {
+    spawn_auth_with(secret, None).await
+}
+
+async fn spawn_auth_with(secret: &str, bootstrap: Option<&str>) -> String {
     let db = format!(
         "{}/atlas-gov-{}-{}.db",
         std::env::temp_dir().display(),
@@ -28,6 +33,7 @@ async fn spawn_auth(secret: &str) -> String {
         kubeconfig_path: None,
         jwt_secret: secret.into(),
         auth_required: true,
+        bootstrap_admin_token: bootstrap.map(|s| s.to_string()),
         monitor_interval_secs: 0,
         ceph_prometheus_url: None,
         alert_webhook_url: None,
@@ -36,6 +42,8 @@ async fn spawn_auth(secret: &str) -> String {
         rgw_public_endpoint: None,
         snapshot_tick_secs: 0,
         databridge_reconcile_secs: 0,
+        job_poll_secs: 0,
+        job_stale_secs: 0,
         https_addr: None,
         tls_cert_path: None,
         tls_key_path: None,
@@ -137,4 +145,40 @@ async fn revoked_token_is_rejected() {
         revoked.as_array().unwrap().iter().any(|r| r["jti"] == jti1),
         "revoked jti should be listed"
     );
+}
+
+#[tokio::test]
+async fn bootstrap_admin_token_can_mint_jwts() {
+    let secret = "gov-test-secret-key-at-least-32-bytes!!";
+    let boot = "one-shot-bootstrap-admin-token-xyz";
+    let base = format!("{}/api/atlas/v1", spawn_auth_with(secret, Some(boot)).await);
+    let c = reqwest::Client::new();
+
+    let minted: Value = c
+        .post(format!("{base}/auth/tokens"))
+        .bearer_auth(boot)
+        .json(&serde_json::json!({ "subject": "ops", "role": "admin", "ttl_secs": 600 }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let jwt = minted["token"].as_str().expect("bootstrap mint returns a JWT");
+
+    let ok = c
+        .get(format!("{base}/alerts"))
+        .bearer_auth(jwt)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), 200, "JWT minted via bootstrap must work");
+
+    let bad = c
+        .get(format!("{base}/alerts"))
+        .bearer_auth("wrong-bootstrap")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bad.status(), 401);
 }

@@ -1,6 +1,6 @@
 # Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 # ---- UI builder (React Storage Center → dist) ----
-FROM node:22-alpine AS ui
+FROM docker.io/library/node:22-alpine AS ui
 WORKDIR /ui
 COPY crates/atlas-gateway/ui/package.json crates/atlas-gateway/ui/package-lock.json ./
 RUN npm ci
@@ -8,7 +8,7 @@ COPY crates/atlas-gateway/ui/ ./
 RUN npm run build
 
 # ---- builder ----
-FROM rust:1.88-bookworm AS builder
+FROM docker.io/library/rust:1.88-bookworm AS builder
 # protoc for the gRPC crates; cmake for the vendored librdkafka (kafka-lag feature).
 RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler cmake && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
@@ -21,7 +21,7 @@ RUN cargo build --release -p atlas-gateway -p atlas-cli \
     --features atlas-databridge/mongodb,atlas-databridge/sqlserver,atlas-databridge/oracle,atlas-databridge/kafka-lag
 
 # ---- runtime ----
-FROM debian:bookworm-slim AS runtime
+FROM docker.io/library/debian:bookworm-slim AS runtime
 # ceph/rbd CLIs are only needed when ATLAS_CEPH_DRIVER_MODE=real against a real cluster.
 # Oracle Instant Client (Basic Lite) + libaio provide libclntsh.so, which ODPI-C dlopens at runtime
 # for the DataBridge `oracle` connector; freely redistributable. The URL is a build ARG so air-gapped

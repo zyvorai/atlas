@@ -90,7 +90,7 @@ metadata:
   namespace: $NS
 spec:
   cephVersion:
-    image: quay.io/ceph/ceph:v18.2.4
+    image: quay.io/ceph/ceph:v19.2.3
     allowUnsupported: true
   dataDirHostPath: /var/lib/rook
   mon: { count: 1, allowMultiplePerNode: true }

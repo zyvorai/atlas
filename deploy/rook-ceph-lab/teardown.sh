@@ -15,7 +15,7 @@ set -euo pipefail
 NS=rook-ceph
 DEV="${CEPH_DEVICE:-sdb}"
 HOSTPATH="${ROOK_HOSTPATH:-/var/lib/rook}"
-ROOK_VERSION="${ROOK_VERSION:-1.15.5}"
+ROOK_VERSION="${ROOK_VERSION:-1.20.2}"
 base="https://raw.githubusercontent.com/rook/rook/release-${ROOK_VERSION%.*}/deploy/examples"
 say() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!! \033[0m %s\n' "$*"; }
@@ -23,6 +23,7 @@ warn() { printf '\033[1;33m!! \033[0m %s\n' "$*"; }
 if [ "${1:-}" != "--confirm" ]; then
   cat <<EOF
 DRY-RUN. This would PERMANENTLY DESTROY the Ceph cluster on this node:
+  - uninstall ceph-csi-drivers Helm release (Rook 1.20+)
   - delete CephObjectStore / CephFilesystem / CephBlockPool / CephCluster
   - delete the zyvor-* StorageClasses (any bound PVCs become unusable)
   - delete the rook-ceph operator, common resources, CRDs, and the '$NS' namespace
@@ -33,6 +34,9 @@ EOF
 fi
 
 warn "DESTROYING Ceph on $(hostname) — device /dev/$DEV — in 5s (Ctrl-C to abort)"; sleep 5
+
+say "0/7 uninstall ceph-csi-drivers chart (Rook 1.20 companion)"
+helm uninstall ceph-csi-drivers -n "$NS" 2>/dev/null || true
 
 say "1/7 arm Rook disk-cleanup (zaps OSD disks on cluster delete)"
 kubectl -n "$NS" patch cephcluster rook-ceph --type merge \

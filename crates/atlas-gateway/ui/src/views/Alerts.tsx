@@ -15,7 +15,7 @@ export default function Alerts() {
   return (
     <div>
       <PageHeader icon={Activity} title="Alerts" subtitle="Cluster health, pool near-full, OSD down/latency, recovery in progress"
-        actions={<Button icon={PlayCircle} onClick={() => submit("post", "/alerts/evaluate", null, "evaluated", () => inv("alerts"))}>Evaluate</Button>} />
+        actions={<Button icon={PlayCircle} onClick={() => submit("post", "/alerts/evaluate", null, "evaluated", () => inv("alerts")).catch(() => {})}>Evaluate</Button>} />
       <div className="mb-3">
         <Select value={state} onChange={(e) => setState(e.target.value)} className="w-40">
           <option value="">All</option><option value="open">Open</option><option value="resolved">Resolved</option>
@@ -36,8 +36,8 @@ export default function Alerts() {
           actions={(a) =>
             a.state === "open" ? (
               <>
-                <Button size="sm" onClick={() => submit("post", `/alerts/${a.id}/ack`, null, "acknowledged", () => inv("alerts"))}>Ack</Button>
-                <Button size="sm" onClick={() => submit("post", `/alerts/${a.id}/silence?secs=3600`, null, "silenced 1h", () => inv("alerts"))}>Silence</Button>
+                <Button size="sm" onClick={() => submit("post", `/alerts/${a.id}/ack`, null, "acknowledged", () => inv("alerts")).catch(() => {})}>Ack</Button>
+                <Button size="sm" onClick={() => submit("post", `/alerts/${a.id}/silence?secs=3600`, null, "silenced 1h", () => inv("alerts")).catch(() => {})}>Silence</Button>
                 <Button size="sm" variant="danger" onClick={() => confirmThen({ title: "Resolve alert?", message: a.title, confirmLabel: "Resolve" }, () => submit("post", `/alerts/${a.id}/resolve`, null, "resolved", () => inv("alerts")))}>Resolve</Button>
               </>
             ) : null

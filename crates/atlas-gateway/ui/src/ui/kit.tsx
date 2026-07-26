@@ -104,9 +104,9 @@ export function StatCard({
 }
 
 type BadgeKind = "success" | "warning" | "danger" | "info" | "neutral";
-export function Badge({ kind = "neutral", dot, children }: { kind?: BadgeKind; dot?: boolean; children: React.ReactNode }) {
+export function Badge({ kind = "neutral", dot, title, children }: { kind?: BadgeKind; dot?: boolean; title?: string; children: React.ReactNode }) {
   return (
-    <span className={cx("badge", `badge-${kind}`)}>
+    <span className={cx("badge", `badge-${kind}`)} title={title}>
       {dot && <span className="dot" />}
       {children}
     </span>
@@ -334,6 +334,9 @@ export function FormModal({
     }
   }, [open]);
   const set = (k: string, v: string) => setVals((s) => ({ ...s, [k]: v }));
+  // Select fields always carry a value (they default to the first option); only plain text/number
+  // fields can be left blank, so only those need a required check.
+  const missingRequired = fields.some((f) => !f.optional && !f.options && !(vals[f.name] ?? "").trim());
   return (
     <Modal
       open={open}
@@ -345,11 +348,16 @@ export function FormModal({
           <Button
             variant="primary"
             loading={busy}
+            disabled={missingRequired}
             onClick={async () => {
               setBusy(true);
               try {
                 await onSubmit(vals);
                 onClose();
+              } catch {
+                // onSubmit is submit()/submitJob(), which already toasts the error and rethrows so
+                // callers can keep the modal open on failure. Swallow it here — otherwise, with no
+                // catch, it becomes an unhandled promise rejection on every failed create/write.
               } finally {
                 setBusy(false);
               }

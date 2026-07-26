@@ -14,6 +14,17 @@ kubectl -n "$NS" create configmap atlas-grafana-dashboard \
   --from-file=atlas-overview.json=atlas-overview.json \
   --dry-run=client -o yaml | kubectl apply -f -
 
+echo "==> Grafana admin Secret (random password if missing)"
+if ! kubectl -n "$NS" get secret atlas-grafana-admin >/dev/null 2>&1; then
+  GW_PASS="$(openssl rand -base64 18 | tr -d '/+=' | head -c 24)"
+  kubectl -n "$NS" create secret generic atlas-grafana-admin \
+    --from-literal=admin-password="$GW_PASS"
+  echo "    created atlas-grafana-admin (admin password printed once below)"
+else
+  GW_PASS="$(kubectl -n "$NS" get secret atlas-grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d)"
+  echo "    atlas-grafana-admin already exists — left alone"
+fi
+
 echo "==> Grafana (datasource + dashboard auto-provisioned)"
 kubectl apply -f grafana.yaml
 
@@ -26,5 +37,6 @@ cat <<EOF
 
 Observability is up:
   Prometheus  http://${NODE_IP}:30514   (targets: Status -> Targets; atlas-gateway should be UP)
-  Grafana     http://${NODE_IP}:30515   (admin / atlas -> Dashboards -> Atlas -> "Atlas Storage Control Plane")
+  Grafana     http://${NODE_IP}:30515   (admin / <secret atlas-grafana-admin>)
+  admin password: ${GW_PASS}
 EOF

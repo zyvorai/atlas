@@ -4,22 +4,31 @@ Stands up the storage fabric Atlas manages, on an existing Kubernetes/K3s cluste
 
 ## Prerequisites
 - A reachable cluster (`kubectl` context set).
-- Empty block devices on the nodes for Ceph OSDs (`useAllDevices: true` in `02-cephcluster.yaml`
-  consumes any unmounted device — pin `nodes`/`devices` for anything but a throwaway lab).
-- 3 nodes recommended; `allowMultiplePerNode` lets mons co-locate for single/dual-node labs.
+- **`helm`** (Rook ≥1.20 needs the companion `ceph-csi-drivers` chart or PVCs never bind).
+- Empty block devices on the nodes for Ceph OSDs.
+- Version lockstep: **Rook v1.20.2** + **Ceph Squid `v19.2.3`** (Reef `v18.2.x` is rejected by Rook 1.20).
 
 ## Install
+
 ```bash
-./up.sh              # Rook + Ceph + RBD/CephFS/RGW StorageClasses + snapshotter
-./up.sh --kubevirt   # also KubeVirt + CDI
-./up.sh --sample-vm  # also a VM booting from a zyvor-rbd-prod PVC
+./up.sh --single-node              # one-node lab (1 mon, size=1 pools, CSI drivers, zyvor-* SCs)
+./up.sh                            # multi-node profile (3 mons / size 3)
+./up.sh --single-node --cluster-only   # operator already installed (e.g. via hypercluster Helm)
+./up.sh --kubevirt                 # also KubeVirt + CDI
+./up.sh --sample-vm                # also a VM booting from a zyvor-rbd-prod PVC
 ```
-Pin versions via env: `ROOK_VERSION`, `KUBEVIRT_VERSION`, `CDI_VERSION`, `SNAPSHOTTER_VERSION`.
+
+Pin versions via env: `ROOK_VERSION` (default `v1.20.2`), `CEPH_IMAGE`
+(default `quay.io/ceph/ceph:v19.2.3`), `KUBEVIRT_VERSION`, `CDI_VERSION`, `SNAPSHOTTER_VERSION`.
+
+See also [single-node/README.md](single-node/README.md) and the end-to-end guide
+[docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md).
 
 ## What you get
 | Object | Name |
 |---|---|
-| CephCluster | `rook-ceph` (3 mon, mgr + prometheus module) |
+| CephCluster | `rook-ceph` (Squid; 3 mon multi-node / 1 mon with `--single-node`) |
+| CSI drivers | `rook-ceph.rbd.csi.ceph.com`, `rook-ceph.cephfs.csi.ceph.com` (Helm) |
 | RBD pool + StorageClass | `rbd-nvme-prod` / `zyvor-rbd-prod` |
 | CephFS + RWX StorageClass | `zyvorfs` / `zyvor-cephfs-shared` |
 | RGW object store + bucket class | `zyvor-rgw` / `zyvor-rgw-bucket` |
@@ -29,11 +38,12 @@ Pin versions via env: `ROOK_VERSION`, `KUBEVIRT_VERSION`, `CDI_VERSION`, `SNAPSH
 > The RGW NodePort (`:30800`) lets browsers reach RGW directly for **presigned object
 > upload/download** from the Buckets page. The gateway advertises it via
 > `ATLAS_RGW_PUBLIC_ENDPOINT=http://<node-ip>:30800` (set from `status.hostIP` in
-> `deploy/k8s/atlas-gateway.yaml`). Versioned uploads (keep-N) power db-file backups.
+> the gateway manifests).
 
 ## Verify
 ```bash
-kubectl -n rook-ceph get cephcluster          # PHASE should reach Ready / HEALTH_OK
+kubectl -n rook-ceph get cephcluster          # PHASE Ready (HEALTH_WARN OK on single-node)
+kubectl -n rook-ceph get driver               # both rook-ceph.* drivers present
 kubectl get storageclass | grep zyvor
 kubectl get volumesnapshotclass
 atlasctl storage-classes                       # Atlas live k8s driver lists the zyvor-* classes
@@ -76,7 +86,7 @@ the root FS `/dev/sda2` is separate):
 - **`teardown.sh --confirm`** — fully uninstall Rook Ceph (reverses `up.sh`) and wipe `/dev/sdb`
   using Rook's own `cleanupPolicy`. **Destructive.** Dry-run without `--confirm`.
   ```sh
-  ./teardown.sh --confirm      # then ./up.sh to reinstall
+  ./teardown.sh --confirm      # then ./up.sh --single-node to reinstall
   ```
 
 > Note: the OSD claims the **whole** raw device, so a BlueStore OSD can't be shrunk online — capping

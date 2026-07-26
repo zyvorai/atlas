@@ -14,10 +14,36 @@ http.interceptors.request.use((cfg) => {
   return cfg;
 });
 
+// A 401 means the gateway has ATLAS_AUTH_REQUIRED=1 and our stored token is missing, expired, or
+// revoked. Without this, queries just fail silently forever (widgets stuck on their loading
+// spinner) since `entered` in the ui store is a one-time flag, not a live auth check. Bounce back
+// to the login gate instead, with one toast — every in-flight request 401s at once on a bad token,
+// so de-dupe rather than firing a toast per request.
+let unauthorizedHandled = false;
+http.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err?.response?.status === 401 && !unauthorizedHandled) {
+      unauthorizedHandled = true;
+      const hadToken = !!useUi.getState().token;
+      useUi.getState().signOut();
+      toast(hadToken ? "Session expired — please re-enter your service-account token." : "Sign-in required.", "err");
+      setTimeout(() => {
+        unauthorizedHandled = false;
+      }, 3000);
+    }
+    return Promise.reject(err);
+  },
+);
+
 // Normalize the gateway's `{error:{message}}` envelope into a readable Error.
 export function apiError(e: unknown): string {
   const anyE = e as { response?: { data?: { error?: { message?: string } } }; message?: string };
   return anyE?.response?.data?.error?.message || anyE?.message || "request failed";
+}
+
+export function isUnauthorized(e: unknown): boolean {
+  return (e as { response?: { status?: number } })?.response?.status === 401;
 }
 
 // A toast bus (subscribed by <Toaster/>).
@@ -115,7 +141,10 @@ export async function submitJob(
     }
     return data;
   } catch (e) {
-    toast(`${label}: ${apiError(e)}`, "err");
+    // A 401 already gets its own explanation + login redirect from the response interceptor above;
+    // piling on a second, request-specific toast ("create: invalid token: InvalidToken") just as the
+    // screen is about to change is confusing rather than helpful.
+    if (!isUnauthorized(e)) toast(`${label}: ${apiError(e)}`, "err");
     throw e;
   }
 }
@@ -128,7 +157,7 @@ export async function submit(method: "post" | "put" | "delete", path: string, bo
     after?.();
     return data;
   } catch (e) {
-    toast(`${label}: ${apiError(e)}`, "err");
+    if (!isUnauthorized(e)) toast(`${label}: ${apiError(e)}`, "err");
     throw e;
   }
 }

@@ -39,7 +39,7 @@ export default function Sources() {
           ]}
           actions={(r) => (
             <>
-              <Button size="sm" icon={Search} onClick={() => submitJob("post", `/databridge/sources/${r.id}/discover`, null, "discover source", refetch)}>Discover</Button>
+              <Button size="sm" icon={Search} onClick={() => submitJob("post", `/databridge/sources/${r.id}/discover`, null, "discover source", refetch).catch(() => {})}>Discover</Button>
               <Button size="sm" onClick={() => setDetail(r)}>Schema</Button>
               <Button size="sm" variant="danger" onClick={() => del(`source ${r.name}`, async () => { await submit("delete", `/databridge/sources/${r.id}`, null, "source"); refetch(); })}>Del</Button>
             </>

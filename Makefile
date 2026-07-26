@@ -1,7 +1,8 @@
 # Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-.PHONY: dev build release test lint fmt fmt-check run run-databridge cli clean ui ui-dev
+.PHONY: dev build release test lint fmt fmt-check run run-databridge cli clean ui ui-dev \
+	features docker-smoke ci
 
-dev: fmt lint test
+dev: lint test
 
 build:
 	cargo build --workspace
@@ -20,6 +21,24 @@ fmt:
 
 fmt-check:
 	cargo fmt --all --check
+
+# Compile-check optional DataBridge connectors (mirrors the CI feature gate).
+features:
+	cargo check -p atlas-databridge --features sqlserver
+	cargo check -p atlas-databridge --features mongodb
+	cargo check -p atlas-databridge --features azure-blob
+	cargo check -p atlas-databridge --features oracle
+	@command -v cmake >/dev/null && cargo check -p atlas-databridge --features kafka-lag \
+		|| echo "skip kafka-lag (cmake not installed)"
+
+# Fast Docker smoke: UI stages of both images (needs podman or docker).
+docker-smoke:
+	@RT=$$(command -v podman >/dev/null && echo podman || echo docker); \
+	  $$RT build --target ui -t atlas-gateway:ui -f Dockerfile .; \
+	  $$RT build --target ui -t atlas-gateway-ceph:ui -f Dockerfile.ceph .
+
+# Local equivalent of the CI static gate (no Docker, no containers).
+ci: lint test features ui
 
 # Run the gateway with the fake Ceph driver (no cluster required).
 run:

@@ -17,6 +17,8 @@ data:
     scrape_configs:
       - job_name: atlas-gateway
         metrics_path: /metrics
+        authorization:
+          credentials_file: /etc/prometheus/secrets/bootstrap-admin-token
         static_configs:
           - targets: ["atlas-gateway-ceph.rook-ceph.svc:5110"]
             labels: { component: control-plane }
@@ -75,11 +77,17 @@ spec:
             - { name: config, mountPath: /etc/prometheus/prometheus.yml, subPath: prometheus.yml }
             - { name: config, mountPath: /etc/prometheus/rules/rules.yml, subPath: rules.yml }
             - { name: data, mountPath: /prometheus }
+            - { name: gateway-auth, mountPath: /etc/prometheus/secrets, readOnly: true }
       volumes:
         - name: config
           configMap: { name: atlas-prometheus-config }
         - name: data
           emptyDir: {}
+        - name: gateway-auth
+          secret:
+            secretName: atlas-gateway-auth
+            items:
+              - { key: bootstrap-admin-token, path: bootstrap-admin-token }
 ---
 apiVersion: v1
 kind: Service

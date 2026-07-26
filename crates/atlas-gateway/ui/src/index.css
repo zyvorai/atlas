@@ -1,6 +1,9 @@
 /* Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
  * Design foundation vendored from Zeus OS (v9s) — tokens + tahoe/zeus component classes.
  */
+@import "./zyvor-premium-login.css";
+@import "./zyvor-secure-login.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -338,34 +341,7 @@
   }
 }
 
-/* ── Premium login ── */
-.login-shell {
-  position: relative;
-  background: linear-gradient(180deg, #020408, #050816 45%, #0a0618 80%, #030712);
-}
-.login-orbs {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse 40% 40% at 22% 25%, rgba(56, 189, 248, 0.22), transparent 60%),
-    radial-gradient(ellipse 45% 45% at 80% 30%, rgba(147, 51, 234, 0.2), transparent 60%),
-    radial-gradient(ellipse 50% 40% at 55% 95%, rgba(236, 72, 153, 0.14), transparent 60%);
-  animation: orb-drift 14s ease-in-out infinite alternate;
-  filter: blur(6px);
-}
-@keyframes orb-drift {
-  from {
-    transform: translate3d(-3%, -2%, 0) scale(1);
-  }
-  to {
-    transform: translate3d(3%, 2%, 0) scale(1.08);
-  }
-}
-.login-mark {
-  background: linear-gradient(180deg, rgb(56, 189, 248), rgb(37, 99, 235));
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18) inset, 0 18px 45px -12px rgba(37, 99, 235, 0.6);
-}
+/* Atlas login — secure shell inherits PacketWolf chrome; light sky mark for product */
 
 /* ── Compact density ── */
 :root[data-density="compact"] .ztable td {

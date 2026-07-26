@@ -41,7 +41,7 @@ export function Backends() {
   return (
     <div>
       <PageHeader icon={Server} title="Backends" subtitle="Registered storage backends and discovery"
-        actions={<Button onClick={() => submit("post", "/backends/bkd_ceph_lab/discover", null, "discovery triggered", () => inv("clusters"))}>Discover</Button>} />
+        actions={<Button onClick={() => submit("post", "/backends/bkd_ceph_lab/discover", null, "discovery triggered", () => inv("clusters")).catch(() => {})}>Discover</Button>} />
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
         {(summary || []).map((b) => {

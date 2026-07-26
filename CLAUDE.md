@@ -58,9 +58,10 @@ the `rbd mirror` paths are unverified), per-product integrations beyond the gRPC
 - `crates/atlas-gateway` — axum server (bin `atlas-gateway`).
 - `crates/atlas-cli` — `atlasctl` REST client.
 - `migrations/` — SQLite schema.
-- `deploy/rook-ceph-lab/` — lab manifests + `up.sh`.
+- `deploy/rook-ceph-lab/` — lab manifests + `up.sh` (`--single-node`; Rook v1.20.2 + Squid + CSI drivers).
 - `scripts/deploy-remote.sh <host> <user>` — build (`Dockerfile`) + deploy the fake/k8s gateway to `zyvor-system`.
-- `scripts/deploy-ceph-gateway-remote.sh <host> [user]` — build (`Dockerfile.ceph`, bundles the Ceph client) + roll out the **real-Ceph** gateway `atlas-gateway-ceph` in `rook-ceph` (NodePort 30511, `imagePullPolicy: Never`).
+- `scripts/deploy-ceph-gateway-remote.sh <host> [user]` — build (`Dockerfile.ceph`, Squid client) + roll out
+  the **real-Ceph** gateway `atlas-gateway-ceph` in `rook-ceph` (NodePort 30511). See `docs/DEPLOYMENT.md`.
 
 ## Conventions
 - Every source file begins with `// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.`

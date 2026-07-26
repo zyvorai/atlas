@@ -64,7 +64,27 @@ Needs local `ssh`+`rsync` and remote `podman`+`k3s`+`kubectl`. The built image r
 features** (real Postgres/MySQL/MariaDB + fake for all); SQL Server/Oracle/MongoDB real connectors and
 `kafka-lag` need their features added to the `Dockerfile` build.
 
+## `deploy-ceph-gateway-remote.sh` — real-Ceph gateway on a remote k3s host
+
+Deploys `atlas-gateway-ceph` into `rook-ceph` (NodePort **30511**). Builds `Dockerfile.ceph`
+(Squid `ceph-common`) on the remote with podman.
+
+```bash
+scripts/deploy-ceph-gateway-remote.sh <host> <user>   # e.g. 212.8.248.187 sus
+ATLAS_SSH_KEY=~/.ssh/id_ed25519_hyper2kvm scripts/deploy-ceph-gateway-remote.sh <host> <user>
+```
+
+Idempotent helpers the script owns (do not do these by hand first):
+- SSH identity: `ATLAS_SSH_KEY` / `SSH_KEY` / `~/.ssh/id_ed25519_hyper2kvm`
+- install **podman** via apt if missing + set `unqualified-search-registries = ["docker.io"]`
+- import `localhost/atlas-gateway:ceph` into k3s (`imagePullPolicy: Never`)
+- ensure ClusterRole, `atlas-tls`, `atlas-gateway-auth` (JWT + bootstrap admin token)
+
+**Prereq:** Rook Ceph Ready **and** CSI drivers installed (`zyvor-rbd-prod` must bind). See
+`deploy/rook-ceph-lab/up.sh --single-node` and [docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md).
+
 ## Related (under `deploy/`)
-- `deploy/rook-ceph-lab/up.sh` — stands up Rook Ceph + the `zyvor-rbd-prod` StorageClass.
+- `deploy/rook-ceph-lab/up.sh` — Rook **v1.20.2** + Ceph **Squid v19.2.3** + `ceph-csi-drivers` +
+  `zyvor-*` StorageClasses. Use `--single-node` (and `--cluster-only` if the operator is already up).
 - `deploy/databridge/up.sh` — installs the edge operators (CloudNativePG / Percona / Strimzi) for real migrations.
 - `deploy/observability/up.sh` — observability stack.

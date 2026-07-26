@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Download, HardDrive, Plus, RefreshCw } from "lucide-react";
-import { submit, submitJob } from "../api/client";
+import { apiError, isUnauthorized, submit, submitJob, toast } from "../api/client";
 import { useBackends, useBuckets, useInvalidate, useVolumes } from "../api/hooks";
 import { http } from "../api/client";
 import type { StorageVolume } from "../api/types";
@@ -28,13 +28,19 @@ export default function Volumes() {
     if (tenant) qs.set("tenant", tenant);
     if (backend) qs.set("backend", backend);
     if (kind) qs.set("kind", kind);
-    const r = await http.get(`/volumes.csv${qs.toString() ? "?" + qs : ""}`, { responseType: "blob" });
-    const url = URL.createObjectURL(r.data as Blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "atlas-volumes.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const r = await http.get(`/volumes.csv${qs.toString() ? "?" + qs : ""}`, { responseType: "blob" });
+      const url = URL.createObjectURL(r.data as Blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "atlas-volumes.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      // Unlike submit()/submitJob(), this wasn't wrapped in any error handling at all — a failed
+      // export (401, network error, ...) silently did nothing and left an unhandled rejection.
+      if (!isUnauthorized(e)) toast(`export CSV: ${apiError(e)}`, "err");
+    }
   };
   const [createOpen, setCreateOpen] = useState(false);
   const [sel, setSel] = useState<StorageVolume | null>(null);

@@ -126,9 +126,14 @@ and "which OSDs affect this VM?" — required for RCA, billing, and safe cleanup
 - **Secret references, never secrets** — backends store a reference (Kubernetes Secret / Vault
   path); no keyrings/keys in Atlas tables (PDF §14.1).
 - **Real Ceph credentials stay in-cluster** — the real-mode gateway renders `/etc/ceph` from the
-  Rook mon Secret via an initContainer; the admin key never leaves the cluster.
-- **JWT auth** — `ATLAS_AUTH_REQUIRED=1` requires an HS256 Bearer token; dev default is open.
-- **Audit everything** — discovery, backend registration, and (in slice 2) all write actions.
+  Rook mon Secret via an initContainer (keyring mode `0600`, process runs as uid `10001`); the
+  admin key never leaves the cluster.
+- **JWT auth** — cluster manifests set `ATLAS_AUTH_REQUIRED=1` and load `ATLAS_JWT_SECRET` from
+  Secret `atlas-gateway-auth`. Local `make run` stays open. The process **refuses to start** if
+  auth is required and the JWT secret is the weak shipped default (or &lt; 32 bytes).
+- **Bootstrap admin** — optional `ATLAS_BOOTSTRAP_ADMIN_TOKEN` (raw bearer) lets a fresh deploy mint
+  lasting service-account JWTs; remove it from the Secret after first use.
+- **Audit everything** — discovery, backend registration, and write actions.
 
 ## Configuration
 
@@ -141,6 +146,7 @@ secret-redacting `Debug`:
 | `ATLAS_DATABASE_URL` | `sqlite://atlas.db?mode=rwc` | SQLite URL (WAL + FK on) |
 | `ATLAS_CEPH_DRIVER_MODE` | `fake` | `real` (ceph/rbd CLI) or `fake` (fixtures) |
 | `ATLAS_KUBECONFIG` | *(unset)* | Explicit kubeconfig; else in-cluster/default |
-| `ATLAS_JWT_SECRET` | dev default | HS256 secret (set ≥32 bytes in prod) |
-| `ATLAS_AUTH_REQUIRED` | `0` | Require JWT on `/api` routes |
+| `ATLAS_JWT_SECRET` | dev default | HS256 secret (≥32 bytes required when auth is on) |
+| `ATLAS_AUTH_REQUIRED` | `0` (local) / `1` (k8s) | Require JWT on `/api` routes |
+| `ATLAS_BOOTSTRAP_ADMIN_TOKEN` | *(unset)* | One-shot admin bearer for first mint |
 | `RUST_LOG` | `info` | tracing filter |

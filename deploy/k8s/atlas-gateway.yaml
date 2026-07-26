@@ -110,8 +110,20 @@ spec:
               value: "sqlite:///var/lib/atlas/atlas.db?mode=rwc"
             - name: ATLAS_CEPH_DRIVER_MODE
               value: "fake"          # switch to "real" once Rook Ceph + ceph client are present
+            # Cluster deploys require JWT auth. Local `make run` stays open (default ATLAS_AUTH_REQUIRED unset).
             - name: ATLAS_AUTH_REQUIRED
-              value: "0"
+              value: "1"
+            - name: ATLAS_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-gateway-auth
+                  key: jwt-secret
+            - name: ATLAS_BOOTSTRAP_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-gateway-auth
+                  key: bootstrap-admin-token
+                  optional: true
             # Browser-reachable RGW endpoint for presigned object upload/download URLs.
             # NODE_IP is this node's address (public on the lab hosts); 30800 is the RGW NodePort
             # created alongside the CephObjectStore (see deploy/rook-ceph-lab/*rgw*.yaml).

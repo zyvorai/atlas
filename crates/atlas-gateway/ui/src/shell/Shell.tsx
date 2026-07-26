@@ -23,12 +23,14 @@ function Clock() {
 }
 
 function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
-  const { data: clusters } = useClusters();
+  const { data: clusters, isError: clustersErrored } = useClusters();
   const { data: jobs } = useJobs();
   const { data: openAlerts } = useAlerts("open");
   const runningJobs = (jobs || []).filter((j) => ["running", "queued", "verifying", "pending"].includes(j.state));
   const recentDone = (jobs || []).filter((j) => ["succeeded", "failed"].includes(j.state)).slice(0, 5);
-  const h = clusters?.[0]?.health || "unknown";
+  // Distinguish "the API rejected us" from "clusters loaded but health wasn't reported" — both used
+  // to render as a silent, unexplained "Unknown" badge.
+  const h = clustersErrored ? "unauthenticated" : clusters?.[0]?.health || "unknown";
   const [tokenOpen, setTokenOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
@@ -140,8 +142,8 @@ function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
           <Moon size={13} />
         )}
       </button>
-      <Badge kind={healthKind(h)} dot>
-        {h}
+      <Badge kind={healthKind(h)} dot title={h === "unauthenticated" ? "API requests are being rejected — check your service-account token" : undefined}>
+        {h === "unauthenticated" ? "Sign-in required" : h}
       </Badge>
       <button className={cx("btn btn-ghost btn-sm", token && "text-success")} onClick={() => setTokenOpen(true)} title="Auth token">
         <KeyRound size={13} />
@@ -168,7 +170,7 @@ function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
           Paste a JWT to authenticate when the gateway has <code className="mono">ATLAS_AUTH_REQUIRED=1</code>. Stored
           locally; sent as a Bearer header.
         </div>
-        <Field placeholder="eyJhbGciOi…" value={draft} onChange={(e) => setDraft(e.target.value)} />
+        <Field type="password" autoComplete="off" placeholder="eyJhbGciOi…" value={draft} onChange={(e) => setDraft(e.target.value)} />
       </Modal>
     </div>
   );

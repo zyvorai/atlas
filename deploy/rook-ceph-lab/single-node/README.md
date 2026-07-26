@@ -5,12 +5,26 @@ The top-level `deploy/rook-ceph-lab/` manifests assume a 3-node cluster (replica
 failure domain). This overlay makes Rook Ceph run on **one node** (k3s dev box): replica size 1,
 `failureDomain: osd`, single MDS/mon. Use it for the lab on `212.8.248.187`, not for production.
 
-Apply it **after** the operator + CephCluster are up (steps 1–4 of the parent `up.sh`), replacing the
-parent's pool/filesystem/RGW manifests with these single-node variants:
+**Preferred:** from `deploy/rook-ceph-lab/`:
+
+```sh
+./up.sh --single-node                 # greenfield
+./up.sh --single-node --cluster-only  # Rook operator already installed (hypercluster Helm)
+```
+
+That path pins **Ceph Squid `v19.2.3`** (required by Rook ≥1.20), installs the
+**`ceph-csi-drivers`** Helm chart with rook-prefixed driver names, and applies the overlay below.
+
+## Manual apply (only if you need to step through)
+
+1. Edit `cluster.yaml`: set `spec.storage.nodes[].name` to your k8s node name (`kubectl get nodes`)
+   and the device (e.g. `sdb`). Image must stay Squid — Reef fails Rook 1.20 version check.
+2. Apply:
 
 ```sh
 cd deploy/rook-ceph-lab/single-node
-kubectl apply -f cluster.yaml        # CephCluster: 1 mon, useAllDevices, osd failure domain
+kubectl apply -f cluster.yaml        # CephCluster: 1 mon, device pin
+# wait for PHASE=Ready, then ensure CSI drivers exist (see parent up.sh / docs/DEPLOYMENT.md)
 kubectl apply -f blockpool-sc.yaml   # RBD pool (size 1) + zyvor-rbd-prod StorageClass (RWO block)
 kubectl apply -f cephfs-sc.yaml      # CephFS (size 1) + zyvor-cephfs-shared StorageClass (RWX file)
 kubectl apply -f rgw.yaml            # CephObjectStore + zyvor-rgw-bucket StorageClass (S3/OBC)
@@ -19,8 +33,9 @@ kubectl apply -f rgw.yaml            # CephObjectStore + zyvor-rgw-bucket Storag
 Wait for each to settle:
 
 ```sh
-kubectl -n rook-ceph get cephcluster            # PHASE Ready, HEALTH_WARN is expected (1 OSD < size 3)
-kubectl -n rook-ceph get cephfilesystem zyvorfs # PHASE Ready (2 MDS pods)
+kubectl -n rook-ceph get cephcluster            # PHASE Ready; HEALTH_WARN expected on 1 OSD
+kubectl -n rook-ceph get driver                 # rook-ceph.rbd… + rook-ceph.cephfs…
+kubectl -n rook-ceph get cephfilesystem zyvorfs # PHASE Ready
 kubectl -n rook-ceph get cephobjectstore        # PHASE Ready (RGW pod)
 kubectl get sc                                  # zyvor-rbd-prod, zyvor-cephfs-shared, zyvor-rgw-bucket
 ```

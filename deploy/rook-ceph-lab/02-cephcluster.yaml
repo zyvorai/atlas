@@ -8,7 +8,8 @@ metadata:
   namespace: rook-ceph
 spec:
   cephVersion:
-    image: quay.io/ceph/ceph:v18.2.4
+    # Keep in lockstep with Rook: v1.20+ charts require Squid (19.2+)
+    image: quay.io/ceph/ceph:v19.2.3
     allowUnsupported: false
   dataDirHostPath: /var/lib/rook
   mon:

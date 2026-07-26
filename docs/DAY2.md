@@ -15,6 +15,9 @@ fake-first tested + CI-green; where a capability needs real infra to fully verif
   (`_KEEP`, default 24) → `VACUUM INTO` snapshots of the control-plane DB to S3/RGW. Off by default.
 - **HA**: a DB leader lease (`leader_lease`) gates the periodic workers so only one replica schedules.
   Single-replica SQLite always wins; **true multi-replica needs Postgres** (`ATLAS_DATABASE_URL`).
+  The job engine is already a **durable DB queue** (poller + atomic claim + stale reclaim) — see
+  [HA.md](HA.md). Postgres URLs are refused at connect until the sqlx port lands; lab compose is at
+  `deploy/postgres/`.
 
 ## Alerting (operator)
 Rules: cluster health, pool near-full (75/85%), OSD down, capacity forecast, OSD latency, recovery,
@@ -45,10 +48,12 @@ Rules: cluster health, pool near-full (75/85%), OSD down, capacity forecast, OSD
 - CDC self-heal: `POST /databridge/plans/{id}/cdc/restart` re-establishes a stalled stream; the
   reconciler also auto-restarts an unhealthy stream up to 3× before giving up (→ `error` → alert).
 
-## Cross-cluster DR (admin) — scaffolding
-Control-plane catalog + API + jobs are here; the real `rbd mirror` operations are **UNVERIFIED** without
-a live second Ceph cluster. `POST/GET /dr/peers`; `POST/DELETE /volumes/{id}/mirror`; `GET /dr/mirrors`
-+ `/dr/status`; `POST /dr/mirrors/{id}/promote|demote` (failover).
+## Cross-cluster DR (admin)
+Control-plane catalog + hardened failover API; live `rbd mirror` still needs a second Ceph cluster.
+See [DR.md](DR.md). `POST/GET /dr/peers`; `POST/DELETE /volumes/{id}/mirror` (peer required);
+`GET /dr/mirrors` · `/dr/status` · `/dr/preflight`; `POST /dr/mirrors/{id}/promote|demote`
+(`?force=1` for split-brain); `POST /dr/failover` (`confirm: true`); `POST /dr/mirrors/{id}/rpo`.
+Fake mode skips the `rbd` CLI so drills succeed locally.
 
 ## Upgrades
 - **Pre-flight** `GET /upgrade/preflight` — no HEALTH_ERR cluster / open critical alerts / in-flight

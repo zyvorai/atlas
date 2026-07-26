@@ -30,7 +30,7 @@ export const MODULES: Module[] = [
   { id: "observatory", codename: "orrery", label: "Observatory", path: "/observatory", icon: Orbit, section: "OBSERVABILITY", dock: true },
   { id: "activity", codename: "kairos", label: "Activity", path: "/activity", icon: Activity, section: "OBSERVABILITY", dock: true },
   { id: "alerts", codename: "hermes", label: "Alerts", path: "/alerts", icon: Bell, section: "OBSERVABILITY" },
-  { id: "metrics", codename: "helios", label: "Metrics", path: "/metrics", icon: Gauge, section: "OBSERVABILITY" },
+  { id: "metrics", codename: "helios", label: "Metrics", path: "/metrics-dashboard", icon: Gauge, section: "OBSERVABILITY" },
   { id: "jobs", codename: "nike", label: "Jobs", path: "/jobs", icon: Clock, section: "OBSERVABILITY", dock: true },
   { id: "audit", codename: "themis", label: "Audit", path: "/audit", icon: FileClock, section: "OBSERVABILITY" },
 

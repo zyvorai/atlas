@@ -41,6 +41,7 @@ pub fn service(
 ) -> InterceptedService<AtlasStorageServer<GrpcService>, impl Interceptor + Clone> {
     let secret = state.config.jwt_secret.clone();
     let required = state.config.auth_required;
+    let bootstrap = state.config.bootstrap_admin_token.clone();
     AtlasStorageServer::with_interceptor(
         GrpcService { state },
         move |mut req: Request<()>| -> Result<Request<()>, Status> {
@@ -59,6 +60,13 @@ pub fn service(
             let Some(token) = token else {
                 return Err(Status::unauthenticated("missing bearer token"));
             };
+            if bootstrap.as_deref().is_some_and(|boot| boot == token) {
+                req.extensions_mut().insert(GrpcActor {
+                    id: "bootstrap".into(),
+                    role: "admin".into(),
+                });
+                return Ok(req);
+            }
             let mut validation = Validation::new(Algorithm::HS256);
             validation.validate_exp = true;
             match decode::<Claims>(

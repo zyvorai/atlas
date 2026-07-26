@@ -321,6 +321,79 @@ enum Command {
         #[arg(long, default_value = "snapshot")]
         mode: String,
     },
+
+    // ---- Day-2 / DR / DataBridge (parity with REST) ----
+
+    /// GET /api/atlas/v1/maintenance — worker pause flag
+    Maintenance,
+    /// POST /api/atlas/v1/maintenance — pause or resume the job worker
+    SetMaintenance {
+        #[arg(long, action = clap::ArgAction::Set)]
+        paused: bool,
+    },
+    /// POST /api/atlas/v1/backends/{id}/cordon — stop new provisioning
+    CordonBackend { id: String },
+    /// POST /api/atlas/v1/backends/{id}/uncordon
+    UncordonBackend { id: String },
+    /// GET /api/atlas/v1/upgrade/preflight
+    UpgradePreflight,
+    /// GET /api/atlas/v1/maintenance/orphans
+    Orphans,
+    /// GET /api/atlas/v1/dr/peers
+    DrPeers,
+    /// POST /api/atlas/v1/dr/peers — register a mirroring peer
+    DrRegisterPeer {
+        name: String,
+        #[arg(long)]
+        cluster_fsid: Option<String>,
+        #[arg(long)]
+        secret_ref: Option<String>,
+    },
+    /// GET /api/atlas/v1/dr/preflight
+    DrPreflight,
+    /// GET /api/atlas/v1/dr/status
+    DrStatus,
+    /// GET /api/atlas/v1/dr/mirrors
+    DrMirrors,
+    /// POST /api/atlas/v1/dr/mirrors/{id}/promote [--force]
+    DrPromote {
+        id: String,
+        #[arg(long)]
+        force: bool,
+    },
+    /// POST /api/atlas/v1/dr/mirrors/{id}/demote
+    DrDemote { id: String },
+    /// POST /api/atlas/v1/dr/failover — confirm-gated failover runbook
+    DrFailover {
+        mirror_id: String,
+        #[arg(long)]
+        force: bool,
+    },
+    /// POST /api/atlas/v1/dr/mirrors/{id}/rpo
+    DrSetRpo {
+        id: String,
+        #[arg(long)]
+        rpo_seconds: i64,
+    },
+    /// POST /api/atlas/v1/volumes/{id}/mirror — enable RBD mirroring
+    VolumeMirrorEnable {
+        id: String,
+        #[arg(long)]
+        peer: String,
+        #[arg(long, default_value = "snapshot")]
+        mode: String,
+    },
+    /// DELETE /api/atlas/v1/volumes/{id}/mirror
+    VolumeMirrorDisable { id: String },
+    /// GET /api/atlas/v1/databridge/sources
+    DatabridgeSources,
+    /// GET /api/atlas/v1/databridge/plans
+    DatabridgePlans,
+    /// POST /api/atlas/v1/databridge/plans/{id}/{stage} — stage ∈ assess|provision|full-load|cdc-start|cdc-stop|cdc-restart|validate|cutover|rollback
+    DatabridgeStage {
+        plan_id: String,
+        stage: String,
+    },
 }
 
 #[tokio::main]
@@ -655,6 +728,100 @@ async fn main() -> Result<()> {
             "/api/atlas/v1/restore-jobs".to_string(),
             Some(serde_json::json!({ "backup_id": backup_id, "name": name, "mode": mode })),
         ),
+        Command::Maintenance => ("GET", "/api/atlas/v1/maintenance".to_string(), None),
+        Command::SetMaintenance { paused } => (
+            "POST",
+            "/api/atlas/v1/maintenance".to_string(),
+            Some(serde_json::json!({ "paused": paused })),
+        ),
+        Command::CordonBackend { id } => (
+            "POST",
+            format!("/api/atlas/v1/backends/{id}/cordon"),
+            None,
+        ),
+        Command::UncordonBackend { id } => (
+            "POST",
+            format!("/api/atlas/v1/backends/{id}/uncordon"),
+            None,
+        ),
+        Command::UpgradePreflight => ("GET", "/api/atlas/v1/upgrade/preflight".to_string(), None),
+        Command::Orphans => ("GET", "/api/atlas/v1/maintenance/orphans".to_string(), None),
+        Command::DrPeers => ("GET", "/api/atlas/v1/dr/peers".to_string(), None),
+        Command::DrRegisterPeer {
+            name,
+            cluster_fsid,
+            secret_ref,
+        } => (
+            "POST",
+            "/api/atlas/v1/dr/peers".to_string(),
+            Some(serde_json::json!({
+                "name": name, "cluster_fsid": cluster_fsid, "secret_ref": secret_ref
+            })),
+        ),
+        Command::DrPreflight => ("GET", "/api/atlas/v1/dr/preflight".to_string(), None),
+        Command::DrStatus => ("GET", "/api/atlas/v1/dr/status".to_string(), None),
+        Command::DrMirrors => ("GET", "/api/atlas/v1/dr/mirrors".to_string(), None),
+        Command::DrPromote { id, force } => (
+            "POST",
+            format!("/api/atlas/v1/dr/mirrors/{id}/promote?force={force}"),
+            None,
+        ),
+        Command::DrDemote { id } => (
+            "POST",
+            format!("/api/atlas/v1/dr/mirrors/{id}/demote"),
+            None,
+        ),
+        Command::DrFailover { mirror_id, force } => (
+            "POST",
+            "/api/atlas/v1/dr/failover".to_string(),
+            Some(serde_json::json!({
+                "mirror_id": mirror_id, "confirm": true, "force": force
+            })),
+        ),
+        Command::DrSetRpo { id, rpo_seconds } => (
+            "POST",
+            format!("/api/atlas/v1/dr/mirrors/{id}/rpo"),
+            Some(serde_json::json!({ "rpo_seconds": rpo_seconds })),
+        ),
+        Command::VolumeMirrorEnable { id, peer, mode } => (
+            "POST",
+            format!("/api/atlas/v1/volumes/{id}/mirror?mode={mode}&peer={peer}"),
+            None,
+        ),
+        Command::VolumeMirrorDisable { id } => (
+            "DELETE",
+            format!("/api/atlas/v1/volumes/{id}/mirror"),
+            None,
+        ),
+        Command::DatabridgeSources => ("GET", "/api/atlas/v1/databridge/sources".to_string(), None),
+        Command::DatabridgePlans => ("GET", "/api/atlas/v1/databridge/plans".to_string(), None),
+        Command::DatabridgeStage { plan_id, stage } => {
+            let path = match stage.as_str() {
+                "assess" => format!("/api/atlas/v1/databridge/plans/{plan_id}/assess"),
+                "provision" => format!("/api/atlas/v1/databridge/plans/{plan_id}/provision"),
+                "full-load" | "fullload" => {
+                    format!("/api/atlas/v1/databridge/plans/{plan_id}/full-load")
+                }
+                "cdc-start" | "cdc/start" => {
+                    format!("/api/atlas/v1/databridge/plans/{plan_id}/cdc/start")
+                }
+                "cdc-stop" | "cdc/stop" => {
+                    format!("/api/atlas/v1/databridge/plans/{plan_id}/cdc/stop")
+                }
+                "cdc-restart" | "cdc/restart" => {
+                    format!("/api/atlas/v1/databridge/plans/{plan_id}/cdc/restart")
+                }
+                "validate" => format!("/api/atlas/v1/databridge/plans/{plan_id}/validate"),
+                "cutover" => format!("/api/atlas/v1/databridge/plans/{plan_id}/cutover"),
+                "rollback" => format!("/api/atlas/v1/databridge/plans/{plan_id}/rollback"),
+                other => {
+                    anyhow::bail!(
+                        "unknown databridge stage '{other}' (assess|provision|full-load|cdc-start|cdc-stop|cdc-restart|validate|cutover|rollback)"
+                    );
+                }
+            };
+            ("POST", path, None)
+        }
     };
 
     let url = format!("{base}{path}");

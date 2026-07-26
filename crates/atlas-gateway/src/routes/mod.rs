@@ -1,0 +1,226 @@
+// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+//! REST surface. Slice 1 read-only inventory/discovery (PDF §10.2) + slice 2 async write path
+//! (volume create/expand/delete, snapshots) — write ops return `202 Accepted` with a job id.
+
+mod backends;
+mod databridge;
+mod day2;
+mod dr;
+mod governance;
+mod inventory;
+mod meta;
+mod object_store;
+mod observability;
+mod rbd;
+mod util;
+mod volumes;
+
+use axum::{
+    middleware,
+    routing::{delete, get, post},
+    Router,
+};
+
+use crate::auth::auth_middleware;
+use crate::state::AppState;
+
+use backends::*;
+use databridge::*;
+use day2::*;
+use dr::*;
+use governance::*;
+use inventory::*;
+use meta::*;
+use object_store::*;
+use observability::*;
+use rbd::*;
+use volumes::*;
+
+pub fn router(state: AppState) -> Router {
+    let api = Router::new()
+        .route("/backends", get(list_backends).post(create_backend))
+        .route("/backends/summary", get(backends_summary))
+        .route("/backends/{id}", delete(delete_backend))
+        .route("/backends/{id}/discover", post(discover_backend))
+        .route("/backends/{id}/cordon", post(cordon_backend))
+        .route("/backends/{id}/uncordon", post(uncordon_backend))
+        .route("/maintenance", get(get_maintenance).post(set_maintenance))
+        .route("/maintenance/orphans", get(list_orphans))
+        .route("/upgrade/preflight", get(upgrade_preflight))
+        .route("/dr/peers", get(list_dr_peers).post(register_dr_peer))
+        .route("/dr/peers/{id}", delete(delete_dr_peer))
+        .route("/dr/mirrors", get(list_dr_mirrors))
+        .route("/dr/status", get(dr_status))
+        .route("/dr/preflight", get(dr_preflight))
+        .route("/dr/mirrors/{id}/promote", post(promote_mirror))
+        .route("/dr/mirrors/{id}/demote", post(demote_mirror))
+        .route("/dr/mirrors/{id}/rpo", post(set_mirror_rpo))
+        .route("/dr/failover", post(dr_failover))
+        .route("/volumes/{id}/mirror", post(enable_mirror).delete(disable_mirror))
+        .route("/clusters", get(list_clusters))
+        .route("/clusters/{id}/health", get(cluster_health))
+        .route("/clusters/{id}/capabilities", get(cluster_capabilities))
+        .route("/nodes", get(list_nodes))
+        .route("/osds", get(list_osds))
+        .route("/osds/{osd_id}/out", post(osd_out))
+        .route("/osds/{osd_id}/in", post(osd_in))
+        .route("/osds/{osd_id}/reweight", post(osd_reweight))
+        .route("/pools", get(list_pools))
+        .route("/ceph/status", get(get_ceph_status))
+        .route("/ceph/osd-tree", get(get_ceph_osd_tree))
+        .route("/ceph/osd-df", get(get_ceph_osd_df))
+        .route("/ceph/df", get(get_ceph_df))
+        .route("/storage-classes", get(list_storage_classes))
+        .route("/kubernetes/pvcs", get(list_pvcs))
+        .route("/kubernetes/pvs", get(list_pvs))
+        .route("/volumes", get(list_volumes).post(create_volume))
+        .route("/volumes.csv", get(volumes_csv))
+        .route("/volumes/{id}", get(get_volume).delete(delete_volume))
+        .route("/volumes/{id}/expand", post(expand_volume))
+        .route("/rbd-images", get(list_rbd_images).post(create_rbd_image))
+        .route(
+            "/rbd-images/{pool}/{image}",
+            axum::routing::delete(delete_rbd_image),
+        )
+        .route("/rbd-images/{pool}/{image}/clone", post(clone_rbd_image))
+        .route("/rbd-images/{pool}/{image}/resize", post(resize_rbd_image))
+        .route("/rbd-images/{pool}/{image}/migrate", post(migrate_rbd_image))
+        .route("/rbd-images/{pool}/{image}/qos", post(qos_rbd_image))
+        .route(
+            "/rbd-images/{pool}/{image}/flatten",
+            post(flatten_rbd_image),
+        )
+        .route(
+            "/rbd-images/{pool}/{image}/snapshots",
+            get(list_rbd_snaps).post(create_rbd_snap),
+        )
+        .route(
+            "/rbd-images/{pool}/{image}/rollback",
+            post(rollback_rbd_image),
+        )
+        .route("/rbd-usage/refresh", post(refresh_rbd_usage))
+        .route("/buckets/{id}/stats", get(bucket_stats))
+        .route(
+            "/buckets/{id}/objects",
+            get(bucket_objects).delete(bucket_object_delete),
+        )
+        .route("/buckets/{id}/objects/upload-url", post(bucket_object_upload_url))
+        .route("/buckets/{id}/objects/download-url", get(bucket_object_download_url))
+        .route("/buckets/{id}/objects/prune", post(bucket_objects_prune))
+        .route("/volumes/{id}/bindings", get(list_volume_bindings))
+        .route(
+            "/volumes/{id}/labels",
+            get(get_volume_labels).put(put_volume_labels),
+        )
+        .route("/tenants", get(list_tenants))
+        .route("/volumes/{id}/snapshots", post(create_snapshot))
+        .route("/snapshots", get(list_snapshots))
+        .route("/snapshots/{id}", axum::routing::delete(delete_snapshot))
+        .route("/snapshots/{id}/clone", post(clone_snapshot))
+        .route("/snapshots/{id}/restore", post(restore_snapshot))
+        .route("/volumes/{id}/schedule", post(create_schedule))
+        .route("/schedules", get(list_schedules))
+        .route("/schedules/{id}", axum::routing::delete(delete_schedule))
+        .route("/buckets", get(list_buckets).post(create_bucket))
+        .route("/buckets/{id}", get(get_bucket).delete(delete_bucket))
+        .route("/backup-jobs", post(create_backup))
+        .route("/restore-jobs", post(create_restore))
+        .route("/backups", get(list_backups))
+        .route("/backups/{id}", get(get_backup).delete(delete_backup))
+        .route("/backups/{id}/download", get(download_backup))
+        // ---- DataBridge (cloud-to-edge DB migration) ----
+        .route(
+            "/databridge/sources",
+            get(db_list_sources).post(db_create_source),
+        )
+        .route(
+            "/databridge/sources/{id}",
+            get(db_get_source).delete(db_delete_source),
+        )
+        .route("/databridge/sources/{id}/discover", post(db_discover_source))
+        .route("/databridge/plans", get(db_list_plans).post(db_create_plan))
+        .route("/databridge/plans/{id}", get(db_get_plan).delete(db_delete_plan))
+        .route("/databridge/plans/{id}/assess", post(db_assess_plan))
+        .route("/databridge/plans/{id}/provision", post(db_provision_edge))
+        .route("/databridge/plans/{id}/full-load", post(db_full_load))
+        .route("/databridge/plans/{id}/cdc/start", post(db_cdc_start))
+        .route("/databridge/plans/{id}/cdc/stop", post(db_cdc_stop))
+        .route("/databridge/plans/{id}/cdc/restart", post(db_cdc_restart))
+        .route("/databridge/plans/{id}/validate", post(db_validate))
+        .route("/databridge/plans/{id}/cutover", post(db_cutover))
+        .route("/databridge/plans/{id}/rollback", post(db_rollback))
+        // ---- DataBridge (object leg): cloud object store -> Ceph RGW ----
+        .route(
+            "/databridge/object",
+            get(db_object_list).post(db_object_create),
+        )
+        .route(
+            "/databridge/object/{id}",
+            get(db_object_get).delete(db_object_delete),
+        )
+        .route("/databridge/object/{id}/start", post(db_object_start))
+        .route("/databridge/edge-clusters", get(db_list_edge_clusters))
+        .route("/databridge/edge-clusters/{id}", get(db_get_edge_cluster).delete(db_delete_edge_cluster))
+        .route("/databridge/cdc-streams", get(db_list_cdc_streams))
+        .route("/databridge/cdc-streams/{id}", get(db_get_cdc_stream))
+        .route("/databridge/validations", get(db_list_validations))
+        .route("/databridge/cutovers", get(db_list_cutovers))
+        .route("/policies", get(list_policies))
+        .route("/auth/tokens", post(issue_token))
+        .route("/auth/tokens/revoked", get(list_revoked_tokens))
+        .route("/auth/tokens/{jti}/revoke", post(revoke_token))
+        .route(
+            "/tenants/{id}/quota",
+            get(get_tenant_quota).put(put_tenant_quota),
+        )
+        .route("/tenants/{id}/policies", get(list_tenant_policies))
+        .route(
+            "/tenants/{id}/policies/{intent}",
+            axum::routing::put(put_tenant_policy).delete(delete_tenant_policy),
+        )
+        .route("/metrics/summary", get(metrics_summary))
+        .route("/metrics/ceph", get(metrics_ceph))
+        .route("/metrics/history", get(metrics_history))
+        .route("/metrics/forecast", get(metrics_forecast))
+        .route("/alerts", get(list_alerts))
+        .route("/alerts/evaluate", post(evaluate_alerts))
+        .route("/alerts/{id}/ack", post(ack_alert))
+        .route("/alerts/{id}/silence", post(silence_alert))
+        .route("/alerts/{id}/resolve", post(resolve_alert))
+        .route("/jobs", get(list_jobs))
+        .route("/jobs/{id}", get(get_job))
+        .route("/jobs/{id}/watch", get(watch_job_sse))
+        .route("/audit", get(list_audit))
+        .route("/audit.csv", get(export_audit_csv))
+        .route("/events", get(list_events))
+        .route("/chargeback", get(chargeback))
+        .route("/policy-drift", get(policy_drift))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ))
+        .with_state(state.clone());
+
+    // `/metrics` exposes real inventory counts, backend names, and capacity — gate it behind the
+    // same bearer-token check as the rest of the API so it can't be scraped anonymously off a
+    // publicly reachable NodePort. Prometheus authenticates via `authorization.credentials_file`
+    // (see deploy/observability/prometheus.yaml).
+    let metrics = Router::new()
+        .route("/metrics", get(prometheus_metrics))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ))
+        .with_state(state.clone());
+
+    Router::new()
+        .route("/health", get(health))
+        .route("/livez", get(livez))
+        .route("/readyz", get(readyz))
+        .route("/version", get(version))
+        .merge(metrics)
+        .nest("/api/atlas/v1", api)
+        // Any other path serves the embedded Storage Center SPA (client-side routing).
+        .fallback(get(spa_handler))
+        .with_state(state)
+}

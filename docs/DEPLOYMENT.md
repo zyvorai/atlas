@@ -5,78 +5,102 @@ Two things get deployed:
 1. the **Atlas gateway** (a container on Kubernetes), and
 2. optionally, the **Rook Ceph** storage fabric it manages.
 
-This guide covers a k3s node end-to-end, exactly as verified during development.
+This guide covers a k3s node end-to-end, exactly as verified on `212.8.248.187`.
+
+**Prefer the scripts.** Hand-editing CRs (image tags, mon count, finalizers) is how labs get stuck.
+The paths below are the supported ones.
 
 ## Prerequisites on the target host
 
-- A running Kubernetes/k3s cluster; `kubectl` works for your user.
-- `podman` (to build the image) and `rsync`, `git`.
-- For real Ceph: an **empty block device** for the OSD (destructive to that disk).
+- A running Kubernetes/k3s cluster; `kubectl` works (or `sudo k3s kubectl`).
+- `helm` on the machine that runs `up.sh` (required for Ceph CSI on Rook ≥1.20).
+- Empty block device for the OSD (destructive to that disk), e.g. `/dev/sdb`.
 - Passwordless `sudo` (for `k3s ctr images import`).
+- SSH from your workstation: `rsync` + an identity that works on the host
+  (`ATLAS_SSH_KEY` / `SSH_KEY`, or `~/.ssh/id_ed25519_hyper2kvm` for the Zyvor lab).
 
-The Atlas gateway image is built **on the host** with podman and imported into k3s containerd —
-no external registry, no local Rust toolchain required on your laptop.
+The gateway image is built **on the host** with podman and imported into k3s containerd —
+no external registry. `deploy-ceph-gateway-remote.sh` installs podman via apt if missing and
+configures `docker.io` as an unqualified-search registry (Ubuntu podman defaults otherwise break
+`FROM rust:…` short names).
+
+## Version lockstep (do not drift)
+
+| Component | Pin | Why |
+|---|---|---|
+| Rook operator / charts | **v1.20.2** (default in `up.sh`) | Current hypercluster Helm default |
+| Ceph image | **`quay.io/ceph/ceph:v19.2.3`** (Squid) | Rook ≥1.20 **rejects** Reef (`v18.2.x`) with `minimum version "19.2.0-0 squid"` |
+| Gateway client (`Dockerfile.ceph`) | Squid apt (`debian-squid`) | Match cluster major |
+| CSI drivers | `ceph-csi-operator/ceph-csi-drivers` Helm chart | Rook 1.20 **does not** ship Driver CRs/SAs; without this chart every PVC stays `Pending` |
+
+Override only together: `ROOK_VERSION=… CEPH_IMAGE=… ./up.sh …`.
 
 ## 1. Deploy the gateway (fake Ceph + live k8s driver)
-
-From your workstation:
 
 ```bash
 ./scripts/deploy-remote.sh <host> <user>
 # e.g. ./scripts/deploy-remote.sh 212.8.248.187 sus
 ```
 
-This rsyncs the repo, `podman build`s `atlas-gateway:dev`, imports it into k3s, applies
-`deploy/k8s/atlas-gateway.yaml` (Namespace `zyvor-system`, RBAC-scoped ServiceAccount,
-Deployment, NodePort **30510**), and verifies `/health` + `/storage-classes`.
-
-RBAC granted (read-only, for the live k8s driver):
-`storageclasses`, `volumesnapshotclasses`, `persistentvolumeclaims`, `persistentvolumes`
-— `get/list/watch` only.
-
-Verify:
-
-```bash
-curl -s http://<host>:30510/health
-curl -s http://<host>:30510/api/atlas/v1/storage-classes | jq     # real cluster StorageClasses
-curl -s http://<host>:30510/api/atlas/v1/kubernetes/pvs | jq       # real bound PVs
-```
-
-The live k8s driver tags Ceph-backed StorageClasses `is_ceph: true`.
+NodePort **30510**. Verifies `/health` + `/storage-classes`.
 
 ## 2. Stand up Rook Ceph (single-node lab)
 
 > **Destructive:** consumes an empty disk (e.g. `/dev/sdb`) as a Ceph OSD.
 
-For a single-node k3s, use the single-node overlay (1 mon, 1 OSD, replica size 1,
-failure domain `osd`). Edit `deploy/rook-ceph-lab/single-node/cluster.yaml` to set your **node
-name** and **device** first (`kubectl get nodes`, `lsblk`).
+### Preferred: one script
+
+Edit `deploy/rook-ceph-lab/single-node/cluster.yaml` so `spec.storage.nodes[].name` matches
+`kubectl get nodes` and the device name matches `lsblk` (lab: `nldw3-4-32-26` + `sdb`).
 
 ```bash
-# on the host (or via ssh), from the synced repo dir:
-ROOK_BASE=https://raw.githubusercontent.com/rook/rook/release-1.15/deploy/examples
-kubectl apply -f deploy/rook-ceph-lab/01-namespaces.yaml
-kubectl apply -f "$ROOK_BASE/crds.yaml" -f "$ROOK_BASE/common.yaml" -f "$ROOK_BASE/operator.yaml"
-kubectl -n rook-ceph rollout status deploy/rook-ceph-operator --timeout=240s
+# Full install (operator + cluster + CSI drivers + zyvor-* SCs):
+cd deploy/rook-ceph-lab
+./up.sh --single-node
 
-kubectl apply -f deploy/rook-ceph-lab/single-node/cluster.yaml      # OSD provisioning (a few min)
-kubectl apply -f deploy/rook-ceph-lab/single-node/blockpool-sc.yaml # pool + zyvor-rbd-prod SC
-kubectl apply -f https://raw.githubusercontent.com/rook/rook/release-1.15/deploy/examples/toolbox.yaml
+# Operator already present (e.g. hypercluster installed Rook via Helm):
+./up.sh --single-node --cluster-only
 ```
 
-For a real **multi-node** cluster use the canonical manifests instead — `deploy/rook-ceph-lab/up.sh`
-(see [that README](../deploy/rook-ceph-lab/README.md)), which also installs KubeVirt/CDI and the
-external-snapshotter.
+`up.sh` will:
+1. apply the CephCluster (Squid image, 1 mon),
+2. wait until phase **Ready** (two consecutive polls),
+3. install **`ceph-csi-drivers`** with rook-prefixed names
+   (`rook-ceph.rbd.csi.ceph.com` / `rook-ceph.cephfs.csi.ceph.com`),
+4. apply single-node RBD / CephFS / RGW StorageClasses + snapshot class.
 
-Verify Ceph:
+### Via hypercluster (platform path)
 
 ```bash
-TB=$(kubectl -n rook-ceph get pod -l app=rook-ceph-tools -o jsonpath='{.items[0].metadata.name}')
-kubectl -n rook-ceph exec "$TB" -- ceph -s
+# from the hypercluster repo, with cluster.conf pointed at the host + SSH_KEY set:
+./hypercluster -c cluster.conf storage apply --backend rook-ceph \
+  --confirm-destroy <ip>:/dev/sdb
+```
+
+That path also pins Squid, sets mon count from node count, and installs `ceph-csi-drivers`.
+Atlas StorageClasses (`zyvor-*`) still come from Atlas `up.sh --single-node --cluster-only`
+(or the single-node YAML overlay) if you want the full Atlas SC set.
+
+### Verify Ceph + CSI
+
+```bash
+kubectl -n rook-ceph get cephcluster          # PHASE Ready (HEALTH_WARN is OK on 1 OSD)
+kubectl -n rook-ceph get driver               # rook-ceph.rbd… and rook-ceph.cephfs…
+kubectl get csidriver | grep rook-ceph
 kubectl get sc | grep zyvor
+kubectl -n rook-ceph get pods | grep 'rbd.csi\|cephfs.csi'   # ctrlplugin + nodeplugin Running
 ```
 
-Prove real RBD provisioning:
+If PVCs stay `Pending` with `Waiting for … rook-ceph.rbd.csi.ceph.com`, the CSI drivers chart
+was skipped — re-run the CSI step from `up.sh` or:
+
+```bash
+helm repo add ceph-csi-operator https://ceph.github.io/ceph-csi-operator
+helm upgrade --install ceph-csi-drivers ceph-csi-operator/ceph-csi-drivers -n rook-ceph \
+  -f https://raw.githubusercontent.com/rook/rook/v1.20.2/deploy/charts/ceph-csi-drivers/values.yaml
+```
+
+Smoke-test RBD:
 
 ```bash
 kubectl apply -f - <<'YAML'
@@ -89,36 +113,61 @@ spec:
   resources: { requests: { storage: 2Gi } }
 YAML
 kubectl -n default get pvc atlas-rbd-smoke      # → Bound
-kubectl -n rook-ceph exec "$TB" -- rbd ls -l rbd-nvme-prod   # → the csi-vol-... image
 ```
 
 ## 3. Run Atlas in real Ceph mode
 
-The real-mode gateway runs in the `rook-ceph` namespace and renders `/etc/ceph` from the Rook
-mon Secret via an **initContainer** — the admin credential never leaves the cluster.
-
 ```bash
-# build the ceph-enabled image (bundles the Reef ceph/rbd client), import, deploy
-podman build -t atlas-gateway:ceph -f Dockerfile.ceph .
-podman save atlas-gateway:ceph -o /tmp/atlas-ceph.tar && sudo k3s ctr images import /tmp/atlas-ceph.tar
-kubectl apply -f deploy/k8s/atlas-gateway.yaml          # ensures the ClusterRole exists
-kubectl apply -f deploy/k8s/atlas-gateway-ceph.yaml     # real-mode Deployment on NodePort 30511
-kubectl -n rook-ceph rollout status deploy/atlas-gateway-ceph --timeout=150s
+./scripts/deploy-ceph-gateway-remote.sh <host> <user>
+# e.g. ./scripts/deploy-ceph-gateway-remote.sh 212.8.248.187 sus
 ```
 
-Verify **real** discovery (Atlas runs `ceph`/`rbd` itself):
+What the script does (idempotent):
+1. rsync repo (uses `ATLAS_SSH_KEY` / `SSH_KEY` / lab hyper2kvm key),
+2. ensure **podman** + docker.io short-name config,
+3. `podman build -f Dockerfile.ceph` (Squid `ceph-common`),
+4. import `localhost/atlas-gateway:ceph` into k3s,
+5. ensure ClusterRole, `atlas-tls`, `atlas-gateway-auth`,
+6. apply `deploy/k8s/atlas-gateway-ceph.yaml` + rollout (NodePort **30511**).
+
+The Deployment PVC uses **`zyvor-rbd-prod`** — CSI must already be Ready or the pod stays Pending.
+
+Cluster deploys **require JWT auth** (`ATLAS_AUTH_REQUIRED=1`). Mint a lasting admin JWT from the
+bootstrap token, then remove the bootstrap key:
 
 ```bash
 B=http://<host>:30511
-curl -s -X POST $B/api/atlas/v1/backends/bkd_ceph_lab/discover | jq
-curl -s $B/api/atlas/v1/clusters | jq     # real fsid + capacity
-curl -s $B/api/atlas/v1/pools    | jq     # real ceph pools
-curl -s $B/api/atlas/v1/volumes  | jq     # real RBD images (incl. the PVC-backed one)
+BOOT=$(kubectl -n rook-ceph get secret atlas-gateway-auth -o jsonpath='{.data.bootstrap-admin-token}' | base64 -d)
+H=(-H "Authorization: Bearer $BOOT")
+curl -sS "${H[@]}" -H 'Content-Type: application/json' \
+  -d '{"subject":"ops","role":"admin","ttl_secs":86400}' \
+  $B/api/atlas/v1/auth/tokens
+# then patch-remove bootstrap-admin-token and rollout restart (see scripts output)
 ```
 
-A verified run returned the real fsid `5ace73d1-…`, pool `rbd-nvme-prod`, `osd.0` up/in, and the
-`csi-vol-…` RBD image created for the `atlas-rbd-smoke` PVC — closing the loop
-PVC → CSI → RBD → Atlas discovery.
+Verify:
+
+```bash
+curl -s "${H[@]}" $B/health
+curl -s "${H[@]}" $B/readyz          # ceph_driver.mode=real
+curl -s "${H[@]}" -X POST $B/api/atlas/v1/backends/bkd_ceph_lab/discover
+curl -s "${H[@]}" $B/api/atlas/v1/storage-classes | jq
+curl -s "${H[@]}" "$B/api/atlas/v1/volumes?kind=block" | jq
+```
+
+## Auth bootstrap (cluster)
+
+```bash
+curl -sS -H "Authorization: Bearer $BOOT" -H 'Content-Type: application/json' \
+  -d '{"subject":"ops","role":"admin","ttl_secs":86400}' \
+  $B/api/atlas/v1/auth/tokens
+kubectl -n rook-ceph patch secret atlas-gateway-auth --type=json \
+  -p='[{"op":"remove","path":"/data/bootstrap-admin-token"}]'
+kubectl -n rook-ceph rollout restart deploy/atlas-gateway-ceph
+```
+
+Local `make run` stays open (`ATLAS_AUTH_REQUIRED` unset). The gateway **refuses to start** if auth
+is required and `ATLAS_JWT_SECRET` is the weak shipped default.
 
 ## Durable database
 
@@ -131,58 +180,39 @@ release the volume before the new one mounts it.
 - `deploy/k8s/atlas-gateway-ceph.yaml` → PVC `atlas-gateway-ceph-data` on **`zyvor-rbd-prod`**
   (dogfoods the platform's own Ceph).
 
-Verify durability:
-```bash
-curl -s http://<host>:30511/api/atlas/v1/volumes | grep -o '"name":"[^"]*"'
-kubectl -n rook-ceph rollout restart deploy/atlas-gateway-ceph
-kubectl -n rook-ceph rollout status deploy/atlas-gateway-ceph
-curl -s http://<host>:30511/api/atlas/v1/volumes | grep -o '"name":"[^"]*"'   # same rows persist
-```
-For multi-replica HA, switch `ATLAS_DATABASE_URL` to Postgres (the `sqlx` layer abstracts the driver).
-A DB-backed **leader lease** (`leader_lease` table) already gates the periodic workers so only one
-replica runs the monitor/scheduler/reconciler — on single-replica SQLite this instance always wins,
-and it makes a shared-Postgres multi-replica deployment safe (no double-fired scheduled jobs).
+For multi-replica HA, switch `ATLAS_DATABASE_URL` to Postgres once the sqlx port lands (see
+[HA.md](HA.md)). Until then a `postgres://` URL is rejected at startup.
 
 ## Day-2 durability & health
 
-The control plane survives restarts and rollouts cleanly:
-
-- **Job recovery on boot** — the job engine re-scans `storage_jobs`: a job left `running` when the
-  process died is failed-safe (`"interrupted by control-plane restart"`, never stuck), and `queued`
-  jobs are re-enqueued. Opt-in bounded retry-with-backoff per job (`max_retries`).
-- **Graceful shutdown** — on `SIGTERM` (k8s rollout / `docker stop`) the REST + gRPC servers drain
-  in-flight requests before exiting. The Deployment sets `terminationGracePeriodSeconds: 30`.
-- **Liveness vs readiness** — `GET /livez` is process-alive (k8s `livenessProbe` → restart);
-  `GET /readyz` deep-checks the DB **and probes the backend driver** (no longer a hardcoded `ok`) and
-  reports worker heartbeats (k8s `readinessProbe` → depool without killing). Both are wired in
-  `deploy/k8s/atlas-gateway.yaml`.
-- **Self-state backup** — Atlas can back up its *own* SQLite state (inventory, jobs, audit, quotas,
-  DataBridge plans) to S3/RGW via `VACUUM INTO` snapshots. Disabled unless configured:
-
-  | Env | Default | Meaning |
-  |---|---|---|
-  | `ATLAS_STATE_BACKUP_SECS` | `0` (off) | snapshot interval; `0` disables |
-  | `ATLAS_STATE_BACKUP_ENDPOINT` / `_BUCKET` | — | S3/RGW endpoint + bucket (required to enable) |
-  | `ATLAS_STATE_BACKUP_ACCESS_KEY` / `_SECRET_KEY` | — | S3 credentials |
-  | `ATLAS_STATE_BACKUP_REGION` | `us-east-1` | S3 region |
-  | `ATLAS_STATE_BACKUP_PREFIX` | `atlas-state` | key prefix |
-  | `ATLAS_STATE_BACKUP_KEEP` | `24` | snapshots retained (older pruned) |
+- **Job recovery on boot** — interrupted `running` jobs fail-safe; `queued` jobs re-enqueue.
+- **Graceful shutdown** — REST + gRPC drain on `SIGTERM` (`terminationGracePeriodSeconds: 30`).
+- **Liveness vs readiness** — `/livez` vs `/readyz` (DB + backend driver + worker heartbeats).
+- **Self-state backup** — optional SQLite → S3/RGW via `ATLAS_STATE_BACKUP_*` (off by default).
 
 ## Image name note
 
-`podman save` preserves the `localhost/` prefix, so k3s imports the image as
-`localhost/atlas-gateway:dev` (and `:ceph`). The Deployments reference those names with
-`imagePullPolicy: Never`. If you push to a registry instead, update the `image:` fields.
+`podman save` preserves the `localhost/` prefix, so k3s imports
+`localhost/atlas-gateway:ceph`. The Deployment uses that name with `imagePullPolicy: Never`.
 
 ## Air-gapped builds (Oracle Instant Client)
 
-The gateway image bundles the Oracle Instant Client (for the DataBridge `oracle` connector),
-downloaded at build time from Oracle's public mirror. For an air-gapped build, mirror the
-`instantclient-basiclite` zip internally and point the build at it:
-
 ```bash
-podman build --build-arg ORACLE_IC_URL=https://mirror.corp/instantclient-basiclite-linux.x64-21.13…zip -t atlas-gateway:dev .
+podman build --build-arg ORACLE_IC_URL=https://mirror.corp/instantclient-basiclite-linux.x64-21.13…zip \
+  -t atlas-gateway:dev .
 ```
+
+## Pitfalls (lab lessons)
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| CephCluster: `minimum version "19.2.0-0 squid"` | Reef image under Rook 1.20 | Use `CEPH_IMAGE=quay.io/ceph/ceph:v19.2.3` / updated manifests |
+| Stuck `Detecting Ceph version`, no mon/osd | Image pull / stuck job, or deleting CR blocked by pool finalizer | Pre-pull image; clear stuck `CephBlockPool` finalizers; re-run `up.sh` |
+| PVC Pending forever, no CSIDriver | Missing `ceph-csi-drivers` chart (Rook 1.20) | Install chart with rook-prefixed driver names |
+| Gateway pod Pending unbound PVC | Same as above | Fix CSI, then rollout restart |
+| `podman: command not found` / short-name resolve error | Fresh Ubuntu host | Use `deploy-ceph-gateway-remote.sh` (installs + registries.conf) |
+| SSH auth fails to lab host | Wrong key | `ATLAS_SSH_KEY=~/.ssh/id_ed25519_hyper2kvm` |
+| `HEALTH_WARN` on single-node | Expected (replication / crush) | Not a blocker if PHASE=Ready and OSD up |
 
 ## Teardown
 
@@ -190,7 +220,6 @@ podman build --build-arg ORACLE_IC_URL=https://mirror.corp/instantclient-basicli
 kubectl delete -f deploy/k8s/atlas-gateway-ceph.yaml --ignore-not-found
 kubectl delete -f deploy/k8s/atlas-gateway.yaml --ignore-not-found
 kubectl -n default delete pvc atlas-rbd-smoke --ignore-not-found
-# Ceph (this releases the OSD disk):
-kubectl -n rook-ceph delete cephcluster rook-ceph
-# then follow Rook cleanup docs to wipe /var/lib/rook and the OSD disk before reuse.
+# Full Ceph wipe (destructive):
+cd deploy/rook-ceph-lab && ./teardown.sh --confirm
 ```
