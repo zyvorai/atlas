@@ -235,6 +235,7 @@ async fn reconcile_once(
             atlas_inventory::databridge::cutovers::set_state(pool, &cut.id, "switching").await?;
             atlas_inventory::databridge::cutovers::set_complete(pool, &cut.id, "complete").await?;
             atlas_inventory::databridge::plans::set_state(pool, &plan.id, "cutover_complete").await?;
+            atlas_inventory::databridge::plans::set_cutover_at(pool, &plan.id, &chrono::Utc::now().to_rfc3339()).await?;
             if let Some(cdc_id) = plan.cdc_stream_id.as_deref() {
                 atlas_inventory::databridge::cdc::set_state(pool, cdc_id, "stopped").await?;
             }

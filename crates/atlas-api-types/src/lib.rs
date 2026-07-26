@@ -61,6 +61,9 @@ pub struct StorageBackend {
     pub capabilities: Capabilities,
     /// Secret *reference* only — never a raw keyring/secret (PDF §14.1).
     pub connection_ref: Option<String>,
+    /// Set via `POST /backends/{id}/cordon`; a cordoned backend rejects new provisioning.
+    #[serde(default)]
+    pub cordoned: bool,
 }
 
 /// Backend capability flags (PDF §12.1).

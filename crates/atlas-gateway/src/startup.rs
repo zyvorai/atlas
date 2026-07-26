@@ -75,6 +75,7 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
             replication: true,
         },
         connection_ref: None,
+        cordoned: false,
     };
     atlas_inventory::upsert_backend(&pool, &backend).await?;
 
@@ -113,6 +114,7 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
                 replication: false,
             },
             connection_ref: None,
+            cordoned: false,
         };
         atlas_inventory::upsert_backend(&pool, &nfs_backend).await?;
         registry.register(nfs.clone());
@@ -150,6 +152,7 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
                 replication: false,
             },
             connection_ref: None,
+            cordoned: false,
         };
         atlas_inventory::upsert_backend(&pool, &zfs_backend).await?;
         registry.register(zfs.clone());

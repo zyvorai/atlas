@@ -467,6 +467,7 @@ async fn monitor_raises_and_resolves_alerts() {
         status: "active".into(),
         capabilities: Default::default(),
         connection_ref: None,
+        cordoned: false,
     };
     atlas_inventory::upsert_backend(&pool, &backend)
         .await
@@ -748,7 +749,7 @@ async fn create_volume_is_idempotent() {
 
 #[tokio::test]
 async fn expand_rejects_smaller_size() {
-    let (addr, _pool) = spawn().await;
+    let (addr, pool) = spawn().await;
     let base = format!("http://{addr}");
     // Unknown volume → 404 (validated before enqueue).
     let resp = client()
@@ -758,6 +759,46 @@ async fn expand_rejects_smaller_size() {
         .await
         .unwrap();
     assert_eq!(resp.status(), reqwest::StatusCode::NOT_FOUND);
+
+    // Seed a real volume (size_bytes = 1073741824 per seed_volume) so the size check itself,
+    // not just the existence check, gets exercised.
+    seed_volume(&pool, "vol_expand", "expand-vol").await;
+    let expand = |new_size_bytes: i64| {
+        let base = base.clone();
+        async move {
+            client()
+                .post(format!("{base}/api/atlas/v1/volumes/vol_expand/expand"))
+                .json(&serde_json::json!({ "new_size_bytes": new_size_bytes }))
+                .send()
+                .await
+                .unwrap()
+        }
+    };
+
+    // Strictly smaller → 400.
+    let smaller = expand(1).await;
+    assert_eq!(
+        smaller.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "expand must reject a size smaller than the current size"
+    );
+
+    // Exactly the current size → also 400 (expand must grow, not no-op).
+    let same = expand(1073741824).await;
+    assert_eq!(
+        same.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "expand must reject a size equal to the current size"
+    );
+
+    // Larger → 202 (accepted; the job itself fails later without a live k8s driver, which is out
+    // of scope for this validation test).
+    let larger = expand(2147483648).await;
+    assert_eq!(
+        larger.status(),
+        reqwest::StatusCode::ACCEPTED,
+        "expand must accept a strictly larger size"
+    );
 }
 
 #[tokio::test]

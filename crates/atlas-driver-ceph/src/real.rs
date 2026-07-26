@@ -125,6 +125,7 @@ impl RealCephDriver {
             .get("nodes")
             .and_then(|v| v.as_array())
             .unwrap_or(&empty);
+        let host_of = osd_host_map(nodes);
         Ok(nodes
             .iter()
             .filter(|n| n.get("type").and_then(|v| v.as_str()) == Some("osd"))
@@ -144,7 +145,7 @@ impl RealCephDriver {
                         .get("device_class")
                         .and_then(|v| v.as_str())
                         .map(String::from),
-                    host: None,
+                    host: host_of.get(&id).cloned(),
                     used_bytes: None,
                     capacity_bytes: None,
                 })
@@ -275,6 +276,30 @@ fn map_health(s: &str) -> Health {
     }
 }
 
+/// Build an OSD-id → host-name lookup from `ceph osd tree`'s flat `nodes` array. Each `host`-typed
+/// node lists its OSD ids in `children`; individual `osd`-typed nodes carry no host field of their
+/// own, so the host has to be resolved by scanning the host nodes (mirrors the CRUSH hierarchy the
+/// fake driver's fixture already models in `FakeCephDriver::osds`/`ceph_osd_tree`).
+fn osd_host_map(nodes: &[serde_json::Value]) -> std::collections::HashMap<i64, String> {
+    let mut host_of = std::collections::HashMap::new();
+    for n in nodes {
+        if n.get("type").and_then(|v| v.as_str()) != Some("host") {
+            continue;
+        }
+        let Some(host_name) = n.get("name").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        if let Some(children) = n.get("children").and_then(|v| v.as_array()) {
+            for child in children {
+                if let Some(id) = child.as_i64() {
+                    host_of.insert(id, host_name.to_string());
+                }
+            }
+        }
+    }
+    host_of
+}
+
 /// Heuristic pool classification from its name. A precise mapping would read
 /// `ceph osd pool application` metadata; the name hint is sufficient for the MVP inventory view.
 fn pool_kind_from_name(name: &str) -> String {
@@ -310,5 +335,28 @@ mod tests {
         assert_eq!(map_health("HEALTH_WARN"), Health::Warn);
         assert_eq!(map_health("HEALTH_ERR"), Health::Critical);
         assert_eq!(map_health("nonsense"), Health::Unknown);
+    }
+
+    /// Regression test for a real/fake parity gap: `osds_for` used to always leave `Osd.host`
+    /// `None` because the flat `ceph osd tree` "osd" nodes carry no host field of their own — only
+    /// the fake driver's fixture populated it, so `GET /nodes` (which derives storage nodes from
+    /// distinct OSD hosts) silently returned nothing against a real cluster while every gateway
+    /// test (which only exercises `FakeCephDriver`) passed.
+    #[test]
+    fn osd_host_map_resolves_hosts_from_crush_tree() {
+        let tree = serde_json::json!({ "nodes": [
+            { "id": -1, "name": "default", "type": "root", "children": [-2, -3] },
+            { "id": -2, "name": "node01", "type": "host", "children": [0, 1] },
+            { "id": 0, "name": "osd.0", "type": "osd", "status": "up" },
+            { "id": 1, "name": "osd.1", "type": "osd", "status": "up" },
+            { "id": -3, "name": "node02", "type": "host", "children": [2] },
+            { "id": 2, "name": "osd.2", "type": "osd", "status": "down" }
+        ]});
+        let nodes = tree["nodes"].as_array().unwrap();
+        let hosts = osd_host_map(nodes);
+        assert_eq!(hosts.get(&0).map(String::as_str), Some("node01"));
+        assert_eq!(hosts.get(&1).map(String::as_str), Some("node01"));
+        assert_eq!(hosts.get(&2).map(String::as_str), Some("node02"));
+        assert_eq!(hosts.len(), 3);
     }
 }

@@ -143,7 +143,7 @@ impl JobEngine {
             }
         }
         let request = serde_json::to_value(&spec)?;
-        atlas_inventory::jobs::insert_job(
+        if let Err(e) = atlas_inventory::jobs::insert_job(
             &self.pool,
             job_id,
             tenant_id,
@@ -152,7 +152,29 @@ impl JobEngine {
             &request,
             idempotency_key,
         )
-        .await?;
+        .await
+        {
+            // The find-then-insert above is not atomic: two concurrent enqueue() calls with the
+            // same idempotency key (a client retry racing the original request, or two gateway
+            // requests) can both see "no existing job" before either commits. The partial UNIQUE
+            // index on idempotency_key (migrations/0024) turns the loser's INSERT into a
+            // constraint violation instead of a silent duplicate job row; recover by returning
+            // the winner's job instead of propagating the error.
+            let is_dup_key = idempotency_key.is_some()
+                && e.downcast_ref::<sqlx::Error>()
+                    .and_then(|se| se.as_database_error())
+                    .map(|de| de.is_unique_violation())
+                    .unwrap_or(false);
+            if is_dup_key {
+                if let Some(existing) =
+                    atlas_inventory::jobs::find_by_idempotency(&self.pool, idempotency_key.unwrap())
+                        .await?
+                {
+                    return Ok(existing);
+                }
+            }
+            return Err(e);
+        }
         atlas_inventory::jobs::set_state(&self.pool, job_id, "queued", 0).await?;
         if self.tx.send(job_id.to_string()).is_err() {
             tracing::warn!(

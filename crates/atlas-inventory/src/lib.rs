@@ -582,7 +582,7 @@ pub async fn delete_volumes_by_backend(pool: &SqlitePool, backend_id: &str) -> R
 
 pub async fn list_backends(pool: &SqlitePool) -> Result<Vec<StorageBackend>> {
     let rows = sqlx::query(
-        "SELECT id, name, backend_type, mode, status, capabilities, connection_ref FROM storage_backends ORDER BY name",
+        "SELECT id, name, backend_type, mode, status, capabilities, connection_ref, cordoned FROM storage_backends ORDER BY name",
     )
     .fetch_all(pool)
     .await?;
@@ -600,6 +600,7 @@ pub async fn list_backends(pool: &SqlitePool) -> Result<Vec<StorageBackend>> {
                 status: r.get("status"),
                 capabilities: caps,
                 connection_ref: r.get("connection_ref"),
+                cordoned: r.get::<i64, _>("cordoned") != 0,
             }
         })
         .collect())

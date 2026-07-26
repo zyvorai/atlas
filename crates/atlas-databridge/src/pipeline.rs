@@ -57,6 +57,15 @@ pub async fn discover(
     let discovered = serde_json::to_value(&schema)?;
     atlas_inventory::databridge::sources::set_discovered(pool, source_id, &discovered).await?;
 
+    // A plan created before its source was discovered stays `draft` forever otherwise — the
+    // pipeline UI gates "Assess" on plan.state, not source.state, so without this the plan can
+    // never visibly progress even though the source itself discovered successfully.
+    for plan in atlas_inventory::databridge::plans::list_plans(pool).await? {
+        if plan.source_id == source_id {
+            let _ = atlas_inventory::databridge::plans::try_transition(pool, &plan.id, "draft", "discovered").await;
+        }
+    }
+
     Ok(serde_json::json!({
         "source_id": source_id,
         "engine": schema.engine,
@@ -143,13 +152,24 @@ pub async fn provision_edge(
     let edge_id = atlas_common::ids::edge_cluster_id();
     let size_gib = edge_size_gib(&source);
 
+    // The route only checks the plan isn't a fresh `draft`, not that a provision isn't already
+    // under way — two racing `/provision` requests (double-click, client retry) can both reach
+    // here. Re-validate atomically: only the request that finds the plan still `assessed` proceeds,
+    // so a duplicate never inserts a second `edge_db_clusters` row that orphans the first and wastes
+    // a redundant CR apply.
+    if !atlas_inventory::databridge::plans::try_transition(pool, plan_id, "assessed", "provisioning").await? {
+        anyhow::bail!(
+            "plan {plan_id} is not in 'assessed' state — a concurrent provision is already in progress \
+             or already completed"
+        );
+    }
+
     atlas_inventory::databridge::edge_clusters::insert_edge_cluster(
         pool, &edge_id, &plan.tenant_id, plan_id, engine_str, operator, namespace, &cr_name,
         "zyvor-rbd-prod", Some("zyvor-rbd-prod"), 1,
     )
     .await?;
     atlas_inventory::databridge::plans::set_edge_cluster(pool, plan_id, &edge_id).await?;
-    atlas_inventory::databridge::plans::set_state(pool, plan_id, "provisioning").await?;
 
     // Fake source mode (or no reachable k8s): fabricate a ready cluster so the pipeline runs.
     if source.driver_mode == "fake" || k8s.is_none() {
@@ -361,12 +381,24 @@ pub async fn start_cdc(
     let connect = crate::cr::streaming::connect_name(&s);
     let connector = crate::cr::streaming::source_connector_name(&s);
     let topic_prefix = crate::cr::streaming::topic_prefix(&s);
+
+    // `db_stage_job` (the route handler) only checks the plan exists, not its state — two racing
+    // `/cdc/start` requests (double-click, client retry) can both reach here. Re-validate
+    // atomically: only the request that finds the plan still `loaded` proceeds, so a duplicate
+    // never inserts a second `cdc_streams` row that orphans the first (a stalled/errored stream
+    // should go through `/cdc/restart`, not a second `/cdc/start`).
+    if !atlas_inventory::databridge::plans::try_transition(pool, plan_id, "loaded", "cdc_streaming").await? {
+        anyhow::bail!(
+            "plan {plan_id} is not in 'loaded' state — CDC is already started for this plan \
+             (use /cdc/restart to re-establish a stalled stream) or full-load hasn't completed yet"
+        );
+    }
+
     atlas_inventory::databridge::cdc::insert_stream(
         pool, &cdc_id, &plan.tenant_id, plan_id, &engine, &connect, &connector, &topic_prefix,
     )
     .await?;
     atlas_inventory::databridge::plans::set_cdc_stream(pool, plan_id, &cdc_id).await?;
-    atlas_inventory::databridge::plans::set_state(pool, plan_id, "cdc_streaming").await?;
 
     if source.driver_mode == "fake" || k8s.is_none() {
         atlas_inventory::databridge::cdc::set_state(pool, &cdc_id, "streaming").await?;
@@ -756,6 +788,18 @@ pub async fn cutover(
         .await?
         .ok_or_else(|| anyhow!("edge cluster not found"))?;
 
+    // The route already checked the plan was `validated`, but that check and this job run are not
+    // atomic — a racing duplicate request (double-click, client retry) can enqueue a second cutover
+    // job before the first one lands. Re-validate here with an atomic transition so only the first
+    // job to reach this point actually starts a cutover; the loser bails instead of driving a second,
+    // conflicting cutover against the same source/edge.
+    if !atlas_inventory::databridge::plans::try_transition(pool, plan_id, "validated", "cutover_in_progress").await? {
+        anyhow::bail!(
+            "plan {plan_id} is not in 'validated' state — a concurrent cutover is already in progress \
+             or already completed"
+        );
+    }
+
     let cut_id = atlas_common::ids::cutover_id();
     let from = source.endpoint.clone().unwrap_or_default();
     let to = edge.service_endpoint.clone().unwrap_or_default();
@@ -767,7 +811,6 @@ pub async fn cutover(
         pool, &cut_id, &plan.tenant_id, plan_id, Some(&from), Some(&to), Some(&drain), Some(&rollback),
     )
     .await?;
-    atlas_inventory::databridge::plans::set_state(pool, plan_id, "cutover_in_progress").await?;
 
     // Real mode: hand the drain to the reconciler — it switches once the stream reports zero lag
     // (or fails the cutover past the drain deadline). The route already verified lag is under the
@@ -785,6 +828,7 @@ pub async fn cutover(
     atlas_inventory::databridge::cutovers::set_state(pool, &cut_id, "switching").await?;
     atlas_inventory::databridge::cutovers::set_complete(pool, &cut_id, "complete").await?;
     atlas_inventory::databridge::plans::set_state(pool, plan_id, "cutover_complete").await?;
+    atlas_inventory::databridge::plans::set_cutover_at(pool, plan_id, &now.to_rfc3339()).await?;
     if let Some(cdc_id) = plan.cdc_stream_id.as_deref() {
         atlas_inventory::databridge::cdc::set_state(pool, cdc_id, "stopped").await?;
     }

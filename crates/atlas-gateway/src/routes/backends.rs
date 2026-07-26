@@ -132,6 +132,7 @@ pub(crate) async fn create_backend(
         status: status.into(),
         capabilities: ceph_default_caps(backend_type),
         connection_ref: None,
+        cordoned: false,
     };
     atlas_inventory::upsert_backend(&s.pool, &backend).await?;
     if let Some(driver) = live {

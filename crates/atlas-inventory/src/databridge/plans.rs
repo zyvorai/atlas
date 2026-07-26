@@ -36,6 +36,27 @@ pub async fn set_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
     Ok(())
 }
 
+/// Atomically move a plan from `from_state` to `to_state`. Returns whether the transition took
+/// effect. Guards stage-entry points (cutover, rollback) that are re-checked at request time but
+/// then run as an async job: two racing requests (double-click, client retry) can both pass the
+/// route-level state check before either job runs, so the job itself re-validates the precondition
+/// with this atomic `UPDATE ... WHERE state=...` — only the first to land wins, the second sees
+/// `false` and bails instead of duplicating a real cutover/rollback against the source database.
+pub async fn try_transition(
+    pool: &SqlitePool,
+    id: &str,
+    from_state: &str,
+    to_state: &str,
+) -> Result<bool> {
+    let res = sqlx::query("UPDATE migration_plans SET state=? WHERE id=? AND state=?")
+        .bind(to_state)
+        .bind(id)
+        .bind(from_state)
+        .execute(pool)
+        .await?;
+    Ok(res.rows_affected() > 0)
+}
+
 pub async fn set_assessment(
     pool: &SqlitePool,
     id: &str,
@@ -65,6 +86,15 @@ pub async fn set_edge_cluster(pool: &SqlitePool, id: &str, edge_cluster_id: &str
 pub async fn set_cdc_stream(pool: &SqlitePool, id: &str, cdc_stream_id: &str) -> Result<()> {
     sqlx::query("UPDATE migration_plans SET cdc_stream_id=? WHERE id=?")
         .bind(cdc_stream_id)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn set_cutover_at(pool: &SqlitePool, id: &str, at: &str) -> Result<()> {
+    sqlx::query("UPDATE migration_plans SET cutover_at=? WHERE id=?")
+        .bind(at)
         .bind(id)
         .execute(pool)
         .await?;

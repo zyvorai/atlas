@@ -2,7 +2,7 @@
 // Day-2 cross-cluster DR: mirroring peers, mirrored images, and failover (promote/demote).
 import { useState, type ReactNode } from "react";
 import { GitBranch } from "lucide-react";
-import { submit } from "../api/client";
+import { submit, submitJob } from "../api/client";
 import { useDrMirrors, useDrPeers, useDrPreflight, useDrStatus, useInvalidate } from "../api/hooks";
 import { Badge, Button, Field, GlassSection, PageHeader } from "../ui/kit";
 import { Table } from "../ui/Table";
@@ -91,12 +91,12 @@ export default function DR() {
             <div className="flex flex-wrap gap-1">
               {m.role === "secondary" ? (
                 <>
-                  <Button size="sm" onClick={() => confirmThen({ title: "Fail over (promote)?", message: `Promote ${m.pool}/${m.image} to primary on this cluster.`, confirmLabel: "Promote" }, () => submit("post", `/dr/mirrors/${m.id}/promote`, null, "promoted", refresh))}>Promote</Button>
-                  <Button size="sm" variant="secondary" onClick={() => confirmThen({ title: "Force promote (split-brain)?", message: `${m.pool}/${m.image}`, confirmLabel: "Force" }, () => submit("post", `/dr/mirrors/${m.id}/promote?force=true`, null, "force-promoted", refresh))}>Force</Button>
-                  <Button size="sm" variant="primary" onClick={() => confirmThen({ title: "Confirm-gated failover?", message: `POST /dr/failover for ${m.pool}/${m.image}. Requires confirm=true.`, confirmLabel: "Failover" }, () => submit("post", "/dr/failover", { mirror_id: m.id, confirm: true }, "failover started", refresh))}>Failover</Button>
+                  <Button size="sm" onClick={() => confirmThen({ title: "Fail over (promote)?", message: `Promote ${m.pool}/${m.image} to primary on this cluster.`, confirmLabel: "Promote" }, () => submitJob("post", `/dr/mirrors/${m.id}/promote`, null, "promote", refresh))}>Promote</Button>
+                  <Button size="sm" variant="secondary" onClick={() => confirmThen({ title: "Force promote (split-brain)?", message: `${m.pool}/${m.image}`, confirmLabel: "Force" }, () => submitJob("post", `/dr/mirrors/${m.id}/promote?force=true`, null, "force-promote", refresh))}>Force</Button>
+                  <Button size="sm" variant="primary" onClick={() => confirmThen({ title: "Confirm-gated failover?", message: `POST /dr/failover for ${m.pool}/${m.image}. Requires confirm=true.`, confirmLabel: "Failover" }, () => submitJob("post", "/dr/failover", { mirror_id: m.id, confirm: true }, "failover", refresh))}>Failover</Button>
                 </>
               ) : (
-                <Button size="sm" variant="secondary" onClick={() => confirmThen({ title: "Demote to secondary?", message: `${m.pool}/${m.image}`, confirmLabel: "Demote" }, () => submit("post", `/dr/mirrors/${m.id}/demote`, null, "demoted", refresh))}>Demote</Button>
+                <Button size="sm" variant="secondary" onClick={() => confirmThen({ title: "Demote to secondary?", message: `${m.pool}/${m.image}`, confirmLabel: "Demote" }, () => submitJob("post", `/dr/mirrors/${m.id}/demote`, null, "demote", refresh))}>Demote</Button>
               )}
               <Button size="sm" variant="secondary" onClick={() => {
                 const raw = window.prompt("Observed RPO seconds", m.rpo_seconds != null ? String(m.rpo_seconds) : "60");
