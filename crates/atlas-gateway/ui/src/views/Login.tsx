@@ -165,19 +165,19 @@ export function Login() {
         <Hexagon className="atlas-signin-mark" aria-hidden />
         <div>
           <p className="atlas-signin-product">{PRODUCT}</p>
-          <p className="atlas-signin-kicker">Storage control plane</p>
+          <p className="atlas-signin-kicker">Storage Center</p>
         </div>
       </header>
 
       <main className="atlas-signin-main">
         <section className="atlas-signin-copy">
           <h1 className="atlas-signin-title">
-            Command your storage
-            <span className="atlas-signin-title-muted"> with Zeus-grade clarity</span>
+            Survey the cluster
+            <span className="atlas-signin-title-muted"> before you steer it</span>
           </h1>
           <p className="atlas-signin-lede">
-            Volumes, snapshots, DataBridge, and day-2 ops — one cockpit for operators who need
-            answers, not dashboards.
+            Capacity, volumes, Ceph, and DataBridge — Atlas Storage Center for operators who chart
+            the fleet, not a wall of widgets.
           </p>
         </section>
 

@@ -1,11 +1,11 @@
 /* Atlas sign-in — open webpage (no cards, no split panel box). */
 
 .atlas-signin {
-  --signin-ink: #e8eef6;
-  --signin-muted: #8b9bb0;
-  --signin-line: rgba(180, 200, 230, 0.28);
-  --signin-accent: #5b9fd4;
-  --signin-bg: #071018;
+  --signin-ink: #e4f0f4;
+  --signin-muted: #9bb3bf;
+  --signin-line: rgba(120, 180, 200, 0.2);
+  --signin-accent: #3fd0e8;
+  --signin-bg: #04070a;
   position: relative;
   min-height: 100dvh;
   min-height: 100vh;
@@ -14,7 +14,7 @@
   color: var(--signin-ink);
   background: var(--signin-bg);
   overflow: hidden;
-  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-family: "Space Grotesk", system-ui, sans-serif;
 }
 
 .atlas-signin-atmosphere {
@@ -28,19 +28,19 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse 90% 70% at 12% 18%, rgba(56, 120, 180, 0.28), transparent 55%),
-    radial-gradient(ellipse 70% 55% at 88% 78%, rgba(20, 90, 110, 0.22), transparent 50%),
-    linear-gradient(165deg, #06101a 0%, #0a1622 42%, #071018 100%);
+    radial-gradient(ellipse 90% 70% at 12% 18%, rgba(63, 208, 232, 0.14), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 78%, rgba(75, 140, 245, 0.1), transparent 50%),
+    linear-gradient(165deg, #04070a 0%, #070c11 42%, #04070a 100%);
   animation: atlas-signin-drift 18s ease-in-out infinite;
 }
 
 .atlas-signin-mesh {
   position: absolute;
   inset: 0;
-  opacity: 0.22;
+  opacity: 0.28;
   background-image:
-    linear-gradient(rgba(148, 175, 205, 0.09) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 175, 205, 0.09) 1px, transparent 1px);
+    linear-gradient(rgba(63, 208, 232, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(63, 208, 232, 0.06) 1px, transparent 1px);
   background-size: 56px 56px;
   mask-image: radial-gradient(ellipse 80% 70% at 40% 35%, black 20%, transparent 75%);
 }
@@ -51,7 +51,7 @@
   left: 8%;
   width: 55%;
   height: 55%;
-  background: radial-gradient(ellipse at center, rgba(120, 180, 230, 0.16), transparent 68%);
+  background: radial-gradient(ellipse at center, rgba(63, 208, 232, 0.12), transparent 68%);
   animation: atlas-signin-pulse 9s ease-in-out infinite;
 }
 
