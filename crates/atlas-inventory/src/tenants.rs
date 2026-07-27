@@ -177,10 +177,15 @@ pub async fn check_admission(
     add_bytes: i64,
 ) -> Result<QuotaCheck> {
     let q = get_quota(pool, tenant_id).await?;
-    if q.max_bytes > 0 && q.used_bytes + add_bytes > q.max_bytes {
+    // `saturating_add`: a caller-supplied `add_bytes` near `i64::MAX` (e.g. a malformed/adversarial
+    // `size_bytes`) would otherwise overflow this addition — panicking the request in a debug build,
+    // or silently wrapping to a bogus (possibly negative) `would_be` that bypasses the quota check
+    // in release.
+    let would_be = q.used_bytes.saturating_add(add_bytes);
+    if q.max_bytes > 0 && would_be > q.max_bytes {
         return Ok(QuotaCheck::Bytes {
             limit: q.max_bytes,
-            would_be: q.used_bytes + add_bytes,
+            would_be,
         });
     }
     if q.max_volumes > 0 && q.volume_count + 1 > q.max_volumes {

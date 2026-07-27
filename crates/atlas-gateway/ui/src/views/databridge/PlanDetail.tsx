@@ -4,7 +4,8 @@ import { Check, Circle, Loader2, Route as RouteIcon } from "lucide-react";
 import { submitJob } from "../../api/client";
 import { usePlan, useSource, useInvalidate } from "../../api/hooks";
 import { Badge, Button, GlassSection, PageHeader } from "../../ui/kit";
-import { planStateKind } from "./Plans";
+import { confirmThen } from "../../ui/confirm";
+import { planStateKind, planStateLabel } from "./Plans";
 
 // Pipeline stages in order. `state` values from migration_plans map to how far we've progressed.
 const STAGES = ["discover", "assess", "provision", "full-load", "cdc", "validate", "cutover"] as const;
@@ -33,6 +34,7 @@ export default function PlanDetail() {
   const done = COMPLETED_THROUGH[plan.state] ?? -1;
   const current = done + 1; // the next actionable stage index
   const a = plan.assessment as any;
+  const rollbackDeadline = plan.cutover_at ? new Date(Date.parse(plan.cutover_at) + plan.rollback_window_secs * 1000) : null;
 
   const act = (stage: string) => {
     const P = `/databridge/plans/${plan.id}`;
@@ -57,9 +59,19 @@ export default function PlanDetail() {
             </>
           )}
           {plan.state === "cutover_complete" && (
-            <Button size="sm" variant="danger" onClick={() => submitJob("post", `/databridge/plans/${plan.id}/rollback`, null, "rollback", refresh).catch(() => {})}>Rollback</Button>
+            <>
+              {rollbackDeadline && <span className="text-xs text-muted-foreground">Rollback available until {rollbackDeadline.toLocaleString()}</span>}
+              <Button size="sm" variant="danger" onClick={() => confirmThen({
+                title: "Roll back this migration?",
+                message: rollbackDeadline
+                  ? `Reverts cutover and switches traffic back to the source database. Only available until ${rollbackDeadline.toLocaleString()}. This cannot be undone.`
+                  : "Reverts cutover and switches traffic back to the source database. This cannot be undone.",
+                confirmLabel: "Roll back",
+                danger: true,
+              }, () => submitJob("post", `/databridge/plans/${plan.id}/rollback`, null, "rollback", refresh))}>Rollback</Button>
+            </>
           )}
-          <Badge kind={planStateKind(plan.state)} dot>{plan.state}</Badge>
+          <Badge kind={planStateKind(plan.state)} dot>{planStateLabel(plan.state)}</Badge>
         </div>} />
 
       <GlassSection title="Pipeline">
@@ -78,7 +90,17 @@ export default function PlanDetail() {
                   {STAGE_LABEL[stage]}
                   {!IMPLEMENTED.has(stage) && <span className="ml-2 text-xs text-muted-foreground/50">(coming soon)</span>}
                 </span>
-                {actionable && <Button size="sm" variant="primary" onClick={() => act(stage)?.catch(() => {})}>Run</Button>}
+                {actionable && stage === "cutover" && (
+                  <Button size="sm" variant="danger" onClick={() => confirmThen({
+                    title: "Run cutover?",
+                    message: (a?.blockers?.length
+                      ? `Assessment still lists ${a.blockers.length} blocker(s) (see below) — cutover will proceed anyway. `
+                      : "") + "Switches live traffic to the edge database. This is the point of no return short of a rollback within the window.",
+                    confirmLabel: "Run cutover",
+                    danger: true,
+                  }, () => act(stage)?.catch(() => {}))}>Run</Button>
+                )}
+                {actionable && stage !== "cutover" && <Button size="sm" variant="primary" onClick={() => act(stage)?.catch(() => {})}>Run</Button>}
                 {status === "done" && <Badge kind="success">done</Badge>}
               </li>
             );

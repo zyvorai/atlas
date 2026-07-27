@@ -2,6 +2,11 @@
 # ---- UI builder (React Storage Center → dist) ----
 FROM docker.io/library/node:22-alpine AS ui
 WORKDIR /ui
+# node:22-alpine ships npm 10.9.8, which mis-resolves this lockfile's optional/platform deps
+# (npm ci "succeeds" but leaves node_modules incomplete — vite/rollup then fail to resolve
+# packages like recharts that are present on disk with a valid package.json). npm >=11 installs
+# cleanly against the same lockfile; pin newer npm before `ci` rather than downgrading the base image.
+RUN npm install -g npm@12
 COPY crates/atlas-gateway/ui/package.json crates/atlas-gateway/ui/package-lock.json ./
 RUN npm ci
 COPY crates/atlas-gateway/ui/ ./

@@ -40,8 +40,8 @@ export default function Tenants() {
       {quota && (
         <FormModal open onClose={() => setQuota(null)} title={`Quota — ${quota.tenant_id}`} submitLabel="Save"
           fields={[
-            { name: "max_bytes", label: "Max bytes (0=∞)", type: "number", value: String(quota.max_bytes) },
-            { name: "max_volumes", label: "Max volumes (0=∞)", type: "number", value: String(quota.max_volumes) },
+            { name: "max_bytes", label: "Max bytes (0=∞)", type: "number", value: String(quota.max_bytes), min: 0 },
+            { name: "max_volumes", label: "Max volumes (0=∞)", type: "number", value: String(quota.max_volumes), min: 0 },
           ]}
           onSubmit={(v) => submit("put", `/tenants/${quota.tenant_id}/quota`, { max_bytes: +v.max_bytes, max_volumes: +v.max_volumes }, "quota set", () => inv("tenants"))} />
       )}
@@ -79,7 +79,13 @@ function PolicyDrawer({ tenant, onClose }: { tenant: TenantQuota | null; onClose
           <input className="field" placeholder="storage class" value={sc} onChange={(e) => setSc(e.target.value)} />
           <input className="field" placeholder="access mode" value={am} onChange={(e) => setAm(e.target.value)} />
         </div>
-        <Button variant="primary" onClick={async () => { try { await submit("put", `/tenants/${id}/policies/${intent}`, { storage_class: sc, access_mode: am, volume_mode: "Filesystem" }, "override set"); refetch(); } catch { /* toasted */ } }}>Save override</Button>
+        <Button variant="primary" disabled={!intent.trim() || !sc.trim() || !am.trim()} onClick={async () => {
+          try {
+            await submit("put", `/tenants/${id}/policies/${intent}`, { storage_class: sc, access_mode: am, volume_mode: "Filesystem" }, "override set");
+            setIntent("database"); setSc("zyvor-cephfs-shared"); setAm("ReadWriteMany");
+            refetch();
+          } catch { /* toasted */ }
+        }}>Save override</Button>
       </div>
     </SlideOver>
   );

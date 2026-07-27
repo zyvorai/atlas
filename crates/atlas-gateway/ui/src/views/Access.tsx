@@ -11,6 +11,9 @@ export default function Access() {
   const [ttl, setTtl] = useState("3600");
   const [result, setResult] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  const ttlNum = +ttl;
+  const ttlInvalid = ttl.trim() === "" || Number.isNaN(ttlNum) || ttlNum < 60 || ttlNum > 7776000;
+  const subjectInvalid = subject.trim() === "";
   return (
     <div>
       <PageHeader icon={KeyRound} title="Access" subtitle="Mint scoped service-account JWTs for products (admin). The secret never leaves Atlas." />
@@ -19,16 +22,18 @@ export default function Access() {
           <div className="p-4">
             <Label>Subject (service account)</Label>
             <Field value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="veyron" />
+            {subjectInvalid && <div className="text-xs text-danger mt-1">Subject is required.</div>}
             <Label>Role</Label>
             <Select value={role} onChange={(e) => setRole(e.target.value)}>
               {["viewer", "operator", "admin"].map((r) => <option key={r}>{r}</option>)}
             </Select>
             <Label>TTL seconds (clamped 60…7776000)</Label>
-            <Field type="number" value={ttl} onChange={(e) => setTtl(e.target.value)} />
+            <Field type="number" min={60} value={ttl} onChange={(e) => setTtl(e.target.value)} />
+            {ttlInvalid && <div className="text-xs text-danger mt-1">Must be between 60 and 7,776,000 seconds.</div>}
             <div className="mt-4">
-              <Button variant="primary" loading={busy} onClick={async () => {
+              <Button variant="primary" loading={busy} disabled={subjectInvalid || ttlInvalid} onClick={async () => {
                 setBusy(true);
-                try { const r = await http.post("/auth/tokens", { subject, role, ttl_secs: +ttl }); setResult(r.data); toast("token minted", "ok"); }
+                try { const r = await http.post("/auth/tokens", { subject, role, ttl_secs: ttlNum }); setResult(r.data); toast("token minted", "ok"); }
                 catch (e) { toast(apiError(e), "err"); } finally { setBusy(false); }
               }}>Mint token</Button>
             </div>
@@ -39,8 +44,8 @@ export default function Access() {
             {result ? (
               <>
                 <div className="flex gap-2 flex-wrap">
-                  <Badge kind="info">subject: {result.subject}</Badge>
-                  <Badge kind="info">role: {result.role}</Badge>
+                  <Badge kind="info" className="normal-case">subject: {result.subject}</Badge>
+                  <Badge kind="info" className="normal-case">role: {result.role}</Badge>
                   <Badge kind="neutral">level: {result.level}</Badge>
                   <Badge kind="neutral">exp: {result.expires_at}</Badge>
                 </div>

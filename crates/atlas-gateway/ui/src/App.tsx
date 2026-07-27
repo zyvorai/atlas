@@ -1,5 +1,6 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-import { Route, Routes } from "react-router-dom";
+import { Link, Route, Routes } from "react-router-dom";
+import { Compass } from "lucide-react";
 import { Shell } from "./shell/Shell";
 import Overview from "./views/Overview";
 import Volumes from "./views/Volumes";
@@ -25,6 +26,17 @@ import PlanDetail from "./views/databridge/PlanDetail";
 import EdgeClusters from "./views/databridge/EdgeClusters";
 import Replication from "./views/databridge/Replication";
 import Validation from "./views/databridge/Validation";
+
+function NotFound() {
+  return (
+    <div className="grid place-items-center py-24 text-center">
+      <Compass size={32} className="text-muted-foreground mb-3" />
+      <div className="text-lg font-semibold mb-1">Page not found</div>
+      <div className="text-sm text-muted-foreground mb-4">There's nothing at this address.</div>
+      <Link to="/" className="btn btn-primary">Back to Command Deck</Link>
+    </div>
+  );
+}
 
 export default function App() {
   return (
@@ -58,7 +70,7 @@ export default function App() {
         <Route path="/databridge/edge-clusters" element={<EdgeClusters />} />
         <Route path="/databridge/replication" element={<Replication />} />
         <Route path="/databridge/validation" element={<Validation />} />
-        <Route path="*" element={<Overview />} />
+        <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>
   );

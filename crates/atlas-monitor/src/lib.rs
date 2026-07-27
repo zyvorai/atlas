@@ -23,7 +23,11 @@ const POOL_WARN: f64 = 0.75;
 const POOL_CRITICAL: f64 = 0.85;
 
 /// Spawn the monitor loop. `interval_secs == 0` disables it. `prometheus_url`, when set, is scraped
-/// each tick for Ceph capacity/latency metrics.
+/// each tick for Ceph capacity/latency metrics. `k8s`, when attached, is used to re-attribute raw
+/// RBD images to their owning PVC on every tick — without it, a volume created through Atlas after
+/// startup loses its namespace/PVC/storage-class correlation (and even its intended name) on the
+/// very next periodic discovery pass and can never recover it without a full gateway restart, since
+/// only the one-time startup discovery previously did this lookup.
 #[allow(clippy::too_many_arguments)]
 pub fn spawn(
     pool: SqlitePool,
@@ -32,6 +36,7 @@ pub fn spawn(
     prometheus_url: Option<String>,
     webhook_url: Option<String>,
     is_leader: Arc<std::sync::atomic::AtomicBool>,
+    k8s: Option<Arc<atlas_driver_k8s::K8sDriver>>,
 ) {
     if interval_secs == 0 {
         tracing::info!("monitor disabled (interval = 0)");
@@ -47,8 +52,27 @@ pub fn spawn(
             if !is_leader.load(std::sync::atomic::Ordering::Relaxed) {
                 continue;
             }
-            if let Err(e) = atlas_discovery::run_discovery(&pool, driver.clone(), None).await {
+            let rbd_owners = match &k8s {
+                Some(k8s) => match k8s.rbd_image_owners().await {
+                    Ok(m) => Some(
+                        m.into_iter()
+                            .map(|(img, o)| (img, (o.namespace, o.pvc_name, o.storage_class)))
+                            .collect(),
+                    ),
+                    Err(e) => {
+                        tracing::warn!("monitor rbd_image_owners failed: {e:#}");
+                        None
+                    }
+                },
+                None => None,
+            };
+            if let Err(e) =
+                atlas_discovery::run_discovery(&pool, driver.clone(), rbd_owners.as_ref()).await
+            {
                 tracing::warn!("monitor discovery failed: {e:#}");
+            }
+            if let Err(e) = reconcile_snapshots(&pool, &k8s).await {
+                tracing::warn!("monitor snapshot reconcile failed: {e:#}");
             }
             if let Err(e) = evaluate(&pool).await {
                 tracing::warn!("monitor evaluate failed: {e:#}");
@@ -70,6 +94,31 @@ pub fn spawn(
             }
         }
     });
+}
+
+/// Re-check snapshots stuck in `creating`: the create job's bind-poll gives up after a bounded
+/// timeout (`atlas_jobs::dispatch::helpers::BIND_TIMEOUT`), but the underlying CSI VolumeSnapshot
+/// can still bind afterward with nothing left to notice — the job already reported "succeeded" and
+/// nothing else ever re-polls the row. Without this a fully-usable snapshot can show "creating"
+/// forever.
+async fn reconcile_snapshots(
+    pool: &SqlitePool,
+    k8s: &Option<Arc<atlas_driver_k8s::K8sDriver>>,
+) -> Result<()> {
+    let Some(k8s) = k8s else { return Ok(()) };
+    for snap in atlas_inventory::snapshots::list_by_state(pool, "creating").await? {
+        let Some(vol) = atlas_inventory::get_volume(pool, &snap.volume_id).await? else {
+            continue;
+        };
+        let Some(ns) = vol.kubernetes_namespace else {
+            continue;
+        };
+        if matches!(k8s.volume_snapshot_ready(&ns, &snap.name).await, Ok(Some(true))) {
+            atlas_inventory::snapshots::set_state(pool, &snap.id, "ready").await?;
+            tracing::info!("snapshot {} reconciled creating -> ready", snap.id);
+        }
+    }
+    Ok(())
 }
 
 /// Days-until-full thresholds for the capacity-forecast rule.

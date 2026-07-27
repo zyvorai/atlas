@@ -104,9 +104,9 @@ export function StatCard({
 }
 
 type BadgeKind = "success" | "warning" | "danger" | "info" | "neutral";
-export function Badge({ kind = "neutral", dot, title, children }: { kind?: BadgeKind; dot?: boolean; title?: string; children: React.ReactNode }) {
+export function Badge({ kind = "neutral", dot, title, className, children }: { kind?: BadgeKind; dot?: boolean; title?: string; className?: string; children: React.ReactNode }) {
   return (
-    <span className={cx("badge", `badge-${kind}`)} title={title}>
+    <span className={cx("badge", `badge-${kind}`, className)} title={title}>
       {dot && <span className="dot" />}
       {children}
     </span>
@@ -312,35 +312,79 @@ export type FormField = {
   placeholder?: string;
   options?: { value: string; label: string }[];
   optional?: boolean;
+  /** For type "number": reject (and disable submit on) values below this. */
+  min?: number;
+  /** For type "text": reject (and disable submit on) values failing this regex. */
+  pattern?: RegExp;
+  hint?: string;
 };
 export function FormModal({
   open,
   onClose,
   title,
-  fields,
+  fields: fieldsProp,
   submitLabel = "Create",
   onSubmit,
 }: {
   open: boolean;
   onClose: () => void;
   title: React.ReactNode;
-  fields: FormField[];
+  /** Static fields, or a function of the current values — e.g. show/hide "Bucket"/"Mode" only
+      when "Kind" is "backup". */
+  fields: FormField[] | ((vals: Record<string, string>) => FormField[]);
   submitLabel?: string;
   onSubmit: (v: Record<string, string>) => Promise<void> | void;
 }) {
   const [vals, setVals] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  // Resolved with an empty {} on the very first pass (before `vals` is populated below) — fine in
+  // practice since a conditional field's branch condition is a specific non-default value (e.g.
+  // kind === "backup"), so an empty/undefined value naturally falls through to the default branch.
+  const fields = typeof fieldsProp === "function" ? fieldsProp(vals) : fieldsProp;
   useEffect(() => {
     if (open) {
       const init: Record<string, string> = {};
-      fields.forEach((f) => (init[f.name] = f.value ?? (f.options ? f.options[0]?.value ?? "" : "")));
+      const initFields = typeof fieldsProp === "function" ? fieldsProp({}) : fieldsProp;
+      initFields.forEach((f) => (init[f.name] = f.value ?? (f.options ? f.options[0]?.value ?? "" : "")));
       setVals(init);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+  // A select field whose options load asynchronously after mount (e.g. a snapshot list fetched by
+  // the parent) initializes with an empty/stale value from the effect above, since that only runs
+  // once on open. The native <select> then visually falls back to showing its first option as
+  // selected even though the bound value doesn't match any of them — silently submitting the wrong
+  // (empty) value. Re-sync any select's stored value to a real option whenever the options change.
+  useEffect(() => {
+    setVals((s) => {
+      let changed = false;
+      const next = { ...s };
+      fields.forEach((f) => {
+        if (f.options && f.options.length > 0 && !f.options.some((o) => o.value === s[f.name])) {
+          next[f.name] = f.options[0].value;
+          changed = true;
+        }
+      });
+      return changed ? next : s;
+    });
+  }, [fields]);
   const set = (k: string, v: string) => setVals((s) => ({ ...s, [k]: v }));
-  // Select fields always carry a value (they default to the first option); only plain text/number
-  // fields can be left blank, so only those need a required check.
-  const missingRequired = fields.some((f) => !f.optional && !f.options && !(vals[f.name] ?? "").trim());
+  // Select fields normally always carry a value (they default to the first option); only plain
+  // text/number fields can be left blank. But a select with zero options (e.g. "pick a bucket" when
+  // none exist yet) has nothing valid to submit either — treat that the same as missing-required.
+  // Number fields with a `min` and text fields with a `pattern` are checked once non-empty.
+  const missingRequired = fields.some((f) => {
+    if (f.options) return !f.optional && f.options.length === 0;
+    const raw = (vals[f.name] ?? "").trim();
+    if (!f.optional && !raw) return true;
+    if (!raw) return false;
+    if (f.type === "number" && f.min != null) {
+      const n = Number(raw);
+      return Number.isNaN(n) || n < f.min;
+    }
+    if (f.pattern) return !f.pattern.test(raw);
+    return false;
+  });
   return (
     <Modal
       open={open}
@@ -376,21 +420,32 @@ export function FormModal({
         <div key={f.name}>
           <Label>{f.label}</Label>
           {f.options ? (
-            <Select value={vals[f.name] ?? ""} onChange={(e) => set(f.name, e.target.value)}>
-              {f.options.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
+            f.options.length === 0 ? (
+              <Select value="" disabled>
+                <option value="">{f.hint || `No ${f.label.toLowerCase()} available`}</option>
+              </Select>
+            ) : (
+              <Select value={vals[f.name] ?? ""} onChange={(e) => set(f.name, e.target.value)}>
+                {f.options.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            )
           ) : (
             <Field
               type={f.type || "text"}
+              min={f.min}
               placeholder={f.placeholder}
               value={vals[f.name] ?? ""}
               onChange={(e) => set(f.name, e.target.value)}
             />
           )}
+          {/* For selects, the hint is only ever shown as the disabled placeholder option above
+              (when there's nothing to pick); once options exist it'd otherwise linger as a stale
+              footnote even after a valid choice is selected. */}
+          {f.hint && !f.options && <div className="text-xs text-muted-foreground mt-1">{f.hint}</div>}
         </div>
       ))}
     </Modal>

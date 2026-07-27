@@ -1,5 +1,6 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AlertTriangle, LayoutDashboard } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useAlerts, useClusters, useForecast, useHistory, useOsds, usePools, useSummary } from "../api/hooks";
@@ -9,6 +10,7 @@ import { Table } from "../ui/Table";
 import { fmtBytes, healthKind, num, stateKind } from "../lib/format";
 
 export default function Overview() {
+  const nav = useNavigate();
   const { data: s } = useSummary();
   const { data: clusters } = useClusters();
   const { data: pools } = usePools();
@@ -156,6 +158,7 @@ export default function Overview() {
               { h: "Avail", f: (c) => fmtBytes(c.available_capacity_bytes) },
             ]}
             rows={clusters}
+            onRow={() => nav("/cluster")}
           />
         </GlassSection>
 
@@ -168,6 +171,7 @@ export default function Overview() {
             ]}
             rows={alerts}
             empty="No open alerts."
+            onRow={() => nav("/alerts")}
           />
         </GlassSection>
       </div>
@@ -179,7 +183,9 @@ export default function Overview() {
               { h: "Name", f: (p) => p.name, mono: true },
               { h: "Kind", f: (p) => p.kind },
               { h: "Used", f: (p) => fmtBytes(p.used_bytes) },
-              { h: "Max", f: (p) => fmtBytes(p.max_bytes) },
+              // p.max_bytes is Ceph's MAX AVAIL (headroom beyond what's used), not total capacity —
+              // add used back in to get the provisioned total, matching the pool-utilization widget above.
+              { h: "Max", f: (p) => fmtBytes((p.max_bytes || 0) + (p.used_bytes || 0)) },
               { h: "Health", f: (p) => <Badge kind={healthKind(p.health)} dot>{p.health}</Badge> },
             ]}
             rows={pools}

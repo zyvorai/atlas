@@ -72,11 +72,21 @@ export default function Backups() {
 
       <FormModal open={create} onClose={() => setCreate(false)} title="Back up a volume" submitLabel="Back up"
         fields={[
-          { name: "volume_id", label: "Volume", options: (vols || []).map((v) => ({ value: v.id, label: v.name })) },
-          { name: "bucket_id", label: "Bucket", options: (buckets || []).filter((b) => b.state === "bound").map((b) => ({ value: b.id, label: b.bucket_name || b.id })) },
+          {
+            name: "volume_id", label: "Volume",
+            // Backups require a PVC-backed (CSI) volume server-side — filter out raw NFS/ZFS
+            // volumes with no pvc_name so they can't be picked only to fail on submit.
+            options: (vols || []).filter((v) => v.pvc_name).map((v) => ({ value: v.id, label: v.name })),
+            hint: "No PVC-backed volumes to back up yet.",
+          },
+          {
+            name: "bucket_id", label: "Bucket",
+            options: (buckets || []).filter((b) => b.state === "bound").map((b) => ({ value: b.id, label: b.bucket_name || b.id })),
+            hint: "No bound buckets yet — create one on the Buckets page first.",
+          },
           { name: "mode", label: "Mode", options: [{ value: "manifest", label: "manifest" }, { value: "data", label: "data (rbd export-diff)" }] },
-          { name: "keep", label: "Keep (0=all)", type: "number", value: "0" },
-          { name: "max_age_secs", label: "Max age secs (0=off)", type: "number", value: "0" },
+          { name: "keep", label: "Keep (0=all)", type: "number", value: "0", min: 0 },
+          { name: "max_age_secs", label: "Max age secs (0=off)", type: "number", value: "0", min: 0 },
         ]}
         onSubmit={(v) => submitJob("post", "/backup-jobs", { volume_id: v.volume_id, bucket_id: v.bucket_id, mode: v.mode, keep: +v.keep, max_age_secs: +v.max_age_secs }, "backup", refetch)} />
 

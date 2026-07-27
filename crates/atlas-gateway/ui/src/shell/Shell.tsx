@@ -48,7 +48,7 @@ function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
   }, [tokenOpen, token]);
   const nav = useNavigate();
   return (
-    <div className="h-9 shrink-0 flex items-center gap-3 px-3 glass border-b border-white/[0.06] text-[13px]">
+    <div className="h-9 shrink-0 flex items-center gap-3 px-3 glass border-b border-white/[0.06] text-[13px] overflow-x-auto">
       <div className="flex items-center gap-1.5 font-bold">
         <Hexagon size={15} className="text-sky-400" fill="currentColor" />
         <span className="bg-gradient-to-r from-sky-400 to-blue-500 bg-clip-text text-transparent">ATLAS</span>
@@ -312,9 +312,13 @@ function Spotlight({ open, onClose }: { open: boolean; onClose: () => void }) {
   const ql = q.toLowerCase();
   const items = [...modItems, ...resources].filter((it) => !q || it.label.toLowerCase().includes(ql) || it.sub.includes(ql)).slice(0, 40);
   if (!open) return null;
-  const go = (i: number) => { const it = items[i]; if (it) { nav(it.path); onClose(); } };
+  // Reset synchronously at every close path (not just via the `open`-transition effect above) —
+  // relying solely on that effect lost a race when the palette was reopened fast enough that the
+  // next open's render could beat the previous close's effect flush, leaking the old query text.
+  const close = () => { setQ(""); setSel(0); onClose(); };
+  const go = (i: number) => { const it = items[i]; if (it) { nav(it.path); close(); } };
   return (
-    <div className="fixed inset-0 z-[70] pt-[14vh] px-4 flex justify-center" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-[70] pt-[14vh] px-4 flex justify-center" onMouseDown={close}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div className="relative glass-card w-[560px] max-w-full overflow-hidden animate-fade-in" onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.06]">
@@ -329,7 +333,7 @@ function Spotlight({ open, onClose }: { open: boolean; onClose: () => void }) {
               if (e.key === "ArrowDown") { e.preventDefault(); setSel((i) => Math.min(items.length - 1, i + 1)); }
               else if (e.key === "ArrowUp") { e.preventDefault(); setSel((i) => Math.max(0, i - 1)); }
               else if (e.key === "Enter") go(sel);
-              else if (e.key === "Escape") onClose();
+              else if (e.key === "Escape") close();
             }}
           />
         </div>

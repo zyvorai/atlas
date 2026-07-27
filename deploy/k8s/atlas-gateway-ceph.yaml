@@ -103,6 +103,13 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
           env:
             - name: ATLAS_BIND_ADDR
               value: "0.0.0.0:5110"
@@ -168,7 +175,7 @@ spec:
             - containerPort: 5443
           livenessProbe:
             httpGet:
-              path: /health
+              path: /livez
               port: 5110
             initialDelaySeconds: 5
             periodSeconds: 15

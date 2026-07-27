@@ -67,9 +67,18 @@ pub(crate) async fn create_schedule(
             "kind must be snapshot or backup".into(),
         ));
     }
-    atlas_inventory::get_volume(&s.pool, &id)
+    let vol = atlas_inventory::get_volume(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("volume {id}")))?;
+    // Both snapshot and backup schedules dispatch a CSI VolumeSnapshot job under the hood, which
+    // needs a PVC-backed (k8s) volume. Without this check a schedule against a raw NFS/ZFS volume
+    // creates successfully and its "next run" timer keeps advancing forever, but no job is ever
+    // enqueued for it — a silent, permanent no-op that looks like a healthy active schedule.
+    if vol.pvc_name.is_none() {
+        return Err(AppError::Validation(format!(
+            "volume {id} has no PVC — schedules require a PVC-backed (CSI) volume"
+        )));
+    }
     let mode = body.mode.as_deref().unwrap_or("manifest");
     if kind == "backup" {
         let bucket_id = body

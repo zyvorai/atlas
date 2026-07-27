@@ -35,7 +35,9 @@ pub async fn record(
     Ok(())
 }
 
-/// Query the audit trail, newest first, with optional equality filters and a bounded limit.
+/// Query the audit trail, newest first, with a bounded limit. `actor`/`action` are matched as
+/// case-insensitive substrings (the UI exposes them as free-text search boxes); `resource_type`/
+/// `resource_id` stay exact-match (used for programmatic drill-down, not fuzzy search).
 pub async fn list(
     pool: &SqlitePool,
     actor: Option<&str>,
@@ -45,21 +47,23 @@ pub async fn list(
     limit: i64,
 ) -> Result<Vec<serde_json::Value>> {
     let limit = limit.clamp(1, 1000);
+    let actor_like = actor.map(|s| format!("%{}%", s.replace('%', "\\%").replace('_', "\\_")));
+    let action_like = action.map(|s| format!("%{}%", s.replace('%', "\\%").replace('_', "\\_")));
     let rows = sqlx::query(
         "SELECT id, tenant_id, actor_id, action, resource_type, resource_id, status,
                 request, result, created_at
          FROM storage_audit_logs
-         WHERE (? IS NULL OR actor_id = ?)
-           AND (? IS NULL OR action = ?)
+         WHERE (? IS NULL OR actor_id LIKE ? ESCAPE '\\')
+           AND (? IS NULL OR action LIKE ? ESCAPE '\\')
            AND (? IS NULL OR resource_type = ?)
            AND (? IS NULL OR resource_id = ?)
          ORDER BY id DESC
          LIMIT ?",
     )
-    .bind(actor)
-    .bind(actor)
-    .bind(action)
-    .bind(action)
+    .bind(&actor_like)
+    .bind(&actor_like)
+    .bind(&action_like)
+    .bind(&action_like)
     .bind(resource_type)
     .bind(resource_type)
     .bind(resource_id)

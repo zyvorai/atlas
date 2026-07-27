@@ -133,6 +133,16 @@ pub async fn list_by_state(pool: &SqlitePool, state: &str) -> Result<Vec<Migrati
     Ok(rows.into_iter().map(row_to_plan).collect())
 }
 
+/// Plans referencing a source — used to block deleting a source out from under a live migration
+/// (the FK is `ON DELETE CASCADE`, so an unguarded delete silently destroys the plan's history).
+pub async fn list_for_source(pool: &SqlitePool, source_id: &str) -> Result<Vec<MigrationPlan>> {
+    let rows = sqlx::query(&select("WHERE source_id = ? ORDER BY created_at DESC"))
+        .bind(source_id)
+        .fetch_all(pool)
+        .await?;
+    Ok(rows.into_iter().map(row_to_plan).collect())
+}
+
 fn select(tail: &str) -> String {
     format!(
         "SELECT id, tenant_id, name, source_id, edge_cluster_id, cdc_stream_id, readiness_score,

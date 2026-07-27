@@ -65,10 +65,18 @@ else
   echo "!! skipping Tier 4 (no npm, or --no-ui)"
 fi
 
+if [[ "${ATLAS_LIVE:-0}" == "1" ]]; then
+  log "Tier 3: live remote suite (ATLAS_LIVE=1)"
+  ./scripts/test-live.sh
+else
+  echo "!! skipping Tier 3 live suite (set ATLAS_LIVE=1 to run against a deployed gateway)"
+fi
+
 log "DONE. Opt-in follow-ups:"
 cat <<'EOF'
-  Tier 3 (real Ceph/k8s write path): redeploy the gateway on a k3s+Rook host in real mode, then
-          POST /volumes and confirm the PVC binds on zyvor-rbd-prod (mutates the remote).
+  Tier 3 (live Ceph/k8s): ATLAS_LIVE=1 ./scripts/test-live.sh
+          Default base http://212.8.248.187:30511 — see scripts/live/README.md.
+          Mutates the remote (volumes/buckets) and cleans up.
   Docker: CI builds Dockerfile.ceph (full) + both Dockerfiles' UI stages; locally:
           podman build -t atlas-gateway:ceph -f Dockerfile.ceph .
 EOF

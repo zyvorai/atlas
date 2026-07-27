@@ -44,7 +44,7 @@ export default function Maintenance() {
           paused ? (
             <Button icon={PlayCircle} onClick={() => submit("post", "/maintenance", { paused: false }, "resumed", () => inv("maintenance")).catch(() => {})}>Resume</Button>
           ) : (
-            <Button icon={PauseCircle} variant="secondary" onClick={() => submit("post", "/maintenance", { paused: true }, "paused", () => inv("maintenance")).catch(() => {})}>Pause</Button>
+            <Button icon={PauseCircle} variant="secondary" onClick={() => confirmThen({ title: "Pause the job engine?", message: "New jobs will queue instead of running until you resume — quiesce the system only if you mean to.", confirmLabel: "Pause" }, () => submit("post", "/maintenance", { paused: true }, "paused", () => inv("maintenance")))}>Pause</Button>
           )
         }>
         <p className="text-sm text-muted-foreground">

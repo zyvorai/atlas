@@ -223,6 +223,14 @@ pub enum JobSpec {
         image: String,
         snap: String,
     },
+    /// Delete a raw RBD image's snapshot (unprotect, then `rbd snap rm`). Without this, a
+    /// snapshot created through the UI has no path back except deleting the whole parent image.
+    #[serde(rename = "rbd.snap_delete")]
+    RbdSnapDelete {
+        pool: String,
+        image: String,
+        snap: String,
+    },
     /// Delete an RGW bucket: remove its ObjectBucketClaim (Rook releases the bucket) and the row.
     #[serde(rename = "bucket.delete")]
     BucketDelete {
@@ -306,6 +314,7 @@ impl JobSpec {
             JobSpec::RbdMirror { .. } => "rbd.mirror",
             JobSpec::RbdSnapshot { .. } => "rbd.snapshot",
             JobSpec::RbdRollback { .. } => "rbd.rollback",
+            JobSpec::RbdSnapDelete { .. } => "rbd.snap_delete",
             JobSpec::SourceDiscover { .. } => "databridge.source.discover",
             JobSpec::MigrationAssess { .. } => "databridge.assess",
             JobSpec::EdgeDbProvision { .. } => "databridge.edge.provision",

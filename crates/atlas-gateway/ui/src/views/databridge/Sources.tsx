@@ -41,7 +41,7 @@ export default function Sources() {
             <>
               <Button size="sm" icon={Search} onClick={() => submitJob("post", `/databridge/sources/${r.id}/discover`, null, "discover source", refetch).catch(() => {})}>Discover</Button>
               <Button size="sm" onClick={() => setDetail(r)}>Schema</Button>
-              <Button size="sm" variant="danger" onClick={() => del(`source ${r.name}`, async () => { await submit("delete", `/databridge/sources/${r.id}`, null, "source"); refetch(); })}>Del</Button>
+              <Button size="sm" variant="danger" onClick={() => del(`source ${r.name}`, async () => { await submit("delete", `/databridge/sources/${r.id}`, null, "delete source"); refetch(); })}>Del</Button>
             </>
           )}
         />
@@ -50,19 +50,25 @@ export default function Sources() {
       <FormModal open={create} onClose={() => setCreate(false)} title="Register source database" submitLabel="Register"
         fields={[
           { name: "name", label: "Name" },
-          { name: "kind", label: "Engine (postgres | mysql)", value: "postgres" },
-          { name: "cloud", label: "Cloud (rds | aurora | cloudsql | generic)", value: "rds" },
+          {
+            name: "kind", label: "Engine",
+            options: ["postgres", "mysql", "mariadb", "oracle", "sqlserver", "mongodb"].map((v) => ({ value: v, label: v })),
+          },
+          {
+            name: "cloud", label: "Cloud",
+            options: ["rds", "aurora", "cloudsql", "generic"].map((v) => ({ value: v, label: v })),
+          },
           { name: "endpoint", label: "Endpoint host", optional: true },
-          { name: "port", label: "Port", type: "number", optional: true },
+          { name: "port", label: "Port", type: "number", optional: true, min: 1 },
           { name: "database", label: "Database", optional: true },
-          { name: "driver_mode", label: "Driver mode (fake | real)", value: "fake" },
+          { name: "driver_mode", label: "Driver mode", options: [{ value: "fake", label: "fake" }, { value: "real", label: "real" }] },
         ]}
         onSubmit={(v) => {
           const body: Record<string, unknown> = { name: v.name, kind: v.kind, cloud: v.cloud, driver_mode: v.driver_mode };
           if (v.endpoint) body.endpoint = v.endpoint;
           if (v.port) body.port = +v.port;
           if (v.database) body.database = v.database;
-          return submit("post", "/databridge/sources", body, "source", refetch);
+          return submit("post", "/databridge/sources", body, "register source", refetch);
         }} />
 
       <SchemaBrowser source={detail} onClose={() => setDetail(null)} />

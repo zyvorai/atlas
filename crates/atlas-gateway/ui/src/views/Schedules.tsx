@@ -1,22 +1,33 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-import { Timer } from "lucide-react";
+import { useState } from "react";
+import { Plus, Timer } from "lucide-react";
 import { submit } from "../api/client";
-import { useInvalidate, useSchedules } from "../api/hooks";
-import { Badge, Button, GlassSection, PageHeader } from "../ui/kit";
+import { useBuckets, useInvalidate, useSchedules, useVolumes } from "../api/hooks";
+import { Badge, Button, FormModal, GlassSection, PageHeader } from "../ui/kit";
 import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
 import { timeAgo } from "../lib/format";
 
 export default function Schedules() {
   const { data } = useSchedules();
+  const { data: vols } = useVolumes();
+  const { data: buckets } = useBuckets();
   const inv = useInvalidate();
+  const [create, setCreate] = useState(false);
   return (
     <div>
-      <PageHeader icon={Timer} title="Schedules" subtitle="Protection schedules — periodic snapshots & backups. Create one from a volume." />
+      <PageHeader
+        icon={Timer}
+        title="Schedules"
+        subtitle="Protection schedules — periodic snapshots & backups, for a volume."
+        actions={<Button variant="primary" icon={Plus} onClick={() => setCreate(true)}>Schedule</Button>}
+      />
       <GlassSection title={<>Schedules <Badge kind="neutral">{data?.length || 0}</Badge></>}>
         <Table
           rows={data}
           rowKey={(s) => s.id}
+          empty="No schedules yet."
+          emptyCta={<Button variant="primary" icon={Plus} onClick={() => setCreate(true)}>Create schedule</Button>}
           cols={[
             { h: "ID", f: (s) => s.id, mono: true },
             { h: "Kind", f: (s) => <Badge kind={s.kind === "backup" ? "info" : "neutral"}>{s.kind}</Badge> },
@@ -31,6 +42,30 @@ export default function Schedules() {
           )}
         />
       </GlassSection>
+
+      <FormModal open={create} onClose={() => setCreate(false)} title="Create schedule" submitLabel="Create schedule"
+        fields={(vals) => [
+          {
+            name: "volume_id", label: "Volume",
+            // Both snapshot and backup schedules dispatch a CSI VolumeSnapshot job, which needs a
+            // PVC-backed (k8s) volume — filter out raw NFS/ZFS volumes so a schedule can't be
+            // created against one that would silently never fire (backend also enforces this).
+            options: (vols || []).filter((v) => v.pvc_name).map((v) => ({ value: v.id, label: v.name })),
+            hint: "No PVC-backed volumes yet — create one on the Volumes page first.",
+          },
+          { name: "kind", label: "Kind", options: [{ value: "snapshot", label: "snapshot" }, { value: "backup", label: "backup" }] },
+          { name: "interval_secs", label: "Interval (seconds)", type: "number", value: "3600", min: 60 },
+          { name: "keep", label: "Keep", type: "number", value: "24", min: 0 },
+          // Bucket/Mode only matter for backup schedules — hide them for snapshot schedules.
+          ...(vals.kind === "backup" ? [
+            { name: "bucket_id", label: "Bucket (backup only)", options: [{ value: "", label: "—" }, ...(buckets || []).filter((b) => b.state === "bound").map((b) => ({ value: b.id, label: b.bucket_name || b.id }))] },
+            { name: "mode", label: "Mode (backup)", options: [{ value: "manifest", label: "manifest" }, { value: "data", label: "data" }] },
+          ] : []),
+        ]}
+        onSubmit={(v) => submit("post", `/volumes/${v.volume_id}/schedule`, {
+          kind: v.kind, interval_secs: +v.interval_secs, keep: +v.keep,
+          bucket_id: v.bucket_id || undefined, mode: v.mode,
+        }, "schedule", () => inv("schedules"))} />
     </div>
   );
 }

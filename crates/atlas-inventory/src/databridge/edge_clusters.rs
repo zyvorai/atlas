@@ -67,6 +67,17 @@ pub async fn set_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
     Ok(())
 }
 
+/// Record the data volume actually loaded onto the edge cluster (the column otherwise stays stuck
+/// at its SQL default of 0 forever — nothing else ever writes it).
+pub async fn set_size_bytes(pool: &SqlitePool, id: &str, size_bytes: i64) -> Result<()> {
+    sqlx::query("UPDATE edge_db_clusters SET size_bytes=? WHERE id=?")
+        .bind(size_bytes)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Delete an edge cluster inventory row (e.g. an orphaned/stale cluster). The backing operator CR
 /// is torn down separately; this only removes the control-plane record.
 pub async fn delete_edge_cluster(pool: &SqlitePool, id: &str) -> Result<()> {

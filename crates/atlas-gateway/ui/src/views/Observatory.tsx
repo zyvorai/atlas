@@ -31,12 +31,15 @@ function poolBackendMap(clusters: any[], backends: any[]) {
     return "ceph";
   };
 }
-const TB = 1e12, GB = 1e9;
+// Binary (1024-based) units, matching lib/format's fmtBytes() — every other page (Command Deck,
+// Volumes, Buckets, ...) reports capacity in TiB/GiB, so these visualizations must too or the same
+// byte count reads as two different-looking numbers depending which page you're on.
+const TB = 2 ** 40, GB = 2 ** 30, MB = 2 ** 20, KB = 2 ** 10;
 function tb(n: number) {
-  if (n >= TB) return (n / TB).toFixed(n >= 10 * TB ? 1 : 2) + " TB";
-  if (n >= GB) return (n / GB).toFixed(n >= 100 * GB ? 0 : 1) + " GB";
-  if (n >= 1e6) return (n / 1e6).toFixed(1) + " MB";
-  return (n / 1e3).toFixed(0) + " KB";
+  if (n >= TB) return (n / TB).toFixed(n >= 10 * TB ? 1 : 2) + " TiB";
+  if (n >= GB) return (n / GB).toFixed(n >= 100 * GB ? 0 : 1) + " GiB";
+  if (n >= MB) return (n / MB).toFixed(1) + " MiB";
+  return (n / KB).toFixed(0) + " KiB";
 }
 const PRODUCTS = ["Zeus OS", "Veyron", "Hyper2KVM", "GuestKit", "PacketWolf", "Aether", "Ragnarok", "Machina", "HyperSDK"];
 const reduced = () => matchMedia("(prefers-reduced-motion:reduce)").matches;
@@ -131,29 +134,36 @@ function Trajectory({ data }: { data: any }) {
       const days = fc.days_to_full;
       const tFill = days != null && growth > 0 ? (RAW - nowUsed) / growth * 24 : 0;
       const PL = 60, PR = 118, PT = 16, PB = 34, pw = W - PL - PR, ph = H - PT - PB;
-      const xMin = (rel.length ? rel[0][0] : -1) - 0.6, xMax = (tFill > 0 ? tFill : 2) + 0.9;
+      // A near-zero growth rate can project a fill horizon hundreds of thousands of hours out —
+      // stretching the axis to the true value would collapse "now" into a sliver at the left edge
+      // (NOW/0-TB labels colliding). Cap how far the axis itself stretches; the true `days` value
+      // is still shown in the "FILL HORIZON" text below regardless of where the axis is clamped.
+      const histSpan = rel.length ? -rel[0][0] : 1;
+      const tFillVis = tFill > 0 ? Math.min(tFill, Math.max(histSpan * 3, 24)) : 0;
+      const xMin = (rel.length ? rel[0][0] : -1) - 0.6, xMax = (tFillVis > 0 ? tFillVis : 2) + 0.9;
       const sx = (h: number) => PL + (h - xMin) / (xMax - xMin) * pw, sy = (v: number) => PT + (1 - v / RAW) * ph;
       // grid
       ctx.font = "10px ui-monospace,Menlo,monospace"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
-      for (let v = 0; v <= RAW + 0.01; v += Math.max(1, Math.round(RAW / 4))) { const y = sy(v); ctx.strokeStyle = "rgba(56,90,140,.14)"; ctx.beginPath(); ctx.moveTo(PL, y); ctx.lineTo(PL + pw, y); ctx.stroke(); ctx.fillStyle = "#5C7192"; ctx.fillText(v.toFixed(0) + " TB", PL - 10, y); }
+      for (let v = 0; v <= RAW + 0.01; v += Math.max(1, Math.round(RAW / 4))) { const y = sy(v); ctx.strokeStyle = "rgba(56,90,140,.14)"; ctx.beginPath(); ctx.moveTo(PL, y); ctx.lineTo(PL + pw, y); ctx.stroke(); ctx.fillStyle = "#5C7192"; ctx.fillText(v.toFixed(0) + " TiB", PL - 10, y); }
       ctx.textAlign = "center"; ctx.textBaseline = "top";
       [-8, -4, 0, 4, 8, 12].forEach((h) => { if (h < xMin || h > xMax) return; ctx.fillStyle = h === 0 ? "#8fb6e8" : "#5C7192"; ctx.fillText(h === 0 ? "NOW" : (h > 0 ? "+" + h + "h" : h + "h"), sx(h), PT + ph + 8); });
       // ceiling
       const cyl = sy(RAW); ctx.setLineDash([5, 5]); ctx.strokeStyle = "rgba(248,113,113,.55)"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(PL, cyl); ctx.lineTo(PL + pw, cyl); ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle = "#F87171"; ctx.textAlign = "left"; ctx.textBaseline = "bottom"; ctx.fillText("RAW CEILING · " + RAW.toFixed(1) + " TB", PL + 6, cyl - 4);
+      ctx.fillStyle = "#F87171"; ctx.textAlign = "left"; ctx.textBaseline = "bottom"; ctx.fillText("RAW CEILING · " + RAW.toFixed(1) + " TiB", PL + 6, cyl - 4);
       const p = red ? 1 : Math.min(1, (ts - t0) / 2400); const ease = 1 - Math.pow(1 - p, 3); const revX = PL + ease * pw;
       ctx.save(); ctx.beginPath(); ctx.rect(PL, PT - 6, Math.max(0, revX - PL), ph + 12); ctx.clip();
       // history area
       const g = ctx.createLinearGradient(0, PT, 0, PT + ph); g.addColorStop(0, "rgba(56,189,248,.42)"); g.addColorStop(1, "rgba(56,189,248,0)");
       if (rel.length) { ctx.beginPath(); ctx.moveTo(sx(rel[0][0]), sy(0)); rel.forEach((q: number[]) => ctx.lineTo(sx(q[0]), sy(q[1]))); ctx.lineTo(sx(0), sy(0)); ctx.closePath(); ctx.fillStyle = g; ctx.fill();
         ctx.beginPath(); rel.forEach((q: number[], i: number) => { const X = sx(q[0]), Y = sy(q[1]); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.strokeStyle = "#38BDF8"; ctx.lineWidth = 2; ctx.stroke(); }
-      // projection
-      if (tFill > 0) { const px0 = sx(0), py0 = sy(nowUsed), px1 = sx(tFill), py1 = sy(RAW);
+      // projection (positioned using the clamped tFillVis; the label always prints the true `days`)
+      if (tFill > 0) { const px0 = sx(0), py0 = sy(nowUsed), px1 = sx(tFillVis), py1 = sy(RAW);
+        const clamped = tFillVis < tFill;
         const cone = ctx.createLinearGradient(px0, 0, px1, 0); cone.addColorStop(0, "rgba(251,191,36,.16)"); cone.addColorStop(1, "rgba(251,191,36,.02)");
         ctx.beginPath(); ctx.moveTo(px0, py0); ctx.lineTo(px1, py1); ctx.lineTo(px1, sy(0)); ctx.lineTo(px0, sy(0)); ctx.closePath(); ctx.fillStyle = cone; ctx.fill();
         ctx.setLineDash([6, 5]); ctx.strokeStyle = "#FBBF24"; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(px0, py0); ctx.lineTo(px1, py1); ctx.stroke(); ctx.setLineDash([]);
         const pulse = red ? 1 : 0.6 + 0.4 * Math.sin(Date.now() * 0.005); ctx.globalAlpha = pulse; ctx.fillStyle = "#FBBF24"; ctx.beginPath(); ctx.arc(px1, py1, 4.2, 0, 6.283); ctx.fill(); ctx.globalAlpha = 1;
-        ctx.fillStyle = "#FBBF24"; ctx.textAlign = "right"; ctx.textBaseline = "bottom"; ctx.font = "600 10px ui-monospace,Menlo,monospace"; ctx.fillText("FILL HORIZON", px1 - 8, py1 - 2);
+        ctx.fillStyle = "#FBBF24"; ctx.textAlign = "right"; ctx.textBaseline = "bottom"; ctx.font = "600 10px ui-monospace,Menlo,monospace"; ctx.fillText(clamped ? "FILL HORIZON (off-chart)" : "FILL HORIZON", px1 - 8, py1 - 2);
         ctx.fillStyle = "#8AA0BD"; ctx.textBaseline = "top"; ctx.fillText("~" + days.toFixed(1) + " d", px1 - 8, py1 + 4);
       } else { ctx.fillStyle = "#34D399"; ctx.font = "600 11px ui-monospace,Menlo,monospace"; ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.fillText("usage steady — no fill projection", sx(0) + 8, PT + 6); }
       // now line + dot

@@ -1,7 +1,8 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 // Ceph — live cluster introspection: health checks, quorum/daemons, PG states, client I/O,
 // the CRUSH OSD tree, and per-pool df. Backed by /ceph/status, /ceph/osd-tree, /ceph/df.
-import { Aperture, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { Aperture, ChevronDown, ChevronRight } from "lucide-react";
 import { useCephDf, useCephOsdDf, useCephOsdTree, useCephStatus } from "../api/hooks";
 import { Badge, GlassSection, PageHeader, StatCard } from "../ui/kit";
 import { Table } from "../ui/Table";
@@ -37,6 +38,11 @@ export default function Ceph() {
   const nodes: any[] = tree?.nodes || [];
   const byId: Record<number, any> = {}; nodes.forEach((n) => (byId[n.id] = n));
   const roots = nodes.filter((n) => n.type === "root");
+
+  // The CRUSH tree renders a chevron in front of each root/host — make it a real collapse
+  // toggle instead of a static decoration (collapsed by id, expanded by default).
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  const toggleNode = (id: number) => setCollapsed((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   return (
     <div>
@@ -87,15 +93,24 @@ export default function Ceph() {
       {/* CRUSH / OSD tree */}
       <GlassSection title={<>CRUSH map · OSD tree <Badge kind="neutral">{nodes.filter((n) => n.type === "osd").length} OSDs</Badge></>}>
         <div className="p-3 font-mono text-sm">
-          {roots.map((r) => (
+          {roots.map((r) => {
+            const rOpen = !collapsed.has(r.id);
+            return (
             <div key={r.id}>
-              <div className="flex items-center gap-2 py-1"><ChevronRight size={14} className="text-muted-foreground" /><span className="text-sky-300">{r.type}</span> {r.name}</div>
-              {(r.children || []).map((hid: number) => {
+              <button type="button" onClick={() => toggleNode(r.id)} className="flex items-center gap-2 py-1 hover:text-white transition-colors">
+                {rOpen ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronRight size={14} className="text-muted-foreground" />}
+                <span className="text-sky-300">{r.type}</span> {r.name}
+              </button>
+              {rOpen && (r.children || []).map((hid: number) => {
                 const host = byId[hid]; if (!host) return null;
+                const hOpen = !collapsed.has(hid);
                 return (
                   <div key={hid} className="ml-5">
-                    <div className="flex items-center gap-2 py-1"><ChevronRight size={13} className="text-muted-foreground" /><span className="text-violet-300">host</span> {host.name}</div>
-                    <div className="ml-6">
+                    <button type="button" onClick={() => toggleNode(hid)} className="flex items-center gap-2 py-1 hover:text-white transition-colors">
+                      {hOpen ? <ChevronDown size={13} className="text-muted-foreground" /> : <ChevronRight size={13} className="text-muted-foreground" />}
+                      <span className="text-violet-300">host</span> {host.name}
+                    </button>
+                    {hOpen && <div className="ml-6">
                       {(host.children || []).map((oid: number) => {
                         const o = byId[oid]; if (!o) return null;
                         const up = o.status === "up";
@@ -119,12 +134,13 @@ export default function Ceph() {
                           </div>
                         );
                       })}
-                    </div>
+                    </div>}
                   </div>
                 );
               })}
             </div>
-          ))}
+            );
+          })}
           {!nodes.length && <div className="text-muted-foreground">No OSD tree.</div>}
         </div>
       </GlassSection>

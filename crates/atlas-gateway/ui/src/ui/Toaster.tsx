@@ -16,7 +16,9 @@ export function Toaster() {
     [],
   );
   return (
-    <div className="fixed right-4 bottom-4 z-[60] flex flex-col gap-2 w-[300px]">
+    // bottom-20 (not bottom-4) clears the floating bottom nav dock, which is horizontally centered
+    // and at tablet widths sits close enough to the right edge to overlap a bottom-right toast.
+    <div className="fixed right-4 bottom-20 z-[60] flex flex-col gap-2 w-[300px]">
       {items.map((t) => (
         <div
           key={t.id}

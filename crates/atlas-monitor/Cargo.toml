@@ -9,6 +9,7 @@ authors.workspace = true
 [dependencies]
 atlas-api-types = { workspace = true }
 atlas-driver-core = { workspace = true }
+atlas-driver-k8s = { workspace = true }
 atlas-inventory = { workspace = true }
 atlas-discovery = { workspace = true }
 sqlx = { workspace = true }

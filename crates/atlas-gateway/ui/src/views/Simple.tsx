@@ -82,12 +82,12 @@ export function Backends() {
 }
 
 export function Kubernetes() {
-  const { data: scs } = useStorageClasses();
+  const { data: scs, isError, refetch } = useStorageClasses();
   return (
     <div>
       <PageHeader icon={Boxes} title="Kubernetes" subtitle="Live StorageClasses from the cluster" />
       <GlassSection title={<>StorageClasses <Badge kind="neutral">{scs?.length || 0}</Badge></>}>
-        <Table rows={scs} rowKey={(s) => s.name}
+        <Table rows={scs} error={isError} onRetry={() => refetch()} rowKey={(s) => s.name}
           cols={[
             { h: "Name", f: (s) => s.name, mono: true },
             { h: "Provisioner", f: (s) => s.provisioner, mono: true },
@@ -129,7 +129,9 @@ export function Cluster() {
               { h: "Name", f: (p) => p.name, mono: true },
               { h: "Kind", f: (p) => p.kind },
               { h: "Used", f: (p) => fmtBytes(p.used_bytes) },
-              { h: "Max", f: (p) => fmtBytes(p.max_bytes) },
+              // p.max_bytes is Ceph's MAX AVAIL (headroom beyond what's used), not total capacity —
+              // add used back in to get the provisioned total, matching Command Deck's pool widget.
+              { h: "Max", f: (p) => fmtBytes((p.max_bytes || 0) + (p.used_bytes || 0)) },
             ]} />
         </GlassSection>
         <GlassSection title="OSDs">

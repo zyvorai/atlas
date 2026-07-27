@@ -288,6 +288,20 @@ async fn run_worker(
     tracing::warn!("atlas-jobs worker channel closed");
 }
 
+/// Ceiling on a single job's dispatch — the worker loop is single-threaded and serializes every job
+/// type in the system, so a job with no other timeout (an infinite loop, a deadlocked lock, a k8s
+/// watch that never resolves) would otherwise wedge every subsequent job forever: the stale-running
+/// reclaim only fires after 15 minutes and only for jobs already `running`, never for ones queued
+/// behind a stuck one. Generous enough for a large `rbd export-diff` backup stream; overridable for
+/// unusually large clusters.
+fn job_timeout() -> Duration {
+    std::env::var("ATLAS_JOB_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .map(Duration::from_secs)
+        .unwrap_or(Duration::from_secs(2 * 3600))
+}
+
 async fn execute_job(
     pool: &SqlitePool,
     k8s: &Option<Arc<K8sDriver>>,
@@ -306,7 +320,12 @@ async fn execute_job(
     let request = load_request(pool, job_id).await?;
     let spec: JobSpec = serde_json::from_value(request).context("decode job request")?;
 
-    let result = crate::dispatch::dispatch(pool, k8s, &job.tenant_id, spec).await?;
+    let result = tokio::time::timeout(
+        job_timeout(),
+        crate::dispatch::dispatch(pool, k8s, &job.tenant_id, spec),
+    )
+    .await
+    .map_err(|_| anyhow!("job exceeded the {:?} timeout", job_timeout()))??;
     atlas_inventory::jobs::mark_succeeded(pool, job_id, &result).await?;
     Ok(())
 }

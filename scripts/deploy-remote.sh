@@ -83,7 +83,7 @@ rsync -az --delete \
   "${HERE}/" "${USER}@${HOST}:${REMOTE_DIR}/"
 
 log "2/5 build image with podman on remote"
-$SSH "cd ~/${REMOTE_DIR} && podman build -t atlas-gateway:dev -f Dockerfile ."
+$SSH "cd ~/${REMOTE_DIR} && podman build --ulimit nofile=65536:65536 -t atlas-gateway:dev -f Dockerfile ."
 
 log "3/5 import image into k3s containerd"
 $SSH "cd ~/${REMOTE_DIR} && podman save atlas-gateway:dev -o /tmp/atlas-gateway.tar && sudo k3s ctr images import /tmp/atlas-gateway.tar && rm -f /tmp/atlas-gateway.tar"

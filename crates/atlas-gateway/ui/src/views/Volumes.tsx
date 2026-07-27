@@ -124,8 +124,8 @@ export default function Volumes() {
           selected={picked}
           onToggle={toggle}
           onToggleAll={toggleAll}
-          empty="No volumes yet."
-          emptyCta={<Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>Create volume</Button>}
+          empty={state || tenant || backend || kind ? "No volumes match your filters." : "No volumes yet."}
+          emptyCta={!(state || tenant || backend || kind) && <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>Create volume</Button>}
           cols={[
             { h: "Name", f: (v) => v.name, mono: true, sortKey: (v) => v.name },
             { h: "Kind", f: (v) => v.kind, sortKey: (v) => v.kind },
@@ -155,7 +155,7 @@ export default function Volumes() {
         fields={[
           { name: "name", label: "Name", placeholder: "my-volume" },
           { name: "tenant_id", label: "Tenant", value: "default" },
-          { name: "size_gib", label: "Size (GiB)", type: "number", value: "1" },
+          { name: "size_gib", label: "Size (GiB)", type: "number", value: "1", min: 1 },
           { name: "policy", label: "Policy (intent)", options: POLICIES.map((p) => ({ value: p, label: p })) },
           { name: "namespace", label: "Namespace", value: "rook-ceph" },
         ]}
@@ -170,22 +170,35 @@ export default function Volumes() {
       {/* Snapshot / Expand / Schedule */}
       {modal?.kind === "snapshot" && (
         <FormModal open onClose={() => setModal(null)} title={`Snapshot ${modal.v.name}`} submitLabel="Snapshot"
-          fields={[{ name: "name", label: "Snapshot name (optional)", optional: true }]}
+          fields={[{
+            name: "name", label: "Snapshot name (optional)", optional: true,
+            pattern: /^[a-zA-Z0-9_.-]+$/,
+            hint: "Letters, digits, dot, dash, underscore only (no spaces or slashes) — leave blank to auto-generate.",
+          }]}
           onSubmit={(x) => submitJob("post", `/volumes/${modal.v.id}/snapshots`, { name: x.name || undefined }, "snapshot", refetch)} />
       )}
       {modal?.kind === "expand" && (
         <FormModal open onClose={() => setModal(null)} title={`Expand ${modal.v.name}`} submitLabel="Expand"
-          fields={[{ name: "size_gib", label: "New size (GiB)", type: "number", value: String(Math.ceil(modal.v.size_bytes / 1073741824) + 1) }]}
+          fields={[{
+            name: "size_gib", label: "New size (GiB)", type: "number",
+            value: String(Math.ceil(modal.v.size_bytes / 1073741824) + 1),
+            min: Math.ceil(modal.v.size_bytes / 1073741824) + 1,
+            hint: `Current size: ${fmtBytes(modal.v.size_bytes)} — expand only grows, must be larger.`,
+          }]}
           onSubmit={(x) => submitJob("post", `/volumes/${modal.v.id}/expand`, { new_size_bytes: gib(+x.size_gib) }, "expand", refetch)} />
       )}
       {modal?.kind === "schedule" && (
         <FormModal open onClose={() => setModal(null)} title={`Schedule for ${modal.v.name}`} submitLabel="Create schedule"
-          fields={[
+          fields={(vals) => [
             { name: "kind", label: "Kind", options: [{ value: "snapshot", label: "snapshot" }, { value: "backup", label: "backup" }] },
-            { name: "interval_secs", label: "Interval (seconds)", type: "number", value: "3600" },
-            { name: "keep", label: "Keep", type: "number", value: "24" },
-            { name: "bucket_id", label: "Bucket (backup only)", options: [{ value: "", label: "—" }, ...(buckets || []).filter((b) => b.state === "bound").map((b) => ({ value: b.id, label: b.bucket_name || b.id }))] },
-            { name: "mode", label: "Mode (backup)", options: [{ value: "manifest", label: "manifest" }, { value: "data", label: "data" }] },
+            { name: "interval_secs", label: "Interval (seconds)", type: "number", value: "3600", min: 60 },
+            { name: "keep", label: "Keep", type: "number", value: "24", min: 0 },
+            // Bucket/Mode only matter for backup schedules — hide them for snapshot schedules
+            // instead of leaving two irrelevant, editable fields sitting in the form.
+            ...(vals.kind === "backup" ? [
+              { name: "bucket_id", label: "Bucket (backup only)", options: [{ value: "", label: "—" }, ...(buckets || []).filter((b) => b.state === "bound").map((b) => ({ value: b.id, label: b.bucket_name || b.id }))] },
+              { name: "mode", label: "Mode (backup)", options: [{ value: "manifest", label: "manifest" }, { value: "data", label: "data" }] },
+            ] : []),
           ]}
           onSubmit={(x) => submit("post", `/volumes/${modal.v.id}/schedule`, {
             kind: x.kind, interval_secs: +x.interval_secs, keep: +x.keep,
@@ -225,7 +238,7 @@ function VolumeDrawer({ vol, onClose, refetch }: { vol: StorageVolume | null; on
         <div>
           <div className="section-label mb-1">Labels</div>
           <div className="flex flex-wrap gap-1.5 mb-2">
-            {labels && Object.entries(labels).length ? Object.entries(labels).map(([k, v]) => <Badge key={k} kind="info">{k}={String(v)}</Badge>) : <span className="text-muted-foreground">none</span>}
+            {labels && Object.entries(labels).length ? Object.entries(labels).map(([k, v]) => <Badge key={k} kind="info" className="normal-case">{k}={String(v)}</Badge>) : <span className="text-muted-foreground">none</span>}
           </div>
           <div className="flex gap-2">
             <input className="field" placeholder="key" value={lk} onChange={(e) => setLk(e.target.value)} />

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-import React, { useMemo, useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
-import { EmptyState, Spinner } from "./kit";
+import React, { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { Button, EmptyState, Spinner } from "./kit";
 
 export type Col<T> = {
   h: string;
@@ -22,6 +22,8 @@ export function Table<T>({
   selected,
   onToggle,
   onToggleAll,
+  error,
+  onRetry,
 }: {
   cols: Col<T>[];
   rows: T[] | undefined;
@@ -34,6 +36,14 @@ export function Table<T>({
   selected?: Set<string>;
   onToggle?: (key: string) => void;
   onToggleAll?: (keys: string[]) => void;
+  /** True when the query backing `rows` failed — shows an error state instead of spinning forever
+      (react-query leaves `data` undefined on both "still loading" and "errored", so callers must
+      pass their hook's `isError` through here to tell the two apart). */
+  error?: boolean;
+  /** Refetch the failed query — typically the hook's own `refetch`. Without this the error state's
+      "Try refreshing" is just text; a page-level "Refresh" button elsewhere (if any) usually refetches
+      a *different* endpoint and won't actually retry this one. */
+  onRetry?: () => void;
 }) {
   const [sort, setSort] = useState<{ i: number; dir: 1 | -1 } | null>(null);
   const sorted = useMemo(() => {
@@ -47,7 +57,29 @@ export function Table<T>({
     });
   }, [rows, sort, cols]);
 
-  if (!rows) return <Spinner />; // undefined = still loading
+  // Defense in depth: a query can fail in ways `error` never observes (e.g. a request that never
+  // settles instead of properly rejecting) — `data`/`isError` staying exactly as they were on
+  // mount looks identical to "still loading" and would spin forever. If loading drags on this long
+  // something's wrong regardless of why, so fall back to the same error affordance.
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    if (rows) { setStuck(false); return; }
+    const t = setTimeout(() => setStuck(true), 10000);
+    return () => clearTimeout(t);
+  }, [rows]);
+
+  if (!rows) {
+    if (error || stuck) {
+      return (
+        <div className="py-10 text-center text-sm text-danger flex flex-col items-center gap-2">
+          <AlertTriangle size={18} />
+          <span>Failed to load — the request errored.</span>
+          {onRetry ? <Button size="sm" onClick={onRetry} className="mt-1">Retry</Button> : <span>Try refreshing.</span>}
+        </div>
+      );
+    }
+    return <Spinner />; // undefined = still loading
+  }
   if (!rows.length) return <EmptyState msg={empty} cta={emptyCta} />;
   const clickHeader = (i: number) => {
     if (!cols[i].sortKey) return;

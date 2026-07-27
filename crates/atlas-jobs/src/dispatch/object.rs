@@ -482,11 +482,16 @@ pub(crate) async fn dispatch_object(
             let verified =
                 matches!(s3.get_object(&object_key).await, Ok(got) if got == manifest_bytes);
             let checksum = record_checksum.unwrap_or(manifest_checksum);
+            // The row was inserted with format="manifest-v1" regardless of mode; reflect the real
+            // format now that we know whether data was actually streamed, so the UI can tell
+            // manifest-only backups apart from full rbd-export-diff ones.
+            let format = if mode == "data" { Some("rbd-export-diff") } else { None };
             atlas_inventory::backups::set_state(
                 pool,
                 &backup_id,
                 if verified { "verified" } else { "completed" },
                 Some(&checksum),
+                format,
             )
             .await?;
             Ok(serde_json::json!({

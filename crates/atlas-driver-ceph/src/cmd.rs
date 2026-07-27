@@ -239,8 +239,11 @@ pub async fn rbd_create(pool: &str, image: &str, size_bytes: i64) -> Result<(), 
     let spec = format!("{pool}/{image}");
     // Round up so the image is never smaller than requested when size_bytes isn't MiB-aligned.
     // NOTE: `i64::div_ceil` is unstable (int_roundings); do not "simplify" to it.
+    // `saturating_add` guards a caller-supplied size near `i64::MAX`: a plain `+` would overflow
+    // (panics in debug, silently wraps to garbage in release — e.g. creating a 1 MiB image when
+    // an enormous size was requested instead of erroring).
     #[allow(clippy::manual_div_ceil)]
-    let mib_val = (size_bytes + 1024 * 1024 - 1) / (1024 * 1024);
+    let mib_val = size_bytes.saturating_add(1024 * 1024 - 1) / (1024 * 1024);
     let mib = std::cmp::max(1, mib_val).to_string();
     let output = tokio::process::Command::new("rbd")
         .args(["create", &spec, "--size", &mib])
@@ -286,8 +289,9 @@ pub async fn rbd_resize(
     let spec = format!("{pool}/{image}");
     // Round up so a grow never under-shoots and a shrink never removes more than requested.
     // NOTE: `i64::div_ceil` is unstable (int_roundings); do not "simplify" to it.
+    // `saturating_add` guards a caller-supplied size near `i64::MAX` (see `rbd_create` above).
     #[allow(clippy::manual_div_ceil)]
-    let mib_val = (size_bytes + 1024 * 1024 - 1) / (1024 * 1024);
+    let mib_val = size_bytes.saturating_add(1024 * 1024 - 1) / (1024 * 1024);
     let mib = std::cmp::max(1, mib_val).to_string();
     let mut args = vec!["resize", &spec, "--size", &mib];
     if allow_shrink {

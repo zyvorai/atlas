@@ -1,7 +1,7 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import { useEffect, useRef, useState } from "react";
 import { Cloud, Download, Plus, Upload } from "lucide-react";
-import { http, submitJob, toast } from "../api/client";
+import { apiError, http, submitJob, toast } from "../api/client";
 import { useBuckets, useInvalidate } from "../api/hooks";
 import type { StorageBucket } from "../api/types";
 import { Badge, Button, FormModal, GlassSection, PageHeader, SlideOver } from "../ui/kit";
@@ -27,7 +27,7 @@ export default function Buckets() {
           empty="No buckets yet."
           emptyCta={<Button variant="primary" icon={Plus} onClick={() => setCreate(true)}>Create bucket</Button>}
           cols={[
-            { h: "Name", f: (b) => b.bucket_name || b.id, mono: true },
+            { h: "Name", f: (b) => b.bucket_name || b.name || b.id, mono: true },
             { h: "State", f: (b) => <Badge kind={b.state === "bound" ? "success" : "warning"} dot>{b.state}</Badge> },
             { h: "Namespace", f: (b) => b.namespace },
             { h: "Endpoint", f: (b) => <span className="mono text-muted-foreground">{b.endpoint || "—"}</span> },
@@ -36,11 +36,11 @@ export default function Buckets() {
             <>
               <Button size="sm" onClick={async () => {
                 try { const s = await http.get(`/buckets/${b.id}/stats`); const d = s.data;
-                  (await import("../api/client")).toast(`${d.bucket}: ${num(d.num_objects)} objs, ${fmtBytes(d.size_bytes)}`, "ok");
-                } catch (e) { (await import("../api/client")).toast(String(e), "err"); }
+                  toast(`${d.bucket}: ${num(d.num_objects)} objs, ${fmtBytes(d.size_bytes)}`, "ok");
+                } catch (e) { toast(`stats: ${apiError(e)}`, "err"); }
               }}>Stats</Button>
               <Button size="sm" onClick={() => setObjBucket(b)}>Objects</Button>
-              <Button size="sm" variant="danger" onClick={() => del(`bucket ${b.bucket_name || b.id}`, () => submitJob("delete", `/buckets/${b.id}?force=true`, null, "delete bucket", refetch))}>Del</Button>
+              <Button size="sm" variant="danger" onClick={() => del(`bucket ${b.bucket_name || b.name || b.id}`, () => submitJob("delete", `/buckets/${b.id}?force=true`, null, "delete bucket", refetch))}>Del</Button>
             </>
           )}
         />
@@ -48,8 +48,13 @@ export default function Buckets() {
 
       <FormModal open={create} onClose={() => setCreate(false)} title="Create bucket" submitLabel="Create"
         fields={[
-          { name: "name", label: "Name" }, { name: "namespace", label: "Namespace", value: "rook-ceph" },
-          { name: "max_objects", label: "Max objects (optional)", type: "number", optional: true },
+          {
+            name: "name", label: "Name",
+            pattern: /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/,
+            hint: "3-63 chars: lowercase letters, digits, dots, hyphens (S3/RGW bucket naming rules).",
+          },
+          { name: "namespace", label: "Namespace", value: "rook-ceph" },
+          { name: "max_objects", label: "Max objects (optional)", type: "number", optional: true, min: 0 },
           { name: "max_size", label: "Max size (e.g. 2G, optional)", optional: true },
         ]}
         onSubmit={(v) => {
@@ -66,13 +71,16 @@ export default function Buckets() {
 
 function ObjectBrowser({ bucket, onClose }: { bucket: StorageBucket | null; onClose: () => void }) {
   const [objs, setObjs] = useState<{ key: string; size_bytes: number }[] | null>(null);
+  const [listError, setListError] = useState(false);
   const [prefix, setPrefix] = useState("");
   const [busy, setBusy] = useState(false);
   const [keep, setKeep] = useState(0); // 0 = overwrite in place; >0 = keep N timestamped versions
   const fileRef = useRef<HTMLInputElement>(null);
-  const load = (p = "") => bucket && http.get(`/buckets/${bucket.id}/objects${p ? "?prefix=" + encodeURIComponent(p) : ""}`).then((r) => setObjs(r.data.objects || [])).catch(() => setObjs([]));
+  const load = (p = "") => bucket && http.get(`/buckets/${bucket.id}/objects${p ? "?prefix=" + encodeURIComponent(p) : ""}`)
+    .then((r) => { setObjs(r.data.objects || []); setListError(false); })
+    .catch((e) => { setObjs([]); setListError(true); toast(`list objects: ${apiError(e)}`, "err"); });
   useEffect(() => { if (bucket) load(); }, [bucket]);
-  const close = () => { setObjs(null); setPrefix(""); onClose(); };
+  const close = () => { setObjs(null); setListError(false); setPrefix(""); onClose(); };
   if (!bucket) return null;
 
   // Upload straight to RGW: gateway mints a presigned PUT, the browser PUTs the file to it —
@@ -109,11 +117,11 @@ function ObjectBrowser({ bucket, onClose }: { bucket: StorageBucket | null; onCl
   });
 
   return (
-    <SlideOver open={!!bucket} onClose={close} title={<span className="mono">{bucket.bucket_name || bucket.id} · objects</span>} width={560}>
+    <SlideOver open={!!bucket} onClose={close} title={<span className="mono">{bucket.bucket_name || bucket.name || bucket.id} · objects</span>} width={560}>
       <div className="flex gap-2 mb-3 items-center">
         <input className="field" placeholder="prefix / folder…" value={prefix} onChange={(e) => setPrefix(e.target.value)} />
         <Button onClick={() => load(prefix)}>List</Button>
-        <input className="field" style={{ width: 84 }} type="number" min={0} title="Keep N timestamped versions per file (0 = overwrite in place)" placeholder="keep" value={keep || ""} onChange={(e) => setKeep(Math.max(0, +e.target.value || 0))} />
+        <input className="field" style={{ width: 84 }} type="number" min={0} title="Keep N timestamped versions per file (0 = overwrite in place)" placeholder="keep" value={keep} onChange={(e) => setKeep(Math.max(0, +e.target.value || 0))} />
         <Button variant="primary" icon={Upload} loading={busy} onClick={() => fileRef.current?.click()}>Upload</Button>
         <input ref={fileRef} type="file" multiple hidden onChange={(e) => { upload(e.target.files); e.currentTarget.value = ""; }} />
       </div>
@@ -125,7 +133,7 @@ function ObjectBrowser({ bucket, onClose }: { bucket: StorageBucket | null; onCl
             <Button size="sm" variant="danger" onClick={() => remove(o.key)}>Del</Button>
           </>
         )}
-        empty="No objects — upload one above." />
+        empty={listError ? "Couldn't list objects (see toast for the error)." : "No objects — upload one above."} />
     </SlideOver>
   );
 }

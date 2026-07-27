@@ -242,6 +242,7 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
             state.config.ceph_prometheus_url.clone(),
             state.config.alert_webhook_url.clone(),
             is_leader.clone(),
+            state.k8s.clone(),
         );
         // Protection-schedule worker: periodic snapshots + retention (shares the job engine).
         atlas_jobs::spawn_scheduler(

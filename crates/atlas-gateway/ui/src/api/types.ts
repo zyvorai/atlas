@@ -101,6 +101,9 @@ export interface AlertRecord {
   state: string;
   created_at?: string | null;
   resolved_at?: string | null;
+  acknowledged_at?: string | null;
+  acknowledged_by?: string | null;
+  silenced_until?: string | null;
 }
 
 export interface JobRecord {

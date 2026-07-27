@@ -107,6 +107,18 @@ pub(crate) async fn db_delete_source(
     Path(id): Path<String>,
 ) -> AppResult<Json<Value>> {
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    // `migration_plans.source_id` is `ON DELETE CASCADE` — an unguarded delete here would silently
+    // destroy a plan's entire migration history (including one already cut over to production) with
+    // no recovery path. Block it instead; the operator must delete the referencing plan(s) first.
+    let plans = atlas_inventory::databridge::plans::list_for_source(&s.pool, &id).await?;
+    if !plans.is_empty() {
+        let names: Vec<&str> = plans.iter().map(|p| p.name.as_str()).collect();
+        return Err(AppError::Conflict(format!(
+            "cannot delete source: {} migration plan(s) still reference it ({}) — delete them first",
+            plans.len(),
+            names.join(", ")
+        )));
+    }
     atlas_inventory::databridge::sources::delete_source_row(&s.pool, &id).await?;
     Ok(Json(json!({ "source_id": id, "deleted": true })))
 }

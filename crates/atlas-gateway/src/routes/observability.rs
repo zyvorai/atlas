@@ -90,6 +90,10 @@ pub(crate) async fn ack_alert(
     if !atlas_inventory::alerts::acknowledge(&s.pool, &id, &actor.id).await? {
         return Err(AppError::NotFound(format!("alert {id}")));
     }
+    let _ = atlas_inventory::audit::record(
+        &s.pool, None, &actor.id, "alert.ack", "alert", &id, "success", None, None,
+    )
+    .await;
     Ok(Json(json!({ "id": id, "acknowledged_by": actor.id })))
 }
 
@@ -112,6 +116,11 @@ pub(crate) async fn silence_alert(
     if !atlas_inventory::alerts::silence(&s.pool, &id, &format!("+{secs} seconds")).await? {
         return Err(AppError::NotFound(format!("alert {id}")));
     }
+    let _ = atlas_inventory::audit::record(
+        &s.pool, None, &actor.id, "alert.silence", "alert", &id, "success",
+        None, Some(json!({ "secs": secs })),
+    )
+    .await;
     Ok(Json(json!({ "id": id, "silenced_secs": secs })))
 }
 
@@ -125,6 +134,10 @@ pub(crate) async fn resolve_alert(
     if !atlas_inventory::alerts::resolve_manual(&s.pool, &id).await? {
         return Err(AppError::NotFound(format!("open alert {id}")));
     }
+    let _ = atlas_inventory::audit::record(
+        &s.pool, None, &actor.id, "alert.resolve", "alert", &id, "success", None, None,
+    )
+    .await;
     Ok(Json(json!({ "id": id, "state": "resolved" })))
 }
 // ---- jobs ----

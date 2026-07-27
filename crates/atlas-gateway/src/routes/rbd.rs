@@ -364,6 +364,32 @@ pub(crate) async fn rollback_rbd_image(
     ))
 }
 
+/// `DELETE /rbd-images/{pool}/{image}/snapshots/{snap}` — delete a raw image's snapshot (admin).
+/// Without this, a snapshot created through the UI has no path back except deleting the whole
+/// parent image, and `rbd rm` on an image with any snapshots fails outright.
+pub(crate) async fn delete_rbd_snap(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path((pool_name, image, snap)): Path<(String, String, String)>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    let job_id = ids::job_id();
+    let spec = JobSpec::RbdSnapDelete {
+        pool: pool_name.clone(),
+        image: image.clone(),
+        snap: snap.clone(),
+    };
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, spec, None)
+        .await
+        .map_err(AppError::from)?;
+    Ok(accepted(
+        &job,
+        json!({ "rbd": format!("{pool_name}/{image}"), "deleted_snapshot": snap }),
+    ))
+}
+
 #[derive(Debug, Deserialize)]
 pub(crate) struct RbdListQuery {
     pool: Option<String>,

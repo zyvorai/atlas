@@ -12,6 +12,11 @@ export const planStateKind = (s: string) =>
   : s === "completed" || s === "cutover_complete" || s === "validated" ? "success"
   : s === "draft" ? "neutral" : "info";
 
+// migration_plans.state is snake_case (e.g. "cdc_streaming", "cutover_complete") — CSS
+// text-transform:capitalize only capitalizes whitespace-delimited words, so it leaves the
+// underscore in place ("Cdc_streaming"). Replace it with a space so each word capitalizes.
+export const planStateLabel = (s: string) => s.replace(/_/g, " ");
+
 export default function Plans() {
   const { data } = usePlans();
   const { data: sources } = useSources();
@@ -34,7 +39,7 @@ export default function Plans() {
             { h: "Name", f: (r) => r.name, mono: true },
             { h: "Source", f: (r) => srcName(r.source_id) },
             { h: "Readiness", f: (r) => r.readiness_score ? `${r.readiness_score}%` : "—" },
-            { h: "State", f: (r) => <Badge kind={planStateKind(r.state)} dot>{r.state}</Badge> },
+            { h: "State", f: (r) => <Badge kind={planStateKind(r.state)} dot>{planStateLabel(r.state)}</Badge> },
           ]}
           actions={(r) => <Button size="sm" onClick={() => nav(`/databridge/plans/${r.id}`)}>Open</Button>}
         />
@@ -43,9 +48,13 @@ export default function Plans() {
       <FormModal open={create} onClose={() => setCreate(false)} title="New migration plan" submitLabel="Create"
         fields={[
           { name: "name", label: "Plan name" },
-          { name: "source_id", label: "Source id (from Cloud Databases)" },
+          {
+            name: "source_id", label: "Source (from Cloud Databases)",
+            options: (sources || []).map((s) => ({ value: s.id, label: s.name })),
+            hint: "No sources registered yet — register one on the Cloud Databases page first.",
+          },
         ]}
-        onSubmit={(v) => submit("post", "/databridge/plans", { name: v.name, source_id: v.source_id }, "plan", () => inv("db-plans"))} />
+        onSubmit={(v) => submit("post", "/databridge/plans", { name: v.name, source_id: v.source_id }, "create plan", () => inv("db-plans"))} />
     </div>
   );
 }

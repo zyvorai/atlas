@@ -58,6 +58,24 @@
     --input: 272 32% 18%;
   }
 
+  /* Midnight shell — cool steel-blue/indigo over near-black, no violet or cyan tint. */
+  :root[data-ui-shell="dark"] {
+    --background: 222 45% 3%;
+    --card: 220 30% 7%;
+    --card-foreground: 210 30% 96%;
+    --foreground: 210 30% 96%;
+    --popover: 220 30% 7%;
+    --primary: 213 90% 58%;
+    --primary-foreground: 210 30% 98%;
+    --ring: 213 90% 58%;
+    --info: 213 90% 58%;
+    --muted-foreground: 216 15% 72%;
+    --border: 220 22% 17%;
+    --secondary: 220 22% 15%;
+    --accent: 220 22% 15%;
+    --input: 220 22% 17%;
+  }
+
   /* Aurora neon shell (Zeus OS variant) — cyan/purple/pink glow over near-black. */
   :root[data-ui-shell="aurora"] {
     --background: 240 30% 3%;
@@ -124,6 +142,21 @@
   :root[data-ui-shell="aurora"] .btn-primary {
     background: linear-gradient(180deg, rgb(34, 211, 238) 0%, rgb(147, 51, 234) 100%);
     box-shadow: 0 1px 0 rgba(255, 255, 255, 0.2) inset, 0 8px 22px -6px rgba(147, 51, 234, 0.5);
+  }
+  /* Midnight shell canvas + accents */
+  :root[data-ui-shell="dark"] .tahoe-canvas {
+    background:
+      radial-gradient(ellipse 70% 50% at 50% -5%, rgba(59, 130, 246, 0.14), transparent 55%),
+      radial-gradient(ellipse 60% 45% at 90% 100%, rgba(30, 64, 175, 0.12), transparent 55%),
+      linear-gradient(180deg, #02040a, #050b18 45%, #0a1020 82%, #030712);
+  }
+  :root[data-ui-shell="dark"] .btn-primary {
+    background: linear-gradient(180deg, rgb(96, 165, 250) 0%, rgb(29, 78, 216) 100%);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.2) inset, 0 8px 22px -6px rgba(29, 78, 216, 0.5);
+  }
+  :root[data-ui-shell="dark"] .glass-card.hoverable:hover {
+    box-shadow: 0 0 32px -8px rgba(96, 165, 250, 0.4);
+    border-color: rgba(96, 165, 250, 0.4);
   }
   /* Nebula shell canvas + accents */
   :root[data-ui-shell="nebula"] .tahoe-canvas {

@@ -254,6 +254,14 @@ pub async fn full_load(
             .map(|a| a.len())
             .unwrap_or(0);
         atlas_inventory::databridge::plans::set_state(pool, plan_id, "loaded").await?;
+        if let Some(edge_id) = plan.edge_cluster_id.as_deref() {
+            let bytes = source
+                .discovered
+                .get("total_size_bytes")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            atlas_inventory::databridge::edge_clusters::set_size_bytes(pool, edge_id, bytes).await?;
+        }
         return Ok(serde_json::json!({ "plan_id": plan_id, "state": "loaded", "tables": tables, "mode": "fake" }));
     }
 

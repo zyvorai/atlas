@@ -282,6 +282,22 @@ pub(crate) async fn dispatch_rbd(
                 "rbd": format!("{rbd_pool}/{image}"), "rolled_back_to": snap
             }))
         }
+        JobSpec::RbdSnapDelete {
+            pool: rbd_pool,
+            image,
+            snap,
+        } => {
+            // Unprotect is a no-op if the snapshot was never protected (e.g. it was created
+            // manually, not via Clone) — always attempt it before rm rather than requiring the
+            // caller to know whether a clone was ever taken from it.
+            atlas_driver_ceph::rbd_snap_unprotect(&rbd_pool, &image, &snap)
+                .await
+                .with_context(|| format!("rbd snap unprotect {rbd_pool}/{image}@{snap}"))?;
+            atlas_driver_ceph::rbd_snap_rm(&rbd_pool, &image, &snap)
+                .await
+                .with_context(|| format!("rbd snap rm {rbd_pool}/{image}@{snap}"))?;
+            Ok(serde_json::json!({ "deleted_snapshot": format!("{rbd_pool}/{image}@{snap}") }))
+        }
         _ => anyhow::bail!("not an rbd spec"),
     }
 }

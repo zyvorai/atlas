@@ -78,7 +78,7 @@ unqualified-search-registries = ["docker.io"]
 EOF
 fi
 cd ~/.deployment/atlas
-podman build -t atlas-gateway:ceph -f Dockerfile.ceph .
+podman build --ulimit nofile=65536:65536 -t atlas-gateway:ceph -f Dockerfile.ceph .
 REMOTE
 
 log "3/6 import image into k3s containerd"

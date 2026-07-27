@@ -1,21 +1,32 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Layers, Plus, RefreshCw } from "lucide-react";
 import { http, submit, submitJob } from "../api/client";
-import { useInvalidate, useRbdImages } from "../api/hooks";
+import { useInvalidate, useRbdImages, useVolumes } from "../api/hooks";
 import { Badge, Button, FormModal, GlassSection, PageHeader, SlideOver } from "../ui/kit";
 import { confirmThen, del } from "../ui/confirm";
 import { Table } from "../ui/Table";
-import { gib } from "../lib/format";
+import { fmtBytes, gib } from "../lib/format";
 
 export default function Rbd() {
   const [pool, setPool] = useState("rbd-nvme-prod");
-  const { data } = useRbdImages(pool);
+  const { data, isError, refetch: refetchImages } = useRbdImages(pool);
+  const { data: vols } = useVolumes();
   const inv = useInvalidate();
   const refetch = () => inv("rbd");
   const [create, setCreate] = useState(false);
   const [modal, setModal] = useState<{ img: string; kind: string } | null>(null);
   const [snapImg, setSnapImg] = useState<string | null>(null);
+  // Raw RBD images aren't tracked with a size by /rbd-images; cross-reference the volume
+  // inventory (CSI-provisioned images are), so Resize can show/guard against the current size.
+  const sizeOf = (img: string) => vols?.find((v) => v.backend_native_id === `rbd:${pool}/${img}`)?.size_bytes;
+  const [cloneSnaps, setCloneSnaps] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (modal?.kind === "clone") {
+      setCloneSnaps(null);
+      http.get(`/rbd-images/${pool}/${modal.img}/snapshots`).then((r) => setCloneSnaps(r.data.snapshots || [])).catch(() => setCloneSnaps([]));
+    }
+  }, [modal, pool]);
 
   return (
     <div>
@@ -34,6 +45,8 @@ export default function Rbd() {
       <GlassSection title={<>Images in {pool} <Badge kind="neutral">{data?.images.length || 0}</Badge></>}>
         <Table
           rows={data?.images}
+          error={isError}
+          onRetry={() => refetchImages()}
           rowKey={(i) => i}
           cols={[{ h: "Image", f: (i) => i, mono: true }]}
           actions={(img) => (
@@ -49,19 +62,37 @@ export default function Rbd() {
       </GlassSection>
 
       <FormModal open={create} onClose={() => setCreate(false)} title="Create RBD image" submitLabel="Create"
-        fields={[{ name: "name", label: "Name" }, { name: "size_gib", label: "Size (GiB)", type: "number", value: "1" }]}
+        fields={[{ name: "name", label: "Name" }, { name: "size_gib", label: "Size (GiB)", type: "number", value: "1", min: 1 }]}
         onSubmit={(v) => submitJob("post", "/rbd-images", { name: v.name, size_bytes: gib(+v.size_gib), pool }, `create ${v.name}`, refetch)} />
 
       {modal?.kind === "clone" && (
-        <FormModal open onClose={() => setModal(null)} title={`Clone ${modal.img}`} submitLabel="Clone"
-          fields={[{ name: "name", label: "Clone name" }, { name: "snap", label: "Snapshot", value: "base" }]}
-          onSubmit={(v) => submitJob("post", `/rbd-images/${pool}/${modal.img}/clone`, { name: v.name, snap: v.snap }, "clone", refetch)} />
+        cloneSnaps && cloneSnaps.length === 0 ? (
+          <FormModal open onClose={() => setModal(null)} title={`Clone ${modal.img}`} submitLabel="Clone"
+            fields={[{ name: "name", label: "Clone name" }, { name: "snap", label: "Snapshot", value: "", hint: `${modal.img} has no snapshots yet — create one first (Snaps → snapshot name), then retry.` }]}
+            onSubmit={(v) => submitJob("post", `/rbd-images/${pool}/${modal.img}/clone`, { name: v.name, snap: v.snap }, "clone", refetch)} />
+        ) : (
+          <FormModal open onClose={() => setModal(null)} title={`Clone ${modal.img}`} submitLabel="Clone"
+            fields={[
+              { name: "name", label: "Clone name" },
+              { name: "snap", label: "Snapshot", options: (cloneSnaps || []).map((s) => ({ value: s, label: s })) },
+            ]}
+            onSubmit={(v) => submitJob("post", `/rbd-images/${pool}/${modal.img}/clone`, { name: v.name, snap: v.snap }, "clone", refetch)} />
+        )
       )}
-      {modal?.kind === "resize" && (
-        <FormModal open onClose={() => setModal(null)} title={`Resize ${modal.img}`} submitLabel="Resize"
-          fields={[{ name: "size_gib", label: "New size (GiB)", type: "number" }]}
-          onSubmit={(v) => submitJob("post", `/rbd-images/${pool}/${modal.img}/resize`, { size_bytes: gib(+v.size_gib) }, "resize", refetch)} />
-      )}
+      {modal?.kind === "resize" && (() => {
+        const cur = sizeOf(modal.img);
+        const curGib = cur != null ? Math.ceil(cur / 1073741824) : undefined;
+        return (
+          <FormModal open onClose={() => setModal(null)} title={`Resize ${modal.img}`} submitLabel="Resize"
+            fields={[{
+              name: "size_gib", label: "New size (GiB)", type: "number", min: curGib != null ? curGib : 1,
+              hint: cur != null
+                ? `Current size: ${fmtBytes(cur)} — shrinking isn't supported from this dialog.`
+                : "Current size unknown for this image (not tracked as a volume).",
+            }]}
+            onSubmit={(v) => submitJob("post", `/rbd-images/${pool}/${modal.img}/resize`, { size_bytes: gib(+v.size_gib) }, "resize", refetch)} />
+        );
+      })()}
 
       <RbdSnaps pool={pool} img={snapImg} onClose={() => setSnapImg(null)} />
     </div>
@@ -79,14 +110,18 @@ function RbdSnaps({ pool, img, onClose }: { pool: string; img: string | null; on
     <SlideOver open={!!img} onClose={close} title={<span className="mono">{img} · snapshots</span>}>
       <div className="flex gap-2 mb-4">
         <input className="field" placeholder="snapshot name" value={name} onChange={(e) => setName(e.target.value)} />
-        <Button variant="primary" disabled={!name} onClick={async () => { await submitJob("post", `/rbd-images/${pool}/${img}/snapshots`, { name }, "snapshot"); setName(""); setTimeout(load, 1200); }}>Create</Button>
+        <Button variant="primary" disabled={!name || !/^[a-zA-Z0-9_.-]+$/.test(name)} onClick={async () => { await submitJob("post", `/rbd-images/${pool}/${img}/snapshots`, { name }, "snapshot"); setName(""); setTimeout(load, 1200); }}>Create</Button>
       </div>
+      {name && !/^[a-zA-Z0-9_.-]+$/.test(name) && <div className="text-xs text-danger -mt-2 mb-3">Letters, digits, dot, dash, underscore only (no spaces or slashes).</div>}
       <Table
         rows={snaps || []}
         rowKey={(s) => s}
         cols={[{ h: "Snapshot", f: (s) => s, mono: true }]}
         actions={(s) => (
-          <Button size="sm" variant="danger" onClick={() => confirmThen({ title: `Roll back to ${s}?`, message: "Destructive: reverts the image to this snapshot's contents.", confirmLabel: "Roll back", danger: true }, () => submitJob("post", `/rbd-images/${pool}/${img}/rollback`, { name: s }, `rollback to ${s}`))}>Rollback</Button>
+          <>
+            <Button size="sm" variant="danger" onClick={() => confirmThen({ title: `Roll back to ${s}?`, message: "Destructive: reverts the image to this snapshot's contents.", confirmLabel: "Roll back", danger: true }, () => submitJob("post", `/rbd-images/${pool}/${img}/rollback`, { name: s }, `rollback to ${s}`))}>Rollback</Button>
+            <Button size="sm" variant="danger" onClick={() => del(`snapshot ${s}`, () => submitJob("delete", `/rbd-images/${pool}/${img}/snapshots/${s}`, null, `delete snapshot ${s}`, load))}>Del</Button>
+          </>
         )}
       />
     </SlideOver>

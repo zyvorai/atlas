@@ -80,6 +80,16 @@ pub async fn list_snapshots(
     Ok(rows.into_iter().map(row_to_snapshot).collect())
 }
 
+/// Snapshots in a given state — used to reconcile ones the create job's bounded bind-poll gave up
+/// on (so they'd otherwise show "creating" forever even once the underlying VolumeSnapshot binds).
+pub async fn list_by_state(pool: &SqlitePool, state: &str) -> Result<Vec<StorageSnapshot>> {
+    let rows = sqlx::query(&select("WHERE state = ? ORDER BY created_at DESC"))
+        .bind(state)
+        .fetch_all(pool)
+        .await?;
+    Ok(rows.into_iter().map(row_to_snapshot).collect())
+}
+
 pub async fn delete_snapshot_row(pool: &SqlitePool, id: &str) -> Result<()> {
     sqlx::query("DELETE FROM storage_snapshots WHERE id=?")
         .bind(id)

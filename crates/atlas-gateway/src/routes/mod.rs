@@ -95,6 +95,10 @@ pub fn router(state: AppState) -> Router {
             get(list_rbd_snaps).post(create_rbd_snap),
         )
         .route(
+            "/rbd-images/{pool}/{image}/snapshots/{snap}",
+            axum::routing::delete(delete_rbd_snap),
+        )
+        .route(
             "/rbd-images/{pool}/{image}/rollback",
             post(rollback_rbd_image),
         )

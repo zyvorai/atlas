@@ -39,13 +39,17 @@ pub async fn set_state(
     id: &str,
     state: &str,
     checksum: Option<&str>,
+    format: Option<&str>,
 ) -> Result<()> {
-    sqlx::query("UPDATE storage_backups SET state=?, checksum=COALESCE(?, checksum) WHERE id=?")
-        .bind(state)
-        .bind(checksum)
-        .bind(id)
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "UPDATE storage_backups SET state=?, checksum=COALESCE(?, checksum), format=COALESCE(?, format) WHERE id=?",
+    )
+    .bind(state)
+    .bind(checksum)
+    .bind(format)
+    .bind(id)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
