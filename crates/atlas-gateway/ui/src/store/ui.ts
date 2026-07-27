@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-// Client UI state (zustand): auth token, sidebar, spotlight, and the live job feed.
+// Client UI state (zustand): auth token, spotlight, and the live job feed.
 import { create } from "zustand";
 import type { JobRecord } from "../api/types";
 

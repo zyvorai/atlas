@@ -81,4 +81,4 @@ Kit surfaces (`GlassSection`, `StatCard`, `SlideOver`, buttons, fields, badges) 
 
 Three-line header; health before inventory; no white-alpha hairlines; cluster strings in mono;
 SI/binary compaction; no nested panels; zeros have fill hints; `depth(pct)` for fills;
-⌘K / Esc / `:focus-visible`; **verify with screenshots at 1280/1440/1920 and 900px**.
+⌘K / Esc / `:focus-visible`; responsive top nav at narrow widths (section menus).
