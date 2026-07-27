@@ -46,7 +46,6 @@
   --s7: 48px;
   --s8: 64px;
   --rail-h: 52px;
-  --side-w: 240px;
   --page-max: 1520px;
   --page-gutter: 0px;
   --page-inset: 16px;
@@ -303,13 +302,6 @@
 }
 
 /* ── Shell layout ── */
-.at-shell {
-  position: relative;
-  z-index: 10;
-  display: flex;
-  flex: 1;
-  min-height: 0;
-}
 /* ── Top nav (webpage primary) ── */
 .at-topnav {
   position: relative;
@@ -1061,96 +1053,6 @@
   padding: 1px 5px;
   border-radius: 3px;
   font-size: 12px;
-}
-
-/* Dock — open footer strip (no floating glass box) */
-.at-dock-wrap {
-  position: sticky;
-  bottom: 0;
-  z-index: 55;
-  display: flex;
-  justify-content: center;
-  padding: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    to top,
-    var(--at-void) 0%,
-    color-mix(in srgb, var(--at-void) 88%, transparent) 42%,
-    transparent 100%
-  );
-}
-.at-dock {
-  pointer-events: auto;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 0;
-  max-width: min(920px, 100%);
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  backdrop-filter: none;
-}
-.at-dockbtn {
-  min-width: 0;
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  color: var(--at-ink-3);
-  cursor: pointer;
-  transition: color 0.16s ease, opacity 0.16s ease;
-  position: relative;
-}
-.at-dockbtn::after {
-  content: "";
-  position: absolute;
-  left: 22%;
-  right: 22%;
-  bottom: 0;
-  height: 1px;
-  background: transparent;
-  transition: background 0.16s ease, left 0.16s ease, right 0.16s ease;
-}
-.at-docklbl {
-  font-family: var(--at-face);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  line-height: 1;
-  white-space: nowrap;
-  opacity: 0.85;
-}
-.at-dockbtn:hover {
-  background: transparent;
-  color: var(--at-ink);
-  transform: none;
-}
-.at-dockbtn:hover::after {
-  background: var(--at-line-2);
-}
-.at-dockbtn.on {
-  background: transparent;
-  color: var(--at-cyan);
-}
-.at-dockbtn.on::after {
-  background: var(--at-cyan);
-  left: 28%;
-  right: 28%;
-}
-.at-dockbtn.on:hover {
-  background: transparent;
-  color: var(--at-cyan);
-}
-.at-dockbtn.on .at-docklbl {
-  opacity: 1;
 }
 
 /* Palette / toast */

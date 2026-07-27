@@ -49,7 +49,8 @@ are deleted even on failure.
 ## Design notes
 
 - Sections run **sequentially** (SQLite lock contention under concurrent discover
-  + writes has knocked the NodePort offline in the lab).
+  + writes has knocked the NodePort offline in the lab). Volume create retries once
+  on `database is locked`; the gateway busy-timeout is 30s.
 - Storage class defaults to `zyvor-rbd-prod` (`ATLAS_STORAGE_CLASS`).
 - Bucket `/stats` timeouts count as **WARN**, not FAIL.
 - DR promote / OSD out-in are **not** exercised (scaffold / destructive).

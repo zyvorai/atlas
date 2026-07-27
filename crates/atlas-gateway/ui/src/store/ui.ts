@@ -29,8 +29,6 @@ interface UiState {
   setDensity: (d: Density) => void;
   paused: boolean;
   togglePaused: () => void;
-  sidebarCollapsed: boolean;
-  toggleSidebar: () => void;
   spotlightOpen: boolean;
   setSpotlight: (v: boolean) => void;
   jobs: Record<string, TrackedJob>;
@@ -96,8 +94,6 @@ export const useUi = create<UiState>((set) => ({
   },
   paused: false,
   togglePaused: () => set((s) => ({ paused: !s.paused })),
-  sidebarCollapsed: false,
-  toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   spotlightOpen: false,
   setSpotlight: (v) => set({ spotlightOpen: v }),
   jobs: {},

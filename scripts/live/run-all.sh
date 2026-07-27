@@ -57,7 +57,8 @@ for s in "${SECTIONS[@]}"; do
   # Source so PASS/FAIL counters and CLEANUP_ITEMS accumulate.
   # shellcheck disable=SC1090
   source "${HERE}/${s}"
-  sleep 1
+  # SQLite lab: give writers a beat between discover / mutate sections.
+  sleep 2
 done
 
 live_cleanup
