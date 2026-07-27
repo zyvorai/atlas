@@ -19,7 +19,10 @@ interface UiState {
   setToken: (t: string, persist?: boolean) => void;
   entered: boolean;
   enter: (persist?: boolean) => void;
-  signOut: () => void;
+  /** Optional soft hint shown on the login page after a forced sign-out (no toast). */
+  sessionHint: string | null;
+  clearSessionHint: () => void;
+  signOut: (hint?: string) => void;
   theme: Theme;
   setTheme: (t: Theme) => void;
   density: Density;
@@ -65,17 +68,19 @@ export const useUi = create<UiState>((set) => ({
     set({ token: t });
   },
   entered: savedEntered,
+  sessionHint: null as string | null,
+  clearSessionHint: () => set({ sessionHint: null }),
   enter: (persist = true) => {
     (persist ? ls : ss)?.setItem("atlas.entered", "1");
     (persist ? ss : ls)?.removeItem("atlas.entered");
-    set({ entered: true });
+    set({ entered: true, sessionHint: null });
   },
-  signOut: () => {
+  signOut: (hint) => {
     ls?.removeItem("atlas.entered");
     ls?.removeItem("atlas.token");
     ss?.removeItem("atlas.entered");
     ss?.removeItem("atlas.token");
-    set({ entered: false, token: "" });
+    set({ entered: false, token: "", sessionHint: hint ?? null });
   },
   theme: savedTheme,
   setTheme: (t) => {

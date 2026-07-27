@@ -253,6 +253,9 @@ live_cleanup() {
       token)
         live_req POST "/auth/tokens/${id}/revoke" '{}' || true
         ;;
+      user)
+        live_req DELETE "/auth/users/${id}" || true
+        ;;
     esac
   done
   CLEANUP_ITEMS=()

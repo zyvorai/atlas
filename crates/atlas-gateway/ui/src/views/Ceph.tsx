@@ -2,163 +2,352 @@
 // Ceph — live cluster introspection: health checks, quorum/daemons, PG states, client I/O,
 // the CRUSH OSD tree, and per-pool df. Backed by /ceph/status, /ceph/osd-tree, /ceph/df.
 import { useState } from "react";
-import { Aperture, ChevronDown, ChevronRight } from "lucide-react";
-import { useCephDf, useCephOsdDf, useCephOsdTree, useCephStatus } from "../api/hooks";
-import { Badge, GlassSection, PageHeader, StatCard } from "../ui/kit";
+import { useNavigate } from "react-router-dom";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import { useCephDf, useCephOsdDf, useCephOsdTree, useCephStatus, usePools } from "../api/hooks";
+import { Badge } from "../ui/kit";
+import { PageHead } from "../ui/PageHead";
 import { Table } from "../ui/Table";
-import { fmtBytes, num } from "../lib/format";
+import { depth, depthWidth } from "../lib/depth";
+import { fmtBytes, fmtPct, fmtSi, num } from "../lib/format";
 
 const healthKind = (s?: string) => (s === "HEALTH_OK" ? "success" : s === "HEALTH_ERR" ? "danger" : "warning");
 const PG_COLOR = (state: string) =>
-  state.includes("clean") ? "#34D399" : state.includes("degraded") || state.includes("undersized") ? "#FBBF24" :
-  state.includes("down") || state.includes("stale") || state.includes("incomplete") ? "#F87171" : "#38BDF8";
+  state.includes("clean")
+    ? "var(--d1)"
+    : state.includes("degraded") || state.includes("undersized")
+      ? "var(--at-warn)"
+      : state.includes("down") || state.includes("stale") || state.includes("incomplete")
+        ? "var(--at-fail)"
+        : "var(--d3)";
 
-function bps(n?: number) { return fmtBytes(n || 0) + "/s"; }
+function bps(n?: number) {
+  return fmtBytes(n || 0) + "/s";
+}
 
 export default function Ceph() {
+  const nav = useNavigate();
   const { data: st } = useCephStatus();
   const { data: tree } = useCephOsdTree();
   const { data: df } = useCephDf();
   const { data: osdDf } = useCephOsdDf();
+  const { data: pools } = usePools();
 
-  // per-OSD utilization keyed by osd id
   const util: Record<number, any> = {};
   (osdDf?.nodes || []).forEach((o: any) => (util[o.id] = o));
-  const fullest = (osdDf?.nodes || []).filter((o: any) => o.status === "up").sort((a: any, b: any) => (b.utilization || 0) - (a.utilization || 0))[0];
-  const utilColor = (p: number) => (p >= 85 ? "#F87171" : p >= 70 ? "#FBBF24" : "#34D399");
+  const fullest = (osdDf?.nodes || [])
+    .filter((o: any) => o.status === "up")
+    .sort((a: any, b: any) => (b.utilization || 0) - (a.utilization || 0))[0];
+  const utilColor = (p: number) => (p >= 85 ? "var(--at-fail)" : p >= 70 ? "var(--at-warn)" : "var(--d1)");
 
   const health = st?.health?.status;
   const checks: any[] = st?.health?.checks ? Object.entries(st.health.checks).map(([k, v]: any) => ({ k, ...v })) : [];
+  const healthWhy =
+    checks[0]?.summary?.message ||
+    checks[0]?.k ||
+    (health === "HEALTH_WARN" ? "Often too-few OSDs or undersized PGs on lab clusters" : undefined);
   const osd = st?.osdmap || {};
   const pgs: any[] = st?.pgmap?.pgs_by_state || [];
-  const totalPg = st?.pgmap?.num_pgs || pgs.reduce((a, p) => a + p.count, 0);
+  const totalPg = st?.pgmap?.num_pgs || pgs.reduce((a, p) => a + p.count, 0) || 1;
   const io = st?.pgmap;
 
-  // OSD tree → host → osd hierarchy
   const nodes: any[] = tree?.nodes || [];
-  const byId: Record<number, any> = {}; nodes.forEach((n) => (byId[n.id] = n));
+  const byId: Record<number, any> = {};
+  nodes.forEach((n) => (byId[n.id] = n));
   const roots = nodes.filter((n) => n.type === "root");
 
-  // The CRUSH tree renders a chevron in front of each root/host — make it a real collapse
-  // toggle instead of a static decoration (collapsed by id, expanded by default).
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
-  const toggleNode = (id: number) => setCollapsed((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleNode = (id: number) =>
+    setCollapsed((s) => {
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+
+  const inventoryPools = pools || [];
 
   return (
     <div>
-      <PageHeader icon={Aperture} title="Ceph" subtitle="Live cluster health, CRUSH map, placement groups, and pool usage" />
+      <PageHead
+        eyebrow="INFRASTRUCTURE · CEPH"
+        title="Ceph"
+        state={
+          health
+            ? `${health}${healthWhy ? ` — ${healthWhy}` : ""}${fullest ? ` · fullest OSD ${Math.round(fullest.utilization || 0)}%` : ""}.`
+            : "Waiting on ceph status…"
+        }
+        actions={
+          <button type="button" className="at-btn" onClick={() => nav("/cluster")}>
+            Cluster inventory
+          </button>
+        }
+      />
 
-      {/* status row */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-        <StatCard label="Health" value={<Badge kind={healthKind(health)} dot>{health || "…"}</Badge>} sub={st?.quorum_names ? `mon quorum ${st.quorum_names.length}/${st.monmap?.num_mons ?? "?"}` : ""} />
-        <StatCard label="OSDs up / in" value={<>{num(osd.num_up_osds)}<span className="text-muted-foreground text-sm"> / {num(osd.num_in_osds)}</span></>} sub={`${num(osd.num_osds)} total`} />
-        {fullest ? (
-          <StatCard label="Fullest OSD" value={<span style={{ color: utilColor(fullest.utilization) }}>{fullest.utilization.toFixed(1)}%</span>} sub={`${fullest.name} · avg ${(osdDf?.summary?.average_utilization ?? 0).toFixed(1)}%`} />
-        ) : (
-          <StatCard label="Placement groups" value={num(totalPg)} sub={`${pgs.length} state(s)`} />
-        )}
-        <StatCard label="Client I/O" value={<span className="text-lg">{bps(io?.read_bytes_sec)} r</span>} sub={`${bps(io?.write_bytes_sec)} w · ${num(io?.read_op_per_sec)}/${num(io?.write_op_per_sec)} ops`} />
+      <div className="at-instrs" style={{ marginBottom: 24 }}>
+        <div className="at-instr">
+          <div className="at-caption">Health</div>
+          <div className="at-val md">
+            <Badge kind={healthKind(health)} dot title={healthWhy}>
+              {health || "…"}
+            </Badge>
+          </div>
+          <div className="at-delta">
+            {healthWhy ||
+              (st?.quorum_names ? `mon quorum ${st.quorum_names.length}/${st.monmap?.num_mons ?? "?"}` : "—")}
+          </div>
+        </div>
+        <div className="at-instr">
+          <div className="at-caption">OSDs up / in</div>
+          <div className="at-val md">
+            {num(osd.num_up_osds)}
+            <span className="at-unit">/ {num(osd.num_in_osds)}</span>
+          </div>
+          <div className="at-delta">{num(osd.num_osds)} total</div>
+        </div>
+        <div className="at-instr">
+          <div className="at-caption">{fullest ? "Fullest OSD" : "Placement groups"}</div>
+          <div className="at-val md" style={fullest ? { color: utilColor(fullest.utilization) } : undefined}>
+            {fullest ? `${fullest.utilization.toFixed(1)}%` : num(totalPg)}
+          </div>
+          <div className="at-delta">
+            {fullest
+              ? `${fullest.name} · avg ${(osdDf?.summary?.average_utilization ?? 0).toFixed(1)}%`
+              : `${pgs.length} state(s)`}
+          </div>
+        </div>
+        <div className="at-instr">
+          <div className="at-caption">Client I/O</div>
+          <div className="at-val md" style={{ fontSize: 18 }}>
+            {bps(io?.read_bytes_sec)}
+            <span className="at-unit">read</span>
+          </div>
+          <div className="at-delta">
+            {bps(io?.write_bytes_sec)} write · {fmtSi(io?.read_op_per_sec)}/{fmtSi(io?.write_op_per_sec)} ops
+          </div>
+        </div>
       </div>
 
-      {/* health checks */}
       {checks.length > 0 && (
-        <GlassSection title={<>Health checks <Badge kind="warning">{checks.length}</Badge></>}>
-          <div className="divide-y divide-white/5">
+        <div className="at-mod">
+          <div className="at-panel">
+            <div className="at-panel-bar">
+              <span className="at-caption">Health checks</span>
+              <span className="grow" />
+              <Badge kind="warning">{checks.length}</Badge>
+            </div>
             {checks.map((c) => (
-              <div key={c.k} className="flex items-start gap-3 px-3 py-2.5">
+              <div key={c.k} className="at-list-row">
                 <Badge kind={c.severity === "HEALTH_ERR" ? "danger" : "warning"}>{c.k}</Badge>
-                <span className="text-sm text-muted-foreground">{c.summary?.message || ""}</span>
+                <span style={{ fontSize: 13, color: "var(--at-ink-3)" }}>{c.summary?.message || ""}</span>
               </div>
             ))}
           </div>
-        </GlassSection>
+        </div>
       )}
 
-      {/* PG states */}
-      <GlassSection title="Placement-group states">
-        <div className="p-3">
-          <div className="flex h-2.5 rounded-full overflow-hidden bg-white/5 mb-3">
-            {pgs.map((p) => <div key={p.state_name} style={{ width: `${(p.count / totalPg) * 100}%`, background: PG_COLOR(p.state_name) }} title={`${p.state_name} · ${p.count}`} />)}
+      <div className="at-mod">
+        <div className="at-panel">
+          <div className="at-panel-bar">
+            <span className="at-caption">Placement-group states</span>
+            <span className="grow" />
+            <span className="at-sub" style={{ margin: 0 }}>
+              {num(totalPg)} PGs
+            </span>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {pgs.map((p) => (
-              <span key={p.state_name} className="mono text-xs px-2.5 py-1 rounded-full border border-white/10 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full" style={{ background: PG_COLOR(p.state_name) }} />{p.state_name} <b className="text-foreground">{p.count}</b>
-              </span>
-            ))}
+          <div style={{ padding: 16 }}>
+            <div className="at-pg-bar">
+              {pgs.map((p) => (
+                <div
+                  key={p.state_name}
+                  style={{
+                    width: `${(p.count / totalPg) * 100}%`,
+                    background: PG_COLOR(p.state_name),
+                  }}
+                  title={`${p.state_name} · ${p.count}`}
+                />
+              ))}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {pgs.map((p) => (
+                <span key={p.state_name} className="at-pg-chip">
+                  <span style={{ width: 8, height: 8, background: PG_COLOR(p.state_name) }} />
+                  {p.state_name}
+                  <b style={{ color: "var(--at-ink)" }}>{p.count}</b>
+                </span>
+              ))}
+              {!pgs.length && <span style={{ color: "var(--at-ink-4)", fontSize: 13 }}>No PG state data.</span>}
+            </div>
           </div>
         </div>
-      </GlassSection>
+      </div>
 
-      {/* CRUSH / OSD tree */}
-      <GlassSection title={<>CRUSH map · OSD tree <Badge kind="neutral">{nodes.filter((n) => n.type === "osd").length} OSDs</Badge></>}>
-        <div className="p-3 font-mono text-sm">
-          {roots.map((r) => {
-            const rOpen = !collapsed.has(r.id);
-            return (
-            <div key={r.id}>
-              <button type="button" onClick={() => toggleNode(r.id)} className="flex items-center gap-2 py-1 hover:text-white transition-colors">
-                {rOpen ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronRight size={14} className="text-muted-foreground" />}
-                <span className="text-sky-300">{r.type}</span> {r.name}
-              </button>
-              {rOpen && (r.children || []).map((hid: number) => {
-                const host = byId[hid]; if (!host) return null;
-                const hOpen = !collapsed.has(hid);
-                return (
-                  <div key={hid} className="ml-5">
-                    <button type="button" onClick={() => toggleNode(hid)} className="flex items-center gap-2 py-1 hover:text-white transition-colors">
-                      {hOpen ? <ChevronDown size={13} className="text-muted-foreground" /> : <ChevronRight size={13} className="text-muted-foreground" />}
-                      <span className="text-violet-300">host</span> {host.name}
-                    </button>
-                    {hOpen && <div className="ml-6">
-                      {(host.children || []).map((oid: number) => {
-                        const o = byId[oid]; if (!o) return null;
-                        const up = o.status === "up";
-                        const u = util[oid];
-                        const up2 = up;
-                        return (
-                          <div key={oid} className="flex items-center gap-3 py-0.5">
-                            <span className="text-muted-foreground w-16">{o.name}</span>
-                            <Badge kind={up2 ? "success" : "danger"} dot>{o.status}</Badge>
-                            {u && up2 ? (
-                              <>
-                                <div className="w-28 h-1.5 rounded-full bg-white/5 overflow-hidden">
-                                  <div className="h-full rounded-full" style={{ width: `${Math.min(100, u.utilization)}%`, background: utilColor(u.utilization) }} />
-                                </div>
-                                <span className="text-xs tabular-nums" style={{ color: utilColor(u.utilization) }}>{u.utilization.toFixed(1)}%</span>
-                                <span className="text-muted-foreground text-xs">{u.pgs} PGs · {u.device_class}</span>
-                              </>
+      <div className="at-mod">
+        <div className="at-panel">
+          <div className="at-panel-bar">
+            <span className="at-caption">CRUSH map · OSD tree</span>
+            <span className="grow" />
+            <span className="at-sub" style={{ margin: 0 }}>
+              {nodes.filter((n) => n.type === "osd").length} OSDs
+            </span>
+          </div>
+          <div className="mono" style={{ padding: 16, fontSize: 12.5 }}>
+            {roots.map((r) => {
+              const rOpen = !collapsed.has(r.id);
+              return (
+                <div key={r.id}>
+                  <button
+                    type="button"
+                    onClick={() => toggleNode(r.id)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "6px 0",
+                      background: "none",
+                      border: "none",
+                      color: "var(--at-ink)",
+                      cursor: "pointer",
+                      font: "inherit",
+                    }}
+                  >
+                    {rOpen ? <ChevronDown size={14} color="var(--at-ink-4)" /> : <ChevronRight size={14} color="var(--at-ink-4)" />}
+                    <span style={{ color: "var(--at-cyan)" }}>{r.type}</span> {r.name}
+                  </button>
+                  {rOpen &&
+                    (r.children || []).map((hid: number) => {
+                      const host = byId[hid];
+                      if (!host) return null;
+                      const hOpen = !collapsed.has(hid);
+                      return (
+                        <div key={hid} style={{ marginLeft: 20 }}>
+                          <button
+                            type="button"
+                            onClick={() => toggleNode(hid)}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              padding: "6px 0",
+                              background: "none",
+                              border: "none",
+                              color: "var(--at-ink)",
+                              cursor: "pointer",
+                              font: "inherit",
+                            }}
+                          >
+                            {hOpen ? (
+                              <ChevronDown size={13} color="var(--at-ink-4)" />
                             ) : (
-                              <span className="text-muted-foreground text-xs">weight {(o.crush_weight ?? 0).toFixed?.(1) ?? o.crush_weight} · reweight {o.reweight}</span>
+                              <ChevronRight size={13} color="var(--at-ink-4)" />
                             )}
-                          </div>
-                        );
-                      })}
-                    </div>}
+                            <span style={{ color: "var(--d3)" }}>host</span> {host.name}
+                          </button>
+                          {hOpen && (
+                            <div style={{ marginLeft: 24 }}>
+                              {(host.children || []).map((oid: number) => {
+                                const o = byId[oid];
+                                if (!o) return null;
+                                const up = o.status === "up";
+                                const u = util[oid];
+                                const pct = u?.utilization || 0;
+                                const d = depth(pct);
+                                return (
+                                  <div
+                                    key={oid}
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 12,
+                                      padding: "4px 0",
+                                      flexWrap: "wrap",
+                                    }}
+                                  >
+                                    <span style={{ width: 72, color: "var(--at-ink-3)" }}>{o.name}</span>
+                                    <Badge kind={up ? "success" : "danger"} dot>
+                                      {o.status}
+                                    </Badge>
+                                    {u && up ? (
+                                      <>
+                                        <div className={`at-mini ${d.cls}`} style={{ width: 96 }}>
+                                          <i style={{ width: depthWidth(pct) }} />
+                                        </div>
+                                        <span className="mono" style={{ fontSize: 11, color: utilColor(pct) }}>
+                                          {pct.toFixed(1)}%
+                                        </span>
+                                        <span style={{ fontSize: 11, color: "var(--at-ink-4)" }}>
+                                          {u.pgs} PGs · {u.device_class}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span style={{ fontSize: 11, color: "var(--at-ink-4)" }}>
+                                        weight {(o.crush_weight ?? 0).toFixed?.(1) ?? o.crush_weight} · reweight {o.reweight}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              );
+            })}
+            {!nodes.length && <div style={{ color: "var(--at-ink-4)" }}>No OSD tree.</div>}
+          </div>
+        </div>
+      </div>
+
+      <div className="at-mod">
+        <div className="at-modhead">
+          <span className="at-modtitle">Pool soundings</span>
+          <span className="at-modnote">from inventory · click for detail</span>
+        </div>
+        <div className="at-panel" style={{ marginBottom: 16 }}>
+          {inventoryPools.slice(0, 8).map((p) => {
+            const max = p.max_bytes || 0;
+            const used = p.used_bytes || 0;
+            const pct = max > 0 ? (used / max) * 100 : 0;
+            const d = depth(pct);
+            return (
+              <button key={p.id} type="button" className="at-basin" onClick={() => nav(`/pools/${p.id}`)}>
+                <div className="at-basin-id">
+                  <div className="at-basin-name">
+                    <span className="mono">{p.name}</span>
+                    <span className="at-tag">{p.kind}</span>
                   </div>
-                );
-              })}
-            </div>
+                  <div className="at-trough">
+                    <i className={`at-level ${d.cls}`} style={{ width: depthWidth(pct) }} />
+                  </div>
+                </div>
+                <div className="at-basin-read">
+                  {fmtBytes(used)} of {fmtBytes(max)}
+                </div>
+                <div className={`at-basin-pct ${d.cls} fg`}>{fmtPct(pct)}%</div>
+              </button>
             );
           })}
-          {!nodes.length && <div className="text-muted-foreground">No OSD tree.</div>}
+          {!inventoryPools.length && (
+            <div style={{ padding: 20, color: "var(--at-ink-4)", fontSize: 13 }}>No inventory pools yet.</div>
+          )}
         </div>
-      </GlassSection>
+      </div>
 
-      {/* pool df */}
-      <GlassSection title={<>Pool usage · ceph df <Badge kind="neutral">{df?.pools?.length || 0}</Badge></>}>
-        <Table
-          rows={df?.pools}
-          rowKey={(p: any) => String(p.id)}
-          cols={[
-            { h: "Pool", f: (p: any) => p.name, mono: true },
-            { h: "Objects", f: (p: any) => num(p.stats?.objects) },
-            { h: "Stored", f: (p: any) => fmtBytes(p.stats?.stored) },
-            { h: "% used", f: (p: any) => ((p.stats?.percent_used || 0) * 100).toFixed(2) + "%" },
-            { h: "Max avail", f: (p: any) => fmtBytes(p.stats?.max_avail) },
-          ]}
-        />
-      </GlassSection>
+      <Table
+        soundings
+        panelTitle="Pool usage · ceph df"
+        rows={df?.pools}
+        rowKey={(p: any) => String(p.id)}
+        empty="No ceph df pools."
+        cols={[
+          { h: "Pool", f: (p: any) => p.name, mono: true },
+          { h: "Objects", f: (p: any) => num(p.stats?.objects) },
+          { h: "Stored", f: (p: any) => fmtBytes(p.stats?.stored) },
+          { h: "% used", f: (p: any) => ((p.stats?.percent_used || 0) * 100).toFixed(2) + "%" },
+          { h: "Max avail", f: (p: any) => fmtBytes(p.stats?.max_avail) },
+        ]}
+      />
     </div>
   );
 }

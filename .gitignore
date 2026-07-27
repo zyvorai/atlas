@@ -12,3 +12,4 @@ atlas.db-shm
 # Atlas Storage Center UI (React) — build artifacts (the Docker node stage / `make ui` regenerate dist)
 crates/atlas-gateway/ui/node_modules/
 crates/atlas-gateway/ui/dist/
+crates/atlas-gateway/ui/.screenshots/

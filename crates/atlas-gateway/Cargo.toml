@@ -44,6 +44,7 @@ clap = { workspace = true }
 anyhow = { workspace = true }
 sqlx = { workspace = true }
 jsonwebtoken = { workspace = true }
+sha2 = "0.10"
 uuid = { workspace = true }
 tonic = "0.12"
 tonic-reflection = "0.12"

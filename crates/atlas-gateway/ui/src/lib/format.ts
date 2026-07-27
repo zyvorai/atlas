@@ -16,7 +16,65 @@ export function fmtBytes(n?: number | null): string {
   return `${i ? x.toFixed(1) : x} ${u[i]}`;
 }
 
+/** Like fmtBytes, but unknown/null capacity shows as an em dash instead of a misleading "0 B". */
+export function fmtBytesOpt(n?: number | null): string {
+  if (n == null || Number.isNaN(Number(n))) return "—";
+  return fmtBytes(n);
+}
+
+/**
+ * Actionable fill projection for Command Deck / Observatory.
+ * Tiny growth rates produce absurd horizons (hundreds of thousands of days) — treat those as steady.
+ */
+export function fmtForecastFill(
+  days: number | null | undefined,
+  growthBytesPerDay?: number | null,
+): string | null {
+  if (days == null || !Number.isFinite(days) || days <= 0) return null;
+  // > ~10 years is not an operator-actionable signal
+  if (days > 3650) return null;
+  const growth =
+    growthBytesPerDay != null && growthBytesPerDay > 0
+      ? ` · +${fmtBytes(growthBytesPerDay)}/day`
+      : "";
+  if (days >= 365) return `Full in ~${(days / 365).toFixed(1)}y${growth}`;
+  if (days >= 45) return `Full in ~${Math.round(days)}d${growth}`;
+  return `Full in ~${days < 10 ? days.toFixed(1) : Math.round(days)}d${growth}`;
+}
+
+export function forecastUrgency(
+  days: number | null | undefined,
+): "danger" | "warning" | "muted" | null {
+  if (days == null || !Number.isFinite(days) || days <= 0 || days > 3650) return null;
+  if (days <= 3) return "danger";
+  if (days <= 14) return "warning";
+  return "muted";
+}
+
 export const num = (n?: number | null) => (Number(n) || 0).toLocaleString();
+
+/** SI compaction for machine counters (ops, objects) — never locale digit grouping. */
+export function fmtSi(n?: number | null, digits = 1): string {
+  const v = Number(n) || 0;
+  const abs = Math.abs(v);
+  if (abs < 1000) return String(Math.round(v));
+  const units = ["K", "M", "B", "T"];
+  let x = abs;
+  let i = -1;
+  while (x >= 1000 && i < units.length - 1) {
+    x /= 1000;
+    i++;
+  }
+  const body = x >= 100 ? x.toFixed(0) : x.toFixed(digits);
+  return `${v < 0 ? "-" : ""}${body}${units[i]}`;
+}
+
+/** Integer percent for depth readouts. */
+export function fmtPct(n?: number | null): number {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return 0;
+  return Math.max(0, Math.min(100, Math.round(v)));
+}
 
 export function timeAgo(iso?: string | null): string {
   if (!iso) return "—";

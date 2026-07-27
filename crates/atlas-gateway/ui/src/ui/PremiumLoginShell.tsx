@@ -82,6 +82,8 @@ export type PremiumLoginShellProps = {
   panelHint?: ReactNode;
   footer?: ReactNode;
   formClassName?: string;
+  /** `flush` = no card/box around the form — open webpage feel. */
+  formSurface?: "card" | "flush";
   children: ReactNode;
 };
 
@@ -106,6 +108,7 @@ export function PremiumLoginShell({
   panelHint,
   footer,
   formClassName = "",
+  formSurface = "card",
   children,
 }: PremiumLoginShellProps) {
   const isSecure = variant === "secure";
@@ -117,13 +120,17 @@ export function PremiumLoginShell({
     "flex-1 flex flex-col lg:flex-row relative overflow-hidden",
     accentClass,
     isSecure ? "login-page-secure" : "",
+    formSurface === "flush" ? "login-page-flush" : "",
     pageThemeClass,
   ]
     .filter(Boolean)
     .join(" ");
-  const cardClass = isSecure
-    ? "login-secure-card p-8"
-    : "login-glass login-glass-border rounded-2xl p-8 shadow-2xl";
+  const cardClass =
+    formSurface === "flush"
+      ? "login-flush-form"
+      : isSecure
+        ? "login-secure-card p-8"
+        : "login-glass login-glass-border rounded-2xl p-8 shadow-2xl";
 
   const featureCards = features.map((f, i) => (
     <div

@@ -33,6 +33,8 @@ async fn spawn() -> SocketAddr {
         jwt_secret: "maint-test-secret-key-at-least-32-byte".into(),
         auth_required: false,
         bootstrap_admin_token: None,
+        admin_username: "admin".into(),
+        admin_password: "Admin@321".into(),
         monitor_interval_secs: 0,
         ceph_prometheus_url: None,
         alert_webhook_url: None,

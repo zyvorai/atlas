@@ -1,31 +1,43 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import { useState } from "react";
-import { ShieldCheck } from "lucide-react";
 import { useValidations } from "../../api/hooks";
 import type { ValidationRun } from "../../api/types";
-import { Badge, Button, GlassSection, PageHeader, SlideOver } from "../../ui/kit";
+import { Badge, Button, SlideOver } from "../../ui/kit";
+import { PageHead } from "../../ui/PageHead";
 import { Table } from "../../ui/Table";
 
 export default function Validation() {
   const { data } = useValidations();
   const [detail, setDetail] = useState<ValidationRun | null>(null);
+  const n = data?.length || 0;
+  const failed = (data || []).filter((r) => r.state === "failed").length;
   return (
     <div>
-      <PageHeader icon={ShieldCheck} title="Validation" subtitle="Source vs edge comparisons (row counts, checksums, schema diff) run before cutover" />
-      <GlassSection title={<>Validation runs <Badge kind="neutral">{data?.length || 0}</Badge></>}>
-        <Table
-          rows={data}
-          rowKey={(r) => r.id}
-          empty="No validation runs yet."
-          cols={[
-            { h: "Kind", f: (r) => r.kind },
-            { h: "Tables", f: (r) => `${r.tables_total - r.tables_mismatched}/${r.tables_total} match` },
-            { h: "State", f: (r) => <Badge kind={r.state === "passed" ? "success" : r.state === "failed" ? "danger" : "warning"} dot>{r.state}</Badge> },
-            { h: "When", f: (r) => r.completed_at || r.created_at || "—" },
-          ]}
-          actions={(r) => <Button size="sm" onClick={() => setDetail(r)}>Details</Button>}
-        />
-      </GlassSection>
+      <PageHead
+        eyebrow="DATABRIDGE · INDEX"
+        title="Validation"
+        state={
+          n
+            ? failed
+              ? `${n} run${n === 1 ? "" : "s"} · ${failed} failed — source vs edge before cutover.`
+              : `${n} validation run${n === 1 ? "" : "s"} — row counts, checksums, schema diff.`
+            : "No validation runs yet. Comparisons run before cutover."
+        }
+      />
+      <Table
+        soundings
+        panelTitle="Validation index"
+        rows={data}
+        rowKey={(r) => r.id}
+        empty="No validation runs yet."
+        cols={[
+          { h: "Kind", f: (r) => r.kind },
+          { h: "Tables", f: (r) => `${r.tables_total - r.tables_mismatched}/${r.tables_total} match` },
+          { h: "State", f: (r) => <Badge kind={r.state === "passed" ? "success" : r.state === "failed" ? "danger" : "warning"} dot>{r.state}</Badge> },
+          { h: "When", f: (r) => r.completed_at || r.created_at || "—" },
+        ]}
+        actions={(r) => <Button size="sm" onClick={() => setDetail(r)}>Details</Button>}
+      />
 
       <SlideOver open={!!detail} onClose={() => setDetail(null)} title={<span className="mono">{detail?.kind} validation</span>} width={560}>
         {detail && (

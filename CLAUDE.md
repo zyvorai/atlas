@@ -15,7 +15,9 @@ Implemented:
   (`export-diff`→S3, retention, presigned), scheduled snapshots/backups, per-tenant quotas + policies.
 - Observability: monitor/alerts + webhook, `/metrics` (Prometheus self), `/metrics/{history,forecast,ceph}`,
   Ceph-native `/ceph/{status,osd-tree,osd-df,df}`, unified `/events`, `/readyz`; `deploy/observability/`.
-- **Zeus OS React console** embedded in the gateway (HTTPS, login, Observatory, Ceph page, Nebula theme).
+- **React console** embedded in the gateway (HTTPS, login, Observatory, Ceph page).
+  UI identity: **Soundings** bathymetric system — see `docs/ATLAS_UI_CONTRACT.md`
+  and `crates/atlas-gateway/ui/src/atlas-soundings.css`.
 - `deploy/rook-ceph-lab/` (single-node overlay + day-2 ops scripts) + `deploy/k8s/` ceph deployment.
 - **DataBridge** (`atlas-databridge`): cloud-to-edge DB migration control plane. **Six source engines**
   — Postgres, MySQL, MariaDB (homogeneous → CNPG/Percona) + Oracle, SQL Server (heterogeneous → Postgres

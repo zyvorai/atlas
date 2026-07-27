@@ -1,10 +1,11 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import { useEffect, useRef, useState } from "react";
-import { Cloud, Download, Plus, Upload } from "lucide-react";
+import { Download, Plus, Upload } from "lucide-react";
 import { apiError, http, submitJob, toast } from "../api/client";
 import { useBuckets, useInvalidate } from "../api/hooks";
 import type { StorageBucket } from "../api/types";
-import { Badge, Button, FormModal, GlassSection, PageHeader, SlideOver } from "../ui/kit";
+import { Badge, Button, FormModal, SlideOver } from "../ui/kit";
+import { PageHead } from "../ui/PageHead";
 import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
 import { fmtBytes, num } from "../lib/format";
@@ -15,36 +16,63 @@ export default function Buckets() {
   const refetch = () => inv("buckets", "summary");
   const [create, setCreate] = useState(false);
   const [objBucket, setObjBucket] = useState<StorageBucket | null>(null);
+  const n = data?.length || 0;
 
   return (
     <div>
-      <PageHeader icon={Cloud} title="Buckets" subtitle="RGW object buckets (ObjectBucketClaim) — quotas, stats, and browse / upload / download / delete objects"
-        actions={<Button variant="primary" icon={Plus} onClick={() => setCreate(true)}>Bucket</Button>} />
-      <GlassSection title={<>Buckets <Badge kind="neutral">{data?.length || 0}</Badge></>}>
-        <Table
-          rows={data}
-          rowKey={(b) => b.id}
-          empty="No buckets yet."
-          emptyCta={<Button variant="primary" icon={Plus} onClick={() => setCreate(true)}>Create bucket</Button>}
-          cols={[
-            { h: "Name", f: (b) => b.bucket_name || b.name || b.id, mono: true },
-            { h: "State", f: (b) => <Badge kind={b.state === "bound" ? "success" : "warning"} dot>{b.state}</Badge> },
-            { h: "Namespace", f: (b) => b.namespace },
-            { h: "Endpoint", f: (b) => <span className="mono text-muted-foreground">{b.endpoint || "—"}</span> },
-          ]}
-          actions={(b) => (
-            <>
-              <Button size="sm" onClick={async () => {
-                try { const s = await http.get(`/buckets/${b.id}/stats`); const d = s.data;
-                  toast(`${d.bucket}: ${num(d.num_objects)} objs, ${fmtBytes(d.size_bytes)}`, "ok");
-                } catch (e) { toast(`stats: ${apiError(e)}`, "err"); }
-              }}>Stats</Button>
-              <Button size="sm" onClick={() => setObjBucket(b)}>Objects</Button>
-              <Button size="sm" variant="danger" onClick={() => del(`bucket ${b.bucket_name || b.name || b.id}`, () => submitJob("delete", `/buckets/${b.id}?force=true`, null, "delete bucket", refetch))}>Del</Button>
-            </>
-          )}
-        />
-      </GlassSection>
+      <PageHead
+        eyebrow="DATA PROTECTION · INDEX"
+        title="Buckets"
+        state={
+          n
+            ? `${n} RGW bucket${n === 1 ? "" : "s"} — quotas, stats, browse / upload / download.`
+            : "Object gateway unused. Create the first bucket to begin exports and backups."
+        }
+        actions={
+          <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
+            <Plus size={14} /> Bucket
+          </button>
+        }
+      />
+      <Table
+        soundings
+        panelTitle="Bucket index"
+        rows={data}
+        rowKey={(b) => b.id}
+        empty="No buckets yet."
+        emptyCta={
+          <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
+            <Plus size={14} /> Create bucket
+          </button>
+        }
+        cols={[
+          { h: "Name", f: (b) => b.bucket_name || b.name || b.id, mono: true },
+          { h: "State", f: (b) => <Badge kind={b.state === "bound" ? "success" : "warning"} dot>{b.state}</Badge> },
+          { h: "Namespace", f: (b) => b.namespace },
+          { h: "Endpoint", f: (b) => <span className="mono" style={{ color: "var(--at-ink-4)" }}>{b.endpoint || "—"}</span> },
+        ]}
+        actions={(b) => (
+          <>
+            <Button size="sm" onClick={async () => {
+              try {
+                const s = await http.get(`/buckets/${b.id}/stats`, { timeout: 12000 });
+                const d = s.data;
+                toast(`${d.bucket}: ${num(d.num_objects)} objs, ${fmtBytes(d.size_bytes)}`, "ok");
+              } catch (e) {
+                const msg = apiError(e);
+                const soft =
+                  /timeout|timed out|network|ECONNABORTED|unavailable|no bucket_name/i.test(msg)
+                  || (e as { code?: string })?.code === "ECONNABORTED"
+                  || (e as { response?: { status?: number } })?.response?.status === 400
+                  || (e as { response?: { status?: number } })?.response?.status === 504;
+                toast(soft ? "Stats unavailable right now" : `stats: ${msg}`, soft ? "info" : "err");
+              }
+            }}>Stats</Button>
+            <Button size="sm" onClick={() => setObjBucket(b)}>Objects</Button>
+            <Button size="sm" variant="danger" onClick={() => del(`bucket ${b.bucket_name || b.name || b.id}`, () => submitJob("delete", `/buckets/${b.id}?force=true`, null, "delete bucket", refetch))}>Del</Button>
+          </>
+        )}
+      />
 
       <FormModal open={create} onClose={() => setCreate(false)} title="Create bucket" submitLabel="Create"
         fields={[

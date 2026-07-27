@@ -145,6 +145,333 @@ pub(crate) struct IssueTokenBody {
     ttl_secs: Option<u64>,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct LoginBody {
+    username: String,
+    password: String,
+    /// Session lifetime in seconds (default 24h, capped at 90 days).
+    #[serde(default)]
+    ttl_secs: Option<u64>,
+}
+
+/// `POST /auth/login` — exchange console username/password for a JWT.
+/// Checks admin-created `console_users` first, then the bootstrap env admin.
+pub(crate) async fn login(
+    State(s): State<AppState>,
+    Json(body): Json<LoginBody>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    if body.username.trim().is_empty() || body.password.is_empty() {
+        return Err(AppError::Validation("username and password are required".into()));
+    }
+    const MAX_TTL: u64 = 90 * 24 * 3600;
+    let ttl_secs = body.ttl_secs.unwrap_or(86_400).clamp(60, MAX_TTL);
+    let user = body.username.trim();
+
+    // 1) DB console users (admin-created, with privilege level).
+    if let Some((hash, role)) = atlas_inventory::users::credentials_for_login(&s.pool, user)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?
+    {
+        if !crate::auth::verify_password_hash(&body.password, &hash) {
+            return Err(AppError::Auth("invalid username or password".into()));
+        }
+        return mint_login_response(&s, user, &role, ttl_secs).await;
+    }
+
+    // 2) Bootstrap env admin (default admin / Admin@321).
+    let ok = crate::auth::verify_console_credentials(
+        user,
+        &body.password,
+        &s.config.admin_username,
+        &s.config.admin_password,
+    );
+    if !ok {
+        return Err(AppError::Auth("invalid username or password".into()));
+    }
+    mint_login_response(&s, &s.config.admin_username, "admin", ttl_secs).await
+}
+
+async fn mint_login_response(
+    s: &AppState,
+    subject: &str,
+    role: &str,
+    ttl_secs: u64,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    let (token, exp, jti) =
+        crate::auth::mint_token(&s.config.jwt_secret, subject, role, ttl_secs)?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        subject,
+        "auth.login",
+        "console",
+        subject,
+        "ok",
+        Some(json!({ "role": role, "ttl_secs": ttl_secs, "jti": jti })),
+        None,
+    )
+    .await;
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "token": token,
+            "jti": jti,
+            "subject": subject,
+            "role": role,
+            "level": crate::auth::role_level(role),
+            "expires_at": exp,
+            "ttl_secs": ttl_secs,
+        })),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CreateUserBody {
+    username: String,
+    password: String,
+    /// Privilege level: `viewer`, `operator`, or `admin` (default viewer).
+    #[serde(default)]
+    role: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpdateUserBody {
+    #[serde(default)]
+    role: Option<String>,
+    #[serde(default)]
+    password: Option<String>,
+    #[serde(default)]
+    disabled: Option<bool>,
+}
+
+/// `GET /auth/users` — list console users (admin).
+pub(crate) async fn list_users(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    let users = atlas_inventory::users::list(&s.pool)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?;
+    // Surface the bootstrap env admin as a virtual entry so operators see it in the UI.
+    let mut items: Vec<Value> = users
+        .into_iter()
+        .map(|u| {
+            json!({
+                "username": u.username,
+                "role": u.role,
+                "level": crate::auth::role_level(&u.role),
+                "disabled": u.disabled,
+                "created_by": u.created_by,
+                "created_at": u.created_at,
+                "updated_at": u.updated_at,
+                "kind": "user",
+            })
+        })
+        .collect();
+    items.insert(
+        0,
+        json!({
+            "username": s.config.admin_username,
+            "role": "admin",
+            "level": crate::auth::ROLE_ADMIN,
+            "disabled": false,
+            "created_by": null,
+            "created_at": null,
+            "updated_at": null,
+            "kind": "bootstrap",
+        }),
+    );
+    Ok(Json(json!(items)))
+}
+
+/// `POST /auth/users` — create a console user with a privilege level (admin).
+pub(crate) async fn create_user(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Json(body): Json<CreateUserBody>,
+) -> AppResult<(StatusCode, Json<Value>)> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    let username = body.username.trim();
+    if username.is_empty() {
+        return Err(AppError::Validation("username is required".into()));
+    }
+    if username.len() > 64 || !username.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.') {
+        return Err(AppError::Validation(
+            "username must be 1–64 chars of [A-Za-z0-9._-]".into(),
+        ));
+    }
+    if username.eq_ignore_ascii_case(&s.config.admin_username) {
+        return Err(AppError::Conflict(format!(
+            "username '{}' is reserved for the bootstrap admin",
+            s.config.admin_username
+        )));
+    }
+    if body.password.len() < 8 {
+        return Err(AppError::Validation("password must be at least 8 characters".into()));
+    }
+    let role = crate::auth::normalize_console_role(body.role.as_deref().unwrap_or("viewer"))
+        .map_err(AppError::Validation)?;
+    let hash = crate::auth::hash_password(&body.password);
+    let user = atlas_inventory::users::create(&s.pool, username, &hash, role, &actor.id)
+        .await
+        .map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("already exists") {
+                AppError::Conflict(msg)
+            } else {
+                AppError::Database(msg)
+            }
+        })?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "auth.user.created",
+        "console_user",
+        &user.username,
+        "ok",
+        Some(json!({ "role": user.role })),
+        None,
+    )
+    .await;
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({
+            "username": user.username,
+            "role": user.role,
+            "level": crate::auth::role_level(&user.role),
+            "disabled": user.disabled,
+            "created_by": user.created_by,
+            "created_at": user.created_at,
+            "kind": "user",
+        })),
+    ))
+}
+
+/// `PUT /auth/users/{username}` — update role, password, or disabled flag (admin).
+pub(crate) async fn update_user(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(username): Path<String>,
+    Json(body): Json<UpdateUserBody>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    if username.eq_ignore_ascii_case(&s.config.admin_username) {
+        return Err(AppError::Validation(
+            "bootstrap admin is managed via ATLAS_ADMIN_* env, not this API".into(),
+        ));
+    }
+    let role = match body.role.as_deref() {
+        Some(r) => Some(crate::auth::normalize_console_role(r).map_err(AppError::Validation)?),
+        None => None,
+    };
+    if let Some(pw) = body.password.as_deref() {
+        if pw.len() < 8 {
+            return Err(AppError::Validation("password must be at least 8 characters".into()));
+        }
+    }
+    // Refuse demoting/disabling the last enabled admin in the DB (bootstrap still works, but
+    // keep at least one named admin when present).
+    if body.disabled == Some(true) || role == Some("viewer") || role == Some("operator") {
+        if let Some(existing) = atlas_inventory::users::get(&s.pool, &username)
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?
+        {
+            if existing.role == "admin" && !existing.disabled {
+                let admins = atlas_inventory::users::count_admins(&s.pool)
+                    .await
+                    .map_err(|e| AppError::Database(e.to_string()))?;
+                if admins <= 1 && (body.disabled == Some(true) || role.is_some_and(|r| r != "admin"))
+                {
+                    return Err(AppError::Validation(
+                        "cannot disable or demote the last admin user".into(),
+                    ));
+                }
+            }
+        }
+    }
+    let hash = body.password.as_deref().map(crate::auth::hash_password);
+    let user = atlas_inventory::users::update(
+        &s.pool,
+        &username,
+        role,
+        hash.as_deref(),
+        body.disabled,
+    )
+    .await
+    .map_err(|e| AppError::Database(e.to_string()))?
+    .ok_or_else(|| AppError::NotFound(format!("user {username}")))?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "auth.user.updated",
+        "console_user",
+        &user.username,
+        "ok",
+        Some(json!({ "role": user.role, "disabled": user.disabled })),
+        None,
+    )
+    .await;
+    Ok(Json(json!({
+        "username": user.username,
+        "role": user.role,
+        "level": crate::auth::role_level(&user.role),
+        "disabled": user.disabled,
+        "created_by": user.created_by,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+        "kind": "user",
+    })))
+}
+
+/// `DELETE /auth/users/{username}` — remove a console user (admin).
+pub(crate) async fn delete_user(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(username): Path<String>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    if username.eq_ignore_ascii_case(&s.config.admin_username) {
+        return Err(AppError::Validation("cannot delete the bootstrap admin".into()));
+    }
+    if let Some(existing) = atlas_inventory::users::get(&s.pool, &username)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?
+    {
+        if existing.role == "admin" && !existing.disabled {
+            let admins = atlas_inventory::users::count_admins(&s.pool)
+                .await
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            if admins <= 1 {
+                return Err(AppError::Validation(
+                    "cannot delete the last admin user".into(),
+                ));
+            }
+        }
+    }
+    let removed = atlas_inventory::users::delete(&s.pool, &username)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?;
+    if !removed {
+        return Err(AppError::NotFound(format!("user {username}")));
+    }
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "auth.user.deleted",
+        "console_user",
+        &username,
+        "ok",
+        None,
+        None,
+    )
+    .await;
+    Ok(Json(json!({ "deleted": username })))
+}
+
 /// `POST /auth/tokens` — mint a scoped service-account JWT for a product (admin). The shared secret
 /// never leaves Atlas; the caller receives only the signed token + its claims.
 pub(crate) async fn issue_token(

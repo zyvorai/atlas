@@ -59,6 +59,28 @@
   display: none;
 }
 
+/* Flush sign-in — no card; form sits on the page like a normal web surface */
+.login-page-flush.login-page-secure .login-panel {
+  background: var(--login-secure-bg);
+  background-image: none;
+}
+.login-page-flush .login-panel-grid {
+  opacity: 0.28;
+}
+.login-page-flush .login-flush-form {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  border-radius: 0;
+}
+.login-page-flush .login-flush-form::before {
+  display: none;
+}
+.login-page-flush.login-page-secure .relative.py-3 span {
+  background: var(--login-secure-bg);
+}
+
 .login-page-secure .login-logo-ring {
   animation: none;
   box-shadow: none;

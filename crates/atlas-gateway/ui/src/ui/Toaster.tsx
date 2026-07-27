@@ -1,24 +1,26 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import { useEffect, useState } from "react";
 import { CheckCircle2, Info, XCircle } from "lucide-react";
-import { onToast } from "../api/client";
+import { onClearToasts, onToast } from "../api/client";
 
 type T = { id: number; kind: "info" | "ok" | "err"; msg: string };
 
 export function Toaster() {
   const [items, setItems] = useState<T[]>([]);
-  useEffect(
-    () =>
-      onToast((t) => {
-        setItems((s) => [...s, t]);
-        setTimeout(() => setItems((s) => s.filter((x) => x.id !== t.id)), 4500);
-      }),
-    [],
-  );
+  useEffect(() => {
+    const offToast = onToast((t) => {
+      setItems((s) => [...s, t]);
+      setTimeout(() => setItems((s) => s.filter((x) => x.id !== t.id)), 4500);
+    });
+    const offClear = onClearToasts(() => setItems([]));
+    return () => {
+      offToast();
+      offClear();
+    };
+  }, []);
   return (
-    // bottom-20 (not bottom-4) clears the floating bottom nav dock, which is horizontally centered
-    // and at tablet widths sits close enough to the right edge to overlap a bottom-right toast.
-    <div className="fixed right-4 bottom-20 z-[60] flex flex-col gap-2 w-[300px]">
+    // Clears page edge.
+    <div className="fixed right-4 bottom-4 z-[60] flex flex-col gap-2 w-[300px]">
       {items.map((t) => (
         <div
           key={t.id}

@@ -24,6 +24,9 @@ export function Table<T>({
   onToggleAll,
   error,
   onRetry,
+  soundings,
+  panelTitle,
+  panelExtra,
 }: {
   cols: Col<T>[];
   rows: T[] | undefined;
@@ -36,14 +39,12 @@ export function Table<T>({
   selected?: Set<string>;
   onToggle?: (key: string) => void;
   onToggleAll?: (keys: string[]) => void;
-  /** True when the query backing `rows` failed — shows an error state instead of spinning forever
-      (react-query leaves `data` undefined on both "still loading" and "errored", so callers must
-      pass their hook's `isError` through here to tell the two apart). */
   error?: boolean;
-  /** Refetch the failed query — typically the hook's own `refetch`. Without this the error state's
-      "Try refreshing" is just text; a page-level "Refresh" button elsewhere (if any) usually refetches
-      a *different* endpoint and won't actually retry this one. */
   onRetry?: () => void;
+  /** Soundings Index archetype — single at-panel + at-tbl + hover row actions. */
+  soundings?: boolean;
+  panelTitle?: React.ReactNode;
+  panelExtra?: React.ReactNode;
 }) {
   const [sort, setSort] = useState<{ i: number; dir: 1 | -1 } | null>(null);
   const sorted = useMemo(() => {
@@ -57,91 +58,143 @@ export function Table<T>({
     });
   }, [rows, sort, cols]);
 
-  // Defense in depth: a query can fail in ways `error` never observes (e.g. a request that never
-  // settles instead of properly rejecting) — `data`/`isError` staying exactly as they were on
-  // mount looks identical to "still loading" and would spin forever. If loading drags on this long
-  // something's wrong regardless of why, so fall back to the same error affordance.
   const [stuck, setStuck] = useState(false);
   useEffect(() => {
-    if (rows) { setStuck(false); return; }
+    if (rows) {
+      setStuck(false);
+      return;
+    }
     const t = setTimeout(() => setStuck(true), 10000);
     return () => clearTimeout(t);
   }, [rows]);
 
-  if (!rows) {
-    if (error || stuck) {
-      return (
-        <div className="py-10 text-center text-sm text-danger flex flex-col items-center gap-2">
-          <AlertTriangle size={18} />
-          <span>Failed to load — the request errored.</span>
-          {onRetry ? <Button size="sm" onClick={onRetry} className="mt-1">Retry</Button> : <span>Try refreshing.</span>}
-        </div>
+  const body = (() => {
+    if (!rows) {
+      if (error || stuck) {
+        return (
+          <div className="py-10 text-center text-sm text-danger flex flex-col items-center gap-2">
+            <AlertTriangle size={18} />
+            <span>Failed to load — the request errored.</span>
+            {onRetry ? (
+              <Button size="sm" onClick={onRetry} className="mt-1">
+                Retry
+              </Button>
+            ) : (
+              <span>Try refreshing.</span>
+            )}
+          </div>
+        );
+      }
+      return soundings ? (
+        <div style={{ padding: 32, color: "var(--at-ink-4)", fontSize: 13 }}>Loading…</div>
+      ) : (
+        <Spinner />
       );
     }
-    return <Spinner />; // undefined = still loading
-  }
-  if (!rows.length) return <EmptyState msg={empty} cta={emptyCta} />;
-  const clickHeader = (i: number) => {
-    if (!cols[i].sortKey) return;
-    setSort((s) => (s?.i === i ? { i, dir: s.dir === 1 ? -1 : 1 } : { i, dir: 1 }));
-  };
-  const rk = (r: T, i: number) => (rowKey ? rowKey(r, i) : String(i));
-  const allKeys = (sorted || []).map((r, i) => rk(r, i));
-  const allSelected = selectable && allKeys.length > 0 && allKeys.every((k) => selected?.has(k));
-  return (
-    <div className="overflow-x-auto">
-      <table className="ztable">
-        <thead>
-          <tr>
-            {selectable && (
-              <th style={{ width: 34 }}>
-                <input type="checkbox" checked={!!allSelected} onChange={() => onToggleAll?.(allKeys)} />
-              </th>
-            )}
-            {cols.map((c, i) => (
-              <th
-                key={c.h}
-                onClick={() => clickHeader(i)}
-                className={c.sortKey ? "cursor-pointer select-none hover:text-white" : ""}
-              >
-                <span className="inline-flex items-center gap-1">
-                  {c.h}
-                  {sort?.i === i && (sort.dir === 1 ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
-                </span>
-              </th>
-            ))}
-            {actions && <th />}
-          </tr>
-        </thead>
-        <tbody>
-          {(sorted || []).map((r, i) => {
-            const key = rk(r, i);
-            return (
-            <tr
-              key={key}
-              onClick={onRow ? () => onRow(r) : undefined}
-              className={`${onRow ? "cursor-pointer" : ""} ${selected?.has(key) ? "selected" : ""}`}
-            >
+    if (!rows.length) {
+      return soundings ? (
+        <div style={{ padding: 36, textAlign: "center" }}>
+          <div style={{ color: "var(--at-ink-3)", marginBottom: emptyCta ? 12 : 0, fontSize: 13.5 }}>{empty}</div>
+          {emptyCta}
+        </div>
+      ) : (
+        <EmptyState msg={empty} cta={emptyCta} />
+      );
+    }
+
+    const clickHeader = (i: number) => {
+      if (!cols[i].sortKey) return;
+      setSort((s) => (s?.i === i ? { i, dir: s.dir === 1 ? -1 : 1 } : { i, dir: 1 }));
+    };
+    const rk = (r: T, i: number) => (rowKey ? rowKey(r, i) : String(i));
+    const allKeys = (sorted || []).map((r, i) => rk(r, i));
+    const allSelected = selectable && allKeys.length > 0 && allKeys.every((k) => selected?.has(k));
+
+    return (
+      <div className="overflow-x-auto">
+        <table className={soundings ? "at-tbl" : "ztable"}>
+          <thead>
+            <tr>
               {selectable && (
-                <td onClick={(e) => e.stopPropagation()}>
-                  <input type="checkbox" checked={selected?.has(key) || false} onChange={() => onToggle?.(key)} />
-                </td>
+                <th style={{ width: 34 }}>
+                  <input
+                    type="checkbox"
+                    checked={!!allSelected}
+                    onChange={() => onToggleAll?.(allKeys)}
+                    aria-label="Select all"
+                  />
+                </th>
               )}
-              {cols.map((c) => (
-                <td key={c.h} className={c.mono ? "mono" : undefined}>
-                  {c.f(r) ?? "—"}
-                </td>
+              {cols.map((c, i) => (
+                <th
+                  key={c.h}
+                  onClick={() => clickHeader(i)}
+                  className={c.sortKey ? (soundings ? "sortable" : "cursor-pointer select-none hover:text-white") : ""}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    {c.h}
+                    {sort?.i === i && (sort.dir === 1 ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
+                  </span>
+                </th>
               ))}
-              {actions && (
-                <td onClick={(e) => e.stopPropagation()}>
-                  <div className="flex gap-1.5 justify-end">{actions(r)}</div>
-                </td>
-              )}
+              {actions && <th />}
             </tr>
-            );
-          })}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {(sorted || []).map((r, i) => {
+              const key = rk(r, i);
+              return (
+                <tr
+                  key={key}
+                  onClick={onRow ? () => onRow(r) : undefined}
+                  className={`${onRow ? "cursor-pointer" : ""} ${selected?.has(key) ? "selected" : ""}`}
+                >
+                  {selectable && (
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selected?.has(key) || false}
+                        onChange={() => onToggle?.(key)}
+                        aria-label={`Select ${key}`}
+                      />
+                    </td>
+                  )}
+                  {cols.map((c) => (
+                    <td key={c.h} className={c.mono ? "mono" : undefined}>
+                      {c.f(r) ?? "—"}
+                    </td>
+                  ))}
+                  {actions && (
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <div className={soundings ? "at-row-actions" : "flex gap-1.5 justify-end"}>{actions(r)}</div>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  })();
+
+  if (!soundings) return body;
+
+  return (
+    <div className="at-panel">
+      {(panelTitle != null || panelExtra != null) && (
+        <div className="at-panel-bar">
+          {panelTitle != null && <span className="at-caption">{panelTitle}</span>}
+          <span className="grow" />
+          {panelExtra}
+          {rows && rows.length > 0 && panelExtra == null && (
+            <span className="at-sub" style={{ margin: 0 }}>
+              {rows.length} shown
+            </span>
+          )}
+        </div>
+      )}
+      {body}
     </div>
   );
 }

@@ -179,7 +179,7 @@ pub async fn auth_middleware(
 
 /// Constant-time byte comparison for the bootstrap shared secret, so a mismatch can't be
 /// distinguished by how many leading bytes matched.
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
     }
@@ -188,6 +188,58 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
         diff |= x ^ y;
     }
     diff == 0
+}
+
+/// Verify console username/password. Both comparisons always run (`&`, not `&&`) to limit timing leaks.
+pub(crate) fn verify_console_credentials(
+    username: &str,
+    password: &str,
+    expected_user: &str,
+    expected_pass: &str,
+) -> bool {
+    let user_ok = constant_time_eq(username.trim().as_bytes(), expected_user.as_bytes());
+    let pass_ok = constant_time_eq(password.as_bytes(), expected_pass.as_bytes());
+    user_ok & pass_ok
+}
+
+/// Hash a password as `sha256$<salt>$<digest>` for storage in `console_users`.
+pub(crate) fn hash_password(password: &str) -> String {
+    let salt = uuid::Uuid::new_v4().to_string();
+    let digest = sha256_hex(&format!("{salt}:{password}"));
+    format!("sha256${salt}${digest}")
+}
+
+/// Verify a password against a stored `sha256$…` hash (constant-time digest compare).
+pub(crate) fn verify_password_hash(password: &str, stored: &str) -> bool {
+    let Some((algo, rest)) = stored.split_once('$') else {
+        return false;
+    };
+    if algo != "sha256" {
+        return false;
+    }
+    let Some((salt, expected)) = rest.split_once('$') else {
+        return false;
+    };
+    let digest = sha256_hex(&format!("{salt}:{password}"));
+    constant_time_eq(digest.as_bytes(), expected.as_bytes())
+}
+
+fn sha256_hex(input: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let hash = Sha256::digest(input.as_bytes());
+    hash.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Normalize / validate a privilege role name used for console users + JWTs.
+pub(crate) fn normalize_console_role(role: &str) -> Result<&'static str, String> {
+    match role.trim().to_ascii_lowercase().as_str() {
+        "viewer" => Ok("viewer"),
+        "operator" => Ok("operator"),
+        "admin" => Ok("admin"),
+        other => Err(format!(
+            "invalid role '{other}'; expected viewer, operator, or admin"
+        )),
+    }
 }
 
 fn unauthorized(msg: &str) -> Response {

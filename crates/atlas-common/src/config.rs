@@ -38,6 +38,10 @@ pub struct Config {
     /// Optional one-shot bootstrap admin bearer (raw string, not a JWT). Accepted only when
     /// `auth_required` so a fresh deploy can mint real service-account tokens, then unset this.
     pub bootstrap_admin_token: Option<String>,
+    /// Console operator username for `POST /auth/login` (default `admin`).
+    pub admin_username: String,
+    /// Console operator password for `POST /auth/login` (default `Admin@321`). Override in prod.
+    pub admin_password: String,
     /// Monitor loop interval in seconds (0 disables the monitor/alerts worker).
     pub monitor_interval_secs: u64,
     /// Ceph mgr Prometheus `/metrics` URL to scrape (None disables metric collection).
@@ -115,6 +119,15 @@ impl Config {
                 .ok()
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty()),
+            admin_username: std::env::var("ATLAS_ADMIN_USERNAME")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "admin".into()),
+            admin_password: std::env::var("ATLAS_ADMIN_PASSWORD")
+                .ok()
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "Admin@321".into()),
             monitor_interval_secs: std::env::var("ATLAS_MONITOR_INTERVAL_SECS")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -241,6 +254,8 @@ impl Default for Config {
             jwt_secret: DEV_JWT_DEFAULT.into(),
             auth_required: false,
             bootstrap_admin_token: None,
+            admin_username: "admin".into(),
+            admin_password: "Admin@321".into(),
             monitor_interval_secs: 0,
             ceph_prometheus_url: None,
             alert_webhook_url: None,
@@ -279,6 +294,8 @@ impl fmt::Debug for Config {
                 "bootstrap_admin_token",
                 &self.bootstrap_admin_token.as_ref().map(|_| "<redacted>"),
             )
+            .field("admin_username", &self.admin_username)
+            .field("admin_password", &"<redacted>")
             .finish()
     }
 }

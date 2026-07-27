@@ -51,7 +51,7 @@ export function Button({
 }
 
 export function Card({ className, children, hoverable }: { className?: string; children: React.ReactNode; hoverable?: boolean }) {
-  return <div className={cx("glass-card", hoverable && "hoverable", className)}>{children}</div>;
+  return <div className={cx("at-card", hoverable && "hoverable", className)}>{children}</div>;
 }
 
 export function GlassSection({
@@ -66,10 +66,12 @@ export function GlassSection({
   className?: string;
 }) {
   return (
-    <section className={cx("glass-card overflow-hidden", className)}>
+    <section className={cx("at-panel", className)}>
       {(title || actions) && (
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.06]">
-          <div className="text-[13px] font-semibold flex-1">{title}</div>
+        <div className="at-panel-bar">
+          <div className="at-caption grow" style={{ flex: 1 }}>
+            {title}
+          </div>
           {actions}
         </div>
       )}
@@ -85,21 +87,21 @@ export function StatCard({
   accent,
   children,
 }: {
-  label: string;
+  label: React.ReactNode;
   value: React.ReactNode;
   sub?: React.ReactNode;
   accent?: string;
   children?: React.ReactNode;
 }) {
   return (
-    <Card hoverable className="p-4">
-      <div className="section-label">{label}</div>
-      <div className="text-2xl font-bold mt-1.5" style={{ color: accent }}>
+    <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+      <div className="at-caption">{label}</div>
+      <div className="at-val md" style={accent ? { color: accent } : undefined}>
         {value}
       </div>
-      {sub && <div className="text-xs text-muted-foreground mt-1">{sub}</div>}
+      {sub != null && sub !== false ? <div className="at-delta">{sub}</div> : null}
       {children}
-    </Card>
+    </div>
   );
 }
 
@@ -248,15 +250,17 @@ export function SlideOver({
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-50" onMouseDown={onClose}>
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="absolute right-0 top-0 h-full glass-card rounded-none border-l overflow-auto animate-fade-in"
-        style={{ width, maxWidth: "92vw" }}
+        className="absolute right-0 top-0 h-full at-panel rounded-none border-l overflow-auto animate-fade-in"
+        style={{ width, maxWidth: "92vw", borderRadius: 0, borderColor: "var(--at-line-2)" }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.06] sticky top-0 bg-card/80 backdrop-blur">
-          <div className="font-semibold flex-1">{title}</div>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>
+        <div className="at-panel-bar sticky top-0" style={{ background: "var(--at-shelf)", zIndex: 1 }}>
+          <div className="at-caption grow" style={{ flex: 1, color: "var(--at-ink)", fontSize: 13 }}>
+            {title}
+          </div>
+          <button type="button" className="at-btn" style={{ height: 28 }} onClick={onClose}>
             <X size={14} />
           </button>
         </div>
@@ -286,12 +290,14 @@ export function Modal({
     <div className="fixed inset-0 z-50 grid place-items-center p-4" onMouseDown={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="relative glass-card w-[460px] max-w-[94vw] p-5 animate-fade-in"
+        className="relative at-panel w-[460px] max-w-[94vw] p-5 animate-fade-in"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 mb-3">
-          <div className="font-semibold flex-1">{title}</div>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>
+          <div className="at-caption grow" style={{ flex: 1, color: "var(--at-ink)", fontSize: 14 }}>
+            {title}
+          </div>
+          <button type="button" className="at-btn" style={{ height: 28 }} onClick={onClose}>
             <X size={14} />
           </button>
         </div>

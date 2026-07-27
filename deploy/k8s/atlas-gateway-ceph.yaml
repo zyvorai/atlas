@@ -132,6 +132,10 @@ spec:
                   name: atlas-gateway-auth
                   key: bootstrap-admin-token
                   optional: true
+            - name: ATLAS_ADMIN_USERNAME
+              value: "admin"
+            - name: ATLAS_ADMIN_PASSWORD
+              value: "Admin@321"
             - name: ATLAS_CEPH_PROMETHEUS_URL
               value: "http://rook-ceph-mgr.rook-ceph.svc:9283/metrics"
             # Public RGW endpoint so presigned backup-download URLs are reachable off-cluster.

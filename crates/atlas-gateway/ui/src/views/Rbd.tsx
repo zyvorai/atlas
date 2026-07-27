@@ -1,9 +1,10 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import { useEffect, useState } from "react";
-import { Layers, Plus, RefreshCw } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 import { http, submit, submitJob } from "../api/client";
 import { useInvalidate, useRbdImages, useVolumes } from "../api/hooks";
-import { Badge, Button, FormModal, GlassSection, PageHeader, SlideOver } from "../ui/kit";
+import { Button, FormModal, SlideOver } from "../ui/kit";
+import { PageHead } from "../ui/PageHead";
 import { confirmThen, del } from "../ui/confirm";
 import { Table } from "../ui/Table";
 import { fmtBytes, gib } from "../lib/format";
@@ -28,38 +29,57 @@ export default function Rbd() {
     }
   }, [modal, pool]);
 
+  const n = data?.images.length || 0;
   return (
     <div>
-      <PageHeader
-        icon={Layers}
+      <PageHead
+        eyebrow="STORAGE · INDEX"
         title="RBD Images"
-        subtitle="Raw Ceph RBD images (bypassing CSI) — for machina/libvirt & bare VMs"
+        state={
+          n
+            ? `${n} raw image${n === 1 ? "" : "s"} in ${pool} — machina/libvirt & bare VMs (bypassing CSI).`
+            : `No images in ${pool}. Create one or switch pool.`
+        }
         actions={
           <>
             <input className="field w-44" value={pool} onChange={(e) => setPool(e.target.value)} />
-            <Button icon={RefreshCw} onClick={() => submit("post", "/rbd-usage/refresh", null, "usage refresh", () => inv("volumes")).catch(() => {})}>Refresh usage</Button>
-            <Button variant="primary" icon={Plus} onClick={() => setCreate(true)}>Image</Button>
+            <button
+              type="button"
+              className="at-btn"
+              onClick={() => submit("post", "/rbd-usage/refresh", null, "usage refresh", () => inv("volumes")).catch(() => {})}
+            >
+              <RefreshCw size={14} /> Refresh usage
+            </button>
+            <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
+              <Plus size={14} /> Image
+            </button>
           </>
         }
       />
-      <GlassSection title={<>Images in {pool} <Badge kind="neutral">{data?.images.length || 0}</Badge></>}>
-        <Table
-          rows={data?.images}
-          error={isError}
-          onRetry={() => refetchImages()}
-          rowKey={(i) => i}
-          cols={[{ h: "Image", f: (i) => i, mono: true }]}
-          actions={(img) => (
-            <>
-              <Button size="sm" onClick={() => setSnapImg(img)}>Snaps</Button>
-              <Button size="sm" onClick={() => setModal({ img, kind: "clone" })}>Clone</Button>
-              <Button size="sm" onClick={() => setModal({ img, kind: "resize" })}>Resize</Button>
-              <Button size="sm" onClick={() => confirmThen({ title: `Flatten ${img}?`, message: "Detaches the clone from its parent (copies all data).", confirmLabel: "Flatten" }, () => submitJob("post", `/rbd-images/${pool}/${img}/flatten`, {}, `flatten ${img}`, refetch))}>Flatten</Button>
-              <Button size="sm" variant="danger" onClick={() => del(`image ${img}`, () => submitJob("delete", `/rbd-images/${pool}/${img}`, null, `delete ${img}`, refetch))}>Del</Button>
-            </>
-          )}
-        />
-      </GlassSection>
+      <Table
+        soundings
+        panelTitle={`Images · ${pool}`}
+        rows={data?.images}
+        error={isError}
+        onRetry={() => refetchImages()}
+        rowKey={(i) => i}
+        empty="No RBD images in this pool."
+        emptyCta={
+          <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
+            <Plus size={14} /> Create image
+          </button>
+        }
+        cols={[{ h: "Image", f: (i) => i, mono: true }]}
+        actions={(img) => (
+          <>
+            <Button size="sm" onClick={() => setSnapImg(img)}>Snaps</Button>
+            <Button size="sm" onClick={() => setModal({ img, kind: "clone" })}>Clone</Button>
+            <Button size="sm" onClick={() => setModal({ img, kind: "resize" })}>Resize</Button>
+            <Button size="sm" onClick={() => confirmThen({ title: `Flatten ${img}?`, message: "Detaches the clone from its parent (copies all data).", confirmLabel: "Flatten" }, () => submitJob("post", `/rbd-images/${pool}/${img}/flatten`, {}, `flatten ${img}`, refetch))}>Flatten</Button>
+            <Button size="sm" variant="danger" onClick={() => del(`image ${img}`, () => submitJob("delete", `/rbd-images/${pool}/${img}`, null, `delete ${img}`, refetch))}>Del</Button>
+          </>
+        )}
+      />
 
       <FormModal open={create} onClose={() => setCreate(false)} title="Create RBD image" submitLabel="Create"
         fields={[{ name: "name", label: "Name" }, { name: "size_gib", label: "Size (GiB)", type: "number", value: "1", min: 1 }]}

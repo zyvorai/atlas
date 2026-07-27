@@ -13,6 +13,7 @@ import Alerts from "./views/Alerts";
 import Activity from "./views/Activity";
 import Observatory from "./views/Observatory";
 import Ceph from "./views/Ceph";
+import PoolDetail from "./views/PoolDetail";
 import Jobs from "./views/Jobs";
 import Audit from "./views/Audit";
 import Tenants from "./views/Tenants";
@@ -62,6 +63,7 @@ export default function App() {
         <Route path="/kubernetes" element={<Kubernetes />} />
         <Route path="/cluster" element={<Cluster />} />
         <Route path="/ceph" element={<Ceph />} />
+        <Route path="/pools/:id" element={<PoolDetail />} />
         <Route path="/maintenance" element={<Maintenance />} />
         <Route path="/dr" element={<DR />} />
         <Route path="/databridge/sources" element={<Sources />} />

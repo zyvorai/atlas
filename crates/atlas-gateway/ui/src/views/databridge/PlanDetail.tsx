@@ -1,9 +1,10 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import { useParams } from "react-router-dom";
-import { Check, Circle, Loader2, Route as RouteIcon } from "lucide-react";
+import { Check, Circle, Loader2 } from "lucide-react";
 import { submitJob } from "../../api/client";
 import { usePlan, useSource, useInvalidate } from "../../api/hooks";
-import { Badge, Button, GlassSection, PageHeader } from "../../ui/kit";
+import { Badge, Button } from "../../ui/kit";
+import { PageHead } from "../../ui/PageHead";
 import { confirmThen } from "../../ui/confirm";
 import { planStateKind, planStateLabel } from "./Plans";
 
@@ -48,87 +49,140 @@ export default function PlanDetail() {
   };
 
   return (
-    <div>
-      <PageHeader icon={RouteIcon} title={plan.name}
-        subtitle={`Plan ${plan.id} · source ${source?.name || plan.source_id}`}
+    <div className="at-stack">
+      <PageHead
+        eyebrow="DATABRIDGE · DETAIL"
+        title={plan.name}
+        state={`Plan ${plan.id} · source ${source?.name || plan.source_id} · ${planStateLabel(plan.state)}`}
         actions={<div className="flex gap-2 items-center">
           {plan.state === "cdc_streaming" && (
             <>
-              <Button size="sm" variant="secondary" onClick={() => submitJob("post", `/databridge/plans/${plan.id}/cdc/stop`, null, "stop CDC", refresh).catch(() => {})}>Stop CDC</Button>
-              <Button size="sm" variant="secondary" onClick={() => submitJob("post", `/databridge/plans/${plan.id}/cdc/restart`, null, "restart CDC", refresh).catch(() => {})}>Restart CDC</Button>
+              <button type="button" className="at-btn" onClick={() => submitJob("post", `/databridge/plans/${plan.id}/cdc/stop`, null, "stop CDC", refresh).catch(() => {})}>Stop CDC</button>
+              <button type="button" className="at-btn" onClick={() => submitJob("post", `/databridge/plans/${plan.id}/cdc/restart`, null, "restart CDC", refresh).catch(() => {})}>Restart CDC</button>
             </>
           )}
           {plan.state === "cutover_complete" && (
             <>
-              {rollbackDeadline && <span className="text-xs text-muted-foreground">Rollback available until {rollbackDeadline.toLocaleString()}</span>}
-              <Button size="sm" variant="danger" onClick={() => confirmThen({
+              {rollbackDeadline && <span className="at-sub" style={{ margin: 0 }}>Rollback available until {rollbackDeadline.toLocaleString()}</span>}
+              <button type="button" className="at-btn" style={{ color: "var(--at-fail)", borderColor: "rgba(255, 90, 110, 0.35)" }} onClick={() => confirmThen({
                 title: "Roll back this migration?",
                 message: rollbackDeadline
                   ? `Reverts cutover and switches traffic back to the source database. Only available until ${rollbackDeadline.toLocaleString()}. This cannot be undone.`
                   : "Reverts cutover and switches traffic back to the source database. This cannot be undone.",
                 confirmLabel: "Roll back",
                 danger: true,
-              }, () => submitJob("post", `/databridge/plans/${plan.id}/rollback`, null, "rollback", refresh))}>Rollback</Button>
+              }, () => submitJob("post", `/databridge/plans/${plan.id}/rollback`, null, "rollback", refresh))}>Rollback</button>
             </>
           )}
           <Badge kind={planStateKind(plan.state)} dot>{planStateLabel(plan.state)}</Badge>
-        </div>} />
+        </div>}
+      />
 
-      <GlassSection title="Pipeline">
-        <ol className="flex flex-col gap-2">
-          {STAGES.map((stage, i) => {
-            const status = i <= done ? "done" : i === current ? "current" : "upcoming";
-            const Icon = status === "done" ? Check : status === "current" ? Loader2 : Circle;
-            const actionable = status === "current" && IMPLEMENTED.has(stage);
-            return (
-              <li key={stage} className="flex items-center gap-3 py-1">
-                <span className={
-                  status === "done" ? "text-emerald-500" : status === "current" ? "text-sky-500" : "text-muted-foreground/40"
-                }><Icon size={18} /></span>
-                <span className="w-8 text-xs text-muted-foreground">{i + 1}</span>
-                <span className={"flex-1 " + (status === "upcoming" ? "text-muted-foreground/60" : "")}>
-                  {STAGE_LABEL[stage]}
-                  {!IMPLEMENTED.has(stage) && <span className="ml-2 text-xs text-muted-foreground/50">(coming soon)</span>}
-                </span>
-                {actionable && stage === "cutover" && (
-                  <Button size="sm" variant="danger" onClick={() => confirmThen({
-                    title: "Run cutover?",
-                    message: (a?.blockers?.length
-                      ? `Assessment still lists ${a.blockers.length} blocker(s) (see below) — cutover will proceed anyway. `
-                      : "") + "Switches live traffic to the edge database. This is the point of no return short of a rollback within the window.",
-                    confirmLabel: "Run cutover",
-                    danger: true,
-                  }, () => act(stage)?.catch(() => {}))}>Run</Button>
+      <div className="at-panel">
+        <div className="at-panel-bar">
+          <span className="at-caption">Pipeline</span>
+          <span className="grow" />
+          <span className="at-sub" style={{ margin: 0 }}>
+            {Math.max(0, done + 1)} / {STAGES.length} stages
+          </span>
+        </div>
+        {STAGES.map((stage, i) => {
+          const status = i <= done ? "done" : i === current ? "current" : "upcoming";
+          const Icon = status === "done" ? Check : status === "current" ? Loader2 : Circle;
+          const actionable = status === "current" && IMPLEMENTED.has(stage);
+          const tickColor =
+            status === "done" ? "var(--at-cyan)" : status === "current" ? "var(--at-cyan-2)" : "var(--at-ink-4)";
+          return (
+            <div key={stage} className="at-list-row" style={{ alignItems: "center" }}>
+              <span style={{ color: tickColor, display: "flex", flexShrink: 0 }}>
+                <Icon size={18} className={status === "current" ? "animate-spin" : undefined} />
+              </span>
+              <span className="mono" style={{ fontSize: 11, color: "var(--at-ink-4)", width: 28 }}>
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <span
+                style={{
+                  flex: 1,
+                  color: status === "upcoming" ? "var(--at-ink-4)" : "var(--at-ink)",
+                  fontWeight: status === "current" ? 500 : 400,
+                }}
+              >
+                {STAGE_LABEL[stage]}
+                {!IMPLEMENTED.has(stage) && (
+                  <span style={{ marginLeft: 8, fontSize: 12, color: "var(--at-ink-4)" }}>(coming soon)</span>
                 )}
-                {actionable && stage !== "cutover" && <Button size="sm" variant="primary" onClick={() => act(stage)?.catch(() => {})}>Run</Button>}
-                {status === "done" && <Badge kind="success">done</Badge>}
-              </li>
-            );
-          })}
-        </ol>
-      </GlassSection>
+              </span>
+              {actionable && stage === "cutover" && (
+                <Button size="sm" variant="danger" onClick={() => confirmThen({
+                  title: "Run cutover?",
+                  message: (a?.blockers?.length
+                    ? `Assessment still lists ${a.blockers.length} blocker(s) (see below) — cutover will proceed anyway. `
+                    : "") + "Switches live traffic to the edge database. This is the point of no return short of a rollback within the window.",
+                  confirmLabel: "Run cutover",
+                  danger: true,
+                }, () => act(stage)?.catch(() => {}))}>Run</Button>
+              )}
+              {actionable && stage !== "cutover" && (
+                <Button size="sm" variant="primary" onClick={() => act(stage)?.catch(() => {})}>Run</Button>
+              )}
+              {status === "done" && <Badge kind="success">done</Badge>}
+            </div>
+          );
+        })}
+      </div>
 
       {a && typeof a === "object" && "score" in a && (
-        <GlassSection title="Assessment">
-          <div className="flex gap-6 items-center mb-3">
-            <div className="text-3xl font-semibold">{a.score}<span className="text-base text-muted-foreground">/100</span></div>
-            <Badge kind={a.risk === "low" ? "success" : a.risk === "medium" ? "warning" : "danger"}>{a.risk} risk</Badge>
-            <div className="text-sm text-muted-foreground">Est. downtime: <b>{a.downtime_estimate}</b> · {a.table_count} tables</div>
+        <div className="at-panel">
+          <div className="at-panel-bar">
+            <span className="at-caption">Assessment</span>
+            <span className="grow" />
+            <Badge kind={a.risk === "low" ? "success" : a.risk === "medium" ? "warning" : "danger"}>
+              {a.risk} risk
+            </Badge>
+          </div>
+          <div className="at-list-row" style={{ alignItems: "center", gap: 24 }}>
+            <div>
+              <div className="at-val lg mono">
+                {a.score}
+                <span style={{ fontSize: 14, color: "var(--at-ink-3)" }}>/100</span>
+              </div>
+            </div>
+            <div className="at-sub" style={{ margin: 0 }}>
+              Est. downtime: <span style={{ color: "var(--at-ink)", fontWeight: 500 }}>{a.downtime_estimate}</span>
+              {" · "}
+              {a.table_count} tables
+            </div>
           </div>
           {!!a.blockers?.length && (
-            <div className="mb-2">
-              <div className="text-sm font-medium text-red-500 mb-1">Blockers</div>
-              <ul className="list-disc ml-5 text-sm">{a.blockers.map((b: string, k: number) => <li key={k}>{b}</li>)}</ul>
-            </div>
+            <>
+              <div className="at-list-row" style={{ paddingBottom: 4 }}>
+                <span className="at-caption" style={{ color: "var(--at-fail)" }}>Blockers</span>
+              </div>
+              {a.blockers.map((b: string, k: number) => (
+                <div key={k} className="at-list-row" style={{ color: "var(--at-fail)", paddingTop: 8, paddingBottom: 8 }}>
+                  <span style={{ flex: 1 }}>{b}</span>
+                </div>
+              ))}
+            </>
           )}
           {!!a.warnings?.length && (
-            <div>
-              <div className="text-sm font-medium text-amber-500 mb-1">Warnings</div>
-              <ul className="list-disc ml-5 text-sm">{a.warnings.map((w: string, k: number) => <li key={k}>{w}</li>)}</ul>
+            <>
+              <div className="at-list-row" style={{ paddingBottom: 4 }}>
+                <span className="at-caption" style={{ color: "var(--at-warn)" }}>Warnings</span>
+              </div>
+              {a.warnings.map((w: string, k: number) => (
+                <div key={k} className="at-list-row" style={{ color: "var(--at-warn)", paddingTop: 8, paddingBottom: 8 }}>
+                  <span style={{ flex: 1 }}>{w}</span>
+                </div>
+              ))}
+            </>
+          )}
+          {!a.blockers?.length && !a.warnings?.length && (
+            <div className="at-list-row" style={{ color: "var(--at-ok)" }}>
+              No blockers or warnings — ready to provision.
             </div>
           )}
-          {!a.blockers?.length && !a.warnings?.length && <div className="text-sm text-emerald-500">No blockers or warnings — ready to provision.</div>}
-        </GlassSection>
+        </div>
       )}
     </div>
   );

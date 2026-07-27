@@ -1,9 +1,10 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import { useState } from "react";
-import { Plus, Timer } from "lucide-react";
+import { Plus } from "lucide-react";
 import { submit } from "../api/client";
 import { useBuckets, useInvalidate, useSchedules, useVolumes } from "../api/hooks";
-import { Badge, Button, FormModal, GlassSection, PageHeader } from "../ui/kit";
+import { Badge, Button, FormModal } from "../ui/kit";
+import { PageHead } from "../ui/PageHead";
 import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
 import { timeAgo } from "../lib/format";
@@ -14,34 +15,47 @@ export default function Schedules() {
   const { data: buckets } = useBuckets();
   const inv = useInvalidate();
   const [create, setCreate] = useState(false);
+  const n = data?.length || 0;
   return (
     <div>
-      <PageHeader
-        icon={Timer}
+      <PageHead
+        eyebrow="DATA PROTECTION · INDEX"
         title="Schedules"
-        subtitle="Protection schedules — periodic snapshots & backups, for a volume."
-        actions={<Button variant="primary" icon={Plus} onClick={() => setCreate(true)}>Schedule</Button>}
+        state={
+          n
+            ? `${n} protection schedule${n === 1 ? "" : "s"} — periodic snapshots & backups for a volume.`
+            : "No schedules yet. Create one to automate snapshots or backups."
+        }
+        actions={
+          <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
+            <Plus size={14} /> Schedule
+          </button>
+        }
       />
-      <GlassSection title={<>Schedules <Badge kind="neutral">{data?.length || 0}</Badge></>}>
-        <Table
-          rows={data}
-          rowKey={(s) => s.id}
-          empty="No schedules yet."
-          emptyCta={<Button variant="primary" icon={Plus} onClick={() => setCreate(true)}>Create schedule</Button>}
-          cols={[
-            { h: "ID", f: (s) => s.id, mono: true },
-            { h: "Kind", f: (s) => <Badge kind={s.kind === "backup" ? "info" : "neutral"}>{s.kind}</Badge> },
-            { h: "Volume", f: (s) => s.volume_id, mono: true },
-            { h: "Every", f: (s) => `${s.interval_secs}s` },
-            { h: "Keep", f: (s) => s.keep },
-            { h: "Bucket", f: (s) => s.bucket_id || "—", mono: true },
-            { h: "Next run", f: (s) => <span className="text-muted-foreground">{timeAgo(s.next_run_at)}</span> },
-          ]}
-          actions={(s) => (
-            <Button size="sm" variant="danger" onClick={() => del("schedule", () => submit("delete", `/schedules/${s.id}`, null, "delete schedule", () => inv("schedules")))}>Del</Button>
-          )}
-        />
-      </GlassSection>
+      <Table
+        soundings
+        panelTitle="Schedule index"
+        rows={data}
+        rowKey={(s) => s.id}
+        empty="No schedules yet."
+        emptyCta={
+          <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
+            <Plus size={14} /> Create schedule
+          </button>
+        }
+        cols={[
+          { h: "ID", f: (s) => s.id, mono: true },
+          { h: "Kind", f: (s) => <Badge kind={s.kind === "backup" ? "info" : "neutral"}>{s.kind}</Badge> },
+          { h: "Volume", f: (s) => s.volume_id, mono: true },
+          { h: "Every", f: (s) => `${s.interval_secs}s` },
+          { h: "Keep", f: (s) => s.keep },
+          { h: "Bucket", f: (s) => s.bucket_id || "—", mono: true },
+          { h: "Next run", f: (s) => <span className="text-muted-foreground">{timeAgo(s.next_run_at)}</span> },
+        ]}
+        actions={(s) => (
+          <Button size="sm" variant="danger" onClick={() => del("schedule", () => submit("delete", `/schedules/${s.id}`, null, "delete schedule", () => inv("schedules")))}>Del</Button>
+        )}
+      />
 
       <FormModal open={create} onClose={() => setCreate(false)} title="Create schedule" submitLabel="Create schedule"
         fields={(vals) => [

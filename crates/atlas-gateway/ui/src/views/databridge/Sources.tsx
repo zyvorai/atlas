@@ -1,10 +1,11 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import { useState } from "react";
-import { Database, Plus, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { http, submitJob, submit, toast } from "../../api/client";
 import { useSources, useInvalidate } from "../../api/hooks";
 import type { MigrationSource } from "../../api/types";
-import { Badge, Button, FormModal, GlassSection, PageHeader, SlideOver } from "../../ui/kit";
+import { Badge, Button, FormModal, SlideOver } from "../../ui/kit";
+import { PageHead } from "../../ui/PageHead";
 import { del } from "../../ui/confirm";
 import { Table } from "../../ui/Table";
 import { fmtBytes } from "../../lib/format";
@@ -18,34 +19,51 @@ export default function Sources() {
   const refetch = () => inv("db-sources");
   const [create, setCreate] = useState(false);
   const [detail, setDetail] = useState<MigrationSource | null>(null);
+  const n = data?.length || 0;
 
   return (
     <div>
-      <PageHeader icon={Database} title="Cloud Databases" subtitle="Registered source databases (AWS RDS/Aurora, GCP Cloud SQL) — discover schema before migrating"
-        actions={<Button variant="primary" icon={Plus} onClick={() => setCreate(true)}>Register source</Button>} />
-      <GlassSection title={<>Sources <Badge kind="neutral">{data?.length || 0}</Badge></>}>
-        <Table
-          rows={data}
-          rowKey={(r) => r.id}
-          empty="No sources yet."
-          emptyCta={<Button variant="primary" icon={Plus} onClick={() => setCreate(true)}>Register source</Button>}
-          cols={[
-            { h: "Name", f: (r) => r.name, mono: true },
-            { h: "Engine", f: (r) => <Badge kind="info">{r.kind}</Badge> },
-            { h: "Cloud", f: (r) => r.cloud },
-            { h: "Endpoint", f: (r) => <span className="mono text-muted-foreground">{r.endpoint || "—"}</span> },
-            { h: "Tables", f: (r) => r.discovered?.tables?.length ?? "—" },
-            { h: "State", f: (r) => <Badge kind={stateKind(r.state)} dot>{r.state}</Badge> },
-          ]}
-          actions={(r) => (
-            <>
-              <Button size="sm" icon={Search} onClick={() => submitJob("post", `/databridge/sources/${r.id}/discover`, null, "discover source", refetch).catch(() => {})}>Discover</Button>
-              <Button size="sm" onClick={() => setDetail(r)}>Schema</Button>
-              <Button size="sm" variant="danger" onClick={() => del(`source ${r.name}`, async () => { await submit("delete", `/databridge/sources/${r.id}`, null, "delete source"); refetch(); })}>Del</Button>
-            </>
-          )}
-        />
-      </GlassSection>
+      <PageHead
+        eyebrow="DATABRIDGE · INDEX"
+        title="Cloud Databases"
+        state={
+          n
+            ? `${n} source database${n === 1 ? "" : "s"} — discover schema before migrating.`
+            : "No sources yet. Register AWS RDS/Aurora or GCP Cloud SQL to begin."
+        }
+        actions={
+          <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
+            <Plus size={14} /> Register source
+          </button>
+        }
+      />
+      <Table
+        soundings
+        panelTitle="Source index"
+        rows={data}
+        rowKey={(r) => r.id}
+        empty="No sources yet."
+        emptyCta={
+          <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
+            <Plus size={14} /> Register source
+          </button>
+        }
+        cols={[
+          { h: "Name", f: (r) => r.name, mono: true },
+          { h: "Engine", f: (r) => <Badge kind="info">{r.kind}</Badge> },
+          { h: "Cloud", f: (r) => r.cloud },
+          { h: "Endpoint", f: (r) => <span className="mono" style={{ color: "var(--at-ink-4)" }}>{r.endpoint || "—"}</span> },
+          { h: "Tables", f: (r) => r.discovered?.tables?.length ?? "—" },
+          { h: "State", f: (r) => <Badge kind={stateKind(r.state)} dot>{r.state}</Badge> },
+        ]}
+        actions={(r) => (
+          <>
+            <Button size="sm" icon={Search} onClick={() => submitJob("post", `/databridge/sources/${r.id}/discover`, null, "discover source", refetch).catch(() => {})}>Discover</Button>
+            <Button size="sm" onClick={() => setDetail(r)}>Schema</Button>
+            <Button size="sm" variant="danger" onClick={() => del(`source ${r.name}`, async () => { await submit("delete", `/databridge/sources/${r.id}`, null, "delete source"); refetch(); })}>Del</Button>
+          </>
+        )}
+      />
 
       <FormModal open={create} onClose={() => setCreate(false)} title="Register source database" submitLabel="Register"
         fields={[

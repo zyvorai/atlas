@@ -1,10 +1,11 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Route as RouteIcon, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { submit } from "../../api/client";
 import { usePlans, useSources, useInvalidate } from "../../api/hooks";
-import { Badge, Button, FormModal, GlassSection, PageHeader } from "../../ui/kit";
+import { Badge, Button, FormModal } from "../../ui/kit";
+import { PageHead } from "../../ui/PageHead";
 import { Table } from "../../ui/Table";
 
 export const planStateKind = (s: string) =>
@@ -24,26 +25,43 @@ export default function Plans() {
   const nav = useNavigate();
   const [create, setCreate] = useState(false);
   const srcName = (id: string) => sources?.find((s) => s.id === id)?.name || id;
+  const n = data?.length || 0;
 
   return (
     <div>
-      <PageHeader icon={RouteIcon} title="Migration Plans" subtitle="Source → edge migration pipelines (assess, provision, full-load, CDC, validate, cutover)"
-        actions={<Button variant="primary" icon={Plus} onClick={() => setCreate(true)}>New plan</Button>} />
-      <GlassSection title={<>Plans <Badge kind="neutral">{data?.length || 0}</Badge></>}>
-        <Table
-          rows={data}
-          rowKey={(r) => r.id}
-          empty="No migration plans yet."
-          emptyCta={<Button variant="primary" icon={Plus} onClick={() => setCreate(true)}>New plan</Button>}
-          cols={[
-            { h: "Name", f: (r) => r.name, mono: true },
-            { h: "Source", f: (r) => srcName(r.source_id) },
-            { h: "Readiness", f: (r) => r.readiness_score ? `${r.readiness_score}%` : "—" },
-            { h: "State", f: (r) => <Badge kind={planStateKind(r.state)} dot>{planStateLabel(r.state)}</Badge> },
-          ]}
-          actions={(r) => <Button size="sm" onClick={() => nav(`/databridge/plans/${r.id}`)}>Open</Button>}
-        />
-      </GlassSection>
+      <PageHead
+        eyebrow="DATABRIDGE · INDEX"
+        title="Migration Plans"
+        state={
+          n
+            ? `${n} plan${n === 1 ? "" : "s"} — assess, provision, full-load, CDC, validate, cutover.`
+            : "No migration plans yet. Create one after registering a cloud source."
+        }
+        actions={
+          <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
+            <Plus size={14} /> New plan
+          </button>
+        }
+      />
+      <Table
+        soundings
+        panelTitle="Plan index"
+        rows={data}
+        rowKey={(r) => r.id}
+        empty="No migration plans yet."
+        emptyCta={
+          <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
+            <Plus size={14} /> New plan
+          </button>
+        }
+        cols={[
+          { h: "Name", f: (r) => r.name, mono: true },
+          { h: "Source", f: (r) => srcName(r.source_id) },
+          { h: "Readiness", f: (r) => r.readiness_score ? `${r.readiness_score}%` : "—" },
+          { h: "State", f: (r) => <Badge kind={planStateKind(r.state)} dot>{planStateLabel(r.state)}</Badge> },
+        ]}
+        actions={(r) => <Button size="sm" onClick={() => nav(`/databridge/plans/${r.id}`)}>Open</Button>}
+      />
 
       <FormModal open={create} onClose={() => setCreate(false)} title="New migration plan" submitLabel="Create"
         fields={[

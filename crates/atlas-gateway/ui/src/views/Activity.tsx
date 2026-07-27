@@ -3,7 +3,8 @@ import { useState } from "react";
 import { Activity as ActivityIcon, Camera, ClipboardList, Clock } from "lucide-react";
 import { useEvents } from "../api/hooks";
 import type { ActivityEvent } from "../api/types";
-import { Badge, Button, GlassSection, PageHeader } from "../ui/kit";
+import { Badge } from "../ui/kit";
+import { PageHead } from "../ui/PageHead";
 import { stateKind, timeAgo } from "../lib/format";
 
 const KIND_ICON = { job: Clock, audit: ClipboardList, alert: Camera } as const;
@@ -21,42 +22,85 @@ export default function Activity() {
 
   return (
     <div>
-      <PageHeader icon={ActivityIcon} title="Activity" subtitle="Unified timeline of jobs, audited actions, and alerts" />
-      <div className="flex gap-2 mb-3">
+      <PageHead
+        eyebrow="OBSERVABILITY · INDEX"
+        title="Activity"
+        state={
+          data
+            ? rows.length
+              ? `${rows.length} event${rows.length === 1 ? "" : "s"} in the unified timeline.`
+              : "No events match this filter."
+            : "Loading unified timeline of jobs, audit, and alerts…"
+        }
+      />
+      <div className="at-chips">
         {filters.map((f) => (
-          <Button key={f.k || "all"} size="sm" variant={kind === f.k ? "primary" : "secondary"} onClick={() => setKind(f.k)}>{f.label}</Button>
+          <button
+            key={f.k || "all"}
+            type="button"
+            className={`at-chip${kind === f.k ? " on" : ""}`}
+            onClick={() => setKind(f.k)}
+          >
+            {f.label}
+          </button>
         ))}
       </div>
-      <GlassSection title={<>Timeline <Badge kind="neutral">{rows.length}</Badge></>}>
+      <div className="at-panel">
+        <div className="at-panel-bar">
+          <span className="at-caption">Timeline</span>
+          <span className="grow" />
+          <span className="at-sub" style={{ margin: 0 }}>
+            {data ? `${rows.length} shown` : "…"}
+          </span>
+        </div>
         {!data ? (
-          <div className="p-6 text-sm text-muted-foreground">Loading…</div>
+          <div style={{ padding: 32, color: "var(--at-ink-4)", fontSize: 13 }}>Loading…</div>
         ) : rows.length === 0 ? (
-          <div className="p-6 text-sm text-muted-foreground">No activity.</div>
+          <div style={{ padding: 36, textAlign: "center", color: "var(--at-ink-3)", fontSize: 13.5 }}>No activity.</div>
         ) : (
-          <ul className="divide-y divide-white/5">
+          <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {rows.map((e) => {
               const Icon = KIND_ICON[e.kind] || ActivityIcon;
               return (
-                <li key={`${e.kind}-${e.id}-${e.ts}`} className="flex items-start gap-3 px-3 py-2.5">
-                  <Icon size={16} className="mt-0.5 text-muted-foreground shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge kind={stateKind(e.severity)} dot>{e.severity}</Badge>
-                      <span className="font-medium">{e.title}</span>
-                      <span className="text-xs text-muted-foreground mono">{e.resource_type}/{e.resource_id}</span>
+                <li
+                  key={`${e.kind}-${e.id}-${e.ts}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 12,
+                    padding: "12px 16px",
+                    borderBottom: "1px solid var(--at-line)",
+                  }}
+                >
+                  <Icon size={16} style={{ marginTop: 3, color: "var(--at-ink-4)", flexShrink: 0 }} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <Badge kind={stateKind(e.severity)} dot>
+                        {e.severity}
+                      </Badge>
+                      <span style={{ fontWeight: 500, color: "var(--at-ink)" }}>{e.title}</span>
+                      <span className="mono" style={{ fontSize: 11, color: "var(--at-ink-4)" }}>
+                        {e.resource_type}/{e.resource_id}
+                      </span>
                     </div>
-                    <div className="text-xs text-muted-foreground mt-0.5 truncate">{e.detail}</div>
+                    <div style={{ fontSize: 12, color: "var(--at-ink-3)", marginTop: 4 }} className="truncate">
+                      {e.detail}
+                    </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-xs text-muted-foreground">{timeAgo(e.ts)}</div>
-                    <div className="text-[10px] text-muted-foreground/70 mono">{e.kind} · {e.actor}</div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div className="mono" style={{ fontSize: 11, color: "var(--at-ink-4)" }}>
+                      {timeAgo(e.ts)}
+                    </div>
+                    <div className="mono" style={{ fontSize: 10, color: "var(--at-ink-4)", opacity: 0.7 }}>
+                      {e.kind} · {e.actor}
+                    </div>
                   </div>
                 </li>
               );
             })}
           </ul>
         )}
-      </GlassSection>
+      </div>
     </div>
   );
 }

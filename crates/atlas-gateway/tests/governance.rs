@@ -34,6 +34,8 @@ async fn spawn_auth_with(secret: &str, bootstrap: Option<&str>) -> String {
         jwt_secret: secret.into(),
         auth_required: true,
         bootstrap_admin_token: bootstrap.map(|s| s.to_string()),
+        admin_username: "admin".into(),
+        admin_password: "Admin@321".into(),
         monitor_interval_secs: 0,
         ceph_prometheus_url: None,
         alert_webhook_url: None,
@@ -181,4 +183,117 @@ async fn bootstrap_admin_token_can_mint_jwts() {
         .await
         .unwrap();
     assert_eq!(bad.status(), 401);
+}
+
+#[tokio::test]
+async fn console_password_login_mints_admin_jwt() {
+    let secret = "gov-test-secret-key-at-least-32-bytes!!";
+    let base = format!("{}/api/atlas/v1", spawn_auth(secret).await);
+    let c = reqwest::Client::new();
+
+    let bad = c
+        .post(format!("{base}/auth/login"))
+        .json(&serde_json::json!({ "username": "admin", "password": "wrong" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bad.status(), 401);
+
+    let minted: Value = c
+        .post(format!("{base}/auth/login"))
+        .json(&serde_json::json!({ "username": "admin", "password": "Admin@321" }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let jwt = minted["token"].as_str().expect("login returns a JWT");
+    assert_eq!(minted["role"], "admin");
+
+    let ok = c
+        .get(format!("{base}/alerts"))
+        .bearer_auth(jwt)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), 200, "JWT from password login must work");
+}
+
+#[tokio::test]
+async fn admin_can_create_user_with_privilege_and_they_can_login() {
+    let secret = "gov-test-secret-key-at-least-32-bytes!!";
+    let base = format!("{}/api/atlas/v1", spawn_auth(secret).await);
+    let c = reqwest::Client::new();
+
+    let admin: Value = c
+        .post(format!("{base}/auth/login"))
+        .json(&serde_json::json!({ "username": "admin", "password": "Admin@321" }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let admin_jwt = admin["token"].as_str().unwrap();
+
+    let created = c
+        .post(format!("{base}/auth/users"))
+        .bearer_auth(admin_jwt)
+        .json(&serde_json::json!({
+            "username": "ops",
+            "password": "OpsPass99",
+            "role": "operator"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(created.status(), 201, "{}", created.text().await.unwrap());
+    let body: Value = created.json().await.unwrap();
+    assert_eq!(body["role"], "operator");
+    assert_eq!(body["level"], 1);
+
+    let login: Value = c
+        .post(format!("{base}/auth/login"))
+        .json(&serde_json::json!({ "username": "ops", "password": "OpsPass99" }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(login["role"], "operator");
+    let ops_jwt = login["token"].as_str().unwrap();
+
+    // Operator cannot create users.
+    let denied = c
+        .post(format!("{base}/auth/users"))
+        .bearer_auth(ops_jwt)
+        .json(&serde_json::json!({
+            "username": "other",
+            "password": "OtherPass1",
+            "role": "viewer"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), 403);
+
+    let listed: Value = c
+        .get(format!("{base}/auth/users"))
+        .bearer_auth(admin_jwt)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(
+        listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|u| u["username"] == "ops" && u["role"] == "operator"),
+        "ops user should be listed"
+    );
 }

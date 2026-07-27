@@ -135,6 +135,10 @@ spec:
                   name: atlas-gateway-auth
                   key: bootstrap-admin-token
                   optional: true
+            - name: ATLAS_ADMIN_USERNAME
+              value: "admin"
+            - name: ATLAS_ADMIN_PASSWORD
+              value: "Admin@321"
             # Browser-reachable RGW endpoint for presigned object upload/download URLs.
             # NODE_IP is this node's address (public on the lab hosts); 30800 is the RGW NodePort
             # created alongside the CephObjectStore (see deploy/rook-ceph-lab/*rgw*.yaml).

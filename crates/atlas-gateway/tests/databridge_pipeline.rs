@@ -32,6 +32,8 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
         jwt_secret: "test-secret".into(),
         auth_required: false,
         bootstrap_admin_token: None,
+        admin_username: "admin".into(),
+        admin_password: "Admin@321".into(),
         monitor_interval_secs: 0,
         ceph_prometheus_url: None,
         alert_webhook_url: None,

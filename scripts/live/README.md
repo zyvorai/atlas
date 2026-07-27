@@ -35,7 +35,7 @@ SSH defaults: `ATLAS_SSH_USER=sus`, `ATLAS_SSH_HOST=212.8.248.187`,
 | Section | Checks |
 |---------|--------|
 | `01-probe` | `/health` `/livez` `/readyz` `/version`; `/metrics` accepts 401 without token and 200 with token |
-| `02-auth` | 401 without token; mint + revoke |
+| `02-auth` | 401 without token; mint + revoke; `POST /auth/login` (bootstrap admin); console users CRUD + login |
 | `03-inventory` | ~45 GET inventory / Ceph / DR / DataBridge / audit paths |
 | `04-discover` | `POST …/discover` on Ceph only (set `ATLAS_LIVE_DISCOVER_ALL=1` for nfs/zfs) |
 | `05-volume-lifecycle` | create → snap → schedule (`interval_secs`) → expand (`new_size_bytes`) → delete on `zyvor-rbd-prod` |
@@ -67,3 +67,5 @@ are deleted even on failure.
 | `ATLAS_JOB_TIMEOUT` | `90` |
 | `ATLAS_LIVE_DISCOVER_ALL` | `0` |
 | `ATLAS_LIVE_LOG` | temp file path |
+| `ATLAS_ADMIN_USERNAME` | `admin` (password-login check) |
+| `ATLAS_ADMIN_PASSWORD` | `Admin@321` (password-login check) |

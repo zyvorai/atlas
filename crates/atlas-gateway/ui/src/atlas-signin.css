@@ -1,0 +1,383 @@
+/* Atlas sign-in — open webpage (no cards, no split panel box). */
+
+.atlas-signin {
+  --signin-ink: #e8eef6;
+  --signin-muted: #8b9bb0;
+  --signin-line: rgba(180, 200, 230, 0.28);
+  --signin-accent: #5b9fd4;
+  --signin-bg: #071018;
+  position: relative;
+  min-height: 100dvh;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  color: var(--signin-ink);
+  background: var(--signin-bg);
+  overflow: hidden;
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+
+.atlas-signin-atmosphere {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.atlas-signin-wash {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 90% 70% at 12% 18%, rgba(56, 120, 180, 0.28), transparent 55%),
+    radial-gradient(ellipse 70% 55% at 88% 78%, rgba(20, 90, 110, 0.22), transparent 50%),
+    linear-gradient(165deg, #06101a 0%, #0a1622 42%, #071018 100%);
+  animation: atlas-signin-drift 18s ease-in-out infinite;
+}
+
+.atlas-signin-mesh {
+  position: absolute;
+  inset: 0;
+  opacity: 0.22;
+  background-image:
+    linear-gradient(rgba(148, 175, 205, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 175, 205, 0.09) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 80% 70% at 40% 35%, black 20%, transparent 75%);
+}
+
+.atlas-signin-beam {
+  position: absolute;
+  top: -10%;
+  left: 8%;
+  width: 55%;
+  height: 55%;
+  background: radial-gradient(ellipse at center, rgba(120, 180, 230, 0.16), transparent 68%);
+  animation: atlas-signin-pulse 9s ease-in-out infinite;
+}
+
+@keyframes atlas-signin-drift {
+  0%,
+  100% {
+    transform: scale(1) translate(0, 0);
+  }
+  50% {
+    transform: scale(1.03) translate(1.2%, -0.8%);
+  }
+}
+
+@keyframes atlas-signin-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes atlas-signin-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.atlas-signin-theme {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 20;
+}
+
+.atlas-signin-theme-btn {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: none;
+  background: transparent;
+  color: var(--signin-muted);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.atlas-signin-theme-btn:hover {
+  color: var(--signin-ink);
+}
+
+.atlas-signin-theme-menu {
+  margin-top: 0.35rem;
+  display: flex;
+  gap: 0.35rem;
+}
+
+.atlas-signin-theme-menu button {
+  border: none;
+  background: transparent;
+  color: var(--signin-muted);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.45rem;
+  cursor: pointer;
+}
+
+.atlas-signin-theme-menu button.is-active,
+.atlas-signin-theme-menu button:hover {
+  color: var(--signin-ink);
+}
+
+.atlas-signin-brand {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: clamp(1.5rem, 4vw, 2.75rem) clamp(1.25rem, 5vw, 4rem) 0;
+  animation: atlas-signin-rise 0.7s ease both;
+}
+
+.atlas-signin-mark {
+  width: 2.35rem;
+  height: 2.35rem;
+  color: var(--signin-accent);
+  fill: currentColor;
+  opacity: 0.95;
+}
+
+.atlas-signin-product {
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 3.15rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: #f4f8fc;
+}
+
+.atlas-signin-kicker {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--signin-muted);
+}
+
+.atlas-signin-main {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: grid;
+  align-content: center;
+  gap: clamp(2rem, 5vw, 3.5rem);
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  padding: clamp(2rem, 6vh, 4rem) clamp(1.25rem, 5vw, 4rem) clamp(1.5rem, 4vh, 2.5rem);
+}
+
+@media (min-width: 900px) {
+  .atlas-signin-main {
+    grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+    align-items: end;
+    gap: clamp(3rem, 8vw, 6rem);
+  }
+}
+
+.atlas-signin-copy {
+  animation: atlas-signin-rise 0.8s ease 0.08s both;
+  max-width: 34rem;
+}
+
+.atlas-signin-title {
+  margin: 0;
+  font-size: clamp(2.1rem, 4.6vw, 3.4rem);
+  font-weight: 650;
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+  color: #f7fafc;
+}
+
+.atlas-signin-title-muted {
+  display: inline;
+  color: #a8bccf;
+  font-weight: 500;
+}
+
+.atlas-signin-lede {
+  margin: 1.15rem 0 0;
+  max-width: 32rem;
+  font-size: clamp(1rem, 1.5vw, 1.125rem);
+  line-height: 1.55;
+  color: var(--signin-muted);
+}
+
+.atlas-signin-gate {
+  animation: atlas-signin-rise 0.85s ease 0.16s both;
+  width: min(100%, 24rem);
+}
+
+.atlas-signin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.atlas-signin-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--signin-muted);
+  margin-bottom: 0.65rem;
+}
+
+.atlas-signin-label--next {
+  margin-top: 1.35rem;
+}
+
+.atlas-signin-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--signin-line);
+  border-radius: 0;
+  padding: 0.65rem 0 0.85rem;
+  font-size: 1rem;
+  color: var(--signin-ink);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.atlas-signin-input::placeholder {
+  color: rgba(139, 155, 176, 0.55);
+}
+
+.atlas-signin-input:focus {
+  border-bottom-color: var(--signin-accent);
+}
+
+.atlas-signin-input:disabled {
+  opacity: 0.55;
+}
+
+.atlas-signin-remember {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 1.15rem;
+  cursor: pointer;
+  user-select: none;
+  color: var(--signin-muted);
+  font-size: 0.875rem;
+}
+
+.atlas-signin-remember input {
+  width: 0.95rem;
+  height: 0.95rem;
+  accent-color: var(--signin-accent);
+}
+
+.atlas-signin-submit {
+  margin-top: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: fit-content;
+  border: none;
+  background: transparent;
+  color: #f4f8fc;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  padding: 0.15rem 0;
+  border-bottom: 1px solid rgba(244, 248, 252, 0.45);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, gap 0.15s ease;
+}
+
+.atlas-signin-submit:hover:not(:disabled) {
+  color: #fff;
+  border-bottom-color: #fff;
+  gap: 0.75rem;
+}
+
+.atlas-signin-submit:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.atlas-signin-meta {
+  margin: 1.5rem 0 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.75rem;
+  color: var(--signin-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.atlas-signin-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: #6b7c90;
+}
+
+.atlas-signin-dot--ok {
+  background: #3dba7e;
+}
+
+.atlas-signin-dot--down {
+  background: #e35d5d;
+}
+
+.atlas-signin-dot--wait {
+  background: #6b7c90;
+}
+
+.atlas-signin-error,
+.atlas-signin-hint {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.atlas-signin-error {
+  color: #f0a0a0;
+}
+
+.atlas-signin-hint {
+  color: var(--signin-muted);
+}
+
+.atlas-signin-footer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 1rem 1.25rem 1.35rem;
+  font-size: 0.75rem;
+  color: var(--signin-muted);
+}
+
+.atlas-signin-footer a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.atlas-signin-footer a:hover {
+  color: var(--signin-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas-signin-wash,
+  .atlas-signin-beam,
+  .atlas-signin-brand,
+  .atlas-signin-copy,
+  .atlas-signin-gate {
+    animation: none !important;
+  }
+}

@@ -37,6 +37,11 @@ use rbd::*;
 use volumes::*;
 
 pub fn router(state: AppState) -> Router {
+    // Password login is intentionally outside the bearer middleware (this is how you get a token).
+    let public_api = Router::new()
+        .route("/auth/login", post(login))
+        .with_state(state.clone());
+
     let api = Router::new()
         .route("/backends", get(list_backends).post(create_backend))
         .route("/backends/summary", get(backends_summary))
@@ -173,6 +178,11 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/tokens", post(issue_token))
         .route("/auth/tokens/revoked", get(list_revoked_tokens))
         .route("/auth/tokens/{jti}/revoke", post(revoke_token))
+        .route("/auth/users", get(list_users).post(create_user))
+        .route(
+            "/auth/users/{username}",
+            axum::routing::put(update_user).delete(delete_user),
+        )
         .route(
             "/tenants/{id}/quota",
             get(get_tenant_quota).put(put_tenant_quota),
@@ -223,7 +233,7 @@ pub fn router(state: AppState) -> Router {
         .route("/readyz", get(readyz))
         .route("/version", get(version))
         .merge(metrics)
-        .nest("/api/atlas/v1", api)
+        .nest("/api/atlas/v1", public_api.merge(api))
         // Any other path serves the embedded Storage Center SPA (client-side routing).
         .fallback(get(spa_handler))
         .with_state(state)

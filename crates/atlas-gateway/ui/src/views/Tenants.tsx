@@ -1,10 +1,10 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import { useState } from "react";
-import { Users } from "lucide-react";
-import { http, submit } from "../api/client";
+import { submit } from "../api/client";
 import { useInvalidate, useTenantPolicies, useTenants } from "../api/hooks";
 import type { TenantQuota } from "../api/types";
-import { Badge, Button, FormModal, GlassSection, PageHeader, SlideOver } from "../ui/kit";
+import { Badge, Button, FormModal, SlideOver } from "../ui/kit";
+import { PageHead } from "../ui/PageHead";
 import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
 import { fmtBytes, num } from "../lib/format";
@@ -14,28 +14,38 @@ export default function Tenants() {
   const inv = useInvalidate();
   const [quota, setQuota] = useState<TenantQuota | null>(null);
   const [drill, setDrill] = useState<TenantQuota | null>(null);
+  const n = data?.length || 0;
   return (
     <div>
-      <PageHeader icon={Users} title="Tenants" subtitle="Per-tenant capacity quotas and intent→placement policy overrides" />
-      <GlassSection title={<>Tenants <Badge kind="neutral">{data?.length || 0}</Badge></>}>
-        <Table
-          rows={data}
-          rowKey={(t) => t.tenant_id}
-          cols={[
-            { h: "Tenant", f: (t) => t.tenant_id, mono: true },
-            { h: "Used", f: (t) => fmtBytes(t.used_bytes) },
-            { h: "Volumes", f: (t) => num(t.volume_count) },
-            { h: "Max bytes", f: (t) => (t.max_bytes ? fmtBytes(t.max_bytes) : "∞") },
-            { h: "Max vols", f: (t) => t.max_volumes || "∞" },
-          ]}
-          actions={(t) => (
-            <>
-              <Button size="sm" onClick={() => setQuota(t)}>Quota</Button>
-              <Button size="sm" onClick={() => setDrill(t)}>Policies</Button>
-            </>
-          )}
-        />
-      </GlassSection>
+      <PageHead
+        eyebrow="GOVERNANCE · INDEX"
+        title="Tenants"
+        state={
+          n
+            ? `${n} tenant${n === 1 ? "" : "s"} — capacity quotas and intent→placement overrides.`
+            : "No tenants yet. Quotas and policy overrides appear once tenants register usage."
+        }
+      />
+      <Table
+        soundings
+        panelTitle="Tenant index"
+        rows={data}
+        rowKey={(t) => t.tenant_id}
+        empty="No tenants yet."
+        cols={[
+          { h: "Tenant", f: (t) => t.tenant_id, mono: true },
+          { h: "Used", f: (t) => fmtBytes(t.used_bytes) },
+          { h: "Volumes", f: (t) => num(t.volume_count) },
+          { h: "Max bytes", f: (t) => (t.max_bytes ? fmtBytes(t.max_bytes) : "∞") },
+          { h: "Max vols", f: (t) => t.max_volumes || "∞" },
+        ]}
+        actions={(t) => (
+          <>
+            <Button size="sm" onClick={() => setQuota(t)}>Quota</Button>
+            <Button size="sm" onClick={() => setDrill(t)}>Policies</Button>
+          </>
+        )}
+      />
 
       {quota && (
         <FormModal open onClose={() => setQuota(null)} title={`Quota — ${quota.tenant_id}`} submitLabel="Save"
@@ -59,33 +69,50 @@ function PolicyDrawer({ tenant, onClose }: { tenant: TenantQuota | null; onClose
   if (!tenant) return null;
   return (
     <SlideOver open={!!tenant} onClose={onClose} title={`Policies — ${tenant.tenant_id}`} width={520}>
-      <Table
-        rows={data}
-        rowKey={(p) => p.intent}
-        cols={[
-          { h: "Intent", f: (p) => p.intent },
-          { h: "StorageClass", f: (p) => p.storage_class, mono: true },
-          { h: "Access", f: (p) => p.access_mode },
-        ]}
-        actions={(p) => (
-          <Button size="sm" variant="danger" onClick={() => del(`override ${p.intent}`, async () => { await submit("delete", `/tenants/${id}/policies/${p.intent}`, null, "delete override"); refetch(); })}>Del</Button>
-        )}
-        empty="No overrides — falls back to the built-in catalog."
-      />
-      <div className="glass-card p-3 mt-4 space-y-2">
-        <div className="section-label">Add override</div>
-        <div className="grid grid-cols-3 gap-2">
-          <input className="field" placeholder="intent" value={intent} onChange={(e) => setIntent(e.target.value)} />
-          <input className="field" placeholder="storage class" value={sc} onChange={(e) => setSc(e.target.value)} />
-          <input className="field" placeholder="access mode" value={am} onChange={(e) => setAm(e.target.value)} />
+      <div className="at-stack">
+        <Table
+          soundings
+          panelTitle="Overrides"
+          rows={data}
+          rowKey={(p) => p.intent}
+          cols={[
+            { h: "Intent", f: (p) => p.intent },
+            { h: "StorageClass", f: (p) => p.storage_class, mono: true },
+            { h: "Access", f: (p) => p.access_mode },
+          ]}
+          actions={(p) => (
+            <Button size="sm" variant="danger" onClick={() => del(`override ${p.intent}`, async () => { await submit("delete", `/tenants/${id}/policies/${p.intent}`, null, "delete override"); refetch(); })}>Del</Button>
+          )}
+          empty="No overrides — falls back to the built-in catalog."
+        />
+        <div className="at-panel">
+          <div className="at-panel-bar">
+            <span className="at-caption">Add override</span>
+          </div>
+          <div className="at-form-grid">
+            <div className="grid grid-cols-3 gap-2">
+              <input className="field" placeholder="intent" value={intent} onChange={(e) => setIntent(e.target.value)} />
+              <input className="field" placeholder="storage class" value={sc} onChange={(e) => setSc(e.target.value)} />
+              <input className="field" placeholder="access mode" value={am} onChange={(e) => setAm(e.target.value)} />
+            </div>
+            <div>
+              <button
+                type="button"
+                className="at-btn primary"
+                disabled={!intent.trim() || !sc.trim() || !am.trim()}
+                onClick={async () => {
+                  try {
+                    await submit("put", `/tenants/${id}/policies/${intent}`, { storage_class: sc, access_mode: am, volume_mode: "Filesystem" }, "override set");
+                    setIntent("database"); setSc("zyvor-cephfs-shared"); setAm("ReadWriteMany");
+                    refetch();
+                  } catch { /* toasted */ }
+                }}
+              >
+                Save override
+              </button>
+            </div>
+          </div>
         </div>
-        <Button variant="primary" disabled={!intent.trim() || !sc.trim() || !am.trim()} onClick={async () => {
-          try {
-            await submit("put", `/tenants/${id}/policies/${intent}`, { storage_class: sc, access_mode: am, volume_mode: "Filesystem" }, "override set");
-            setIntent("database"); setSc("zyvor-cephfs-shared"); setAm("ReadWriteMany");
-            refetch();
-          } catch { /* toasted */ }
-        }}>Save override</Button>
       </div>
     </SlideOver>
   );

@@ -3,6 +3,8 @@
  */
 @import "./zyvor-premium-login.css";
 @import "./zyvor-secure-login.css";
+@import "./atlas-signin.css";
+@import "./atlas-soundings.css";
 
 @tailwind base;
 @tailwind components;
@@ -40,22 +42,22 @@
     --radius: 0.75rem;
   }
 
-  /* Nebula shell (default) — electric violet + magenta over deep cosmic indigo. */
+  /* Nebula = Soundings identity (mineral void + survey cyan) — default shell. */
   :root[data-ui-shell="nebula"] {
-    --background: 258 45% 4%;
-    --card: 262 32% 8%;
-    --card-foreground: 260 30% 97%;
-    --foreground: 260 30% 97%;
-    --popover: 262 32% 8%;
-    --primary: 280 90% 66%;
-    --primary-foreground: 260 30% 98%;
-    --ring: 280 90% 66%;
-    --info: 280 90% 66%;
-    --muted-foreground: 258 18% 76%;
-    --border: 272 32% 18%;
-    --secondary: 270 28% 15%;
-    --accent: 270 28% 15%;
-    --input: 272 32% 18%;
+    --background: 200 30% 3%;
+    --card: 200 22% 7%;
+    --card-foreground: 190 30% 94%;
+    --foreground: 190 30% 94%;
+    --popover: 200 22% 7%;
+    --primary: 188 78% 58%;
+    --primary-foreground: 195 60% 8%;
+    --ring: 188 78% 58%;
+    --info: 188 78% 58%;
+    --muted-foreground: 195 14% 62%;
+    --border: 195 18% 16%;
+    --secondary: 200 18% 12%;
+    --accent: 200 18% 12%;
+    --input: 195 18% 16%;
   }
 
   /* Midnight shell — cool steel-blue/indigo over near-black, no violet or cyan tint. */
@@ -100,11 +102,11 @@
     height: 100%;
   }
   body {
-    background: hsl(var(--background));
-    color: hsl(var(--foreground));
-    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--at-void, hsl(var(--background)));
+    color: var(--at-ink, hsl(var(--foreground)));
+    font-family: var(--at-face, "Space Grotesk", system-ui, sans-serif);
     font-size: 14px;
-    line-height: 1.5;
+    line-height: 1.45;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -158,21 +160,23 @@
     box-shadow: 0 0 32px -8px rgba(96, 165, 250, 0.4);
     border-color: rgba(96, 165, 250, 0.4);
   }
-  /* Nebula shell canvas + accents */
+  /* Nebula shell canvas + accents — Soundings survey cyan */
   :root[data-ui-shell="nebula"] .tahoe-canvas {
     background:
-      radial-gradient(ellipse 72% 52% at 16% -6%, rgba(168, 85, 247, 0.18), transparent 55%),
-      radial-gradient(ellipse 62% 50% at 90% 6%, rgba(236, 72, 153, 0.13), transparent 55%),
-      radial-gradient(ellipse 84% 62% at 58% 114%, rgba(56, 189, 248, 0.1), transparent 55%),
-      linear-gradient(180deg, #070312, #0c0620 45%, #12082a 82%, #08040f);
+      radial-gradient(ellipse 70% 50% at 50% -8%, rgba(63, 208, 232, 0.08), transparent 55%),
+      radial-gradient(ellipse 50% 40% at 100% 80%, rgba(75, 140, 245, 0.06), transparent 50%),
+      linear-gradient(180deg, #04070a, #070c11 45%, #0b131a 82%, #04070a);
   }
   :root[data-ui-shell="nebula"] .btn-primary {
-    background: linear-gradient(180deg, rgb(192, 132, 252) 0%, rgb(219, 39, 119) 100%);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.22) inset, 0 8px 22px -6px rgba(192, 60, 220, 0.55);
+    background: var(--at-cyan, #3fd0e8);
+    color: #032027;
+    border: 1px solid var(--at-cyan, #3fd0e8);
+    box-shadow: 0 0 22px var(--at-cyan-glow, rgba(63, 208, 232, 0.34));
   }
-  :root[data-ui-shell="nebula"] .glass-card.hoverable:hover {
-    box-shadow: 0 0 32px -8px rgba(192, 132, 252, 0.4);
-    border-color: rgba(192, 132, 252, 0.4);
+  :root[data-ui-shell="nebula"] .glass-card.hoverable:hover,
+  :root[data-ui-shell="nebula"] .at-card.hoverable:hover {
+    box-shadow: 0 0 28px -8px var(--at-cyan-glow, rgba(63, 208, 232, 0.34));
+    border-color: var(--at-line-3, rgba(120, 180, 200, 0.34));
   }
   .zeus-sidebar {
     background: linear-gradient(180deg, hsl(var(--card) / 0.92) 0%, hsl(222 47% 5%) 100%);

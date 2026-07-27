@@ -33,6 +33,8 @@ fn base_config(db: &str, o: Opts) -> Config {
         jwt_secret: "obs-test-secret-key-at-least-32-bytes!".into(),
         auth_required: o.auth_required,
         bootstrap_admin_token: None,
+        admin_username: "admin".into(),
+        admin_password: "Admin@321".into(),
         monitor_interval_secs: 0,
         ceph_prometheus_url: None,
         alert_webhook_url: None,

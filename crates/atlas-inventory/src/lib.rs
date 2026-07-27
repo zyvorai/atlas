@@ -30,6 +30,7 @@ pub mod schedules;
 pub mod snapshots;
 pub mod tokens;
 pub mod tenants;
+pub mod users;
 
 /// Open the SQLite pool with WAL + foreign keys, creating the file if missing.
 ///

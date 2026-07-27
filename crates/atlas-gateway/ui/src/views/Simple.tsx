@@ -1,170 +1,321 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 // Compact read/light-write Centers: Policies, Backends, Kubernetes, Cluster, Metrics.
-import { useState } from "react";
-import { Boxes, Database, Gauge, Server, ShieldCheck } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { submit } from "../api/client";
 import {
-  useBackends, useBackendsSummary, useCephMetrics, useClusters, useInvalidate, useNodes, useOsds,
-  usePolicies, usePools, useStorageClasses,
+  useBackends,
+  useBackendsSummary,
+  useCephMetrics,
+  useCephOsdDf,
+  useClusters,
+  useInvalidate,
+  useNodes,
+  useOsds,
+  usePolicies,
+  usePools,
+  useStorageClasses,
 } from "../api/hooks";
-import { Badge, Button, GlassSection, PageHeader } from "../ui/kit";
+import { Badge, Button } from "../ui/kit";
+import { PageHead } from "../ui/PageHead";
 import { Table } from "../ui/Table";
-import { fmtBytes, healthKind } from "../lib/format";
+import { depth, depthWidth } from "../lib/depth";
+import { fmtBytes, fmtBytesOpt, fmtPct, healthKind } from "../lib/format";
 
 export function Policies() {
   const { data } = usePolicies();
+  const n = data?.length || 0;
   return (
     <div>
-      <PageHeader icon={ShieldCheck} title="Policies" subtitle="Built-in intent → placement catalog (atlas-policy)" />
-      <GlassSection title="Intent catalog">
-        <Table rows={data} rowKey={(p) => p.intent}
-          cols={[
-            { h: "Intent", f: (p) => <Badge kind="info">{p.intent}</Badge> },
-            { h: "StorageClass", f: (p) => p.storage_class, mono: true },
-            { h: "Access", f: (p) => p.access_mode },
-            { h: "Volume mode", f: (p) => p.volume_mode },
-            { h: "Description", f: (p) => <span className="text-muted-foreground">{p.description}</span> },
-          ]} />
-      </GlassSection>
+      <PageHead
+        eyebrow="GOVERNANCE · INDEX"
+        title="Policies"
+        state={
+          n
+            ? `${n} intent${n === 1 ? "" : "s"} in the built-in placement catalog (atlas-policy).`
+            : "Built-in intent → placement catalog (atlas-policy)."
+        }
+      />
+      <Table
+        soundings
+        panelTitle="Intent catalog"
+        rows={data}
+        rowKey={(p) => p.intent}
+        empty="No policies loaded."
+        cols={[
+          { h: "Intent", f: (p) => <Badge kind="info">{p.intent}</Badge> },
+          { h: "StorageClass", f: (p) => p.storage_class, mono: true },
+          { h: "Access", f: (p) => p.access_mode },
+          { h: "Volume mode", f: (p) => p.volume_mode },
+          { h: "Description", f: (p) => <span style={{ color: "var(--at-ink-3)" }}>{p.description}</span> },
+        ]}
+      />
     </div>
   );
 }
 
 const BACKEND_KIND: Record<string, "success" | "info" | "warning" | "neutral"> = {
-  ceph: "info", nfs: "success", zfs: "warning", rgw: "neutral",
+  ceph: "info",
+  nfs: "success",
+  zfs: "warning",
+  rgw: "neutral",
 };
 
 export function Backends() {
   const { data } = useBackends();
   const { data: summary } = useBackendsSummary();
   const inv = useInvalidate();
+  const n = data?.length || 0;
   return (
     <div>
-      <PageHeader icon={Server} title="Backends" subtitle="Registered storage backends and discovery"
-        actions={<Button onClick={() => submit("post", "/backends/bkd_ceph_lab/discover", null, "discovery triggered", () => inv("clusters")).catch(() => {})}>Discover</Button>} />
+      <PageHead
+        eyebrow="INFRASTRUCTURE · OPS"
+        title="Backends"
+        state={
+          n
+            ? `${n} registered backend${n === 1 ? "" : "s"} — discovery and capacity summary.`
+            : "No backends registered yet."
+        }
+        actions={
+          <button
+            type="button"
+            className="at-btn"
+            onClick={() =>
+              submit("post", "/backends/bkd_ceph_lab/discover", null, "discovery triggered", () => inv("clusters")).catch(
+                () => {},
+              )
+            }
+          >
+            Discover
+          </button>
+        }
+      />
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-        {(summary || []).map((b) => {
-          const pct = b.raw_capacity_bytes > 0 ? (b.used_capacity_bytes / b.raw_capacity_bytes) * 100 : 0;
-          return (
-            <div key={b.backend_id} className="glass-card p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Badge kind={BACKEND_KIND[b.backend_type] || "neutral"}>{b.backend_type}</Badge>
-                <span className="font-semibold truncate">{b.backend_id}</span>
-              </div>
-              <div className="text-xs text-muted-foreground mb-2">
-                {b.clusters} cluster(s) · {b.volumes} volume(s) · {b.mode}
-              </div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-muted-foreground">{fmtBytes(b.used_capacity_bytes)} used</span>
-                <span className="text-muted-foreground">of {fmtBytes(b.raw_capacity_bytes)}</span>
-              </div>
-              <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
-                <div className="h-full rounded-full" style={{ width: `${Math.min(100, pct)}%`, background: "linear-gradient(180deg,#38BDF8,#2563EB)" }} />
-              </div>
-            </div>
-          );
-        })}
+      <div className="at-mod">
+        <div className="at-modhead">
+          <span className="at-modtitle">Capacity soundings</span>
+          <span className="at-modnote">{(summary || []).length} backends</span>
+        </div>
+        <div className="at-panel">
+          {(summary || []).map((b) => {
+            const pct = b.raw_capacity_bytes > 0 ? (b.used_capacity_bytes / b.raw_capacity_bytes) * 100 : 0;
+            const d = depth(pct);
+            return (
+              <button key={b.backend_id} type="button" className="at-basin" style={{ cursor: "default" }}>
+                <div className="at-basin-id">
+                  <div className="at-basin-name">
+                    <span className="mono">{b.backend_type?.toUpperCase?.() || b.backend_type}</span>
+                    <span className="at-tag">{d.name.toUpperCase()}</span>
+                    <span className="at-tag" style={{ opacity: 0.7 }}>
+                      {b.mode}
+                    </span>
+                  </div>
+                  <div className="at-trough">
+                    <i className={`at-level ${d.cls}`} style={{ width: depthWidth(pct) }} />
+                  </div>
+                </div>
+                <div className="at-basin-read">
+                  {fmtBytes(b.used_capacity_bytes)} of {fmtBytes(b.raw_capacity_bytes)}
+                  <div style={{ fontSize: 11, color: "var(--at-ink-4)", marginTop: 4 }}>
+                    {b.clusters} cluster(s) · {b.volumes} volume(s)
+                  </div>
+                </div>
+                <div className={`at-basin-pct ${d.cls} fg`}>{fmtPct(pct)}%</div>
+              </button>
+            );
+          })}
+          {!summary?.length && (
+            <div style={{ padding: 24, color: "var(--at-ink-4)", fontSize: 13 }}>No capacity summary yet.</div>
+          )}
+        </div>
       </div>
 
-      <GlassSection title="Backends">
-        <Table rows={data} rowKey={(b) => b.id}
-          cols={[
-            { h: "ID", f: (b) => b.id, mono: true },
-            { h: "Name", f: (b) => b.name },
-            { h: "Type", f: (b) => <Badge kind={BACKEND_KIND[b.backend_type] || "neutral"}>{b.backend_type}</Badge> },
-            { h: "Mode", f: (b) => b.mode },
-            { h: "Status", f: (b) => <Badge kind={b.status === "active" ? "success" : "neutral"}>{b.status}</Badge> },
-          ]} />
-      </GlassSection>
+      <Table
+        soundings
+        panelTitle="Backend registry"
+        rows={data}
+        rowKey={(b) => b.id}
+        empty="No backends registered."
+        cols={[
+          { h: "ID", f: (b) => b.id, mono: true },
+          { h: "Name", f: (b) => b.name },
+          { h: "Type", f: (b) => <Badge kind={BACKEND_KIND[b.backend_type] || "neutral"}>{b.backend_type}</Badge> },
+          { h: "Mode", f: (b) => b.mode },
+          { h: "Status", f: (b) => <Badge kind={b.status === "active" ? "success" : "neutral"}>{b.status}</Badge> },
+        ]}
+      />
     </div>
   );
 }
 
 export function Kubernetes() {
-  const { data: scs, isError, refetch } = useStorageClasses();
+  const { data: scs } = useStorageClasses();
+  const n = scs?.length || 0;
   return (
     <div>
-      <PageHeader icon={Boxes} title="Kubernetes" subtitle="Live StorageClasses from the cluster" />
-      <GlassSection title={<>StorageClasses <Badge kind="neutral">{scs?.length || 0}</Badge></>}>
-        <Table rows={scs} error={isError} onRetry={() => refetch()} rowKey={(s) => s.name}
-          cols={[
-            { h: "Name", f: (s) => s.name, mono: true },
-            { h: "Provisioner", f: (s) => s.provisioner, mono: true },
-            { h: "Reclaim", f: (s) => s.reclaim_policy || "—" },
-            { h: "Binding", f: (s) => s.volume_binding_mode || "—" },
-            { h: "Expand", f: (s) => (s.allow_volume_expansion ? "yes" : "no") },
-            { h: "Ceph", f: (s) => (s.is_ceph ? <Badge kind="info">ceph</Badge> : "—") },
-          ]} />
-      </GlassSection>
+      <PageHead
+        eyebrow="INFRASTRUCTURE · OPS"
+        title="Kubernetes"
+        state={
+          n
+            ? `${n} StorageClass${n === 1 ? "" : "es"} discovered from the cluster.`
+            : "No StorageClasses visible — check KUBECONFIG / RBAC."
+        }
+      />
+      <Table
+        soundings
+        panelTitle="StorageClasses"
+        rows={scs}
+        rowKey={(s) => s.name}
+        empty="No StorageClasses."
+        cols={[
+          { h: "Name", f: (s) => s.name, mono: true },
+          { h: "Provisioner", f: (s) => s.provisioner, mono: true },
+          { h: "Reclaim", f: (s) => s.reclaim_policy || "—" },
+          { h: "Binding", f: (s) => s.volume_binding_mode || "—" },
+          {
+            h: "Default",
+            f: (s) => (s.is_default ? <Badge kind="success">yes</Badge> : <span style={{ color: "var(--at-ink-4)" }}>—</span>),
+          },
+        ]}
+      />
     </div>
   );
 }
 
 export function Cluster() {
+  const nav = useNavigate();
   const { data: clusters } = useClusters();
+  const { data: nodes } = useNodes();
   const { data: pools } = usePools();
   const { data: osds } = useOsds();
-  const { data: nodes } = useNodes();
+  const primary = clusters?.[0];
   return (
     <div>
-      <PageHeader icon={Database} title="Cluster" subtitle="Ceph cluster health, nodes, pools and OSDs" />
-      <div className="grid lg:grid-cols-2 gap-4">
-        <GlassSection title="Clusters">
-          <Table rows={clusters} rowKey={(c) => c.id}
-            cols={[
-              { h: "Name", f: (c) => c.name, mono: true },
-              { h: "FSID", f: (c) => <span className="mono text-muted-foreground">{(c.native_fsid || "").slice(0, 12) || "—"}</span> },
-              { h: "Health", f: (c) => <Badge kind={healthKind(c.health)} dot>{c.health}</Badge> },
-              { h: "Raw", f: (c) => fmtBytes(c.raw_capacity_bytes) },
-              { h: "Used", f: (c) => fmtBytes(c.used_capacity_bytes) },
-            ]} />
-        </GlassSection>
-        <GlassSection title={<>Nodes <Badge kind="neutral">{nodes?.length || 0}</Badge></>}>
-          <Table rows={nodes} rowKey={(n) => n.host} cols={[{ h: "Host", f: (n) => n.host, mono: true }]} />
-        </GlassSection>
-        <GlassSection title="Pools">
-          <Table rows={pools} rowKey={(p) => p.id}
-            cols={[
-              { h: "Name", f: (p) => p.name, mono: true },
-              { h: "Kind", f: (p) => p.kind },
-              { h: "Used", f: (p) => fmtBytes(p.used_bytes) },
-              // p.max_bytes is Ceph's MAX AVAIL (headroom beyond what's used), not total capacity —
-              // add used back in to get the provisioned total, matching Command Deck's pool widget.
-              { h: "Max", f: (p) => fmtBytes((p.max_bytes || 0) + (p.used_bytes || 0)) },
-            ]} />
-        </GlassSection>
-        <GlassSection title="OSDs">
-          <Table rows={osds} rowKey={(o) => String(o.id)}
-            cols={[
-              { h: "OSD", f: (o) => `osd.${o.osd_num ?? o.id}`, mono: true },
-              { h: "Host", f: (o) => o.host },
-              { h: "Up", f: (o) => <Badge kind={o.up ? "success" : "danger"} dot>{o.up ? "up" : "down"}</Badge> },
-              { h: "Used", f: (o) => fmtBytes(o.used_bytes) },
-            ]} />
-        </GlassSection>
+      <PageHead
+        eyebrow="INFRASTRUCTURE · OPS"
+        title="Cluster"
+        state={
+          primary
+            ? `${primary.name} · health ${primary.health} · ${pools?.length || 0} pools · ${osds?.length || 0} OSDs.`
+            : "Waiting on cluster inventory…"
+        }
+        actions={
+          <button type="button" className="at-btn" onClick={() => nav("/ceph")}>
+            Ceph detail
+          </button>
+        }
+      />
+
+      <div className="at-instr-grid">
+        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+          <div className="at-caption">Health</div>
+          <div className="at-val md" style={{ textTransform: "uppercase" }}>
+            {primary?.health || "—"}
+          </div>
+          <div className="at-delta mono">{primary?.name || "—"}</div>
+        </div>
+        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+          <div className="at-caption">Raw</div>
+          <div className="at-val md">{fmtBytesOpt(primary?.raw_capacity_bytes)}</div>
+          <div className="at-delta">used {fmtBytesOpt(primary?.used_capacity_bytes)}</div>
+        </div>
+        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+          <div className="at-caption">Pools</div>
+          <div className="at-val md">{pools?.length ?? "—"}</div>
+          <div className="at-delta">inventory</div>
+        </div>
+        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+          <div className="at-caption">OSDs</div>
+          <div className="at-val md">{osds?.length ?? "—"}</div>
+          <div className="at-delta">{nodes?.length || 0} node(s)</div>
+        </div>
+      </div>
+
+      <div className="at-stack">
+        <Table
+          soundings
+          panelTitle="Clusters"
+          rows={clusters}
+          rowKey={(c) => c.id}
+          empty="No clusters."
+          cols={[
+            { h: "Name", f: (c) => c.name, mono: true },
+            { h: "Health", f: (c) => <Badge kind={healthKind(c.health)} dot>{c.health}</Badge> },
+            { h: "Raw", f: (c) => fmtBytesOpt(c.raw_capacity_bytes) },
+            { h: "Used", f: (c) => fmtBytesOpt(c.used_capacity_bytes) },
+          ]}
+        />
+        <Table
+          soundings
+          panelTitle="Nodes"
+          rows={nodes}
+          rowKey={(n) => n.host}
+          empty="No nodes."
+          cols={[{ h: "Host", f: (n) => n.host, mono: true }]}
+        />
+        <Table
+          soundings
+          panelTitle="Pools"
+          rows={pools}
+          rowKey={(p) => p.id}
+          onRow={(p) => nav(`/pools/${p.id}`)}
+          empty="No pools."
+          cols={[
+            { h: "Name", f: (p) => p.name, mono: true },
+            { h: "Kind", f: (p) => p.kind },
+            { h: "Used", f: (p) => fmtBytesOpt(p.used_bytes) },
+            { h: "Max", f: (p) => fmtBytesOpt(p.max_bytes) },
+            { h: "Health", f: (p) => <Badge kind={healthKind(p.health)} dot>{p.health}</Badge> },
+          ]}
+        />
+        <Table
+          soundings
+          panelTitle="OSDs"
+          rows={osds}
+          rowKey={(o) => String(o.id)}
+          empty="No OSDs."
+          cols={[
+            { h: "OSD", f: (o) => `osd.${o.osd_num ?? o.id}`, mono: true },
+            { h: "Host", f: (o) => o.host || "—" },
+            { h: "Up", f: (o) => (o.up ? <Badge kind="success">up</Badge> : <Badge kind="danger">down</Badge>) },
+            { h: "In", f: (o) => (o.in_cluster ? "in" : "out") },
+            { h: "Class", f: (o) => o.device_class || "—" },
+          ]}
+        />
       </div>
     </div>
   );
 }
 
 export function Metrics() {
-  const [prefix, setPrefix] = useState("");
-  const { data } = useCephMetrics(prefix || undefined);
+  const { data } = useCephMetrics();
+  const { data: osdDf } = useCephOsdDf();
+  const n = data?.length || 0;
+  const avg = osdDf?.summary?.average_utilization;
   return (
     <div>
-      <PageHeader icon={Gauge} title="Metrics" subtitle="Curated Ceph mgr Prometheus metrics (capacity, OSD latency, pool usage, client I/O, recovery)" />
-      <div className="mb-3">
-        <input className="field w-72" placeholder="Filter by prefix, e.g. ceph_pool_" value={prefix} onChange={(e) => setPrefix(e.target.value)} />
-      </div>
-      <GlassSection title={<>Metrics <Badge kind="neutral">{data?.length || 0}</Badge></>}>
-        <Table rows={data} rowKey={(m, i) => m.name + i}
-          cols={[
-            { h: "Metric", f: (m) => m.name, mono: true },
-            { h: "Labels", f: (m) => <span className="mono text-muted-foreground text-[11px]">{Object.entries(m.labels || {}).map(([k, v]) => `${k}=${v}`).join(" ")}</span> },
-            { h: "Value", f: (m) => (Number.isInteger(m.value) ? m.value.toLocaleString() : m.value.toFixed(3)) },
-          ]} />
-      </GlassSection>
+      <PageHead
+        eyebrow="OBSERVABILITY · INDEX"
+        title="Metrics"
+        state={
+          n
+            ? `${n} Ceph metric sample${n === 1 ? "" : "s"}${avg != null ? ` · OSD avg ${avg.toFixed(1)}%` : ""}.`
+            : "Ceph-native metrics stream — waiting on samples."
+        }
+      />
+      <Table
+        soundings
+        panelTitle="Metric samples"
+        rows={data}
+        rowKey={(_, i) => String(i)}
+        empty="No metrics yet."
+        cols={[
+          { h: "Name", f: (m) => m.name, mono: true },
+          { h: "Value", f: (m) => String(m.value), mono: true },
+          { h: "Labels", f: (m) => <span className="mono" style={{ color: "var(--at-ink-4)" }}>{JSON.stringify(m.labels || {})}</span> },
+        ]}
+      />
     </div>
   );
 }
