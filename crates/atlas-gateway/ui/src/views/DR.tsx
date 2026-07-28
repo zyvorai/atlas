@@ -2,8 +2,8 @@
 // Day-2 cross-cluster DR: mirroring peers, mirrored images, and failover (promote/demote).
 import { useState } from "react";
 import { submit, submitJob } from "../api/client";
-import { useDrMirrors, useDrPeers, useDrPreflight, useDrStatus, useInvalidate } from "../api/hooks";
-import { Badge, Button, Field } from "../ui/kit";
+import { useDrMirrors, useDrPeers, useDrPreflight, useDrStatus, useInvalidate, useVolumes } from "../api/hooks";
+import { Badge, Button, Field, Label, Select } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
 import { Table } from "../ui/Table";
 import { confirmThen } from "../ui/confirm";
@@ -14,8 +14,17 @@ export default function DR() {
   const { data: peers } = useDrPeers();
   const { data: mirrors } = useDrMirrors();
   const { data: preflight } = useDrPreflight();
+  const { data: volumes } = useVolumes(undefined, undefined, undefined, "block");
   const [peerName, setPeerName] = useState("");
+  const [peerFsid, setPeerFsid] = useState("");
+  const [peerSecret, setPeerSecret] = useState("");
+  const [peerDir, setPeerDir] = useState("rx-tx");
+  const [volId, setVolId] = useState("");
+  const [mirrorPeer, setMirrorPeer] = useState("");
+  const [mirrorMode, setMirrorMode] = useState("snapshot");
   const refresh = () => inv("dr-status", "dr-peers", "dr-mirrors", "dr-preflight");
+
+  const blockVols = (volumes || []).filter((v) => v.state === "bound" || v.state === "ready" || !v.state);
 
   return (
     <div className="at-stack">
@@ -24,7 +33,7 @@ export default function DR() {
         title="Disaster Recovery"
         state={
           status
-            ? `${status.peers ?? 0} peer${(status.peers ?? 0) === 1 ? "" : "s"} · ${status.mirrors ?? 0} mirror${(status.mirrors ?? 0) === 1 ? "" : "s"} — control plane ${status.control_plane_ready ? "ready" : "incomplete"}; dataplane unverified.`
+            ? `${status.peers ?? 0} peer${(status.peers ?? 0) === 1 ? "" : "s"} · ${status.mirrors ?? 0} mirror${(status.mirrors ?? 0) === 1 ? "" : "s"} — control plane ${status.control_plane_ready ? "ready" : "incomplete"}; dataplane ${status.dataplane_verified || status.verified ? "verified" : "unverified (needs 2nd Ceph site)"}.`
             : "Cross-cluster RBD mirroring & failover — control plane ready; live mirror needs a peer cluster."
         }
       />
@@ -72,7 +81,7 @@ export default function DR() {
         </div>
         <div className="at-list-row">
           <span className="at-sub" style={{ margin: 0 }}>
-            {status?.note || "Run before failover drills"}
+            {status?.note || "Run before failover drills. Live rbd mirror image status needs a second cluster — see docs/DR.md."}
           </span>
         </div>
         {(preflight?.checks ?? []).map((c: any) => (
@@ -99,19 +108,51 @@ export default function DR() {
         soundings
         panelTitle="Mirroring peers"
         panelExtra={
-          <div className="flex items-center gap-2">
-            <Field
-              className="w-40"
-              value={peerName}
-              onChange={(e) => setPeerName(e.target.value)}
-              placeholder="peer name (dc2)"
-            />
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <Label>Name</Label>
+              <Field className="w-28" value={peerName} onChange={(e) => setPeerName(e.target.value)} placeholder="dc2" />
+            </div>
+            <div>
+              <Label>Cluster FSID</Label>
+              <Field className="w-40" value={peerFsid} onChange={(e) => setPeerFsid(e.target.value)} placeholder="optional" />
+            </div>
+            <div>
+              <Label>Secret ref</Label>
+              <Field className="w-36" value={peerSecret} onChange={(e) => setPeerSecret(e.target.value)} placeholder="k8s secret" />
+            </div>
+            <div>
+              <Label>Direction</Label>
+              <Select value={peerDir} onChange={(e) => setPeerDir(e.target.value)}>
+                <option value="rx-tx">rx-tx</option>
+                <option value="rx">rx</option>
+                <option value="tx">tx</option>
+              </Select>
+            </div>
             <button
               type="button"
               className="at-btn primary"
-              style={{ height: 28 }}
+              style={{ height: 32 }}
               disabled={!peerName.trim()}
-              onClick={() => submit("post", "/dr/peers", { name: peerName.trim() }, "peer registered", () => { setPeerName(""); refresh(); }).catch(() => {})}
+              onClick={() =>
+                submit(
+                  "post",
+                  "/dr/peers",
+                  {
+                    name: peerName.trim(),
+                    cluster_fsid: peerFsid.trim() || undefined,
+                    secret_ref: peerSecret.trim() || undefined,
+                    direction: peerDir,
+                  },
+                  "peer registered",
+                  () => {
+                    setPeerName("");
+                    setPeerFsid("");
+                    setPeerSecret("");
+                    refresh();
+                  },
+                ).catch(() => {})
+              }
             >
               Register
             </button>
@@ -122,6 +163,7 @@ export default function DR() {
         cols={[
           { h: "Name", f: (p) => p.name },
           { h: "Cluster FSID", f: (p) => p.cluster_fsid || "—", mono: true },
+          { h: "Secret", f: (p) => p.bootstrap_secret_ref || p.secret_ref || "—", mono: true },
           { h: "Direction", f: (p) => <Badge kind="info">{p.direction}</Badge> },
           { h: "State", f: (p) => p.state, mono: true },
         ]}
@@ -129,6 +171,68 @@ export default function DR() {
           <Button size="sm" variant="secondary" onClick={() => confirmThen({ title: "Delete peer?", message: p.name, confirmLabel: "Delete" }, () => submit("delete", `/dr/peers/${p.id}`, null, "peer deleted", refresh))}>Delete</Button>
         )}
       />
+
+      <div className="at-panel">
+        <div className="at-panel-bar">
+          <span className="at-caption">Enable mirror</span>
+        </div>
+        <div className="at-form-grid" style={{ padding: "12px var(--page-inset) 16px" }}>
+          <div>
+            <Label>Block volume</Label>
+            <Select value={volId} onChange={(e) => setVolId(e.target.value)}>
+              <option value="">Select volume…</option>
+              {blockVols.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name} ({v.id})
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label>Peer</Label>
+            <Select value={mirrorPeer} onChange={(e) => setMirrorPeer(e.target.value)}>
+              <option value="">Select peer…</option>
+              {(peers || []).map((p: any) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label>Mode</Label>
+            <Select value={mirrorMode} onChange={(e) => setMirrorMode(e.target.value)}>
+              <option value="snapshot">snapshot</option>
+              <option value="journal">journal</option>
+            </Select>
+          </div>
+          <div style={{ display: "flex", alignItems: "flex-end" }}>
+            <Button
+              variant="primary"
+              disabled={!volId || !mirrorPeer}
+              onClick={() =>
+                confirmThen(
+                  {
+                    title: "Enable RBD mirroring?",
+                    message: `POST /volumes/${volId}/mirror?mode=${mirrorMode}&peer=${mirrorPeer}. On a single-site lab the job may fail honestly — dataplane needs a second cluster.`,
+                    confirmLabel: "Enable",
+                  },
+                  () =>
+                    submitJob(
+                      "post",
+                      `/volumes/${volId}/mirror?mode=${mirrorMode}&peer=${mirrorPeer}`,
+                      null,
+                      "enable mirror",
+                      refresh,
+                    ),
+                )
+              }
+            >
+              Enable mirroring
+            </Button>
+          </div>
+        </div>
+      </div>
 
       <Table
         soundings
@@ -141,6 +245,7 @@ export default function DR() {
         rowKey={(m) => m.id}
         cols={[
           { h: "Image", f: (m) => `${m.pool}/${m.image}`, mono: true },
+          { h: "Volume", f: (m) => m.volume_id || "—", mono: true },
           { h: "Role", f: (m) => <Badge kind={m.role === "primary" ? "success" : "info"} dot>{m.role}</Badge> },
           { h: "State", f: (m) => m.state, mono: true },
           { h: "Mode", f: (m) => m.mode },
@@ -165,6 +270,25 @@ export default function DR() {
               if (!Number.isFinite(rpo_seconds) || rpo_seconds < 0) return;
               submit("post", `/dr/mirrors/${m.id}/rpo`, { rpo_seconds }, "rpo recorded", refresh).catch(() => {});
             }}>Set RPO</Button>
+            {m.volume_id && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() =>
+                  confirmThen(
+                    {
+                      title: "Disable mirroring?",
+                      message: `DELETE /volumes/${m.volume_id}/mirror — stops RBD mirror for this volume.`,
+                      confirmLabel: "Disable",
+                      danger: true,
+                    },
+                    () => submitJob("delete", `/volumes/${m.volume_id}/mirror`, null, "disable mirror", refresh),
+                  )
+                }
+              >
+                Disable
+              </Button>
+            )}
           </div>
         )}
       />

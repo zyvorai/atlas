@@ -15,11 +15,11 @@ use atlas_api_types::VolumeKind;
 use crate::auth::Claims;
 use crate::proto::atlas_storage_server::{AtlasStorage, AtlasStorageServer};
 use crate::proto::{
-    Alert, Cluster, CreateSnapshotRequest, CreateVolumeReply, CreateVolumeRequest,
+    Alert, Bucket, Cluster, CreateSnapshotRequest, CreateVolumeReply, CreateVolumeRequest,
     DeleteVolumeRequest, Empty, ExpandVolumeRequest, GetJobRequest, GetVolumeRequest, HealthReply,
-    HealthRequest, Job, JobReply, ListAlertsReply, ListAlertsRequest, ListClustersReply,
-    ListPoolsReply, ListSnapshotsReply, ListSnapshotsRequest, ListVolumesByOwnerRequest,
-    ListVolumesReply, Pool, Snapshot, Volume,
+    HealthRequest, Job, JobReply, ListAlertsReply, ListAlertsRequest, ListBucketsReply,
+    ListClustersReply, ListPoolsReply, ListSnapshotsReply, ListSnapshotsRequest,
+    ListVolumesByOwnerRequest, ListVolumesReply, MetricsSummary, Pool, Snapshot, Volume,
 };
 use crate::state::AppState;
 
@@ -528,6 +528,55 @@ impl AtlasStorage for GrpcService {
             })
             .collect();
         Ok(Response::new(ListAlertsReply { alerts }))
+    }
+
+    async fn get_metrics_summary(
+        &self,
+        _req: Request<Empty>,
+    ) -> Result<Response<MetricsSummary>, Status> {
+        let v = atlas_inventory::metrics_summary(&self.state.pool)
+            .await
+            .map_err(internal)?;
+        let io = v.get("client_io").cloned().unwrap_or(serde_json::json!({}));
+        let rec = v.get("recovery").cloned().unwrap_or(serde_json::json!({}));
+        Ok(Response::new(MetricsSummary {
+            raw_capacity_bytes: v["raw_capacity_bytes"].as_i64().unwrap_or(0),
+            used_capacity_bytes: v["used_capacity_bytes"].as_i64().unwrap_or(0),
+            available_capacity_bytes: v["available_capacity_bytes"].as_i64().unwrap_or(0),
+            used_capacity_percent: v["used_capacity_percent"].as_f64().unwrap_or(0.0),
+            clusters: v["clusters"].as_i64().unwrap_or(0),
+            pools: v["pools"].as_i64().unwrap_or(0),
+            volumes: v["volumes"].as_i64().unwrap_or(0),
+            snapshots: v["snapshots"].as_i64().unwrap_or(0),
+            buckets: v["buckets"].as_i64().unwrap_or(0),
+            backups: v["backups"].as_i64().unwrap_or(0),
+            read_ops_total: io["read_ops_total"].as_f64().unwrap_or(0.0),
+            write_ops_total: io["write_ops_total"].as_f64().unwrap_or(0.0),
+            pg_recovering: rec["pg_recovering"].as_i64().unwrap_or(0),
+            pg_backfilling: rec["pg_backfilling"].as_i64().unwrap_or(0),
+            objects_degraded: rec["objects_degraded"].as_i64().unwrap_or(0),
+        }))
+    }
+
+    async fn list_buckets(
+        &self,
+        _req: Request<Empty>,
+    ) -> Result<Response<ListBucketsReply>, Status> {
+        let buckets = atlas_inventory::buckets::list_buckets(&self.state.pool)
+            .await
+            .map_err(internal)?
+            .into_iter()
+            .map(|b| Bucket {
+                id: b.id,
+                name: b.name,
+                bucket_name: b.bucket_name.unwrap_or_default(),
+                state: b.state,
+                tenant_id: b.tenant_id,
+                namespace: b.namespace.unwrap_or_default(),
+                endpoint: b.endpoint.unwrap_or_default(),
+            })
+            .collect();
+        Ok(Response::new(ListBucketsReply { buckets }))
     }
 }
 

@@ -19,6 +19,7 @@ import Audit from "./views/Audit";
 import Tenants from "./views/Tenants";
 import Access from "./views/Access";
 import Settings from "./views/Settings";
+import ApiDocs from "./views/ApiDocs";
 import { Backends, Cluster, Kubernetes, Metrics, Policies } from "./views/Simple";
 import Maintenance from "./views/Maintenance";
 import DR from "./views/DR";
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="/tenants" element={<Tenants />} />
         <Route path="/access" element={<Access />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/api-docs" element={<ApiDocs />} />
         <Route path="/policies" element={<Policies />} />
         <Route path="/backends" element={<Backends />} />
         <Route path="/kubernetes" element={<Kubernetes />} />

@@ -59,3 +59,20 @@ Percona `Cluster` binds its PVCs on `zyvor-rbd-prod`; Atlas's reconciler advance
 | Postgres | live | live | live | live | live |
 | MySQL / MariaDB / MongoDB | live | live | live | pending (needs Kafka stack) | pending |
 | Oracle / SQL Server | live | via Debezium `initial` | advisory | pending | pending |
+
+## Unblocking non-Postgres CDC + cutover (lab)
+
+On the **edge** cluster (where CNPG/Percona already run):
+
+```bash
+cd deploy/databridge
+./up.sh                         # includes Strimzi + zyvor-kafka
+podman build -t databridge-connect:dev -f connect/Dockerfile connect
+# import image into k3s/containerd, then on atlas-gateway-ceph:
+kubectl -n rook-ceph set env deploy/atlas-gateway-ceph \
+  ATLAS_DATABRIDGE_CONNECT_IMAGE=localhost/databridge-connect:dev
+```
+
+Until that stack is up, Atlas **refuses** real `cdc/start` without `ATLAS_DATABRIDGE_CONNECT_IMAGE`,
+and the console marks CDC/cutover as **needs Kafka** for non-Postgres engines. Fake mode still
+runs discover→cutover for all six engines in CI.

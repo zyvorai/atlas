@@ -82,8 +82,8 @@ Kit surfaces (`GlassSection`, `StatCard`, `SlideOver`, buttons, fields, badges) 
 Single metal **topbar** (brand · centered icon section menus · quick links · action cluster)
 follows Zeus OS ~Apr 2026 EnhancedLayout / `dark-steel` / `zinc-metal` (`f0360bae3`): square
 `barIcon` triggers, hover/click flyouts, Look & feel menu (`LayoutTemplate`), icon search (⌘K),
-`TOP_BAR_QUICK_LINKS` (Settings / Observatory / Metrics), menubar capacity sparkline + cluster
-pulse, and a hamburger drawer below ~960px.
+`TOP_BAR_QUICK_LINKS` (Settings / Observatory / API Docs), menubar capacity sparkline + I/O + recovery
+chips + cluster pulse, and a hamburger drawer below ~960px.
 
 | Atlas theme (`data-ui-shell`) | Look |
 |---|---|

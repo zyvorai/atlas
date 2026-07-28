@@ -21,6 +21,10 @@ service AtlasStorage {
   // Server-streaming: emit the job on each state change until it reaches a terminal state.
   rpc WatchJob(GetJobRequest) returns (stream Job);
   rpc ListAlerts(ListAlertsRequest) returns (ListAlertsReply);
+  // Capacity + client I/O + recovery rollup (mirrors REST /metrics/summary).
+  rpc GetMetricsSummary(Empty) returns (MetricsSummary);
+  // Object buckets (RGW) — product-facing inventory read.
+  rpc ListBuckets(Empty) returns (ListBucketsReply);
 }
 
 message Empty {}
@@ -138,3 +142,32 @@ message Alert {
 }
 message ListAlertsRequest { string state = 1; }
 message ListAlertsReply { repeated Alert alerts = 1; }
+
+message MetricsSummary {
+  int64 raw_capacity_bytes = 1;
+  int64 used_capacity_bytes = 2;
+  int64 available_capacity_bytes = 3;
+  double used_capacity_percent = 4;
+  int64 clusters = 5;
+  int64 pools = 6;
+  int64 volumes = 7;
+  int64 snapshots = 8;
+  int64 buckets = 9;
+  int64 backups = 10;
+  double read_ops_total = 11;
+  double write_ops_total = 12;
+  int64 pg_recovering = 13;
+  int64 pg_backfilling = 14;
+  int64 objects_degraded = 15;
+}
+
+message Bucket {
+  string id = 1;
+  string name = 2;
+  string bucket_name = 3;
+  string state = 4;
+  string tenant_id = 5;
+  string namespace = 6;
+  string endpoint = 7;
+}
+message ListBucketsReply { repeated Bucket buckets = 1; }

@@ -7,6 +7,7 @@ import { Badge, Button } from "../../ui/kit";
 import { PageHead } from "../../ui/PageHead";
 import { confirmThen } from "../../ui/confirm";
 import { planStateKind, planStateLabel } from "./Plans";
+import { stageBadge, verificationFor } from "../../lib/engineVerification";
 
 // Pipeline stages in order. `state` values from migration_plans map to how far we've progressed.
 const STAGES = ["discover", "assess", "provision", "full-load", "cdc", "validate", "cutover"] as const;
@@ -36,6 +37,10 @@ export default function PlanDetail() {
   const current = done + 1; // the next actionable stage index
   const a = plan.assessment as any;
   const rollbackDeadline = plan.cutover_at ? new Date(Date.parse(plan.cutover_at) + plan.rollback_window_secs * 1000) : null;
+  const engineKind = source?.kind || "";
+  const engVer = verificationFor(String(engineKind));
+  const cdcLive = stageBadge(engVer, "cdc") === "live";
+  const cutoverLive = stageBadge(engVer, "cutover") === "live";
 
   const act = (stage: string) => {
     const P = `/databridge/plans/${plan.id}`;
@@ -53,8 +58,13 @@ export default function PlanDetail() {
       <PageHead
         eyebrow="DATABRIDGE · DETAIL"
         title={plan.name}
-        state={`Plan ${plan.id} · source ${source?.name || plan.source_id} · ${planStateLabel(plan.state)}`}
+        state={`Plan ${plan.id} · source ${source?.name || plan.source_id} · ${planStateLabel(plan.state)}${engVer ? ` · ${engVer.engine}` : ""}`}
         actions={<div className="flex gap-2 items-center">
+          {engVer && (
+            <Badge kind={cdcLive && cutoverLive ? "success" : "warning"} title={engVer.note}>
+              CDC/cutover {cdcLive && cutoverLive ? "live" : "pending infra"}
+            </Badge>
+          )}
           {plan.state === "cdc_streaming" && (
             <>
               <button type="button" className="at-btn" onClick={() => submitJob("post", `/databridge/plans/${plan.id}/cdc/stop`, null, "stop CDC", refresh).catch(() => {})}>Stop CDC</button>
@@ -110,6 +120,14 @@ export default function PlanDetail() {
                 {STAGE_LABEL[stage]}
                 {!IMPLEMENTED.has(stage) && (
                   <span style={{ marginLeft: 8, fontSize: 12, color: "var(--at-ink-4)" }}>(coming soon)</span>
+                )}
+                {(stage === "cdc" || stage === "cutover") && engVer && (
+                  <Badge
+                    kind={stageBadge(engVer, stage) === "live" ? "success" : "warning"}
+                    className="ml-2"
+                  >
+                    {stageBadge(engVer, stage) === "live" ? "live verified" : "needs Kafka"}
+                  </Badge>
                 )}
               </span>
               {actionable && stage === "cutover" && (

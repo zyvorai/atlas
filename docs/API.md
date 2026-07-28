@@ -6,10 +6,11 @@
 > `GetVolume`, `CreateVolume` (→ job; takes an `Owner` recorded in `product_bindings`), `DeleteVolume`
 > (→ job, admin), `CreateSnapshot` (→ job, operator), `ListVolumesByOwner(product, resource_id?)` so a
 > product enumerates only the volumes it owns, `GetJob`, `WatchJob` (server-streaming job updates),
-> `ListAlerts`. Auth: HS256 JWT in `authorization` metadata when `ATLAS_AUTH_REQUIRED=1`, with the
-> same role hierarchy as REST. Server reflection is enabled, so:
+> `ListAlerts`, `GetMetricsSummary`, `ListBuckets`. Auth: HS256 JWT in `authorization` metadata when
+> `ATLAS_AUTH_REQUIRED=1`, with the same role hierarchy as REST. Server reflection is enabled, so:
 > `grpcurl -plaintext <host>:5111 list` and `grpcurl -plaintext <host>:5111 atlas.v1.AtlasStorage/ListPools`.
-> The proto is at `crates/atlas-gateway/proto/atlas.proto`.
+> The proto is at `crates/atlas-gateway/proto/atlas.proto`. Product ownership conventions: [PRODUCTS.md](PRODUCTS.md).
+> In-console curated map: **API Docs** page (`/api-docs`).
 
 Base path: `/api/atlas/v1`. All responses are JSON. Errors use
 `{ "error": { "code": "...", "message": "..." } }` with an appropriate HTTP status.

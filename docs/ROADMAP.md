@@ -171,6 +171,8 @@ cert/ingress gives trusted TLS).
   lets a product enumerate only the volumes it owns; `CreateSnapshot` (operator) and `DeleteVolume`
   (admin) return job replies. Verified live over gRPC reflection (Veyron flow: create-owned →
   list-by-owner scoped correctly → snapshot → delete, all jobs `succeeded`).
+- ✅ **GetMetricsSummary** + **ListBuckets** — capacity/I/O/recovery rollup and RGW bucket inventory
+  for product consoles (see `docs/PRODUCTS.md`).
 - Follow-ups: generated gRPC client stubs vendored into each product (Veyron, Hyper2KVM, …).
 
 ## ✅ DataBridge — cloud-to-edge database mobility (done, verified on two clusters)

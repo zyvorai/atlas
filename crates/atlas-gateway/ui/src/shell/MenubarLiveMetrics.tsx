@@ -1,9 +1,16 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-/** Capacity sparkline + cluster pulse — Zeus MenubarLiveMetrics, Atlas metrics. */
-import { useEffect, useRef } from "react";
+/** Capacity sparkline + IOPS/recovery/cluster pulse — Zeus MenubarLiveMetrics, Atlas metrics. */
+import { useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import { Activity } from "lucide-react";
 import { useClusters, useSummary } from "../api/hooks";
+
+function fmtOps(n: number | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(Math.round(n));
+}
 
 export function MenubarLiveMetrics() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -16,6 +23,18 @@ export function MenubarLiveMetrics() {
   const health = isError ? "auth" : clusters?.[0]?.health || "unknown";
   const healthClass =
     health === "ok" ? "ok" : health === "warn" ? "warn" : health === "critical" ? "crit" : "muted";
+
+  const readOps = summary?.client_io?.read_ops_total;
+  const writeOps = summary?.client_io?.write_ops_total;
+  const recovering =
+    (summary?.recovery?.pg_recovering ?? 0) + (summary?.recovery?.pg_backfilling ?? 0);
+  const degraded = summary?.recovery?.objects_degraded ?? 0;
+  const recoveryHot = recovering > 0 || degraded > 0;
+
+  const iopsLabel = useMemo(() => {
+    if (readOps == null && writeOps == null) return null;
+    return `${fmtOps(readOps)}/${fmtOps(writeOps)}`;
+  }, [readOps, writeOps]);
 
   useEffect(() => {
     if (!hasPct) return;
@@ -55,6 +74,10 @@ export function MenubarLiveMetrics() {
 
   const tooltip = [
     hasPct ? `Capacity ${Math.round(pct)}% used` : "Capacity unavailable",
+    iopsLabel ? `Client I/O R/W ops ${iopsLabel}` : null,
+    recoveryHot
+      ? `Recovery · ${recovering} PG · ${degraded} degraded objs`
+      : "Recovery idle",
     summary ? `${summary.volumes} volumes · ${summary.pools} pools` : null,
     isError ? "Auth required" : `Cluster ${String(health).toUpperCase()}`,
   ]
@@ -70,7 +93,25 @@ export function MenubarLiveMetrics() {
     >
       <Activity size={14} strokeWidth={2} aria-hidden />
       <canvas ref={canvasRef} className={hasPct ? undefined : "dim"} aria-hidden />
-      <span className="at-menubar-metrics-pct">{hasPct ? `${Math.round(pct)}%` : "—"}</span>
+      <span className="at-menubar-chip" data-kind="cap">
+        {hasPct ? `${Math.round(pct)}%` : "—"}
+      </span>
+      {iopsLabel && (
+        <span className="at-menubar-chip" data-kind="io" title="Client read/write ops (lifetime counters)">
+          I/O {iopsLabel}
+        </span>
+      )}
+      <span
+        className={`at-menubar-chip ${recoveryHot ? "hot" : ""}`}
+        data-kind="rec"
+        title={
+          recoveryHot
+            ? `${recovering} recovering/backfilling PGs · ${degraded} degraded objects`
+            : "No recovery activity"
+        }
+      >
+        {recoveryHot ? `REC ${recovering || degraded}` : "REC 0"}
+      </span>
       <span className={`at-menubar-pulse ${healthClass}`} aria-hidden />
     </Link>
   );
