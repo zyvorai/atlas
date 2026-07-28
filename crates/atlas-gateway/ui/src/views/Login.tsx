@@ -12,7 +12,7 @@ const DEFAULT_USER = "admin";
 
 const THEME_OPTIONS: { id: Theme; label: string }[] = [
   { id: "nebula", label: "Nebula" },
-  { id: "dark", label: "Dark" },
+  { id: "dark", label: "Midnight" },
   { id: "aurora", label: "Aurora" },
 ];
 

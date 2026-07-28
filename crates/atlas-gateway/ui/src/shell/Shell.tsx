@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   Loader2,
   LogOut,
+  Palette,
   Pause,
   Play,
   Search,
@@ -23,7 +24,7 @@ import type { LucideIcon } from "lucide-react";
 import { MODULES, SECTIONS, type Module } from "../nav/modules";
 import { http } from "../api/client";
 import { useAlerts, useClusters, useJobs } from "../api/hooks";
-import { useUi } from "../store/ui";
+import { useUi, type Theme } from "../store/ui";
 import { cx } from "../lib/format";
 import { onSendPrompt } from "../lib/prompts";
 import { Button, Field, Modal } from "../ui/kit";
@@ -75,8 +76,11 @@ function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
   const [tokenOpen, setTokenOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
   const token = useUi((s) => s.token);
   const setToken = useUi((s) => s.setToken);
+  const theme = useUi((s) => s.theme);
+  const setTheme = useUi((s) => s.setTheme);
   const paused = useUi((s) => s.paused);
   const togglePaused = useUi((s) => s.togglePaused);
   const [draft, setDraft] = useState(token);
@@ -202,6 +206,49 @@ function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
       >
         {paused ? <Play size={15} /> : <Pause size={15} />}
       </button>
+
+      <div className="relative">
+        <button
+          type="button"
+          className="at-iconbtn"
+          title="Theme"
+          aria-label="Change theme"
+          aria-expanded={themeOpen}
+          aria-haspopup="menu"
+          onClick={() => setThemeOpen((v) => !v)}
+        >
+          <Palette size={15} />
+        </button>
+        {themeOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setThemeOpen(false)} />
+            <div className="at-theme-menu" role="menu" aria-label="Visual theme">
+              {(
+                [
+                  { id: "nebula", label: "Nebula", hint: "Soundings cyan" },
+                  { id: "dark", label: "Midnight", hint: "Zeus dark-steel" },
+                  { id: "aurora", label: "Aurora", hint: "Neon glow" },
+                ] as { id: Theme; label: string; hint: string }[]
+              ).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={theme === opt.id}
+                  className={cx("at-theme-item", theme === opt.id && "on")}
+                  onClick={() => {
+                    setTheme(opt.id);
+                    setThemeOpen(false);
+                  }}
+                >
+                  <span>{opt.label}</span>
+                  <span className="hint">{opt.hint}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
 
       <div className={cx("at-health", healthClass)} title={healthWhy}>
         <span className="dot" />
