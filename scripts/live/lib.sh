@@ -252,7 +252,7 @@ live_cleanup() {
     case "$kind" in
       schedule) live_req DELETE "/schedules/${id}" || true ;;
       snapshot) live_req DELETE "/snapshots/${id}" || true; sleep 2 ;;
-      volume)   live_req DELETE "/volumes/${id}" || true; sleep 2 ;;
+      volume)   live_req DELETE "/volumes/${id}?confirm=true" || true; sleep 2 ;;
       bucket)   live_req DELETE "/buckets/${id}" || true; sleep 2 ;;
       rbd)
         # id form: pool/image

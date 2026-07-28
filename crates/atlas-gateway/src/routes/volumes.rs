@@ -153,16 +153,24 @@ pub(crate) async fn create_volume(
     ))
 }
 
-/// `DELETE /volumes/{id}` — delete the PVC + inventory row as a job.
+/// `DELETE /volumes/{id}[?confirm=true]` — delete the PVC + inventory row as a job.
+/// Safe-by-default (PDF §14 Rule 2): production-class volumes require confirm=true
+/// (legacy force=true also accepted — matches the console delete path).
 pub(crate) async fn delete_volume(
     State(s): State<AppState>,
     Extension(actor): Extension<Actor>,
     Path(id): Path<String>,
+    Query(q): Query<ConfirmParams>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
     let vol = atlas_inventory::get_volume(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("volume {id}")))?;
+    if volume_requires_delete_confirm(&vol) && !q.confirmed() {
+        return Err(AppError::Validation(
+            "confirm=true is required to delete this volume (production / protected class)".into(),
+        ));
+    }
     let namespace = vol
         .kubernetes_namespace
         .ok_or_else(|| AppError::Validation("volume has no kubernetes namespace".into()))?;
@@ -312,6 +320,28 @@ pub(crate) async fn create_snapshot(
 pub(crate) struct ForceParams {
     #[serde(default)]
     pub(crate) force: bool,
+}
+
+/// Explicit destructive confirm for volume delete (PDF §14 Rule 2).
+#[derive(Debug, Deserialize, Default)]
+pub(crate) struct ConfirmParams {
+    #[serde(default)]
+    pub(crate) confirm: bool,
+    /// Legacy alias used by the console (`?force=true`).
+    #[serde(default)]
+    pub(crate) force: bool,
+}
+
+impl ConfirmParams {
+    pub(crate) fn confirmed(&self) -> bool {
+        self.confirm || self.force
+    }
+}
+
+fn volume_requires_delete_confirm(vol: &atlas_api_types::StorageVolume) -> bool {
+    let sc = vol.storage_class_name.as_deref().unwrap_or("").to_ascii_lowercase();
+    // Production / protected classes (zyvor-rbd-prod, *-production*, etc.).
+    sc.contains("prod") || sc.contains("production") || sc.contains("database")
 }
 
 /// `DELETE /snapshots/{id}[?force=true]` — blocked if the snapshot has dependent clones (PDF §8.3).

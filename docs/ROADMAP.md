@@ -39,8 +39,9 @@ Read-only control plane + real Ceph lab.
   VolumeSnapshot (`dataSource`), with parent/child dependency tracking
   (`storage_volumes.source_snapshot_id`) and a safe-delete guard (409 unless `?force=true`).
   Verified on real Ceph.
-- ⏭ **Safe-by-default** deletes for production *volumes*: approval/confirmation (PDF §14, Rule 2).
-  (Snapshot delete already guards on dependents; volume delete does not yet require approval.)
+- ✅ **Safe-by-default** deletes for production *volumes*: `DELETE /volumes/{id}?confirm=true`
+  required for prod/database StorageClasses (PDF §14 Rule 2; `force=true` accepted as alias).
+  (Snapshot delete already guards on dependents; volume delete now requires confirmation.)
 - ⏭ WebSocket/SSE job progress for the UI.
 - ✅ **Direct RBD create path (bypassing CSI)** for non-Kubernetes consumers (machina/libvirt, bare
   VMs): `POST /rbd-images {name, size_bytes, pool?}` runs `rbd create` and records a volume row

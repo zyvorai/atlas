@@ -53,6 +53,7 @@ SECTIONS=(
   08-metrics-alerts.sh
   09-databridge.sh
   10-dr.sh
+  11-databridge-mysql.sh
 )
 
 for s in "${SECTIONS[@]}"; do

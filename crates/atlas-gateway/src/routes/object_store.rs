@@ -31,6 +31,7 @@ pub(crate) async fn get_bucket(State(s): State<AppState>, Path(id): Path<String>
 }
 
 /// `GET /buckets/{id}/stats` — RGW usage + quota for the bucket (via `radosgw-admin bucket stats`).
+/// Soft-fails on timeout/driver errors so the console can show "unavailable" instead of hanging.
 pub(crate) async fn bucket_stats(State(s): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
     let b = atlas_inventory::buckets::get_bucket(&s.pool, &id)
         .await?
@@ -38,16 +39,33 @@ pub(crate) async fn bucket_stats(State(s): State<AppState>, Path(id): Path<Strin
     let name = b
         .bucket_name
         .ok_or_else(|| AppError::Validation("bucket has no bucket_name".into()))?;
-    let stats = atlas_driver_ceph::radosgw_admin_json(&["bucket", "stats", "--bucket", &name])
-        .await
-        .map_err(|e| AppError::Driver(e.to_string()))?;
+    let timed = tokio::time::timeout(
+        std::time::Duration::from_secs(12),
+        atlas_driver_ceph::radosgw_admin_json(&["bucket", "stats", "--bucket", &name]),
+    )
+    .await;
+    let stats = match timed {
+        Ok(Ok(v)) => v,
+        Ok(Err(e)) => {
+            return Ok(Json(json!({
+                "bucket_id": id, "bucket": name, "available": false,
+                "reason": e.to_string(),
+            })));
+        }
+        Err(_) => {
+            return Ok(Json(json!({
+                "bucket_id": id, "bucket": name, "available": false,
+                "reason": "stats timed out",
+            })));
+        }
+    };
     let main = stats
         .get("usage")
         .and_then(|u| u.get("rgw.main"))
         .cloned()
         .unwrap_or(Value::Null);
     Ok(Json(json!({
-        "bucket_id": id, "bucket": name,
+        "bucket_id": id, "bucket": name, "available": true,
         "num_objects": main.get("num_objects").cloned().unwrap_or(json!(0)),
         "size_bytes": main.get("size_actual").cloned().unwrap_or(json!(0)),
         "quota": stats.get("bucket_quota").cloned().unwrap_or(Value::Null)

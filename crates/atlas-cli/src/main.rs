@@ -659,7 +659,11 @@ async fn main() -> Result<()> {
             format!("/api/atlas/v1/volumes/{volume_id}/snapshots"),
             Some(serde_json::json!({ "name": name })),
         ),
-        Command::DeleteVolume { id } => ("DELETE", format!("/api/atlas/v1/volumes/{id}"), None),
+        Command::DeleteVolume { id } => (
+            "DELETE",
+            format!("/api/atlas/v1/volumes/{id}?confirm=true"),
+            None,
+        ),
         Command::CloneSnapshot {
             snapshot_id,
             name,

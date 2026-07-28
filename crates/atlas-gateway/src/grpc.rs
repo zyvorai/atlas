@@ -313,11 +313,24 @@ impl AtlasStorage for GrpcService {
         req: Request<DeleteVolumeRequest>,
     ) -> Result<Response<JobReply>, Status> {
         let actor = self.require_role(&req, crate::auth::ROLE_ADMIN)?;
-        let id = req.into_inner().id;
+        let body = req.into_inner();
+        let id = body.id;
         let vol = atlas_inventory::get_volume(&self.state.pool, &id)
             .await
             .map_err(internal)?
             .ok_or_else(|| Status::not_found(format!("volume {id}")))?;
+        let sc = vol
+            .storage_class_name
+            .as_deref()
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let needs_confirm =
+            sc.contains("prod") || sc.contains("production") || sc.contains("database");
+        if needs_confirm && !body.confirm {
+            return Err(Status::failed_precondition(
+                "confirm=true is required to delete this volume (production / protected class)",
+            ));
+        }
         let namespace = vol
             .kubernetes_namespace
             .ok_or_else(|| Status::failed_precondition("volume has no kubernetes namespace"))?;

@@ -55,8 +55,12 @@ export default function Buckets() {
           <>
             <Button size="sm" onClick={async () => {
               try {
-                const s = await http.get(`/buckets/${b.id}/stats`, { timeout: 12000 });
+                const s = await http.get(`/buckets/${b.id}/stats`, { timeout: 14000 });
                 const d = s.data;
+                if (d?.available === false) {
+                  toast(d.reason ? `Stats unavailable: ${d.reason}` : "Stats unavailable right now", "info");
+                  return;
+                }
                 toast(`${d.bucket}: ${num(d.num_objects)} objs, ${fmtBytes(d.size_bytes)}`, "ok");
               } catch (e) {
                 const msg = apiError(e);

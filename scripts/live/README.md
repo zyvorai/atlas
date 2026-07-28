@@ -42,8 +42,9 @@ SSH defaults: `ATLAS_SSH_USER=sus`, `ATLAS_SSH_HOST=212.8.248.187`,
 | `06-buckets` | create → get → stats (WARN on timeout) → **delete** |
 | `07-rbd-governance` | RBD **create → resize → snap → delete**, usage refresh, maintenance, upgrade preflight |
 | `08-metrics-alerts` | `/metrics/{summary,ceph,history,forecast}`, alerts evaluate |
-| `09-databridge` | fake source → discover → plan → assess…validate → **delete plan → delete source** |
-| `10-dr` | DR peer create → preflight → temp volume → mirror enable (soft) → **delete volume → delete peer** |
+| `09-databridge` | fake Postgres source → discover → plan → assess…validate → **delete plan → delete source** |
+| `10-dr` | DR peer create → preflight → direct-RBD mirror attempt (soft) → **delete image → delete peer** |
+| `11-databridge-mysql` | fake MySQL source → plan stages → **delete plan → delete source** |
 
 Writes use prefix `live-<pid>-<ts>-*` and register a `trap` cleanup so leftovers
 are deleted even on failure.

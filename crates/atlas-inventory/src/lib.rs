@@ -56,10 +56,12 @@ pub async fn connect_sqlite(database_url: &str) -> Result<SqlitePool> {
         .create_if_missing(true)
         .journal_mode(SqliteJournalMode::Wal)
         .pragma("foreign_keys", "ON")
-        .busy_timeout(Duration::from_secs(30));
+        .busy_timeout(Duration::from_secs(60))
+        .pragma("synchronous", "NORMAL");
     let pool = SqlitePoolOptions::new()
         // SQLite allows one writer; keep the pool small so discovery + jobs don't stampede.
         .max_connections(3)
+        .acquire_timeout(Duration::from_secs(60))
         .connect_with(options)
         .await?;
     Ok(pool)

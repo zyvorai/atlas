@@ -121,6 +121,6 @@ if [[ -n "$SNAP_ID" ]]; then
   sleep 2
   cleanup_unregister "snapshot:${SNAP_ID}"
 fi
-assert_code 202,200,204 DELETE "/volumes/${VOL_ID}" || true
+assert_code 202,200,204 DELETE "/volumes/${VOL_ID}?confirm=true" || true
 wait_gone "/volumes/${VOL_ID}" || true
 cleanup_unregister "volume:${VOL_ID}"
