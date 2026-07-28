@@ -19,21 +19,22 @@
   --at-ink-3: #607a87;
   --at-ink-4: #3a4e59;
 
-  --at-cyan: #7c6bff;
-  --at-cyan-2: #a594ff;
-  --at-cyan-wash: rgba(124, 107, 255, 0.12);
-  --at-cyan-glow: rgba(124, 107, 255, 0.38);
+  /* Interaction accent — Zeus sky blue (not survey cyan) */
+  --at-cyan: #60a5fa;
+  --at-cyan-2: #93c5fd;
+  --at-cyan-wash: rgba(96, 165, 250, 0.12);
+  --at-cyan-glow: rgba(96, 165, 250, 0.36);
 
-  /* Chart / depth series — vivid telemetry (replaces dull survey cyan) */
-  --d1: #2ee6a8;
-  --d2: #7c6bff;
-  --d3: #ff5c8a;
-  --d4: #c084fc;
-  --d5: #ffb020;
+  /* Chart / depth series — Zeus telemetry: emerald · sky · amber · violet · coral */
+  --d1: #34d399;
+  --d2: #60a5fa;
+  --d3: #fbbf24;
+  --d4: #a78bfa;
+  --d5: #f87171;
 
-  --at-warn: #ffc24b;
-  --at-fail: #ff5a6e;
-  --at-ok: #2ee6a8;
+  --at-warn: #fbbf24;
+  --at-fail: #f87171;
+  --at-ok: #34d399;
 
   --at-face: "Space Grotesk", system-ui, sans-serif;
   --at-mono: "DM Mono", ui-monospace, monospace;
@@ -112,18 +113,18 @@
 }
 .at-chart-floor .iso {
   fill: none;
-  stroke: var(--at-cyan);
+  stroke: var(--d2);
   stroke-width: 1;
-  opacity: 0.055;
+  opacity: 0.09;
 }
 .at-chart-floor .iso.major {
-  opacity: 0.1;
+  opacity: 0.16;
   stroke-width: 1.25;
 }
 .at-chart-floor .grid {
-  stroke: var(--at-cyan);
+  stroke: var(--d4);
   stroke-width: 0.5;
-  opacity: 0.028;
+  opacity: 0.05;
 }
 .at-vignette {
   position: fixed;

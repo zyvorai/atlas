@@ -4,7 +4,7 @@ import type { Theme } from "../store/ui";
 
 export const THEME_OPTIONS: { id: Theme; title: string; hint: string }[] = [
   { id: "carbon", title: "Carbon", hint: "Flat IBM-style gray — Atlas default" },
-  { id: "nebula", title: "Nebula", hint: "Soundings cyan mineral void" },
+  { id: "nebula", title: "Nebula", hint: "Mineral void · Zeus sky charts" },
   { id: "dark", title: "Dark steel", hint: "Metal top bar, cool accents" },
   { id: "zinc", title: "Zinc metal", hint: "Brushed zinc, amber highlights" },
   { id: "aurora", title: "Aurora", hint: "Neon cyan / violet glow" },

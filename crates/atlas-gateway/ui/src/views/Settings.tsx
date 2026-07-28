@@ -20,7 +20,7 @@ export default function Settings() {
       <PageHead
         eyebrow="CONSOLE · APPEARANCE"
         title="Settings"
-        state="Look & feel and density for this browser. Carbon is the flat default; Nebula keeps Soundings cyan."
+        state="Look & feel and density for this browser. Carbon is the flat default; charts use Zeus emerald/sky/amber."
       />
 
       <div className="at-panel">
@@ -31,7 +31,7 @@ export default function Settings() {
           <div className="at-settings-block">
             <div className="at-settings-label">Shell theme</div>
             <p className="at-settings-hint">
-              Carbon is the Atlas default (flat gray + blue). Nebula is Soundings cyan; Dark steel and Zinc match Zeus metal chrome; Aurora is neon.
+              Carbon is the Atlas default. Charts follow Zeus OS telemetry colors (emerald · sky · amber · violet) — no survey cyan.
             </p>
             <div className="at-choice-grid" role="radiogroup" aria-label="Shell theme">
               {THEME_OPTIONS.map((opt) => (

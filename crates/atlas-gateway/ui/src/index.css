@@ -75,32 +75,43 @@
     --at-cyan-2: #78a9ff;
     --at-cyan-wash: rgba(69, 137, 255, 0.14);
     --at-cyan-glow: rgba(69, 137, 255, 0.36);
-    --d1: #3ddbd9;
+    /* Zeus-style series on Carbon: green · blue · amber · purple · red */
+    --d1: #42be65;
     --d2: #4589ff;
-    --d3: #ee5396;
+    --d3: #f1c21b;
     --d4: #be95ff;
-    --d5: #ff832b;
+    --d5: #fa4d56;
     --at-ok: #42be65;
     --at-warn: #f1c21b;
     --at-err: #fa4d56;
   }
 
-  /* Nebula = Soundings identity (mineral void + survey cyan). */
+  /* Nebula — mineral void with Zeus sky/violet/emerald charts (no survey cyan). */
   :root[data-ui-shell="nebula"] {
     --background: 200 30% 3%;
     --card: 200 22% 7%;
     --card-foreground: 190 30% 94%;
     --foreground: 190 30% 94%;
     --popover: 200 22% 7%;
-    --primary: 188 78% 58%;
-    --primary-foreground: 195 60% 8%;
-    --ring: 188 78% 58%;
-    --info: 188 78% 58%;
+    --primary: 213 94% 68%;
+    --primary-foreground: 220 40% 8%;
+    --ring: 213 94% 68%;
+    --info: 213 94% 68%;
     --muted-foreground: 195 14% 62%;
     --border: 195 18% 16%;
     --secondary: 200 18% 12%;
     --accent: 200 18% 12%;
     --input: 195 18% 16%;
+    --at-cyan: #60a5fa;
+    --at-cyan-2: #93c5fd;
+    --at-cyan-wash: rgba(96, 165, 250, 0.12);
+    --at-cyan-glow: rgba(96, 165, 250, 0.34);
+    --d1: #34d399;
+    --d2: #60a5fa;
+    --d3: #fbbf24;
+    --d4: #a78bfa;
+    --d5: #f87171;
+    --at-ok: #34d399;
   }
 
   /* Midnight shell — Zeus dark-steel (brushed metal + steel-blue accent). */
@@ -137,21 +148,37 @@
     --at-cyan-2: #8ec5ff;
     --at-cyan-wash: rgba(93, 144, 247, 0.12);
     --at-cyan-glow: rgba(93, 144, 247, 0.34);
+    --d1: #34d399;
+    --d2: #5d90f7;
+    --d3: #fbbf24;
+    --d4: #a78bfa;
+    --d5: #f87171;
+    --at-ok: #34d399;
   }
 
-  /* Aurora neon shell (Zeus OS variant) — cyan/purple/pink glow over near-black. */
+  /* Aurora — neon violet/pink; charts stay emerald/amber/violet (no teal). */
   :root[data-ui-shell="aurora"] {
     --background: 240 30% 3%;
     --card: 270 15% 7%;
     --card-foreground: 250 30% 96%;
     --foreground: 250 30% 96%;
-    --primary: 186 100% 54%;
-    --ring: 186 100% 54%;
-    --info: 186 100% 54%;
+    --primary: 280 90% 68%;
+    --ring: 280 90% 68%;
+    --info: 280 90% 68%;
     --muted-foreground: 250 15% 72%;
     --border: 265 25% 18%;
     --secondary: 265 25% 16%;
     --accent: 265 25% 16%;
+    --at-cyan: #c084fc;
+    --at-cyan-2: #e879f9;
+    --at-cyan-wash: rgba(192, 132, 252, 0.14);
+    --at-cyan-glow: rgba(192, 132, 252, 0.36);
+    --d1: #34d399;
+    --d2: #c084fc;
+    --d3: #fbbf24;
+    --d4: #60a5fa;
+    --d5: #f87171;
+    --at-ok: #34d399;
   }
 
   /* Zinc metal — Zeus brushed zinc + amber (Apr metal shells). */
@@ -187,6 +214,12 @@
     --at-cyan-2: #fbbf24;
     --at-cyan-wash: rgba(245, 158, 11, 0.12);
     --at-cyan-glow: rgba(245, 158, 11, 0.34);
+    --d1: #34d399;
+    --d2: #f59e0b;
+    --d3: #a78bfa;
+    --d4: #60a5fa;
+    --d5: #f87171;
+    --at-ok: #34d399;
   }
 
   * {
@@ -493,22 +526,22 @@
     background: rgba(69, 137, 255, 0.12);
   }
 
-  /* Nebula shell canvas + accents — Soundings survey cyan */
+  /* Nebula shell canvas — sky/violet glow (Zeus chart language, no survey cyan) */
   :root[data-ui-shell="nebula"] .tahoe-canvas {
     background:
-      radial-gradient(ellipse 70% 50% at 50% -8%, rgba(63, 208, 232, 0.08), transparent 55%),
-      radial-gradient(ellipse 50% 40% at 100% 80%, rgba(75, 140, 245, 0.06), transparent 50%),
+      radial-gradient(ellipse 70% 50% at 50% -8%, rgba(96, 165, 250, 0.1), transparent 55%),
+      radial-gradient(ellipse 50% 40% at 100% 80%, rgba(167, 139, 250, 0.08), transparent 50%),
       linear-gradient(180deg, #04070a, #070c11 45%, #0b131a 82%, #04070a);
   }
   :root[data-ui-shell="nebula"] .btn-primary {
-    background: var(--at-cyan, #3fd0e8);
-    color: #032027;
-    border: 1px solid var(--at-cyan, #3fd0e8);
-    box-shadow: 0 0 22px var(--at-cyan-glow, rgba(63, 208, 232, 0.34));
+    background: var(--at-cyan, #60a5fa);
+    color: #0a1220;
+    border: 1px solid var(--at-cyan, #60a5fa);
+    box-shadow: 0 0 22px var(--at-cyan-glow, rgba(96, 165, 250, 0.34));
   }
   :root[data-ui-shell="nebula"] .glass-card.hoverable:hover,
   :root[data-ui-shell="nebula"] .at-card.hoverable:hover {
-    box-shadow: 0 0 28px -8px var(--at-cyan-glow, rgba(63, 208, 232, 0.34));
+    box-shadow: 0 0 28px -8px var(--at-cyan-glow, rgba(96, 165, 250, 0.34));
     border-color: var(--at-line-3, rgba(120, 180, 200, 0.34));
   }
 
