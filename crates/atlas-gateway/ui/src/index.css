@@ -71,10 +71,15 @@
     --at-ink-2: #e0e0e0;
     --at-ink-3: #c6c6c6;
     --at-ink-4: #8d8d8d;
-    --at-cyan: #78a9ff;
-    --at-cyan-2: #a6c8ff;
-    --at-cyan-wash: rgba(120, 169, 255, 0.12);
-    --at-cyan-glow: rgba(120, 169, 255, 0.28);
+    --at-cyan: #4589ff;
+    --at-cyan-2: #78a9ff;
+    --at-cyan-wash: rgba(69, 137, 255, 0.14);
+    --at-cyan-glow: rgba(69, 137, 255, 0.36);
+    --d1: #3ddbd9;
+    --d2: #4589ff;
+    --d3: #ee5396;
+    --d4: #be95ff;
+    --d5: #ff832b;
     --at-ok: #42be65;
     --at-warn: #f1c21b;
     --at-err: #fa4d56;
@@ -426,9 +431,9 @@
       linear-gradient(180deg, #161616 0%, #1a1a1a 40%, #121212 100%);
   }
   :root[data-ui-shell="carbon"] .btn-primary {
-    background: #78a9ff;
+    background: #4589ff;
     color: #161616;
-    border: 1px solid #a6c8ff;
+    border: 1px solid #78a9ff;
     box-shadow: none;
   }
   :root[data-ui-shell="carbon"] .at-rail {
@@ -437,7 +442,7 @@
     box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.35);
   }
   :root[data-ui-shell="carbon"] .at-brand-logo {
-    color: #78a9ff;
+    color: #4589ff;
     background: #161616;
     border-color: #393939;
     box-shadow: none;
@@ -456,14 +461,14 @@
   :root[data-ui-shell="carbon"] .at-topnav-home.on,
   :root[data-ui-shell="carbon"] .at-topnav-dd.on .at-topnav-ddbtn,
   :root[data-ui-shell="carbon"] .at-quick-link.on {
-    background: rgba(120, 169, 255, 0.12);
-    border-color: rgba(120, 169, 255, 0.35);
+    background: rgba(69, 137, 255, 0.14);
+    border-color: rgba(69, 137, 255, 0.4);
     color: #f4f4f4;
   }
   :root[data-ui-shell="carbon"] .at-topnav-home.on::after,
   :root[data-ui-shell="carbon"] .at-topnav-dd.on .at-topnav-ddbtn::after,
   :root[data-ui-shell="carbon"] .at-quick-link.on::after {
-    background: linear-gradient(90deg, transparent, #78a9ff, transparent);
+    background: linear-gradient(90deg, transparent, #4589ff, transparent);
   }
   :root[data-ui-shell="carbon"] .at-topnav-menu,
   :root[data-ui-shell="carbon"] .at-theme-menu,
@@ -484,8 +489,8 @@
     background: #1e1e1e;
   }
   :root[data-ui-shell="carbon"] .at-choice.on {
-    border-color: rgba(120, 169, 255, 0.45);
-    background: rgba(120, 169, 255, 0.12);
+    border-color: rgba(69, 137, 255, 0.45);
+    background: rgba(69, 137, 255, 0.12);
   }
 
   /* Nebula shell canvas + accents — Soundings survey cyan */

@@ -40,14 +40,16 @@ export function Echogram({
     }));
   }, [hist, readOps, writeOps, N, wide]);
 
+  const gid = wide ? "atSweepGradWide" : "atSweepGrad";
+
   return (
     <div className={`at-echo${wide ? " wide" : ""}`}>
       <svg viewBox={`0 0 ${viewW} ${viewH}`} preserveAspectRatio="none" aria-hidden>
         <defs>
-          <linearGradient id="atSweepGrad" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#3FD0E8" stopOpacity="0" />
-            <stop offset="70%" stopColor="#3FD0E8" stopOpacity=".16" />
-            <stop offset="100%" stopColor="#6FEFC6" stopOpacity=".55" />
+          <linearGradient id={gid} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="var(--d2)" stopOpacity="0" />
+            <stop offset="70%" stopColor="var(--d2)" stopOpacity=".2" />
+            <stop offset="100%" stopColor="var(--d1)" stopOpacity=".65" />
           </linearGradient>
         </defs>
         <line className="axis" x1="0" y1={AX} x2={viewW} y2={AX} />
@@ -58,20 +60,20 @@ export function Echogram({
               y={(AX - b.up - 1).toFixed(1)}
               width={(W - 2).toFixed(1)}
               height={b.up.toFixed(1)}
-              fill="#6FEFC6"
-              opacity=".72"
+              fill="var(--d1)"
+              opacity=".85"
             />
             <rect
               x={(i * W + 1).toFixed(1)}
               y={(AX + 1).toFixed(1)}
               width={(W - 2).toFixed(1)}
               height={b.dn.toFixed(1)}
-              fill="#4B8CF5"
-              opacity=".72"
+              fill="var(--d3)"
+              opacity=".85"
             />
           </g>
         ))}
-        <rect className="sweep" x="0" y="0" width={wide ? 96 : 72} height={viewH} />
+        <rect className="sweep" x="0" y="0" width={wide ? 96 : 72} height={viewH} fill={`url(#${gid})`} />
       </svg>
       <div style={{ display: "flex", gap: 20, marginTop: 9 }}>
         <span className="at-io-leg">

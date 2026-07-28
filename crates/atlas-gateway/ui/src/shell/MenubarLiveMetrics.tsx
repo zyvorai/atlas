@@ -59,7 +59,7 @@ export function MenubarLiveMetrics() {
     const range = max - min || 1;
 
     const rootStyle = getComputedStyle(document.documentElement);
-    const stroke = rootStyle.getPropertyValue("--at-cyan").trim() || "#3fd0e8";
+    const stroke = rootStyle.getPropertyValue("--d2").trim() || rootStyle.getPropertyValue("--at-cyan").trim() || "#7c6bff";
     ctx.strokeStyle = stroke;
     ctx.lineWidth = 1.5;
     ctx.beginPath();

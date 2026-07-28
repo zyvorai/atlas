@@ -34,17 +34,17 @@ function SoundingOrb({ pct }: { pct: number }) {
           <circle cx="110" cy="110" r="76" />
         </clipPath>
         <linearGradient id="waterGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#3FD0E8" stopOpacity=".62" />
-          <stop offset="60%" stopColor="#4B8CF5" stopOpacity=".34" />
-          <stop offset="100%" stopColor="#8A6BF7" stopOpacity=".22" />
+          <stop offset="0%" stopColor="var(--d2)" stopOpacity=".72" />
+          <stop offset="55%" stopColor="var(--d3)" stopOpacity=".38" />
+          <stop offset="100%" stopColor="var(--d4)" stopOpacity=".28" />
         </linearGradient>
       </defs>
-      <path d={ticks.join("")} stroke="#3FD0E8" strokeWidth="1" fill="none" opacity=".2" />
+      <path d={ticks.join("")} stroke="var(--d2)" strokeWidth="1" fill="none" opacity=".28" />
       <circle cx="110" cy="110" r="92" fill="none" stroke="rgba(120,180,200,.16)" />
       <circle cx="110" cy="110" r="76" fill="rgba(16,28,37,.85)" stroke="rgba(120,180,200,.22)" />
       <g clipPath="url(#orbClip)">
         <rect x="0" y={waterY} width="220" height={220 - waterY} fill="url(#waterGrad)" />
-        <line x1="0" y1={waterY} x2="220" y2={waterY} stroke="#6FEFC6" strokeWidth="1.4" opacity=".85" />
+        <line x1="0" y1={waterY} x2="220" y2={waterY} stroke="var(--d1)" strokeWidth="1.6" opacity=".95" />
       </g>
       <circle cx="110" cy="110" r="84" fill="none" stroke="rgba(120,180,200,.12)" strokeWidth="3" />
       <circle
@@ -52,13 +52,13 @@ function SoundingOrb({ pct }: { pct: number }) {
         cy="110"
         r="84"
         fill="none"
-        stroke="#3FD0E8"
-        strokeWidth="3"
+        stroke="var(--d2)"
+        strokeWidth="3.5"
         strokeLinecap="round"
         strokeDasharray={circ}
         strokeDashoffset={dashOff}
         transform="rotate(-90 110 110)"
-        style={{ filter: "drop-shadow(0 0 6px rgba(63,208,232,.6))" }}
+        style={{ filter: "drop-shadow(0 0 10px color-mix(in srgb, var(--d2) 70%, transparent))" }}
       />
       <text
         x="110"

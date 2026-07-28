@@ -183,8 +183,8 @@ export default function PoolDetail() {
           <svg className="at-cross-svg" viewBox="0 0 800 140" preserveAspectRatio="none" aria-hidden>
             <defs>
               <linearGradient id="poolFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#3FD0E8" stopOpacity=".55" />
-                <stop offset="100%" stopColor="#4B8CF5" stopOpacity=".25" />
+                <stop offset="0%" stopColor="var(--d2)" stopOpacity=".65" />
+                <stop offset="100%" stopColor="var(--d3)" stopOpacity=".3" />
               </linearGradient>
             </defs>
             <path
@@ -201,9 +201,9 @@ export default function PoolDetail() {
               y1={waterY + 40}
               x2="800"
               y2={waterY + 44}
-              stroke="#6FEFC6"
-              strokeWidth="1.5"
-              opacity=".85"
+              stroke="var(--d1)"
+              strokeWidth="1.6"
+              opacity=".95"
             />
             <text x="16" y="18" fill="#607A87" style={{ fontFamily: "DM Mono, monospace", fontSize: 11 }}>
               waterline · {fmtBytes(used)} / {fmtBytes(max)}

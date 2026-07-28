@@ -19,20 +19,21 @@
   --at-ink-3: #607a87;
   --at-ink-4: #3a4e59;
 
-  --at-cyan: #3fd0e8;
-  --at-cyan-2: #2aa8c4;
-  --at-cyan-wash: rgba(63, 208, 232, 0.1);
-  --at-cyan-glow: rgba(63, 208, 232, 0.34);
+  --at-cyan: #7c6bff;
+  --at-cyan-2: #a594ff;
+  --at-cyan-wash: rgba(124, 107, 255, 0.12);
+  --at-cyan-glow: rgba(124, 107, 255, 0.38);
 
-  --d1: #6fefc6;
-  --d2: #3fd0e8;
-  --d3: #4b8cf5;
-  --d4: #8a6bf7;
-  --d5: #f0557f;
+  /* Chart / depth series — vivid telemetry (replaces dull survey cyan) */
+  --d1: #2ee6a8;
+  --d2: #7c6bff;
+  --d3: #ff5c8a;
+  --d4: #c084fc;
+  --d5: #ffb020;
 
   --at-warn: #ffc24b;
   --at-fail: #ff5a6e;
-  --at-ok: #6fefc6;
+  --at-ok: #2ee6a8;
 
   --at-face: "Space Grotesk", system-ui, sans-serif;
   --at-mono: "DM Mono", ui-monospace, monospace;
@@ -1284,8 +1285,7 @@
   stroke-dasharray: 2 4;
 }
 .at-echo .sweep {
-  fill: url(#atSweepGrad);
-  opacity: 0.75;
+  opacity: 0.85;
   animation: at-sweep 4.6s linear infinite;
 }
 @keyframes at-sweep {
