@@ -520,12 +520,12 @@
 }
 .at-badge {
   position: absolute;
-  top: 3px;
-  right: 3px;
+  top: 2px;
+  right: 2px;
   min-width: 14px;
   height: 14px;
   padding: 0 3px;
-  border-radius: var(--r-pill);
+  border-radius: 999px;
   background: var(--at-warn);
   color: #1a1200;
   font-family: var(--at-mono);
@@ -533,7 +533,8 @@
   font-weight: 500;
   display: grid;
   place-items: center;
-  border: 2px solid var(--at-abyss);
+  border: 1.5px solid rgba(12, 18, 24, 0.65);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 .at-health {
   display: flex;
@@ -1905,27 +1906,33 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
+  height: 28px;
   padding: 0 12px;
-  border-radius: var(--r-ctl);
-  border: 1px solid var(--at-line-2);
-  background: transparent;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.01) 100%),
+    transparent;
   color: var(--at-ink-3);
   font-family: var(--at-face);
   font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
   transition: 0.15s;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 .at-chip:hover {
   color: var(--at-ink);
-  border-color: var(--at-line-3);
-  background: var(--at-ridge);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.1);
 }
 .at-chip.on {
-  color: var(--at-cyan);
-  border-color: rgba(63, 208, 232, 0.45);
-  background: rgba(63, 208, 232, 0.08);
+  color: var(--at-ink);
+  border-color: color-mix(in srgb, var(--at-cyan) 40%, rgba(255, 255, 255, 0.12));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 60%),
+    color-mix(in srgb, var(--at-cyan) 12%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 .at-chip .n {
   font-family: var(--at-mono);
@@ -1933,19 +1940,53 @@
   opacity: 0.75;
 }
 .at-chip-field {
-  height: 30px;
+  height: 28px;
   padding: 0 12px;
-  border-radius: var(--r-ctl);
-  border: 1px solid var(--at-line-2);
-  background: var(--at-shelf);
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
+    rgba(14, 20, 28, 0.35);
   color: var(--at-ink-2);
   font-family: var(--at-face);
   font-size: 12.5px;
   min-width: 140px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 .at-chip-field:focus {
   outline: none;
-  border-color: var(--at-cyan);
+  border-color: color-mix(in srgb, var(--at-cyan) 55%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 0 3px color-mix(in srgb, var(--at-cyan) 18%, transparent);
+}
+
+/* Detail slide-over — glass sheet (Tahoe), content stays ruled inside */
+.at-slideover {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 24%, transparent 50%),
+    rgba(12, 18, 24, 0.78);
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 1px 0 0 rgba(255, 255, 255, 0.06),
+    -18px 0 48px rgba(0, 0, 0, 0.45);
+  -webkit-backdrop-filter: saturate(1.35) blur(28px);
+  backdrop-filter: saturate(1.35) blur(28px);
+}
+.at-slideover-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  min-height: 48px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 100%),
+    rgba(12, 18, 24, 0.55);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
 }
 
 .at-panel {
@@ -2034,17 +2075,21 @@
 .at-tbl .at-act {
   height: 26px;
   padding: 0 10px;
-  border-radius: var(--r-ctl);
-  border: 1px solid var(--at-line-2);
-  background: var(--at-crest);
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 100%),
+    rgba(16, 22, 30, 0.4);
   color: var(--at-ink-2);
   font-size: 12px;
   font-family: var(--at-face);
   cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 .at-tbl .at-act:hover {
-  color: var(--at-cyan);
-  border-color: rgba(63, 208, 232, 0.4);
+  color: var(--at-ink);
+  border-color: color-mix(in srgb, var(--at-cyan) 40%, rgba(255, 255, 255, 0.15));
+  background: rgba(255, 255, 255, 0.12);
 }
 .at-tbl .at-act.danger:hover {
   color: var(--at-fail);
@@ -2054,15 +2099,19 @@
 .at-tbl .at-row-actions .btn {
   height: 26px;
   padding: 0 10px;
-  border-radius: var(--r-ctl);
+  border-radius: 999px;
   font-size: 12px;
-  background: var(--at-crest);
-  border-color: var(--at-line-2);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 100%),
+    rgba(16, 22, 30, 0.4);
+  border-color: rgba(255, 255, 255, 0.12);
   color: var(--at-ink-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 .at-tbl .at-row-actions .btn:hover {
-  color: var(--at-cyan);
-  border-color: rgba(63, 208, 232, 0.4);
+  color: var(--at-ink);
+  border-color: color-mix(in srgb, var(--at-cyan) 40%, rgba(255, 255, 255, 0.15));
+  background: rgba(255, 255, 255, 0.12);
 }
 .at-tbl .at-row-actions .btn-danger:hover,
 .at-tbl .at-row-actions .btn.btn-danger:hover {
@@ -2197,33 +2246,43 @@
   -webkit-backdrop-filter: none;
 }
 .at-app .btn {
-  border-radius: var(--r-ctl);
+  border-radius: 999px;
   font-family: var(--at-face);
   font-weight: 500;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 .at-app .btn-primary {
-  background: var(--at-cyan);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--at-cyan) 92%, white) 0%, var(--at-cyan) 100%);
   color: #032027;
-  border: 1px solid var(--at-cyan);
-  box-shadow: none;
+  border: 1px solid color-mix(in srgb, var(--at-cyan) 70%, white);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 6px 18px color-mix(in srgb, var(--at-cyan) 25%, transparent);
 }
 .at-app .btn-primary:hover:not(:disabled) {
-  background: #5adcf0;
+  background: color-mix(in srgb, var(--at-cyan) 88%, white);
   transform: none;
   filter: none;
-  box-shadow: 0 0 22px var(--at-cyan-glow);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 0 22px var(--at-cyan-glow);
 }
 .at-app .btn-secondary,
 .at-app .btn-ghost {
-  background: var(--at-ridge);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 100%),
+    rgba(16, 22, 30, 0.4);
   color: var(--at-ink-2);
-  border: 1px solid var(--at-line-2);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 .at-app .btn-secondary:hover:not(:disabled),
 .at-app .btn-ghost:hover:not(:disabled) {
-  background: var(--at-crest);
+  background: rgba(255, 255, 255, 0.12);
   color: var(--at-ink);
-  border-color: var(--at-line-3);
+  border-color: rgba(255, 255, 255, 0.2);
   transform: none;
 }
 .at-app .btn-danger {
@@ -2238,12 +2297,13 @@
   filter: none;
 }
 .at-app .badge {
-  border-radius: var(--r-ctl);
+  border-radius: 999px;
   font-family: var(--at-mono);
   font-size: 10.5px;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
   font-weight: 500;
+  padding: 2px 8px;
 }
 .at-app .badge-info {
   color: var(--at-cyan);
@@ -2267,19 +2327,24 @@
 }
 .at-app .badge-neutral {
   color: var(--at-ink-3);
-  background: var(--at-ridge);
-  border-color: var(--at-line);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 .at-app .field {
-  background: var(--at-abyss);
-  border: 1px solid var(--at-line-2);
-  border-radius: var(--r-ctl);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%),
+    rgba(8, 12, 18, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
   color: var(--at-ink);
   font-family: var(--at-face);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 .at-app .field:focus {
-  border-color: var(--at-cyan);
-  box-shadow: 0 0 0 3px var(--at-cyan-wash);
+  border-color: color-mix(in srgb, var(--at-cyan) 55%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 3px color-mix(in srgb, var(--at-cyan) 18%, transparent);
 }
 .at-app .section-label,
 .at-app .at-caption {

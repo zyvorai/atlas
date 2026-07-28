@@ -250,13 +250,13 @@ export function SlideOver({
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-50" onMouseDown={onClose}>
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/45 backdrop-blur-md" />
       <div
-        className="absolute right-0 top-0 h-full at-panel rounded-none border-l overflow-auto animate-fade-in"
-        style={{ width, maxWidth: "92vw", borderRadius: 0, borderColor: "var(--at-line-2)" }}
+        className="absolute right-0 top-0 h-full at-slideover overflow-auto animate-fade-in"
+        style={{ width, maxWidth: "92vw" }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="at-panel-bar sticky top-0" style={{ background: "var(--at-shelf)", zIndex: 1 }}>
+        <div className="at-slideover-bar sticky top-0 z-[1]">
           <div className="at-caption grow" style={{ flex: 1, color: "var(--at-ink)", fontSize: 13 }}>
             {title}
           </div>

@@ -541,16 +541,20 @@
     -webkit-backdrop-filter: saturate(1.2) blur(24px);
     backdrop-filter: saturate(1.2) blur(24px);
   }
+  /* Content panels stay Soundings-ruled (transparent + hairline) — not Carbon metal cards. */
   :root[data-ui-shell="carbon"] .at-panel {
-    background: #1e1e1e;
-    border: 1px solid #393939;
+    background: transparent;
+    border: none;
+    border-top: 1px solid var(--at-line, #393939);
     border-radius: 0;
     box-shadow: none;
-    overflow: hidden;
+    overflow: visible;
   }
   :root[data-ui-shell="carbon"] .at-menubar-metrics {
-    border-color: #393939;
-    background: #1e1e1e;
+    border-color: rgba(255, 255, 255, 0.1);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 100%),
+      rgba(30, 30, 30, 0.45);
   }
   :root[data-ui-shell="carbon"] .at-choice.on {
     border-color: rgba(69, 137, 255, 0.45);
