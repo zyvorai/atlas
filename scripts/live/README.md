@@ -38,10 +38,12 @@ SSH defaults: `ATLAS_SSH_USER=sus`, `ATLAS_SSH_HOST=212.8.248.187`,
 | `02-auth` | 401 without token; mint + revoke; `POST /auth/login` (bootstrap admin); console users CRUD + login |
 | `03-inventory` | ~45 GET inventory / Ceph / DR / DataBridge / audit paths |
 | `04-discover` | `POST …/discover` on Ceph only (set `ATLAS_LIVE_DISCOVER_ALL=1` for nfs/zfs) |
-| `05-volume-lifecycle` | create → snap → schedule (`interval_secs`) → expand (`new_size_bytes`) → delete on `zyvor-rbd-prod` |
-| `06-buckets` | create → get → stats (WARN on timeout) → delete |
-| `07-rbd-governance` | RBD list, usage refresh, maintenance, upgrade preflight |
+| `05-volume-lifecycle` | create → snap → schedule → expand → **delete** on `zyvor-rbd-prod` |
+| `06-buckets` | create → get → stats (WARN on timeout) → **delete** |
+| `07-rbd-governance` | RBD **create → resize → snap → delete**, usage refresh, maintenance, upgrade preflight |
 | `08-metrics-alerts` | `/metrics/{summary,ceph,history,forecast}`, alerts evaluate |
+| `09-databridge` | fake source → discover → plan → assess…validate → **delete plan → delete source** |
+| `10-dr` | DR peer create → preflight → temp volume → mirror enable (soft) → **delete volume → delete peer** |
 
 Writes use prefix `live-<pid>-<ts>-*` and register a `trap` cleanup so leftovers
 are deleted even on failure.

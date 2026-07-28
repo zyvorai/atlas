@@ -165,7 +165,11 @@ json_field() {
   local field="$1"
   python3 -c "
 import sys, json
-d = json.loads(sys.stdin.read() or 'null')
+raw = sys.stdin.read() or ''
+try:
+    d = json.loads(raw or 'null')
+except Exception:
+    d = None
 if isinstance(d, dict):
     v = d.get('${field}', '')
     if v is None: v = ''
@@ -250,6 +254,14 @@ live_cleanup() {
       snapshot) live_req DELETE "/snapshots/${id}" || true; sleep 2 ;;
       volume)   live_req DELETE "/volumes/${id}" || true; sleep 2 ;;
       bucket)   live_req DELETE "/buckets/${id}" || true; sleep 2 ;;
+      rbd)
+        # id form: pool/image
+        live_req DELETE "/rbd-images/${id}" || true
+        sleep 1
+        ;;
+      db-plan)  live_req DELETE "/databridge/plans/${id}" || true ;;
+      db-source) live_req DELETE "/databridge/sources/${id}" || true ;;
+      dr-peer)  live_req DELETE "/dr/peers/${id}" || true ;;
       token)
         live_req POST "/auth/tokens/${id}/revoke" '{}' || true
         ;;

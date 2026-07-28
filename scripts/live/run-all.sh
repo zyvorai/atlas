@@ -51,6 +51,8 @@ SECTIONS=(
   06-buckets.sh
   07-rbd-governance.sh
   08-metrics-alerts.sh
+  09-databridge.sh
+  10-dr.sh
 )
 
 for s in "${SECTIONS[@]}"; do
