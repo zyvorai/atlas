@@ -175,6 +175,18 @@
   gap: 10px;
   min-width: 0;
   flex-shrink: 0;
+  text-decoration: none;
+  color: inherit;
+  border-radius: 10px;
+  transition: background 0.14s, box-shadow 0.14s;
+}
+.at-mark:hover {
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+a.at-mark:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--at-cyan) 55%, transparent);
+  outline-offset: 2px;
 }
 .at-brand-logo {
   width: 30px;
@@ -719,6 +731,10 @@
   letter-spacing: -0.01em;
   line-height: 1;
   white-space: nowrap;
+}
+/* Always label the Command Deck home control — it is the primary “go home” affordance. */
+.at-topnav-home .at-topnav-dd-title {
+  display: inline;
 }
 @media (min-width: 1180px) {
   .at-topnav-dd-title {

@@ -112,7 +112,7 @@ function MenuBar({
           <Menu size={16} strokeWidth={2} />
         </button>
 
-        <div className="at-mark">
+        <NavLink to="/" end className="at-mark" title="Command Deck" aria-label="Atlas — Command Deck">
           <span className="at-brand-logo" aria-hidden>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="3" fill="currentColor" />
@@ -122,7 +122,7 @@ function MenuBar({
           </span>
           <span className="at-wordmark">Atlas</span>
           <span className="at-mark-sub">Storage Center</span>
-        </div>
+        </NavLink>
       </div>
 
       <div className="at-rail-center">
@@ -514,7 +514,8 @@ function PrimaryNav() {
         sec,
         short: SECTION_SHORT[sec] || sec,
         icon: SECTION_ICON[sec] || Server,
-        items: MODULES.filter((m) => m.section === sec && m.path !== "/"),
+        // Keep Command Deck in Storage so it is discoverable in the menu (home capsule + brand also go there).
+        items: MODULES.filter((m) => m.section === sec),
       })).filter((g) => g.items.length),
     [],
   );
@@ -570,7 +571,7 @@ function MobileNavDrawer({ open, onClose }: { open: boolean; onClose: () => void
   const grouped = SECTIONS.map((sec) => ({
     sec,
     short: SECTION_SHORT[sec] || sec,
-    items: MODULES.filter((m) => m.section === sec && m.path !== "/"),
+    items: MODULES.filter((m) => m.section === sec),
   })).filter((g) => g.items.length);
 
   return createPortal(
@@ -773,6 +774,7 @@ function AgentToast() {
 let welcomed = false;
 
 const SHORTCUTS: [string, string][] = [
+  ["H", "Go to Command Deck"],
   ["⌘K / Ctrl-K", "Open command palette"],
   ["↑ ↓ / Enter", "Navigate & open in palette"],
   ["?", "Show this help"],
@@ -785,20 +787,25 @@ export function Shell() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const loc = useLocation();
+  const nav = useNavigate();
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      const typing = ["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName);
+      const typing = ["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName)
+        || (e.target as HTMLElement)?.isContentEditable;
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setSpot(true);
       } else if (e.key === "?" && !typing) {
         e.preventDefault();
         setHelpOpen(true);
+      } else if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "h") {
+        e.preventDefault();
+        nav("/");
       }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [setSpot]);
+  }, [setSpot, nav]);
   useEffect(() => {
     const m = MODULES.find((x) => (x.path === "/" ? loc.pathname === "/" : loc.pathname.startsWith(x.path)));
     document.title = m ? `Atlas · ${m.label}` : "Atlas — Storage Center";
