@@ -88,11 +88,13 @@ function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
   return (
     <header className="at-rail">
       <div className="at-mark">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <circle cx="12" cy="12" r="3" fill="#3FD0E8" />
-          <circle cx="12" cy="12" r="6.5" stroke="#3FD0E8" strokeWidth="1.3" opacity=".62" />
-          <circle cx="12" cy="12" r="10" stroke="#3FD0E8" strokeWidth="1.1" opacity=".3" />
-        </svg>
+        <span className="at-brand-logo" aria-hidden>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="3" fill="currentColor" />
+            <circle cx="12" cy="12" r="6.5" stroke="currentColor" strokeWidth="1.3" opacity=".62" />
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.1" opacity=".3" />
+          </svg>
+        </span>
         <span className="at-wordmark">Atlas</span>
         <span className="at-mark-sub">Storage Center</span>
       </div>

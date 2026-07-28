@@ -60,22 +60,40 @@
     --input: 195 18% 16%;
   }
 
-  /* Midnight shell — cool steel-blue/indigo over near-black, no violet or cyan tint. */
+  /* Midnight shell — Zeus dark-steel (brushed metal + steel-blue accent). */
   :root[data-ui-shell="dark"] {
-    --background: 222 45% 3%;
-    --card: 220 30% 7%;
-    --card-foreground: 210 30% 96%;
-    --foreground: 210 30% 96%;
-    --popover: 220 30% 7%;
-    --primary: 213 90% 58%;
-    --primary-foreground: 210 30% 98%;
-    --ring: 213 90% 58%;
-    --info: 213 90% 58%;
-    --muted-foreground: 216 15% 72%;
-    --border: 220 22% 17%;
-    --secondary: 220 22% 15%;
-    --accent: 220 22% 15%;
-    --input: 220 22% 17%;
+    --background: 220 35% 4%;
+    --card: 218 28% 8%;
+    --card-foreground: 210 28% 92%;
+    --foreground: 210 28% 92%;
+    --popover: 218 28% 8%;
+    --primary: 213 90% 65%;
+    --primary-foreground: 220 40% 8%;
+    --ring: 213 90% 65%;
+    --info: 213 90% 65%;
+    --muted-foreground: 215 14% 68%;
+    --border: 215 18% 18%;
+    --secondary: 218 22% 14%;
+    --accent: 218 22% 14%;
+    --input: 215 18% 18%;
+
+    /* Soundings tokens remapped for dark-steel accent (Zeus #5d90f7 / #8ec5ff) */
+    --at-void: #06080d;
+    --at-abyss: #0b1017;
+    --at-shelf: #101722;
+    --at-ridge: #161c24;
+    --at-crest: #1a222d;
+    --at-line: rgba(140, 160, 190, 0.14);
+    --at-line-2: rgba(140, 160, 190, 0.22);
+    --at-line-3: rgba(140, 160, 190, 0.34);
+    --at-ink: #eef3f8;
+    --at-ink-2: #cfd8e3;
+    --at-ink-3: #9aa8b8;
+    --at-ink-4: #6b7788;
+    --at-cyan: #5d90f7;
+    --at-cyan-2: #8ec5ff;
+    --at-cyan-wash: rgba(93, 144, 247, 0.12);
+    --at-cyan-glow: rgba(93, 144, 247, 0.34);
   }
 
   /* Aurora neon shell (Zeus OS variant) — cyan/purple/pink glow over near-black. */
@@ -145,20 +163,91 @@
     background: linear-gradient(180deg, rgb(34, 211, 238) 0%, rgb(147, 51, 234) 100%);
     box-shadow: 0 1px 0 rgba(255, 255, 255, 0.2) inset, 0 8px 22px -6px rgba(147, 51, 234, 0.5);
   }
-  /* Midnight shell canvas + accents */
+  /* Midnight shell canvas + accents — Zeus dark-steel */
   :root[data-ui-shell="dark"] .tahoe-canvas {
     background:
-      radial-gradient(ellipse 70% 50% at 50% -5%, rgba(59, 130, 246, 0.14), transparent 55%),
-      radial-gradient(ellipse 60% 45% at 90% 100%, rgba(30, 64, 175, 0.12), transparent 55%),
-      linear-gradient(180deg, #02040a, #050b18 45%, #0a1020 82%, #030712);
+      radial-gradient(circle at top center, rgba(120, 140, 160, 0.15), transparent 30%),
+      linear-gradient(180deg, #06080d 0%, #0b1017 40%, #101722 70%, #0b1018 100%);
   }
   :root[data-ui-shell="dark"] .btn-primary {
-    background: linear-gradient(180deg, rgb(96, 165, 250) 0%, rgb(29, 78, 216) 100%);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.2) inset, 0 8px 22px -6px rgba(29, 78, 216, 0.5);
+    background: linear-gradient(180deg, #8ec5ff 0%, #5d90f7 55%, #3b6fd4 100%);
+    color: #0a1220;
+    border: 1px solid rgba(142, 197, 255, 0.45);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 8px 22px -6px rgba(93, 144, 247, 0.45);
   }
   :root[data-ui-shell="dark"] .glass-card.hoverable:hover {
-    box-shadow: 0 0 32px -8px rgba(96, 165, 250, 0.4);
-    border-color: rgba(96, 165, 250, 0.4);
+    box-shadow: 0 0 32px -8px rgba(93, 144, 247, 0.4);
+    border-color: rgba(93, 144, 247, 0.4);
+  }
+
+  /* Midnight chrome — Zeus steel-topbar / search / icon-btn / menus */
+  :root[data-ui-shell="dark"] .at-rail {
+    background: linear-gradient(180deg, #0f141a 0%, #1a222d 50%, #0c1117 100%);
+    border-bottom-color: rgba(140, 160, 190, 0.18);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 10px 30px rgba(0, 0, 0, 0.45);
+  }
+  :root[data-ui-shell="dark"] .at-brand-logo {
+    color: #8ec5ff;
+    background: linear-gradient(145deg, #2a3442, #121820);
+    border-color: rgba(170, 190, 220, 0.25);
+  }
+  :root[data-ui-shell="dark"] .at-search {
+    background: linear-gradient(180deg, #141a22 0%, #0e141c 100%);
+    border-color: rgba(140, 160, 190, 0.2);
+    color: #d7dde5;
+  }
+  :root[data-ui-shell="dark"] .at-search:hover {
+    border-color: rgba(170, 190, 220, 0.35);
+    color: #ffffff;
+  }
+  :root[data-ui-shell="dark"] .at-kbd {
+    background: rgba(0, 0, 0, 0.35);
+    color: #9aa8b8;
+  }
+  :root[data-ui-shell="dark"] .at-iconbtn {
+    color: #9aa8b8;
+    border-color: rgba(140, 160, 190, 0.15);
+    background: linear-gradient(180deg, #161c24 0%, #10161d 100%);
+  }
+  :root[data-ui-shell="dark"] .at-iconbtn:hover {
+    color: #ffffff;
+    border-color: rgba(170, 190, 220, 0.3);
+    background: rgba(255, 255, 255, 0.06);
+  }
+  :root[data-ui-shell="dark"] .at-topnav {
+    background: linear-gradient(180deg, rgba(15, 20, 26, 0.92), rgba(12, 17, 23, 0.88));
+    border-bottom-color: rgba(140, 160, 190, 0.14);
+  }
+  :root[data-ui-shell="dark"] .at-topnav-home.on,
+  :root[data-ui-shell="dark"] .at-topnav-dd.on .at-topnav-ddbtn {
+    background: rgba(93, 144, 247, 0.12);
+    border-color: rgba(93, 144, 247, 0.25);
+    color: #eef3f8;
+  }
+  :root[data-ui-shell="dark"] .at-topnav-home.on::after,
+  :root[data-ui-shell="dark"] .at-topnav-dd.on .at-topnav-ddbtn::after {
+    background: linear-gradient(90deg, #8ea0b5, #5d90f7);
+  }
+  :root[data-ui-shell="dark"] .at-topnav-menu {
+    background: linear-gradient(145deg, #1a1f27 0%, #222a35 50%, #161b22 100%);
+    border-color: rgba(160, 180, 210, 0.2);
+  }
+  :root[data-ui-shell="dark"] .at-topnav-item {
+    color: #cfd8e3;
+  }
+  :root[data-ui-shell="dark"] .at-topnav-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #ffffff;
+  }
+  :root[data-ui-shell="dark"] .at-topnav-item.on {
+    color: #8ec5ff;
+    background: rgba(93, 144, 247, 0.15);
+  }
+  :root[data-ui-shell="dark"] .at-topnav-item.on svg,
+  :root[data-ui-shell="dark"] .at-topnav-item:hover svg {
+    color: #8ec5ff;
   }
   /* Nebula shell canvas + accents — Soundings survey cyan */
   :root[data-ui-shell="nebula"] .tahoe-canvas {

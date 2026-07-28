@@ -45,13 +45,13 @@
   --s6: 32px;
   --s7: 48px;
   --s8: 64px;
-  --rail-h: 52px;
+  --rail-h: 56px;
   --page-max: 1520px;
   --page-gutter: 0px;
   --page-inset: 16px;
 
   --r-panel: 0px;
-  --r-ctl: 6px;
+  --r-ctl: 8px;
   --r-pill: 999px;
   --r-data: 0px;
 }
@@ -132,7 +132,7 @@
   background: radial-gradient(120% 90% at 50% 0%, transparent 35%, var(--at-void) 100%);
 }
 
-/* ── Rail ── */
+/* ── Rail (Zeus metal chrome structure, Soundings cyan accent) ── */
 .at-rail {
   position: relative;
   z-index: 60;
@@ -142,15 +142,32 @@
   align-items: center;
   gap: var(--s4);
   padding: 0 var(--page-inset);
-  background: transparent;
+  background: linear-gradient(180deg, #0c1419 0%, #121c24 48%, #0a1016 100%);
+  border-bottom: 1px solid rgba(120, 180, 200, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 10px 28px rgba(0, 0, 0, 0.4);
   backdrop-filter: none;
-  border-bottom: 1px solid var(--at-line);
 }
 .at-mark {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+}
+.at-brand-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: var(--at-cyan);
+  background: linear-gradient(145deg, #1a2832, #0c1419);
+  border: 1px solid rgba(120, 180, 200, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 6px 14px rgba(0, 0, 0, 0.35);
 }
 .at-wordmark {
   font-weight: 700;
@@ -173,53 +190,58 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 32px;
-  min-width: 230px;
-  padding: 0 10px 0 11px;
-  background: var(--at-ridge);
-  border: 1px solid var(--at-line);
-  border-radius: var(--r-ctl);
+  height: 36px;
+  min-width: 240px;
+  padding: 0 12px 0 12px;
+  background: linear-gradient(180deg, #141c24 0%, #0e151c 100%);
+  border: 1px solid rgba(120, 180, 200, 0.2);
+  border-radius: 12px;
   color: var(--at-ink-3);
   font-size: 12.5px;
   cursor: pointer;
   transition: 0.16s;
   font-family: var(--at-face);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 .at-search:hover {
-  border-color: var(--at-line-3);
-  color: var(--at-ink-2);
-  background: var(--at-crest);
+  border-color: rgba(120, 180, 200, 0.35);
+  color: var(--at-ink);
+  background: linear-gradient(180deg, #18222c 0%, #111920 100%);
 }
 .at-kbd {
   margin-left: auto;
   font-family: var(--at-mono);
   font-size: 10.5px;
   color: var(--at-ink-4);
+  background: rgba(0, 0, 0, 0.35);
   border: 1px solid var(--at-line-2);
-  border-radius: 4px;
-  padding: 1px 5px;
+  border-radius: 5px;
+  padding: 2px 6px;
 }
 .at-iconbtn {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
-  border-radius: var(--r-ctl);
-  border: 1px solid transparent;
-  background: transparent;
+  border-radius: 10px;
+  border: 1px solid rgba(120, 180, 200, 0.15);
+  background: linear-gradient(180deg, #161e26 0%, #10161d 100%);
   color: var(--at-ink-3);
   cursor: pointer;
   position: relative;
   transition: 0.16s;
   flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 .at-iconbtn:hover {
-  background: var(--at-ridge);
   color: var(--at-ink);
-  border-color: var(--at-line);
+  border-color: rgba(120, 180, 200, 0.3);
+  background: rgba(255, 255, 255, 0.06);
 }
 .at-iconbtn.is-on {
   color: var(--at-warn);
+  border-color: rgba(255, 194, 75, 0.35);
+  background: rgba(255, 194, 75, 0.08);
 }
 .at-badge {
   position: absolute;
@@ -311,7 +333,7 @@
   align-items: center;
   gap: 0;
   border-bottom: 1px solid var(--at-line);
-  background: transparent;
+  background: linear-gradient(180deg, rgba(12, 20, 25, 0.72), rgba(8, 14, 18, 0.55));
   min-height: 44px;
   padding: 2px 0;
 }
