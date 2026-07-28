@@ -217,11 +217,14 @@
 
   /* Midnight chrome — Zeus steel-topbar / search / icon-btn / menus */
   :root[data-ui-shell="dark"] .at-rail {
-    background: linear-gradient(180deg, #0f141a 0%, #1a222d 50%, #0c1117 100%);
-    border-bottom-color: rgba(140, 160, 190, 0.18);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, transparent 40%),
+      linear-gradient(180deg, #0f141a 0%, #1a222d 50%, #0c1117 100%);
+    border-bottom-color: rgba(140, 160, 190, 0.22);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.06),
-      0 10px 30px rgba(0, 0, 0, 0.45);
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+      0 12px 34px rgba(0, 0, 0, 0.5);
   }
   :root[data-ui-shell="dark"] .at-brand-logo {
     color: #8ec5ff;
@@ -256,18 +259,29 @@
     border-bottom-color: rgba(140, 160, 190, 0.14);
   }
   :root[data-ui-shell="dark"] .at-topnav-home.on,
-  :root[data-ui-shell="dark"] .at-topnav-dd.on .at-topnav-ddbtn {
+  :root[data-ui-shell="dark"] .at-topnav-dd.on .at-topnav-ddbtn,
+  :root[data-ui-shell="dark"] .at-quick-link.on {
     background: rgba(93, 144, 247, 0.12);
     border-color: rgba(93, 144, 247, 0.25);
     color: #eef3f8;
   }
   :root[data-ui-shell="dark"] .at-topnav-home.on::after,
-  :root[data-ui-shell="dark"] .at-topnav-dd.on .at-topnav-ddbtn::after {
-    background: linear-gradient(90deg, #8ea0b5, #5d90f7);
+  :root[data-ui-shell="dark"] .at-topnav-dd.on .at-topnav-ddbtn::after,
+  :root[data-ui-shell="dark"] .at-quick-link.on::after {
+    background: linear-gradient(90deg, transparent, #8ec5ff, #5d90f7, transparent);
   }
-  :root[data-ui-shell="dark"] .at-topnav-menu {
+  :root[data-ui-shell="dark"] .at-topnav-menu,
+  :root[data-ui-shell="dark"] .at-theme-menu,
+  :root[data-ui-shell="dark"] .at-drawer {
     background: linear-gradient(145deg, #1a1f27 0%, #222a35 50%, #161b22 100%);
     border-color: rgba(160, 180, 210, 0.2);
+  }
+  :root[data-ui-shell="dark"] .at-panel {
+    background: linear-gradient(145deg, rgba(26, 31, 39, 0.55) 0%, rgba(34, 42, 53, 0.35) 50%, rgba(22, 27, 34, 0.5) 100%);
+    border: 1px solid rgba(160, 180, 210, 0.14);
+    border-radius: 12px;
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
   }
   :root[data-ui-shell="dark"] .at-topnav-item {
     color: #cfd8e3;
@@ -284,6 +298,14 @@
   :root[data-ui-shell="dark"] .at-topnav-item:hover svg {
     color: #8ec5ff;
   }
+  :root[data-ui-shell="dark"] .at-menubar-metrics {
+    border-color: rgba(140, 160, 190, 0.18);
+    background: linear-gradient(180deg, #161c24 0%, #10161d 100%);
+  }
+  :root[data-ui-shell="dark"] .at-choice.on {
+    border-color: rgba(93, 144, 247, 0.45);
+    background: rgba(93, 144, 247, 0.12);
+  }
 
   /* Zinc metal chrome */
   :root[data-ui-shell="zinc"] .tahoe-canvas {
@@ -298,8 +320,14 @@
     box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 8px 22px -6px rgba(245, 158, 11, 0.45);
   }
   :root[data-ui-shell="zinc"] .at-rail {
-    background: linear-gradient(180deg, #27272a 0%, #3f3f46 45%, #27272a 100%);
-    border-bottom-color: rgba(228, 228, 231, 0.14);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, transparent 42%),
+      linear-gradient(180deg, #27272a 0%, #3f3f46 45%, #27272a 100%);
+    border-bottom-color: rgba(228, 228, 231, 0.16);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+      0 12px 34px rgba(0, 0, 0, 0.48);
   }
   :root[data-ui-shell="zinc"] .at-brand-logo {
     color: #fbbf24;
@@ -317,18 +345,29 @@
     background: rgba(255, 255, 255, 0.08);
   }
   :root[data-ui-shell="zinc"] .at-topnav-home.on,
-  :root[data-ui-shell="zinc"] .at-topnav-dd.on .at-topnav-ddbtn {
+  :root[data-ui-shell="zinc"] .at-topnav-dd.on .at-topnav-ddbtn,
+  :root[data-ui-shell="zinc"] .at-quick-link.on {
     background: rgba(245, 158, 11, 0.12);
     border-color: rgba(245, 158, 11, 0.28);
     color: #fafafa;
   }
   :root[data-ui-shell="zinc"] .at-topnav-home.on::after,
-  :root[data-ui-shell="zinc"] .at-topnav-dd.on .at-topnav-ddbtn::after {
-    background: linear-gradient(90deg, #a1a1aa, #f59e0b);
+  :root[data-ui-shell="zinc"] .at-topnav-dd.on .at-topnav-ddbtn::after,
+  :root[data-ui-shell="zinc"] .at-quick-link.on::after {
+    background: linear-gradient(90deg, transparent, #a1a1aa, #f59e0b, transparent);
   }
-  :root[data-ui-shell="zinc"] .at-topnav-menu {
+  :root[data-ui-shell="zinc"] .at-topnav-menu,
+  :root[data-ui-shell="zinc"] .at-theme-menu,
+  :root[data-ui-shell="zinc"] .at-drawer {
     background: linear-gradient(155deg, #27272a 0%, #3f3f46 45%, #27272a 100%);
     border-color: rgba(228, 228, 231, 0.14);
+  }
+  :root[data-ui-shell="zinc"] .at-panel {
+    background: linear-gradient(155deg, rgba(39, 39, 42, 0.65) 0%, rgba(63, 63, 70, 0.4) 40%, rgba(39, 39, 42, 0.55) 100%);
+    border: 1px solid rgba(228, 228, 231, 0.12);
+    border-radius: 12px;
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
   }
   :root[data-ui-shell="zinc"] .at-topnav-item.on {
     color: #fbbf24;
@@ -337,6 +376,10 @@
   :root[data-ui-shell="zinc"] .at-topnav-item.on svg,
   :root[data-ui-shell="zinc"] .at-topnav-item:hover svg {
     color: #fbbf24;
+  }
+  :root[data-ui-shell="zinc"] .at-choice.on {
+    border-color: rgba(245, 158, 11, 0.45);
+    background: rgba(245, 158, 11, 0.12);
   }
   /* Nebula shell canvas + accents — Soundings survey cyan */
   :root[data-ui-shell="nebula"] .tahoe-canvas {
@@ -555,17 +598,34 @@
 /* Atlas login — secure shell inherits PacketWolf chrome; light sky mark for product */
 
 /* ── Compact density ── */
-:root[data-density="compact"] .ztable td {
+:root[data-density="compact"] {
+  --rail-h: 48px;
+  --page-inset: 12px;
+}
+:root[data-density="compact"] .ztable td,
+:root[data-density="compact"] .at-tbl td {
   padding: 0.3rem 0.7rem;
 }
-:root[data-density="compact"] .ztable th {
+:root[data-density="compact"] .ztable th,
+:root[data-density="compact"] .at-tbl th {
   padding: 0.35rem 0.7rem;
 }
 :root[data-density="compact"] .glass-card {
   border-radius: 0.7rem;
 }
-:root[data-density="compact"] main .p-6 {
-  padding: 1rem;
+:root[data-density="compact"] main .p-6,
+:root[data-density="compact"] .at-main-scroll {
+  --page-inset: 12px;
+}
+:root[data-density="compact"] .at-stack {
+  gap: 12px;
+}
+:root[data-density="compact"] .at-iconbtn,
+:root[data-density="compact"] .at-topnav-home,
+:root[data-density="compact"] .at-topnav-ddbtn,
+:root[data-density="compact"] .at-quick-link {
+  width: 30px;
+  height: 30px;
 }
 
 .animate-fade-in {

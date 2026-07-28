@@ -14,14 +14,16 @@ import {
   LayoutTemplate,
   Loader2,
   LogOut,
+  Menu,
   Pause,
   Play,
   Search,
   Server,
   Shield,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { MODULES, SECTIONS, type Module } from "../nav/modules";
+import { MODULES, SECTIONS, TOP_BAR_QUICK_LINKS, type Module } from "../nav/modules";
 import { http } from "../api/client";
 import { useAlerts, useClusters, useJobs } from "../api/hooks";
 import { useUi } from "../store/ui";
@@ -30,6 +32,7 @@ import { cx } from "../lib/format";
 import { onSendPrompt } from "../lib/prompts";
 import { Button, Field, Modal } from "../ui/kit";
 import { ChartFloor } from "../ui/ChartFloor";
+import { MenubarLiveMetrics } from "./MenubarLiveMetrics";
 
 function Clock() {
   const [t, setT] = useState(new Date());
@@ -44,7 +47,13 @@ function Clock() {
   );
 }
 
-function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
+function MenuBar({
+  onSpotlight,
+  onOpenNav,
+}: {
+  onSpotlight: () => void;
+  onOpenNav: () => void;
+}) {
   const { data: clusters, isError: clustersErrored } = useClusters();
   const { data: jobs } = useJobs();
   const { data: openAlerts } = useAlerts("open");
@@ -92,6 +101,16 @@ function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
 
   return (
     <header className="at-rail">
+      <button
+        type="button"
+        className="at-iconbtn at-menu-burger"
+        title="Open navigation"
+        aria-label="Open navigation"
+        onClick={onOpenNav}
+      >
+        <Menu size={16} strokeWidth={2} />
+      </button>
+
       <div className="at-mark">
         <span className="at-brand-logo" aria-hidden>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -105,8 +124,11 @@ function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
       </div>
 
       <PrimaryNav />
+      <QuickLinks />
 
       <div className="at-rail-actions">
+        <MenubarLiveMetrics />
+
         <button
           type="button"
           className="at-iconbtn"
@@ -456,6 +478,25 @@ function SectionDropdown({
   );
 }
 
+function QuickLinks() {
+  return (
+    <nav className="at-quick-links" aria-label="Quick links">
+      <span className="at-rail-sep at-quick-sep" aria-hidden />
+      {TOP_BAR_QUICK_LINKS.map((m) => (
+        <NavLink
+          key={m.id}
+          to={m.path}
+          title={m.label}
+          aria-label={m.label}
+          className={({ isActive }) => cx("at-quick-link", isActive && "on")}
+        >
+          <m.icon className="at-topnav-secico" strokeWidth={2} aria-hidden />
+        </NavLink>
+      ))}
+    </nav>
+  );
+}
+
 function PrimaryNav() {
   const loc = useLocation();
   const [openSec, setOpenSec] = useState<string | null>(null);
@@ -501,6 +542,84 @@ function PrimaryNav() {
         />
       ))}
     </nav>
+  );
+}
+
+function MobileNavDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const loc = useLocation();
+  useEffect(() => {
+    onClose();
+  }, [loc.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const grouped = SECTIONS.map((sec) => ({
+    sec,
+    short: SECTION_SHORT[sec] || sec,
+    items: MODULES.filter((m) => m.section === sec && m.path !== "/"),
+  })).filter((g) => g.items.length);
+
+  return createPortal(
+    <div className="at-drawer-scrim" onMouseDown={onClose}>
+      <aside
+        className="at-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Navigation"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="at-drawer-head">
+          <span className="at-drawer-title">Navigate</span>
+          <button type="button" className="at-iconbtn" aria-label="Close navigation" onClick={onClose}>
+            <X size={16} />
+          </button>
+        </div>
+        <div className="at-drawer-body">
+          <NavLink to="/" end className={({ isActive }) => cx("at-drawer-item", isActive && "on")} onClick={onClose}>
+            <LayoutDashboard size={16} strokeWidth={2} aria-hidden />
+            <span>Command Deck</span>
+          </NavLink>
+          <div className="at-drawer-label">Shortcuts</div>
+          {TOP_BAR_QUICK_LINKS.map((m) => (
+            <NavLink
+              key={m.id}
+              to={m.path}
+              className={({ isActive }) => cx("at-drawer-item", isActive && "on")}
+              onClick={onClose}
+            >
+              <m.icon size={16} strokeWidth={2} aria-hidden />
+              <span>{m.label}</span>
+            </NavLink>
+          ))}
+          {grouped.map((g) => (
+            <div key={g.sec}>
+              <div className="at-drawer-label">{g.short}</div>
+              {g.items.map((m) => (
+                <NavLink
+                  key={m.id}
+                  to={m.path}
+                  end={m.path === "/"}
+                  className={({ isActive }) => cx("at-drawer-item", isActive && "on")}
+                  onClick={onClose}
+                >
+                  <m.icon size={16} strokeWidth={2} aria-hidden />
+                  <span>{m.label}</span>
+                </NavLink>
+              ))}
+            </div>
+          ))}
+        </div>
+      </aside>
+    </div>,
+    document.body,
   );
 }
 
@@ -658,6 +777,7 @@ export function Shell() {
   const spotOpen = useUi((s) => s.spotlightOpen);
   const setSpot = useUi((s) => s.setSpotlight);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const loc = useLocation();
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -687,13 +807,14 @@ export function Shell() {
   return (
     <div className="at-app h-full flex flex-col overflow-hidden">
       <ChartFloor />
-      <MenuBar onSpotlight={() => setSpot(true)} />
+      <MenuBar onSpotlight={() => setSpot(true)} onOpenNav={() => setNavOpen(true)} />
       <div className="at-main flex-1 min-h-0">
         <div key={loc.pathname} className="at-main-scroll">
           <Outlet />
         </div>
       </div>
       <Spotlight open={spotOpen} onClose={() => setSpot(false)} />
+      <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
       <AgentToast />
       <Modal open={helpOpen} onClose={() => setHelpOpen(false)} title="Keyboard shortcuts">
         <div className="space-y-2">

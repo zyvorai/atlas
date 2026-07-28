@@ -3,7 +3,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity, Aperture, Archive, Bell, Boxes, Camera, Clock, Cloud, Database, FileClock, Gauge, HardDrive,
-  KeyRound, Layers, LayoutDashboard, Orbit, Server, ShieldCheck, Sparkles, Timer, Users, CloudCog,
+  KeyRound, Layers, LayoutDashboard, Orbit, Server, Settings, ShieldCheck, Sparkles, Timer, Users, CloudCog,
   Route as RouteIcon, Radio, Wrench, GitBranch,
 } from "lucide-react";
 
@@ -15,6 +15,13 @@ export interface Module {
   icon: LucideIcon;
   section: string;
 }
+
+/** Icon shortcuts after primary nav (Zeus TOP_BAR_QUICK_LINKS pattern; Atlas targets). */
+export const TOP_BAR_QUICK_LINKS: Module[] = [
+  { id: "ql-settings", codename: "settings", label: "Settings", path: "/settings", icon: Settings, section: "GOVERNANCE" },
+  { id: "ql-observatory", codename: "orrery", label: "Observatory", path: "/observatory", icon: Orbit, section: "OBSERVABILITY" },
+  { id: "ql-metrics", codename: "helios", label: "Metrics", path: "/metrics-dashboard", icon: Gauge, section: "OBSERVABILITY" },
+];
 
 export const MODULES: Module[] = [
   { id: "overview", codename: "olympus", label: "Command Deck", path: "/", icon: LayoutDashboard, section: "STORAGE" },
@@ -36,6 +43,7 @@ export const MODULES: Module[] = [
   { id: "tenants", codename: "athena", label: "Tenants", path: "/tenants", icon: Users, section: "GOVERNANCE" },
   { id: "access", codename: "aegis", label: "Access", path: "/access", icon: KeyRound, section: "GOVERNANCE" },
   { id: "policies", codename: "dike", label: "Policies", path: "/policies", icon: ShieldCheck, section: "GOVERNANCE" },
+  { id: "settings", codename: "hestia-ui", label: "Settings", path: "/settings", icon: Settings, section: "GOVERNANCE" },
 
   { id: "cloud-databases", codename: "prometheus", label: "Cloud Databases", path: "/databridge/sources", icon: CloudCog, section: "DATABRIDGE" },
   { id: "migration-plans", codename: "iris", label: "Migration Plans", path: "/databridge/plans", icon: RouteIcon, section: "DATABRIDGE" },

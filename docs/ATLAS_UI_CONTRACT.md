@@ -79,9 +79,11 @@ Kit surfaces (`GlassSection`, `StatCard`, `SlideOver`, buttons, fields, badges) 
 
 ## Shell chrome (Zeus metal patterns)
 
-Single metal **topbar** (brand · centered icon section menus · action cluster) follows Zeus OS
-~Apr 2026 EnhancedLayout / `dark-steel` / `zinc-metal` (`f0360bae3`): square `barIcon` triggers,
-hover/click flyouts, Look & feel menu (`LayoutTemplate`), icon search (⌘K).
+Single metal **topbar** (brand · centered icon section menus · quick links · action cluster)
+follows Zeus OS ~Apr 2026 EnhancedLayout / `dark-steel` / `zinc-metal` (`f0360bae3`): square
+`barIcon` triggers, hover/click flyouts, Look & feel menu (`LayoutTemplate`), icon search (⌘K),
+`TOP_BAR_QUICK_LINKS` (Settings / Observatory / Metrics), menubar capacity sparkline + cluster
+pulse, and a hamburger drawer below ~960px.
 
 | Atlas theme (`data-ui-shell`) | Look |
 |---|---|
@@ -90,8 +92,14 @@ hover/click flyouts, Look & feel menu (`LayoutTemplate`), icon search (⌘K).
 | **zinc** | **Zeus zinc-metal** (brushed zinc + amber) |
 | **aurora** | Neon cyan/violet/pink canvas |
 
-Change Look & feel from the top-rail template icon after login (also on the sign-in page).
+Change Look & feel from the top-rail template icon after login, or **Settings → Appearance**
+(theme + density). Density is stored as `data-density` (`comfortable` | `compact`).
+
+**Not ported (by design):** Zeus light/dark *within* a shell — Atlas Soundings is dark-mineral
+shells only (no light canvas). Also skipped: Dock, Finder, Dynamic Island, VM theatre, Tahoe sidebar.
+
 Nebula must not use steel-blue/amber as the default interaction colour; dark/zinc remap `--at-cyan*`.
+Metal shells add light steel-panel treatment on `.at-panel`; Nebula keeps flat Soundings panels.
 
 ## Ship checklist
 
