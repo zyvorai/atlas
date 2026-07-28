@@ -4,20 +4,20 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
+  Archive,
   Bell,
-  ChevronDown,
   CloudCog,
+  Gauge,
   HardDrive as HardDriveIcon,
   KeyRound,
   LayoutDashboard,
   Loader2,
   LogOut,
-  Orbit,
   Pause,
   Play,
   Search,
   Server,
-  ShieldCheck,
+  Shield,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { MODULES, SECTIONS, type Module } from "../nav/modules";
@@ -277,16 +277,20 @@ const SECTION_SHORT: Record<string, string> = {
   INFRASTRUCTURE: "Infra",
 };
 
+/** Section bar icons — same pattern as Zeus metal top nav (`barIcon` on NAV_GROUPS). */
 const SECTION_ICON: Record<string, LucideIcon> = {
   STORAGE: HardDriveIcon,
-  "DATA PROTECTION": ShieldCheck,
+  "DATA PROTECTION": Archive,
   DATABRIDGE: CloudCog,
-  OBSERVABILITY: Orbit,
-  GOVERNANCE: KeyRound,
+  OBSERVABILITY: Gauge,
+  GOVERNANCE: Shield,
   INFRASTRUCTURE: Server,
 };
 
-/** Section dropdown — portal + fixed coords so menus aren't clipped by overflow-x on the nav strip. */
+/**
+ * Zeus-style icon section menu: square icon trigger + hover/click flyout with icon rows.
+ * Portaled + fixed so the nav strip never clips the panel (Zeus EnhancedLayout lesson).
+ */
 function SectionDropdown({
   short,
   icon: Icon,
@@ -305,7 +309,7 @@ function SectionDropdown({
   onClose: () => void;
 }) {
   const btnRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const flyoutRef = useRef<HTMLDivElement>(null);
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
@@ -317,7 +321,7 @@ function SectionDropdown({
   };
   const scheduleClose = () => {
     clearLeave();
-    leaveTimer.current = setTimeout(onClose, 140);
+    leaveTimer.current = setTimeout(onClose, 160);
   };
 
   useLayoutEffect(() => {
@@ -327,9 +331,9 @@ function SectionDropdown({
     }
     const place = () => {
       const r = btnRef.current!.getBoundingClientRect();
-      const menuW = 220;
+      const menuW = 240;
       const left = Math.min(Math.max(8, r.left), window.innerWidth - menuW - 8);
-      setPos({ top: r.bottom - 1, left });
+      setPos({ top: r.bottom, left });
     };
     place();
     window.addEventListener("resize", place);
@@ -342,11 +346,20 @@ function SectionDropdown({
 
   useEffect(() => {
     if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t) || flyoutRef.current?.contains(t)) return;
+      onClose();
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
+    document.addEventListener("mousedown", onDoc);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [open, onClose]);
 
   useEffect(() => () => clearLeave(), []);
@@ -364,27 +377,26 @@ function SectionDropdown({
         ref={btnRef}
         type="button"
         className="at-topnav-ddbtn"
+        title={short}
+        aria-label={short}
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={() => (open ? onClose() : onOpen())}
       >
-        <Icon size={14} strokeWidth={1.75} className="at-topnav-secico" aria-hidden />
-        {short}
-        <ChevronDown size={13} strokeWidth={2} className="at-topnav-chev" aria-hidden />
+        <Icon className="at-topnav-secico" strokeWidth={2} aria-hidden />
       </button>
       {open &&
         pos &&
         createPortal(
-          <>
-            <div className="at-topnav-scrim" onClick={onClose} />
-            <div
-              ref={menuRef}
-              className="at-topnav-menu"
-              role="menu"
-              style={{ top: pos.top, left: pos.left }}
-              onMouseEnter={clearLeave}
-              onMouseLeave={scheduleClose}
-            >
+          <div
+            ref={flyoutRef}
+            className="at-topnav-flyout"
+            style={{ top: pos.top, left: pos.left }}
+            onMouseEnter={clearLeave}
+            onMouseLeave={scheduleClose}
+          >
+            <div className="at-topnav-menu" role="menu" aria-label={short}>
+              <div className="at-topnav-menu-label">{short}</div>
               {items.map((m) => (
                 <NavLink
                   key={m.id}
@@ -394,12 +406,12 @@ function SectionDropdown({
                   className={({ isActive }) => cx("at-topnav-item", isActive && "on")}
                   onClick={onClose}
                 >
-                  <m.icon size={15} strokeWidth={1.75} aria-hidden />
+                  <m.icon strokeWidth={2} aria-hidden />
                   <span>{m.label}</span>
                 </NavLink>
               ))}
             </div>
-          </>,
+          </div>,
           document.body,
         )}
     </div>
@@ -437,9 +449,14 @@ function TopNav() {
   return (
     <nav className="at-topnav" aria-label="Primary">
       <div className="at-topnav-scroll">
-        <NavLink to="/" end className={({ isActive }) => cx("at-topnav-home", isActive && "on")}>
-          <LayoutDashboard size={14} strokeWidth={1.75} className="at-topnav-secico" aria-hidden />
-          Command Deck
+        <NavLink
+          to="/"
+          end
+          title="Command Deck"
+          aria-label="Command Deck"
+          className={({ isActive }) => cx("at-topnav-home", isActive && "on")}
+        >
+          <LayoutDashboard className="at-topnav-secico" strokeWidth={2} aria-hidden />
         </NavLink>
         {grouped.map((g) => (
           <SectionDropdown
