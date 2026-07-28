@@ -1,6 +1,6 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 // Soundings shell: chart floor + rail + top nav + canvas.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -14,6 +14,7 @@ import {
   Loader2,
   LogOut,
   Menu,
+  MoreHorizontal,
   Pause,
   Play,
   Search,
@@ -130,164 +131,165 @@ function MenuBar({
 
       <div className="at-rail-actions">
         <MenubarControls />
-        <span className="at-rail-sep" aria-hidden />
-        <MenubarLiveMetrics />
+        <div className="at-rail-tray">
+          <MenubarLiveMetrics />
 
-        <button
-          type="button"
-          className="at-iconbtn"
-          title="Search — ⌘K / Ctrl+K"
-          aria-label="Search pools, volumes, hosts"
-          onClick={onSpotlight}
-        >
-          <Search size={16} strokeWidth={2} />
-        </button>
-
-        <div className="relative">
           <button
             type="button"
-            className="at-iconbtn at-look-btn"
-            title={`Look & feel: ${themeTitle(theme)}`}
-            aria-label={`Look & feel — ${themeTitle(theme)}. Choose Carbon, Nebula, Dark steel, Zinc metal, or Aurora.`}
-            aria-expanded={themeOpen}
-            aria-haspopup="menu"
-            onClick={() => setThemeOpen((v) => !v)}
+            className="at-iconbtn"
+            title="Search — ⌘K / Ctrl+K"
+            aria-label="Search pools, volumes, hosts"
+            onClick={onSpotlight}
           >
-            <LayoutTemplate size={16} strokeWidth={2} />
+            <Search size={16} strokeWidth={2} />
           </button>
-          {themeOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setThemeOpen(false)} />
-              <div className="at-theme-menu" role="menu" aria-label="Look and feel">
-                <div className="at-theme-menu-label">Look &amp; feel</div>
-                {THEME_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={theme === opt.id}
-                    className={cx("at-theme-item", theme === opt.id && "on")}
-                    onClick={() => {
-                      setTheme(opt.id);
-                      setThemeOpen(false);
-                    }}
-                  >
-                    <span>{opt.title}</span>
-                    <span className="hint">{opt.hint}</span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
 
-        {runningJobs.length > 0 && (
           <div className="relative">
             <button
               type="button"
-              className="at-iconbtn"
-              title={`${runningJobs.length} running jobs`}
-              onClick={() => setJobsOpen((v) => !v)}
+              className="at-iconbtn at-look-btn"
+              title={`Look & feel: ${themeTitle(theme)}`}
+              aria-label={`Look & feel — ${themeTitle(theme)}. Choose Carbon, Nebula, Dark steel, Zinc metal, or Aurora.`}
+              aria-expanded={themeOpen}
+              aria-haspopup="menu"
+              onClick={() => setThemeOpen((v) => !v)}
             >
-              <Loader2 size={15} className="animate-spin" style={{ color: "var(--at-cyan)" }} />
+              <LayoutTemplate size={16} strokeWidth={2} />
             </button>
-            {jobsOpen && (
+            {themeOpen && (
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setJobsOpen(false)} />
-                <div className="at-theme-menu at-theme-menu-wide">
-                  <div className="at-theme-menu-label">Running jobs</div>
-                  {runningJobs.slice(0, 8).map((j) => (
+                <div className="fixed inset-0 z-40" onClick={() => setThemeOpen(false)} />
+                <div className="at-theme-menu" role="menu" aria-label="Look and feel">
+                  <div className="at-theme-menu-label">Look &amp; feel</div>
+                  {THEME_OPTIONS.map((opt) => (
                     <button
-                      key={j.id}
+                      key={opt.id}
                       type="button"
-                      className="at-theme-item"
+                      role="menuitemradio"
+                      aria-checked={theme === opt.id}
+                      className={cx("at-theme-item", theme === opt.id && "on")}
                       onClick={() => {
-                        setJobsOpen(false);
-                        nav("/jobs");
+                        setTheme(opt.id);
+                        setThemeOpen(false);
                       }}
                     >
-                      <span className="mono" style={{ fontSize: 12 }}>
-                        {j.job_type}
-                      </span>
-                      <span className="hint">{j.state}</span>
+                      <span>{opt.title}</span>
+                      <span className="hint">{opt.hint}</span>
                     </button>
                   ))}
                 </div>
               </>
             )}
           </div>
-        )}
 
-        <div className="relative">
-          <button type="button" className="at-iconbtn" title="Alerts" onClick={() => setBellOpen((v) => !v)}>
-            <Bell size={16} />
-            {(openAlerts?.length || 0) > 0 && <span className="at-badge">{openAlerts!.length}</span>}
-          </button>
-          {bellOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setBellOpen(false)} />
-              <div className="at-theme-menu at-theme-menu-wide">
-                <div className="at-theme-menu-label">Open alerts</div>
-                {openAlerts?.length ? (
-                  openAlerts.slice(0, 6).map((a) => (
-                    <button
-                      key={a.id}
-                      type="button"
-                      className="at-theme-item"
-                      onClick={() => {
-                        setBellOpen(false);
-                        nav("/alerts");
-                      }}
-                    >
-                      <span className="truncate">{a.title}</span>
-                      <span className="hint">{a.severity}</span>
-                    </button>
-                  ))
-                ) : (
-                  <div className="at-theme-item" style={{ cursor: "default" }}>
-                    <span className="hint">No open alerts.</span>
+          {runningJobs.length > 0 && (
+            <div className="relative">
+              <button
+                type="button"
+                className="at-iconbtn"
+                title={`${runningJobs.length} running jobs`}
+                onClick={() => setJobsOpen((v) => !v)}
+              >
+                <Loader2 size={15} className="animate-spin" style={{ color: "var(--at-cyan)" }} />
+              </button>
+              {jobsOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setJobsOpen(false)} />
+                  <div className="at-theme-menu at-theme-menu-wide">
+                    <div className="at-theme-menu-label">Running jobs</div>
+                    {runningJobs.slice(0, 8).map((j) => (
+                      <button
+                        key={j.id}
+                        type="button"
+                        className="at-theme-item"
+                        onClick={() => {
+                          setJobsOpen(false);
+                          nav("/jobs");
+                        }}
+                      >
+                        <span className="mono" style={{ fontSize: 12 }}>
+                          {j.job_type}
+                        </span>
+                        <span className="hint">{j.state}</span>
+                      </button>
+                    ))}
                   </div>
-                )}
-              </div>
-            </>
+                </>
+              )}
+            </div>
           )}
+
+          <div className="relative">
+            <button type="button" className="at-iconbtn" title="Alerts" onClick={() => setBellOpen((v) => !v)}>
+              <Bell size={16} />
+              {(openAlerts?.length || 0) > 0 && <span className="at-badge">{openAlerts!.length}</span>}
+            </button>
+            {bellOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setBellOpen(false)} />
+                <div className="at-theme-menu at-theme-menu-wide">
+                  <div className="at-theme-menu-label">Open alerts</div>
+                  {openAlerts?.length ? (
+                    openAlerts.slice(0, 6).map((a) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        className="at-theme-item"
+                        onClick={() => {
+                          setBellOpen(false);
+                          nav("/alerts");
+                        }}
+                      >
+                        <span className="truncate">{a.title}</span>
+                        <span className="hint">{a.severity}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="at-theme-item" style={{ cursor: "default" }}>
+                      <span className="hint">No open alerts.</span>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          <button
+            type="button"
+            className={cx("at-iconbtn", paused && "is-on")}
+            title={paused ? "Resume auto-refresh" : "Pause live telemetry"}
+            onClick={togglePaused}
+          >
+            {paused ? <Play size={15} /> : <Pause size={15} />}
+          </button>
+
+          <div className={cx("at-health", healthClass)} title={healthWhy}>
+            <span className="dot" />
+            <span>{healthLabel}</span>
+            {healthWhy && (
+              <>
+                <span className="sep" />
+                <span className="msg">{healthWhy}</span>
+              </>
+            )}
+          </div>
+
+          <span className="at-rail-sep" aria-hidden />
+
+          <button
+            type="button"
+            className="at-iconbtn"
+            title="Auth token"
+            onClick={() => setTokenOpen(true)}
+            style={token ? { color: "var(--at-ok)" } : undefined}
+          >
+            <KeyRound size={15} />
+          </button>
+          <Clock />
+          <button type="button" className="at-iconbtn" title="Sign out" onClick={() => useUi.getState().signOut()}>
+            <LogOut size={15} />
+          </button>
         </div>
-
-        <button
-          type="button"
-          className={cx("at-iconbtn", paused && "is-on")}
-          title={paused ? "Resume auto-refresh" : "Pause live telemetry"}
-          onClick={togglePaused}
-        >
-          {paused ? <Play size={15} /> : <Pause size={15} />}
-        </button>
-
-        <div className={cx("at-health", healthClass)} title={healthWhy}>
-          <span className="dot" />
-          <span>{healthLabel}</span>
-          {healthWhy && (
-            <>
-              <span className="sep" />
-              <span className="msg">{healthWhy}</span>
-            </>
-          )}
-        </div>
-
-        <div className="at-rail-sep" aria-hidden />
-
-        <button
-          type="button"
-          className="at-iconbtn"
-          title="Auth token"
-          onClick={() => setTokenOpen(true)}
-          style={token ? { color: "var(--at-ok)" } : undefined}
-        >
-          <KeyRound size={15} />
-        </button>
-        <Clock />
-        <button type="button" className="at-iconbtn" title="Sign out" onClick={() => useUi.getState().signOut()}>
-          <LogOut size={15} />
-        </button>
       </div>
 
       <Modal
@@ -483,10 +485,53 @@ function SectionDropdown({
   );
 }
 
+function pathActive(pathname: string, path: string) {
+  return path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(`${path}/`);
+}
+
+function useRailBudget(ref: RefObject<HTMLElement | null>) {
+  const [budget, setBudget] = useState(0);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setBudget(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+  return budget;
+}
+
+function fitCount(budget: number, total: number, item: number, gap: number, more: number) {
+  if (total <= 0) return 0;
+  if (budget <= 0) return total;
+  const all = total * item + Math.max(0, total - 1) * gap;
+  if (all <= budget) return total;
+  const room = budget - more - gap;
+  if (room < item) return 0;
+  return Math.max(0, Math.min(total - 1, Math.floor((room + gap) / (item + gap))));
+}
+
 function MenubarControls() {
+  const loc = useLocation();
+  const wrapRef = useRef<HTMLElement>(null);
+  const budget = useRailBudget(wrapRef);
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  // Icon-only Control Center pills (~28px) + chrome; labels live in the fold menu.
+  const visible = fitCount(budget, MENUBAR_CONTROLS.length, 30, 3, 30);
+  const shown = MENUBAR_CONTROLS.slice(0, visible);
+  const folded = MENUBAR_CONTROLS.slice(visible);
+  const foldedOn = folded.some((m) => pathActive(loc.pathname, m.path));
+
+  useEffect(() => {
+    setMoreOpen(false);
+  }, [loc.pathname]);
+
   return (
-    <nav className="at-controls" aria-label="Shortcuts">
-      {MENUBAR_CONTROLS.map((m) => (
+    <nav ref={wrapRef} className="at-controls" aria-label="Shortcuts">
+      {shown.map((m) => (
         <NavLink
           key={m.id}
           to={m.path}
@@ -500,15 +545,58 @@ function MenubarControls() {
           {m.shortcut ? <kbd className="at-control-kbd">{m.shortcut}</kbd> : null}
         </NavLink>
       ))}
+      {folded.length > 0 && (
+        <div className="at-controls-more">
+          <button
+            type="button"
+            className={cx("at-control", foldedOn && "on", moreOpen && "open")}
+            title="More shortcuts"
+            aria-label="More shortcuts"
+            aria-expanded={moreOpen}
+            aria-haspopup="menu"
+            onClick={() => setMoreOpen((v) => !v)}
+          >
+            <MoreHorizontal className="at-control-ico" strokeWidth={2} aria-hidden />
+          </button>
+          {moreOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
+              <div className="at-theme-menu at-controls-menu" role="menu" aria-label="More shortcuts">
+                <div className="at-theme-menu-label">Shortcuts</div>
+                {folded.map((m) => (
+                  <NavLink
+                    key={m.id}
+                    to={m.path}
+                    end={m.path === "/"}
+                    role="menuitem"
+                    className={({ isActive }) => cx("at-theme-item", isActive && "on")}
+                    onClick={() => setMoreOpen(false)}
+                  >
+                    <span className="at-controls-menu-row">
+                      <m.icon size={14} strokeWidth={2} aria-hidden />
+                      <span>{m.label}</span>
+                    </span>
+                    {m.shortcut ? <span className="hint">{m.shortcut}</span> : null}
+                  </NavLink>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </nav>
   );
 }
 
 function PrimaryNav() {
   const loc = useLocation();
+  const wrapRef = useRef<HTMLElement>(null);
+  const budget = useRailBudget(wrapRef);
   const [openSec, setOpenSec] = useState<string | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
   useEffect(() => {
     setOpenSec(null);
+    setMoreOpen(false);
   }, [loc.pathname]);
   const grouped = useMemo(
     () =>
@@ -516,19 +604,25 @@ function PrimaryNav() {
         sec,
         short: SECTION_SHORT[sec] || sec,
         icon: SECTION_ICON[sec] || Server,
-        // Keep Command Deck in Storage so it is discoverable in the menu (home capsule + brand also go there).
         items: MODULES.filter((m) => m.section === sec),
       })).filter((g) => g.items.length),
     [],
   );
   const activeSec = useMemo(() => {
-    const m = MODULES.find((x) => (x.path === "/" ? loc.pathname === "/" : loc.pathname.startsWith(x.path)));
+    const m = MODULES.find((x) => pathActive(loc.pathname, x.path));
     return m?.section ?? null;
   }, [loc.pathname]);
 
+  // Prefer icon capsules; titles appear via container query when center is wide enough.
+  const itemW = budget >= 560 ? 90 : 36;
+  const visible = fitCount(budget, grouped.length, itemW, 2, itemW);
+  const shown = grouped.slice(0, visible);
+  const folded = grouped.slice(visible);
+  const foldedOn = folded.some((g) => g.sec === activeSec);
+
   return (
-    <nav className="at-rail-nav" aria-label="Primary">
-      {grouped.map((g) => (
+    <nav ref={wrapRef} className="at-rail-nav" aria-label="Primary">
+      {shown.map((g) => (
         <SectionDropdown
           key={g.sec}
           short={g.short}
@@ -536,10 +630,59 @@ function PrimaryNav() {
           items={g.items}
           active={activeSec === g.sec}
           open={openSec === g.sec}
-          onOpen={() => setOpenSec(g.sec)}
+          onOpen={() => {
+            setMoreOpen(false);
+            setOpenSec(g.sec);
+          }}
           onClose={() => setOpenSec((cur) => (cur === g.sec ? null : cur))}
         />
       ))}
+      {folded.length > 0 && (
+        <div className={cx("at-topnav-dd", foldedOn && "on", moreOpen && "open")}>
+          <button
+            type="button"
+            className="at-topnav-ddbtn"
+            title="More"
+            aria-label="More sections"
+            aria-expanded={moreOpen}
+            aria-haspopup="menu"
+            onClick={() => {
+              setOpenSec(null);
+              setMoreOpen((v) => !v);
+            }}
+          >
+            <MoreHorizontal className="at-topnav-secico" strokeWidth={2} aria-hidden />
+            <span className="at-topnav-dd-title">More</span>
+          </button>
+          {moreOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
+              <div className="at-theme-menu at-nav-more-menu" role="menu" aria-label="More sections">
+                {folded.map((g) => (
+                  <div key={g.sec} className="at-nav-more-group">
+                    <div className="at-theme-menu-label">{g.short}</div>
+                    {g.items.map((m) => (
+                      <NavLink
+                        key={m.id}
+                        to={m.path}
+                        end={m.path === "/"}
+                        role="menuitem"
+                        className={({ isActive }) => cx("at-theme-item", isActive && "on")}
+                        onClick={() => setMoreOpen(false)}
+                      >
+                        <span className="at-controls-menu-row">
+                          <m.icon size={14} strokeWidth={2} aria-hidden />
+                          <span>{m.label}</span>
+                        </span>
+                      </NavLink>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </nav>
   );
 }

@@ -141,7 +141,7 @@
   height: var(--rail-h);
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(140px, 1fr) minmax(0, auto);
   align-items: center;
   column-gap: 12px;
   padding: 0 var(--page-inset);
@@ -163,7 +163,13 @@
   gap: 8px;
   min-width: 0;
   flex-shrink: 0;
-  z-index: 2;
+  z-index: 3;
+  isolation: isolate;
+  /* Keep wordmark readable when Safari backdrop-filter kids bleed past overflow. */
+  background: linear-gradient(90deg, rgba(12, 18, 24, 0.92) 70%, rgba(12, 18, 24, 0));
+  margin-left: calc(var(--page-inset) * -0.15);
+  padding-left: calc(var(--page-inset) * 0.15);
+  padding-right: 8px;
 }
 /* Must beat .at-iconbtn { display:grid } — otherwise the burger leaks onto every width. */
 .at-iconbtn.at-menu-burger {
@@ -229,6 +235,8 @@ a.at-mark:focus-visible {
   gap: 6px;
   min-width: 0;
   overflow: hidden;
+  container-type: inline-size;
+  container-name: rail-center;
 }
 .at-rail-nav {
   display: flex;
@@ -236,6 +244,8 @@ a.at-mark:focus-visible {
   justify-content: center;
   gap: 2px;
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
   overflow: hidden;
 }
 .at-quick-links {
@@ -245,8 +255,9 @@ a.at-mark:focus-visible {
   display: flex;
   align-items: center;
   gap: 3px;
-  flex-shrink: 1;
-  min-width: 0;
+  flex: 1 1 auto;
+  min-width: 36px;
+  max-width: min(100%, 320px);
   padding: 2px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -256,6 +267,9 @@ a.at-mark:focus-visible {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
+  container-type: inline-size;
+  container-name: rail-controls;
+  overflow: hidden;
 }
 .at-control {
   display: inline-flex;
@@ -263,14 +277,18 @@ a.at-mark:focus-visible {
   justify-content: center;
   gap: 5px;
   height: 26px;
+  width: 28px;
   min-width: 28px;
-  padding: 0 9px;
+  padding: 0;
   border: 1px solid transparent;
   border-radius: 999px;
   color: var(--at-ink-3);
   text-decoration: none;
   position: relative;
   flex-shrink: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
   transition: color 0.14s, background 0.14s, border-color 0.14s, box-shadow 0.14s;
 }
 .at-control-ico {
@@ -279,27 +297,40 @@ a.at-mark:focus-visible {
   flex-shrink: 0;
   opacity: 0.92;
 }
-.at-control-label {
-  display: none;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 1;
-  white-space: nowrap;
-}
+.at-control-label,
 .at-control-kbd {
   display: none;
-  margin: 0;
-  padding: 1px 5px;
-  border-radius: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(0, 0, 0, 0.28);
-  color: var(--at-ink-4);
-  font-family: var(--at-mono);
-  font-size: 10px;
-  line-height: 1.2;
 }
-.at-control:hover {
+.at-controls-more {
+  position: relative;
+  flex-shrink: 0;
+}
+.at-controls-menu,
+.at-nav-more-menu {
+  right: 0;
+  left: auto;
+  min-width: 200px;
+  z-index: 80;
+}
+.at-nav-more-menu {
+  left: 0;
+  right: auto;
+  max-height: min(70vh, 480px);
+  overflow: auto;
+}
+.at-nav-more-group + .at-nav-more-group {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.at-controls-menu-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.at-control:hover,
+.at-control.open {
   color: var(--at-ink);
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.08);
@@ -310,21 +341,6 @@ a.at-mark:focus-visible {
   background: rgba(255, 255, 255, 0.16);
   border-color: rgba(255, 255, 255, 0.12);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
-}
-@media (min-width: 1280px) {
-  .at-control-label {
-    display: inline;
-  }
-}
-@media (min-width: 1480px) {
-  .at-control-kbd {
-    display: inline;
-  }
-}
-@media (max-width: 1100px) {
-  .at-controls .at-control:nth-child(n + 5) {
-    display: none;
-  }
 }
 @media (max-width: 900px) {
   .at-controls {
@@ -378,8 +394,17 @@ a.at-mark:focus-visible {
 .at-rail-actions {
   display: flex;
   align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: min(62vw, 720px);
+  justify-self: end;
+}
+.at-rail-tray {
+  display: flex;
+  align-items: center;
   gap: 6px;
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 .at-rail-sep {
   width: 1px;
@@ -479,7 +504,7 @@ a.at-mark:focus-visible {
 .at-menubar-pulse.crit {
   background: var(--at-err);
 }
-@media (min-width: 1100px) {
+@media (min-width: 1400px) {
   .at-menubar-metrics {
     display: inline-flex;
   }
@@ -592,6 +617,19 @@ a.at-mark:focus-visible {
 .at-theme-item {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--at-ink-2);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  font: inherit;
+}
   align-items: flex-start;
   gap: 2px;
   width: 100%;
@@ -827,7 +865,8 @@ a.at-mark:focus-visible {
 .at-topnav-home .at-topnav-dd-title {
   display: inline;
 }
-@media (min-width: 1180px) {
+/* Titles only when the center column actually has room (not viewport width). */
+@container rail-center (min-width: 560px) {
   .at-topnav-dd-title {
     display: inline;
   }
@@ -1060,7 +1099,7 @@ a.at-mark:focus-visible {
     display: none;
   }
 }
-@media (max-width: 960px) {
+@media (max-width: 1100px) {
   .at-iconbtn.at-menu-burger {
     display: grid;
   }
@@ -1068,7 +1107,7 @@ a.at-mark:focus-visible {
     display: none;
   }
   .at-rail {
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto minmax(0, 1fr);
     column-gap: 6px;
   }
   .at-rail-actions {
