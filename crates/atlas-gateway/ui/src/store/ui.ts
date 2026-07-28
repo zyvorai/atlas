@@ -11,7 +11,7 @@ interface TrackedJob {
   error?: string | null;
 }
 
-export type Theme = "nebula" | "dark" | "aurora";
+export type Theme = "nebula" | "dark" | "zinc" | "aurora";
 export type Density = "comfortable" | "compact";
 
 interface UiState {
@@ -46,7 +46,9 @@ const ss = typeof sessionStorage !== "undefined" ? sessionStorage : null;
 // tab session must never see a token/entered flag neither of us asked to persist.
 const savedToken = ls?.getItem("atlas.token") || ss?.getItem("atlas.token") || "";
 const savedEntered = ls?.getItem("atlas.entered") === "1" || ss?.getItem("atlas.entered") === "1";
-const savedTheme = (ls?.getItem("atlas.theme") as Theme) || "nebula";
+const THEMES = new Set<Theme>(["nebula", "dark", "zinc", "aurora"]);
+const rawTheme = ls?.getItem("atlas.theme") || "";
+const savedTheme: Theme = THEMES.has(rawTheme as Theme) ? (rawTheme as Theme) : "nebula";
 const savedDensity = (ls?.getItem("atlas.density") as Density) || "comfortable";
 
 function applyTheme(t: Theme) {

@@ -45,7 +45,7 @@
   --s6: 32px;
   --s7: 48px;
   --s8: 64px;
-  --rail-h: 56px;
+  --rail-h: 64px;
   --page-max: 1520px;
   --page-gutter: 0px;
   --page-inset: 16px;
@@ -132,15 +132,15 @@
   background: radial-gradient(120% 90% at 50% 0%, transparent 35%, var(--at-void) 100%);
 }
 
-/* ── Rail (Zeus metal chrome structure, Soundings cyan accent) ── */
+/* ── Rail (Zeus metal single topbar: brand | icon nav | actions) ── */
 .at-rail {
   position: relative;
-  z-index: 60;
+  z-index: 70;
   height: var(--rail-h);
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: var(--s4);
+  gap: 10px;
   padding: 0 var(--page-inset);
   background: linear-gradient(180deg, #0c1419 0%, #121c24 48%, #0a1016 100%);
   border-bottom: 1px solid rgba(120, 180, 200, 0.18);
@@ -156,9 +156,9 @@
   flex-shrink: 0;
 }
 .at-brand-logo {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
   flex-shrink: 0;
   display: grid;
   place-items: center;
@@ -171,7 +171,7 @@
 }
 .at-wordmark {
   font-weight: 700;
-  font-size: 14px;
+  font-size: 15px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
@@ -182,6 +182,28 @@
   padding-left: 12px;
   margin-left: 2px;
   border-left: 1px solid var(--at-line-2);
+}
+.at-rail-nav {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  overflow: visible;
+}
+.at-rail-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.at-rail-sep {
+  width: 1px;
+  height: 22px;
+  margin: 0 4px;
+  background: rgba(255, 255, 255, 0.12);
+  flex-shrink: 0;
 }
 .at-rail-spacer {
   flex: 1;
@@ -219,11 +241,11 @@
   padding: 2px 6px;
 }
 .at-iconbtn {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 11px;
   border: 1px solid rgba(120, 180, 200, 0.15);
   background: linear-gradient(180deg, #161e26 0%, #10161d 100%);
   color: var(--at-ink-3);
@@ -243,12 +265,17 @@
   border-color: rgba(255, 194, 75, 0.35);
   background: rgba(255, 194, 75, 0.08);
 }
+.at-look-btn {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 0 0 1px color-mix(in srgb, var(--at-cyan) 35%, transparent);
+}
 .at-theme-menu {
   position: absolute;
   right: 0;
   top: calc(100% + 8px);
   z-index: 90;
-  min-width: 200px;
+  min-width: 220px;
   padding: 6px;
   background: linear-gradient(145deg, var(--at-abyss) 0%, var(--at-shelf) 50%, var(--at-abyss) 100%);
   border: 1px solid var(--at-line-2);
@@ -256,6 +283,21 @@
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 16px 40px rgba(0, 0, 0, 0.5);
+}
+.at-theme-menu-wide {
+  min-width: 280px;
+  max-height: 70vh;
+  overflow: auto;
+}
+.at-theme-menu-label {
+  padding: 8px 12px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--at-ink-4);
+  border-bottom: 1px solid var(--at-line);
+  margin-bottom: 4px;
 }
 .at-theme-item {
   display: flex;

@@ -11,9 +11,9 @@ import {
   HardDrive as HardDriveIcon,
   KeyRound,
   LayoutDashboard,
+  LayoutTemplate,
   Loader2,
   LogOut,
-  Palette,
   Pause,
   Play,
   Search,
@@ -24,7 +24,8 @@ import type { LucideIcon } from "lucide-react";
 import { MODULES, SECTIONS, type Module } from "../nav/modules";
 import { http } from "../api/client";
 import { useAlerts, useClusters, useJobs } from "../api/hooks";
-import { useUi, type Theme } from "../store/ui";
+import { useUi } from "../store/ui";
+import { THEME_OPTIONS, themeTitle } from "../lib/themes";
 import { cx } from "../lib/format";
 import { onSendPrompt } from "../lib/prompts";
 import { Button, Field, Modal } from "../ui/kit";
@@ -102,178 +103,166 @@ function MenuBar({ onSpotlight }: { onSpotlight: () => void }) {
         <span className="at-wordmark">Atlas</span>
         <span className="at-mark-sub">Storage Center</span>
       </div>
-      <div className="at-rail-spacer" />
 
-      <button type="button" className="at-search" onClick={onSpotlight}>
-        <Search size={13} />
-        Search pools, volumes, hosts
-        <span className="at-kbd">⌘K</span>
-      </button>
+      <PrimaryNav />
 
-      {runningJobs.length > 0 && (
+      <div className="at-rail-actions">
+        <button
+          type="button"
+          className="at-iconbtn"
+          title="Search — ⌘K / Ctrl+K"
+          aria-label="Search pools, volumes, hosts"
+          onClick={onSpotlight}
+        >
+          <Search size={16} strokeWidth={2} />
+        </button>
+
         <div className="relative">
           <button
             type="button"
-            className="at-iconbtn"
-            title={`${runningJobs.length} running jobs`}
-            onClick={() => setJobsOpen((v) => !v)}
+            className="at-iconbtn at-look-btn"
+            title={`Look & feel: ${themeTitle(theme)}`}
+            aria-label={`Look & feel — ${themeTitle(theme)}. Choose Nebula, Dark steel, Zinc metal, or Aurora.`}
+            aria-expanded={themeOpen}
+            aria-haspopup="menu"
+            onClick={() => setThemeOpen((v) => !v)}
           >
-            <Loader2 size={15} className="animate-spin" style={{ color: "var(--at-cyan)" }} />
+            <LayoutTemplate size={16} strokeWidth={2} />
           </button>
-          {jobsOpen && (
+          {themeOpen && (
             <>
-              <div className="fixed inset-0 z-40" onClick={() => setJobsOpen(false)} />
-              <div
-                className="absolute right-0 top-10 z-50 w-72 overflow-hidden"
-                style={{
-                  background: "var(--at-shelf)",
-                  border: "1px solid var(--at-line-2)",
-                  borderRadius: 12,
-                }}
-              >
-                <div className="at-caption" style={{ padding: "10px 12px 4px" }}>
-                  Running jobs
-                </div>
-                {runningJobs.slice(0, 8).map((j) => (
+              <div className="fixed inset-0 z-40" onClick={() => setThemeOpen(false)} />
+              <div className="at-theme-menu" role="menu" aria-label="Look and feel">
+                <div className="at-theme-menu-label">Look &amp; feel</div>
+                {THEME_OPTIONS.map((opt) => (
                   <button
-                    key={j.id}
+                    key={opt.id}
                     type="button"
-                    className="at-pitem"
+                    role="menuitemradio"
+                    aria-checked={theme === opt.id}
+                    className={cx("at-theme-item", theme === opt.id && "on")}
                     onClick={() => {
-                      setJobsOpen(false);
-                      nav("/jobs");
+                      setTheme(opt.id);
+                      setThemeOpen(false);
                     }}
                   >
-                    <span className="mono" style={{ fontSize: 12 }}>
-                      {j.job_type}
-                    </span>
-                    <span className="k">{j.state}</span>
+                    <span>{opt.title}</span>
+                    <span className="hint">{opt.hint}</span>
                   </button>
                 ))}
               </div>
             </>
           )}
         </div>
-      )}
 
-      <div className="relative">
-        <button type="button" className="at-iconbtn" title="Alerts" onClick={() => setBellOpen((v) => !v)}>
-          <Bell size={16} />
-          {(openAlerts?.length || 0) > 0 && <span className="at-badge">{openAlerts!.length}</span>}
-        </button>
-        {bellOpen && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setBellOpen(false)} />
-            <div
-              className="absolute right-0 top-10 z-50 w-80 max-h-[70vh] overflow-auto"
-              style={{
-                background: "var(--at-shelf)",
-                border: "1px solid var(--at-line-2)",
-                borderRadius: 12,
-              }}
+        {runningJobs.length > 0 && (
+          <div className="relative">
+            <button
+              type="button"
+              className="at-iconbtn"
+              title={`${runningJobs.length} running jobs`}
+              onClick={() => setJobsOpen((v) => !v)}
             >
-              <div className="at-caption" style={{ padding: "10px 12px 4px" }}>
-                Open alerts
-              </div>
-              {openAlerts?.length ? (
-                openAlerts.slice(0, 6).map((a) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    className="at-pitem"
-                    onClick={() => {
-                      setBellOpen(false);
-                      nav("/alerts");
-                    }}
-                  >
-                    <span className="truncate">{a.title}</span>
-                    <span className="k">{a.severity}</span>
-                  </button>
-                ))
-              ) : (
-                <div style={{ padding: "12px", color: "var(--at-ink-4)", fontSize: 13 }}>No open alerts.</div>
-              )}
-            </div>
-          </>
+              <Loader2 size={15} className="animate-spin" style={{ color: "var(--at-cyan)" }} />
+            </button>
+            {jobsOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setJobsOpen(false)} />
+                <div className="at-theme-menu at-theme-menu-wide">
+                  <div className="at-theme-menu-label">Running jobs</div>
+                  {runningJobs.slice(0, 8).map((j) => (
+                    <button
+                      key={j.id}
+                      type="button"
+                      className="at-theme-item"
+                      onClick={() => {
+                        setJobsOpen(false);
+                        nav("/jobs");
+                      }}
+                    >
+                      <span className="mono" style={{ fontSize: 12 }}>
+                        {j.job_type}
+                      </span>
+                      <span className="hint">{j.state}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         )}
-      </div>
 
-      <button
-        type="button"
-        className={cx("at-iconbtn", paused && "is-on")}
-        title={paused ? "Resume auto-refresh" : "Pause live telemetry"}
-        onClick={togglePaused}
-      >
-        {paused ? <Play size={15} /> : <Pause size={15} />}
-      </button>
+        <div className="relative">
+          <button type="button" className="at-iconbtn" title="Alerts" onClick={() => setBellOpen((v) => !v)}>
+            <Bell size={16} />
+            {(openAlerts?.length || 0) > 0 && <span className="at-badge">{openAlerts!.length}</span>}
+          </button>
+          {bellOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setBellOpen(false)} />
+              <div className="at-theme-menu at-theme-menu-wide">
+                <div className="at-theme-menu-label">Open alerts</div>
+                {openAlerts?.length ? (
+                  openAlerts.slice(0, 6).map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      className="at-theme-item"
+                      onClick={() => {
+                        setBellOpen(false);
+                        nav("/alerts");
+                      }}
+                    >
+                      <span className="truncate">{a.title}</span>
+                      <span className="hint">{a.severity}</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="at-theme-item" style={{ cursor: "default" }}>
+                    <span className="hint">No open alerts.</span>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
 
-      <div className="relative">
+        <button
+          type="button"
+          className={cx("at-iconbtn", paused && "is-on")}
+          title={paused ? "Resume auto-refresh" : "Pause live telemetry"}
+          onClick={togglePaused}
+        >
+          {paused ? <Play size={15} /> : <Pause size={15} />}
+        </button>
+
+        <div className={cx("at-health", healthClass)} title={healthWhy}>
+          <span className="dot" />
+          <span>{healthLabel}</span>
+          {healthWhy && (
+            <>
+              <span className="sep" />
+              <span className="msg">{healthWhy}</span>
+            </>
+          )}
+        </div>
+
+        <div className="at-rail-sep" aria-hidden />
+
         <button
           type="button"
           className="at-iconbtn"
-          title="Theme"
-          aria-label="Change theme"
-          aria-expanded={themeOpen}
-          aria-haspopup="menu"
-          onClick={() => setThemeOpen((v) => !v)}
+          title="Auth token"
+          onClick={() => setTokenOpen(true)}
+          style={token ? { color: "var(--at-ok)" } : undefined}
         >
-          <Palette size={15} />
+          <KeyRound size={15} />
         </button>
-        {themeOpen && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setThemeOpen(false)} />
-            <div className="at-theme-menu" role="menu" aria-label="Visual theme">
-              {(
-                [
-                  { id: "nebula", label: "Nebula", hint: "Soundings cyan" },
-                  { id: "dark", label: "Midnight", hint: "Zeus dark-steel" },
-                  { id: "aurora", label: "Aurora", hint: "Neon glow" },
-                ] as { id: Theme; label: string; hint: string }[]
-              ).map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={theme === opt.id}
-                  className={cx("at-theme-item", theme === opt.id && "on")}
-                  onClick={() => {
-                    setTheme(opt.id);
-                    setThemeOpen(false);
-                  }}
-                >
-                  <span>{opt.label}</span>
-                  <span className="hint">{opt.hint}</span>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
+        <Clock />
+        <button type="button" className="at-iconbtn" title="Sign out" onClick={() => useUi.getState().signOut()}>
+          <LogOut size={15} />
+        </button>
       </div>
-
-      <div className={cx("at-health", healthClass)} title={healthWhy}>
-        <span className="dot" />
-        <span>{healthLabel}</span>
-        {healthWhy && (
-          <>
-            <span className="sep" />
-            <span className="msg">{healthWhy}</span>
-          </>
-        )}
-      </div>
-
-      <button
-        type="button"
-        className="at-iconbtn"
-        title="Auth token"
-        onClick={() => setTokenOpen(true)}
-        style={token ? { color: "var(--at-ok)" } : undefined}
-      >
-        <KeyRound size={15} />
-      </button>
-      <Clock />
-      <button type="button" className="at-iconbtn" title="Sign out" onClick={() => useUi.getState().signOut()}>
-        <LogOut size={15} />
-      </button>
 
       <Modal
         open={tokenOpen}
@@ -467,16 +456,9 @@ function SectionDropdown({
   );
 }
 
-function TopNav() {
+function PrimaryNav() {
   const loc = useLocation();
-  const [ver, setVer] = useState("");
   const [openSec, setOpenSec] = useState<string | null>(null);
-  useEffect(() => {
-    fetch("/version")
-      .then((r) => r.json())
-      .then((v) => setVer(v.version))
-      .catch(() => {});
-  }, []);
   useEffect(() => {
     setOpenSec(null);
   }, [loc.pathname]);
@@ -496,33 +478,28 @@ function TopNav() {
   }, [loc.pathname]);
 
   return (
-    <nav className="at-topnav" aria-label="Primary">
-      <div className="at-topnav-scroll">
-        <NavLink
-          to="/"
-          end
-          title="Command Deck"
-          aria-label="Command Deck"
-          className={({ isActive }) => cx("at-topnav-home", isActive && "on")}
-        >
-          <LayoutDashboard className="at-topnav-secico" strokeWidth={2} aria-hidden />
-        </NavLink>
-        {grouped.map((g) => (
-          <SectionDropdown
-            key={g.sec}
-            short={g.short}
-            icon={g.icon}
-            items={g.items}
-            active={activeSec === g.sec}
-            open={openSec === g.sec}
-            onOpen={() => setOpenSec(g.sec)}
-            onClose={() => setOpenSec((cur) => (cur === g.sec ? null : cur))}
-          />
-        ))}
-      </div>
-      <a href="https://zyvor.dev" target="_blank" rel="noreferrer" className="at-topnav-ver">
-        <span className="dot" /> Atlas{ver ? ` v${ver}` : ""}
-      </a>
+    <nav className="at-rail-nav" aria-label="Primary">
+      <NavLink
+        to="/"
+        end
+        title="Command Deck"
+        aria-label="Command Deck"
+        className={({ isActive }) => cx("at-topnav-home", isActive && "on")}
+      >
+        <LayoutDashboard className="at-topnav-secico" strokeWidth={2} aria-hidden />
+      </NavLink>
+      {grouped.map((g) => (
+        <SectionDropdown
+          key={g.sec}
+          short={g.short}
+          icon={g.icon}
+          items={g.items}
+          active={activeSec === g.sec}
+          open={openSec === g.sec}
+          onOpen={() => setOpenSec(g.sec)}
+          onClose={() => setOpenSec((cur) => (cur === g.sec ? null : cur))}
+        />
+      ))}
     </nav>
   );
 }
@@ -711,7 +688,6 @@ export function Shell() {
     <div className="at-app h-full flex flex-col overflow-hidden">
       <ChartFloor />
       <MenuBar onSpotlight={() => setSpot(true)} />
-      <TopNav />
       <div className="at-main flex-1 min-h-0">
         <div key={loc.pathname} className="at-main-scroll">
           <Outlet />

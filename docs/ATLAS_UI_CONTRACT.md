@@ -79,15 +79,19 @@ Kit surfaces (`GlassSection`, `StatCard`, `SlideOver`, buttons, fields, badges) 
 
 ## Shell chrome (Zeus metal patterns)
 
-Top rail / search / icon buttons / section menus follow Zeus OS **dark-steel** chrome structure from ~Apr 2026 (`steel-topbar`, icon `barIcon` nav, gradient search/icon chips, rounded flyouts) — see zeus-os commit `f0360bae3`.
+Single metal **topbar** (brand · centered icon section menus · action cluster) follows Zeus OS
+~Apr 2026 EnhancedLayout / `dark-steel` / `zinc-metal` (`f0360bae3`): square `barIcon` triggers,
+hover/click flyouts, Look & feel menu (`LayoutTemplate`), icon search (⌘K).
 
 | Atlas theme (`data-ui-shell`) | Look |
 |---|---|
-| **nebula** (default) | Metal chrome shapes + **survey cyan** accent (Soundings identity) |
-| **dark** (Midnight) | Faithful **Zeus dark-steel** (brushed metal + `#5d90f7` / `#8ec5ff`) |
-| **aurora** | Neon cyan/violet/pink canvas; shared chrome classes |
+| **nebula** (default) | Metal chrome + **survey cyan** (Soundings identity) |
+| **dark** | **Zeus dark-steel** (brushed metal + `#5d90f7` / `#8ec5ff`) |
+| **zinc** | **Zeus zinc-metal** (brushed zinc + amber) |
+| **aurora** | Neon cyan/violet/pink canvas |
 
-Nebula must not use steel-blue as the interaction colour. Midnight remaps `--at-cyan*` to steel-blue so existing Soundings components pick up the accent without a second CSS dialect.
+Change Look & feel from the top-rail template icon after login (also on the sign-in page).
+Nebula must not use steel-blue/amber as the default interaction colour; dark/zinc remap `--at-cyan*`.
 
 ## Ship checklist
 

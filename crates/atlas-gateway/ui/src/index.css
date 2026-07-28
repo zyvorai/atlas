@@ -111,6 +111,41 @@
     --accent: 265 25% 16%;
   }
 
+  /* Zinc metal — Zeus brushed zinc + amber (Apr metal shells). */
+  :root[data-ui-shell="zinc"] {
+    --background: 240 6% 4%;
+    --card: 240 5% 10%;
+    --card-foreground: 0 0% 98%;
+    --foreground: 0 0% 98%;
+    --popover: 240 5% 10%;
+    --primary: 38 92% 50%;
+    --primary-foreground: 240 6% 6%;
+    --ring: 38 92% 50%;
+    --info: 38 92% 50%;
+    --muted-foreground: 240 5% 70%;
+    --border: 240 4% 18%;
+    --secondary: 240 4% 14%;
+    --accent: 240 4% 14%;
+    --input: 240 4% 18%;
+
+    --at-void: #09090b;
+    --at-abyss: #18181b;
+    --at-shelf: #27272a;
+    --at-ridge: #3f3f46;
+    --at-crest: #52525b;
+    --at-line: rgba(228, 228, 231, 0.12);
+    --at-line-2: rgba(228, 228, 231, 0.18);
+    --at-line-3: rgba(228, 228, 231, 0.28);
+    --at-ink: #fafafa;
+    --at-ink-2: #e4e4e7;
+    --at-ink-3: #a1a1aa;
+    --at-ink-4: #71717a;
+    --at-cyan: #f59e0b;
+    --at-cyan-2: #fbbf24;
+    --at-cyan-wash: rgba(245, 158, 11, 0.12);
+    --at-cyan-glow: rgba(245, 158, 11, 0.34);
+  }
+
   * {
     border-color: hsl(var(--border));
   }
@@ -248,6 +283,60 @@
   :root[data-ui-shell="dark"] .at-topnav-item.on svg,
   :root[data-ui-shell="dark"] .at-topnav-item:hover svg {
     color: #8ec5ff;
+  }
+
+  /* Zinc metal chrome */
+  :root[data-ui-shell="zinc"] .tahoe-canvas {
+    background:
+      radial-gradient(circle at top center, rgba(245, 158, 11, 0.08), transparent 32%),
+      linear-gradient(180deg, #09090b 0%, #18181b 40%, #27272a 72%, #18181b 100%);
+  }
+  :root[data-ui-shell="zinc"] .btn-primary {
+    background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 55%, #d97706 100%);
+    color: #18181b;
+    border: 1px solid rgba(251, 191, 36, 0.45);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 8px 22px -6px rgba(245, 158, 11, 0.45);
+  }
+  :root[data-ui-shell="zinc"] .at-rail {
+    background: linear-gradient(180deg, #27272a 0%, #3f3f46 45%, #27272a 100%);
+    border-bottom-color: rgba(228, 228, 231, 0.14);
+  }
+  :root[data-ui-shell="zinc"] .at-brand-logo {
+    color: #fbbf24;
+    background: linear-gradient(145deg, #3f3f46, #18181b);
+    border-color: rgba(228, 228, 231, 0.18);
+  }
+  :root[data-ui-shell="zinc"] .at-iconbtn {
+    color: #d4d4d8;
+    border-color: rgba(228, 228, 231, 0.14);
+    background: linear-gradient(180deg, #3f3f46 0%, #27272a 100%);
+  }
+  :root[data-ui-shell="zinc"] .at-iconbtn:hover {
+    color: #fafafa;
+    border-color: rgba(228, 228, 231, 0.28);
+    background: rgba(255, 255, 255, 0.08);
+  }
+  :root[data-ui-shell="zinc"] .at-topnav-home.on,
+  :root[data-ui-shell="zinc"] .at-topnav-dd.on .at-topnav-ddbtn {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.28);
+    color: #fafafa;
+  }
+  :root[data-ui-shell="zinc"] .at-topnav-home.on::after,
+  :root[data-ui-shell="zinc"] .at-topnav-dd.on .at-topnav-ddbtn::after {
+    background: linear-gradient(90deg, #a1a1aa, #f59e0b);
+  }
+  :root[data-ui-shell="zinc"] .at-topnav-menu {
+    background: linear-gradient(155deg, #27272a 0%, #3f3f46 45%, #27272a 100%);
+    border-color: rgba(228, 228, 231, 0.14);
+  }
+  :root[data-ui-shell="zinc"] .at-topnav-item.on {
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.14);
+  }
+  :root[data-ui-shell="zinc"] .at-topnav-item.on svg,
+  :root[data-ui-shell="zinc"] .at-topnav-item:hover svg {
+    color: #fbbf24;
   }
   /* Nebula shell canvas + accents — Soundings survey cyan */
   :root[data-ui-shell="nebula"] .tahoe-canvas {
