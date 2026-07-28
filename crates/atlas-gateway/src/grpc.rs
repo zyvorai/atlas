@@ -18,8 +18,9 @@ use crate::proto::{
     Alert, Bucket, Cluster, CreateSnapshotRequest, CreateVolumeReply, CreateVolumeRequest,
     DeleteVolumeRequest, Empty, ExpandVolumeRequest, GetJobRequest, GetVolumeRequest, HealthReply,
     HealthRequest, Job, JobReply, ListAlertsReply, ListAlertsRequest, ListBucketsReply,
-    ListClustersReply, ListPoolsReply, ListSnapshotsReply, ListSnapshotsRequest,
-    ListVolumesByOwnerRequest, ListVolumesReply, MetricsSummary, Pool, Snapshot, Volume,
+    ListClustersReply, ListJobsReply, ListJobsRequest, ListPoolsReply, ListSnapshotsReply,
+    ListSnapshotsRequest, ListTenantsReply, ListVolumesByOwnerRequest, ListVolumesReply,
+    MetricsSummary, Pool, Snapshot, Tenant, Volume,
 };
 use crate::state::AppState;
 
@@ -477,6 +478,22 @@ impl AtlasStorage for GrpcService {
         Ok(Response::new(job_to_proto(j)))
     }
 
+    async fn list_jobs(
+        &self,
+        req: Request<ListJobsRequest>,
+    ) -> Result<Response<ListJobsReply>, Status> {
+        let r = req.into_inner();
+        let limit = if r.limit <= 0 { 50 } else { i64::from(r.limit) };
+        let state = (!r.state.trim().is_empty()).then_some(r.state.as_str());
+        let jobs = atlas_inventory::jobs::list_jobs_filtered(&self.state.pool, state, limit)
+            .await
+            .map_err(internal)?
+            .into_iter()
+            .map(job_to_proto)
+            .collect();
+        Ok(Response::new(ListJobsReply { jobs }))
+    }
+
     type WatchJobStream = Pin<Box<dyn Stream<Item = Result<Job, Status>> + Send>>;
 
     /// Stream a job on each state change until it reaches a terminal state (or a ~2 min cap).
@@ -577,6 +594,23 @@ impl AtlasStorage for GrpcService {
             })
             .collect();
         Ok(Response::new(ListBucketsReply { buckets }))
+    }
+
+    async fn list_tenants(
+        &self,
+        _req: Request<Empty>,
+    ) -> Result<Response<ListTenantsReply>, Status> {
+        // Inventory overview keys tenants by `tenant_id` only (no separate display name).
+        let tenants = atlas_inventory::tenants::list_overview(&self.state.pool)
+            .await
+            .map_err(internal)?
+            .into_iter()
+            .map(|t| Tenant {
+                id: t.tenant_id.clone(),
+                name: t.tenant_id,
+            })
+            .collect();
+        Ok(Response::new(ListTenantsReply { tenants }))
     }
 }
 

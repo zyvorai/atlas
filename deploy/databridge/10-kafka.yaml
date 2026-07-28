@@ -37,8 +37,10 @@ metadata:
     strimzi.io/kraft: enabled
 spec:
   kafka:
-    version: 4.0.0
-    metadataVersion: 4.0-IV3
+    # Must match the Strimzi operator's supported set (lab: 4.2.0 / 4.2.1 / 4.3.0).
+    # Align with deploy/databridge/connect/Dockerfile (quay.io/strimzi/kafka:*-kafka-4.3.0).
+    version: 4.3.0
+    metadataVersion: 4.3-IV0
     listeners:
       - name: plain
         port: 9092

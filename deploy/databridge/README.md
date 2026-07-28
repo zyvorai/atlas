@@ -66,12 +66,18 @@ On the **edge** cluster (where CNPG/Percona already run):
 
 ```bash
 cd deploy/databridge
-./up.sh                         # includes Strimzi + zyvor-kafka
+./up.sh                         # includes Strimzi + zyvor-kafka (Kafka 4.3.0)
 podman build -t databridge-connect:dev -f connect/Dockerfile connect
 # import image into k3s/containerd, then on atlas-gateway-ceph:
 kubectl -n rook-ceph set env deploy/atlas-gateway-ceph \
   ATLAS_DATABRIDGE_CONNECT_IMAGE=localhost/databridge-connect:dev
 ```
+
+**Lab `212.8.248.187` (2026-07-28):** Strimzi + CNPG + Percona operators installed;
+`zyvor-kafka` Ready on Kafka **4.3.0** (earlier CR pinned 4.0.0 — unsupported by current Strimzi;
+fixed in `10-kafka.yaml`). Connect image build/import + `ATLAS_DATABRIDGE_CONNECT_IMAGE` wired when
+the gateway roll completes. Registered lab sources are still `driver_mode: fake` — real MySQL/Mongo
+CDC needs a live source Secret; fake pipeline still covers discover→cutover for all engines in CI.
 
 Until that stack is up, Atlas **refuses** real `cdc/start` without `ATLAS_DATABRIDGE_CONNECT_IMAGE`,
 and the console marks CDC/cutover as **needs Kafka** for non-Postgres engines. Fake mode still

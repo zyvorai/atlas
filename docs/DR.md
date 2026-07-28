@@ -14,7 +14,7 @@ API and catalog without calling `rbd`.
 | Enable / disable / promote / demote API + jobs | Done |
 | Role transition guards + force promote | Done |
 | Preflight + one-click failover runbook | Done (`control_plane_ready`; always `dataplane_verified: false` until live) |
-| Fake-mode job success (no second cluster) | Done |
+| Fake-mode job success (no second cluster) | Done (`cargo test -p atlas-gateway --test dr`) |
 | Live two-site `rbd mirror` verification | **Pending** (needs peer cluster) |
 
 `GET /dr/status` and `GET /dr/preflight` both expose `control_plane_ready` (catalog coherent) and

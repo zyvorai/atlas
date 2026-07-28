@@ -24,8 +24,21 @@ Same JWT hierarchy as REST: `viewer < operator < admin`. Product service account
 
 ## Surface today
 
-Health, clusters/pools/volumes, create/delete/expand volume, snapshots, jobs (+ WatchJob stream),
-alerts, **GetMetricsSummary**, **ListBuckets**.
+| RPC | Notes |
+|---|---|
+| `Health` | Liveness + version |
+| `ListClusters` / `ListPools` / `ListVolumes` / `GetVolume` | Inventory reads |
+| `CreateVolume` | Operator; returns `job_id` + `volume_id`; optional `Owner` |
+| `DeleteVolume` | Admin; enqueues delete job |
+| `ExpandVolume` | Operator; enqueues expand job (`new_size_bytes` must grow) |
+| `CreateSnapshot` / `ListSnapshots` | Operator create; list optional `volume_id` filter |
+| `ListVolumesByOwner` | Product-scoped volume enumeration |
+| `GetJob` / `WatchJob` | Job status + server stream until terminal |
+| `ListJobs` | Optional `state` filter; `limit` default 50 |
+| `ListTenants` | Tenants with volumes or quotas (`id`/`name` ← `tenant_id`) |
+| `ListAlerts` | Optional `state` filter |
+| `GetMetricsSummary` | Capacity + client I/O + recovery rollup |
+| `ListBuckets` | RGW object-bucket inventory |
 
 Not yet on gRPC (REST-only): DR/mirroring, DataBridge, schedules, quotas admin, OSD ops, CephFS/NFS/ZFS
 specifics.

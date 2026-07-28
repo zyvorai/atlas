@@ -34,18 +34,24 @@ pub mod users;
 
 /// Open the SQLite pool with WAL + foreign keys, creating the file if missing.
 ///
-/// Postgres URLs (`postgres://` / `postgresql://`) are rejected with a clear error until the
-/// sqlx port lands — see `docs/HA.md`. The durable job queue + leader lease already assume a
-/// shared DB and are the HA foundation for that cutover.
+/// Postgres URLs (`postgres://` / `postgresql://`) are rejected here — the default path stays
+/// SQLite. Phase-1 HA exposes [`connect_postgres`] / [`migrate_postgres`] behind the
+/// `postgres` feature; full query port is still outstanding — see `docs/HA.md`.
 pub async fn connect(database_url: &str) -> Result<SqlitePool> {
     let lower = database_url.to_ascii_lowercase();
     if lower.starts_with("postgres://") || lower.starts_with("postgresql://") {
         anyhow::bail!(
-            "PostgreSQL is not wired yet (ATLAS_DATABASE_URL={database_url}). \
-             Atlas still uses SQLite; the durable job queue + leader lease are ready for a shared DB. \
-             See docs/HA.md for the migration plan and deploy/postgres/ for a lab Postgres."
+            "PostgreSQL is not wired yet into the default SQLite connect path \
+             (ATLAS_DATABASE_URL={database_url}). \
+             Enable the atlas-inventory `postgres` feature and call connect_postgres/migrate_postgres. \
+             Lab still uses SQLite. See docs/HA.md."
         );
     }
+    connect_sqlite(database_url).await
+}
+
+/// SQLite connect (same as [`connect`] after the Postgres-URL guard).
+pub async fn connect_sqlite(database_url: &str) -> Result<SqlitePool> {
     let options = SqliteConnectOptions::from_str(database_url)?
         .create_if_missing(true)
         .journal_mode(SqliteJournalMode::Wal)
@@ -62,6 +68,32 @@ pub async fn connect(database_url: &str) -> Result<SqlitePool> {
 /// Run the embedded migrations (from the workspace-root `migrations/` dir).
 pub async fn migrate(pool: &SqlitePool) -> Result<()> {
     sqlx::migrate!("../../migrations").run(pool).await?;
+    Ok(())
+}
+
+/// Phase-1 HA: open a Postgres pool when `ATLAS_DATABASE_URL` / `DATABASE_URL` is `postgres://`.
+///
+/// Does not replace the SQLite inventory API — callers must use this pool with Postgres-aware
+/// queries (not yet ported). See `docs/HA.md`.
+#[cfg(feature = "postgres")]
+pub async fn connect_postgres(database_url: &str) -> Result<sqlx::PgPool> {
+    let lower = database_url.to_ascii_lowercase();
+    if !(lower.starts_with("postgres://") || lower.starts_with("postgresql://")) {
+        anyhow::bail!(
+            "connect_postgres requires a postgres:// or postgresql:// URL, got: {database_url}"
+        );
+    }
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(10)
+        .connect(database_url)
+        .await?;
+    Ok(pool)
+}
+
+/// Run Postgres migrations from workspace-root `migrations-postgres/`.
+#[cfg(feature = "postgres")]
+pub async fn migrate_postgres(pool: &sqlx::PgPool) -> Result<()> {
+    sqlx::migrate!("../../migrations-postgres").run(pool).await?;
     Ok(())
 }
 
@@ -973,5 +1005,6 @@ mod connect_tests {
             .to_string();
         assert!(err.contains("PostgreSQL is not wired yet"), "{err}");
         assert!(err.contains("docs/HA.md"), "{err}");
+        assert!(err.contains("connect_postgres") || err.contains("postgres"), "{err}");
     }
 }

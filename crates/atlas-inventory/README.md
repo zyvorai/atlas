@@ -3,9 +3,11 @@
 
 The SQLite-backed normalized inventory read model + audit log.
 
-- **`connect` / `migrate`** — open the pool (WAL, foreign keys on, `create_if_missing`) and run
-  the embedded migrations from the workspace `migrations/` dir. Mirrors
-  `machina/controller/src/db/mod.rs`.
+- **`connect` / `connect_sqlite` / `migrate`** — open the SQLite pool (WAL, foreign keys on,
+  `create_if_missing`) and run the embedded migrations from the workspace `migrations/` dir.
+  Postgres URLs are rejected with a pointer to `docs/HA.md`.
+- **`postgres` feature** — Phase-1 HA: `connect_postgres` + `migrate_postgres` against
+  `migrations-postgres/` (`sqlx::PgPool`). Does not port inventory queries off SQLite yet.
 - **Writes** — `upsert_backend`, `upsert_discovery` (one transaction: cluster → pools → osds →
   volumes, with enum↔TEXT mapping).
 - **Reads** — `list_backends`, `list_clusters`, `get_cluster`, `cluster_health`, `list_pools`,
@@ -13,5 +15,5 @@ The SQLite-backed normalized inventory read model + audit log.
   DTOs and power the gateway's read endpoints.
 - **`audit`** — `record(...)` appends to `storage_audit_logs`; `count_for_action` (used in tests).
 
-Schema: `migrations/0001_init.sql`. Uses runtime `sqlx::query`/`query_as` (no compile-time
-`DATABASE_URL` needed).
+Schema: `migrations/0001_init.sql` (SQLite). Postgres mirror: `migrations-postgres/`.
+Uses runtime `sqlx::query`/`query_as` (no compile-time `DATABASE_URL` needed).

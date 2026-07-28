@@ -20,11 +20,14 @@ service AtlasStorage {
   rpc GetJob(GetJobRequest) returns (Job);
   // Server-streaming: emit the job on each state change until it reaches a terminal state.
   rpc WatchJob(GetJobRequest) returns (stream Job);
+  rpc ListJobs(ListJobsRequest) returns (ListJobsReply);
   rpc ListAlerts(ListAlertsRequest) returns (ListAlertsReply);
   // Capacity + client I/O + recovery rollup (mirrors REST /metrics/summary).
   rpc GetMetricsSummary(Empty) returns (MetricsSummary);
   // Object buckets (RGW) — product-facing inventory read.
   rpc ListBuckets(Empty) returns (ListBucketsReply);
+  // Tenants with volumes or quotas (mirrors REST GET /tenants overview).
+  rpc ListTenants(Empty) returns (ListTenantsReply);
 }
 
 message Empty {}
@@ -131,6 +134,18 @@ message Job {
   int64 progress_percent = 4;
   string error = 5;
 }
+message ListJobsRequest {
+  string state = 1;  // optional; empty = all states
+  int32 limit = 2;   // optional; 0 / unset → default 50
+}
+message ListJobsReply { repeated Job jobs = 1; }
+
+// Tenant identity from inventory overview (tenant_id is the only name-like key today).
+message Tenant {
+  string id = 1;
+  string name = 2;
+}
+message ListTenantsReply { repeated Tenant tenants = 1; }
 
 message Alert {
   string id = 1;

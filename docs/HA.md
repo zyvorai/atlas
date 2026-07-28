@@ -5,6 +5,25 @@ Atlas today runs as a **single replica** with SQLite on a ReadWriteOnce PVC. Tru
 needs a shared database (PostgreSQL). This document describes what is already durable, what still
 blocks multi-replica, and the cutover plan.
 
+## Phase-1 status (foundation landed)
+
+Lab and gateway **remain on SQLite** — nothing flips `ATLAS_DATABASE_URL` in deploy.
+
+| Landed | Detail |
+|---|---|
+| **`migrations-postgres/`** | Postgres dialect of `migrations/` 0001..0025 (`PRAGMA` removed, `AUTOINCREMENT` → `BIGSERIAL`, `strftime` → `to_char` UTC TEXT defaults, `json_valid` → `::json` CHECKs). Same table/column names. |
+| **`atlas-inventory` feature `postgres`** | Enables `sqlx/postgres`. Adds `connect_postgres` + `migrate_postgres` (runs `migrations-postgres` via `sqlx::migrate!`). Default SQLite `connect` / `migrate` unchanged. |
+| **Smoke** | `scripts/smoke-postgres-ha.sh` and `crates/atlas-inventory/tests/postgres_connect.rs` (live migrate is `#[ignore]` — needs `DATABASE_URL`). |
+| **K8s sketch** | `deploy/k8s/atlas-postgres.yaml` (plain Deployment + optional CNPG comment) — **not applied** to lab. |
+
+Remaining for a full cutover (not Phase-1):
+
+1. Dual query modules (or `sqlx::Any`) — inventory/jobs still use SQLite `?` placeholders and `SqlitePool` end-to-end.
+2. Gateway/job engine wired to `PgPool` when URL is Postgres; raise pool size; keep leader lease + job claim semantics.
+3. Move rate limiting to Redis or DB-backed counters.
+4. Deployments → `RollingUpdate` + no local DB volume / RWX as needed.
+5. Console `COLLATE NOCASE` parity (`citext` or lower() unique index).
+
 ## What is durable now
 
 | Piece | Behavior |
@@ -24,31 +43,31 @@ blocks multi-replica, and the cutover plan.
 3. **In-process rate limiter** — per-pod fixed windows (`ATLAS_RATE_LIMIT_RPM`).
 4. **Ceph CLI / local `/etc/ceph`** — real driver assumes local credentials rendered into the pod.
 
-## PostgreSQL cutover (planned)
+## PostgreSQL cutover
 
 Lab Postgres for development (does **not** switch Atlas yet):
 
 ```bash
 docker compose -f deploy/postgres/docker-compose.yml up -d
-# Connection string for the future cutover:
-# ATLAS_DATABASE_URL=postgres://atlas:atlas@127.0.0.1:5432/atlas
+# Connection string for Phase-1 migrate smoke:
+# DATABASE_URL=postgres://atlas:atlas@127.0.0.1:5432/atlas
+./scripts/smoke-postgres-ha.sh --migrate
 ```
 
-Today, a `postgres://` / `postgresql://` `ATLAS_DATABASE_URL` is **rejected at connect** with a pointer
-here — so misconfiguration fails loudly instead of half-working.
+Build / check the optional feature:
 
-Remaining work for the cutover:
+```bash
+cargo check -p atlas-inventory --features postgres
+```
 
-1. Translate `migrations/*.sql` to Postgres (types, `strftime` → `now()`, `json_set`, etc.).
-2. Introduce a sqlx backend feature (`sqlite` | `postgres`) or `sqlx::Any` and dual query modules.
-3. Raise pool size; keep leader lease + job claim semantics unchanged.
-4. Move rate limiting to Redis or DB-backed counters.
-5. Change Deployments to `RollingUpdate` + `ReadWriteMany`/no local DB volume.
+Default SQLite `connect("postgres://...")` still **rejects** with a pointer here so a mis-set
+`ATLAS_DATABASE_URL` fails loudly. Use `connect_postgres` only behind the `postgres` feature.
 
 ## Config knobs
 
 | Env | Default | Meaning |
 |---|---|---|
-| `ATLAS_DATABASE_URL` | `sqlite://atlas.db?mode=rwc` | SQLite only for now; Postgres URL refused |
+| `ATLAS_DATABASE_URL` | `sqlite://atlas.db?mode=rwc` | SQLite for lab/gateway; Postgres URL refused by default `connect` |
+| `DATABASE_URL` | — | Used by Phase-1 smoke / ignored migrate test |
 | `ATLAS_JOB_POLL_SECS` | `2` | Durable queue poll interval (`0` disables; tests use `0`) |
 | `ATLAS_JOB_STALE_SECS` | `900` | Reclaim stale `running` locks (`0` disables) |

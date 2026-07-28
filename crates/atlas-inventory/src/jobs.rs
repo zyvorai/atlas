@@ -50,10 +50,31 @@ pub async fn get_job(pool: &SqlitePool, id: &str) -> Result<Option<JobRecord>> {
 }
 
 pub async fn list_jobs(pool: &SqlitePool, limit: i64) -> Result<Vec<JobRecord>> {
-    let rows = sqlx::query(&job_select("ORDER BY created_at DESC LIMIT ?"))
-        .bind(limit)
-        .fetch_all(pool)
-        .await?;
+    list_jobs_filtered(pool, None, limit).await
+}
+
+/// List jobs newest-first, optionally filtered by `state`, capped at `limit`.
+pub async fn list_jobs_filtered(
+    pool: &SqlitePool,
+    state: Option<&str>,
+    limit: i64,
+) -> Result<Vec<JobRecord>> {
+    let limit = limit.max(1);
+    let rows = match state {
+        Some(s) if !s.is_empty() => {
+            sqlx::query(&job_select("WHERE state = ? ORDER BY created_at DESC LIMIT ?"))
+                .bind(s)
+                .bind(limit)
+                .fetch_all(pool)
+                .await?
+        }
+        _ => {
+            sqlx::query(&job_select("ORDER BY created_at DESC LIMIT ?"))
+                .bind(limit)
+                .fetch_all(pool)
+                .await?
+        }
+    };
     Ok(rows.into_iter().map(row_to_job).collect())
 }
 

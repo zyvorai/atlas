@@ -306,7 +306,7 @@ stream reports caught-up (0).
 | Engine | Discover | Full-load | Validate | CDC | Cutover |
 |---|---|---|---|---|---|
 | Postgres | **live** | **live** | **live** | **live** | **live** |
-| MySQL | **live** | **live** | **live** | pending | pending |
+| MySQL | **live** | **live** | **live** | pending (real source) / **fake on lab** | pending |
 | MariaDB | **live** | **live** | **live** | pending | pending |
 | MongoDB | **live** | **live** | **live** | pending | pending |
 | SQL Server | **live** | via Debezium `initial` | advisory | pending | pending |
@@ -314,13 +314,15 @@ stream reports caught-up (0).
 
 Fake path covers **all six** engines discover→cutover in CI (`tests/databridge_engines.rs`).
 
+- **Lab `212.8.248.187` (2026-07-28):** Strimzi + `zyvor-kafka` **Ready** (Kafka **4.3.0**; CR was
+  bumped from unsupported 4.0.0), multi-engine Connect image imported, gateway
+  `ATLAS_DATABRIDGE_CONNECT_IMAGE=localhost/databridge-connect:dev`. Fake MySQL plan walked
+  assess→provision→full-load→**cdc_streaming**. Real non-Postgres CDC still needs a live source
+  Secret (lab inventory sources remain `driver_mode: fake`).
 - **Follow-ups (verify on live infra)**: **streaming CDC + cutover** for the non-Postgres engines
-  (MySQL / MariaDB / MongoDB are verified through full-load+validate; Postgres through CDC;
-  Oracle/SQL Server full-load is by design the Debezium snapshot → folds into CDC). Shared lab now
-  has deploy scaffolding (`deploy/databridge/10-kafka.yaml` + multi-engine Connect Dockerfile);
-  installing that stack on the shared k3s lab is still an operator step. Cross-engine per-table
-  row-count validation for heterogeneous plans is advisory (parity confirmed by snapshot/stream
-  convergence rather than a source-vs-edge count Job).
+  against real sources (MySQL / MariaDB / MongoDB already verified through full-load+validate;
+  Postgres through live CDC). Cross-engine per-table row-count validation for heterogeneous plans is
+  advisory (parity confirmed by snapshot/stream convergence rather than a source-vs-edge count Job).
 - **CDC Connect image — multi-engine** (`deploy/databridge/connect/Dockerfile`): one Strimzi-based
   image bundles Debezium PostgreSQL + MySQL/MariaDB + MongoDB + Oracle + SQL Server source connectors,
   the Aiven JDBC sink (Postgres/MySQL/SQL Server/Oracle drivers), and the MongoDB Kafka sink.
