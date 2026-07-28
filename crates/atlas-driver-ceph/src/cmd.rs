@@ -403,7 +403,10 @@ pub async fn rbd_snap_unprotect(pool: &str, image: &str, snap: &str) -> Result<(
         .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        if stderr.contains("not protected") || stderr.contains("does not exist") {
+        if stderr.contains("not protected")
+            || stderr.contains("already unprotected")
+            || stderr.contains("does not exist")
+        {
             return Ok(());
         }
         return Err(DriverError::Backend(format!(
