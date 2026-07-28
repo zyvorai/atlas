@@ -6,14 +6,20 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Bell,
   ChevronDown,
+  CloudCog,
   HardDrive as HardDriveIcon,
   KeyRound,
+  LayoutDashboard,
   Loader2,
   LogOut,
+  Orbit,
   Pause,
   Play,
   Search,
+  Server,
+  ShieldCheck,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { MODULES, SECTIONS, type Module } from "../nav/modules";
 import { http } from "../api/client";
 import { useAlerts, useClusters, useJobs } from "../api/hooks";
@@ -271,9 +277,19 @@ const SECTION_SHORT: Record<string, string> = {
   INFRASTRUCTURE: "Infra",
 };
 
+const SECTION_ICON: Record<string, LucideIcon> = {
+  STORAGE: HardDriveIcon,
+  "DATA PROTECTION": ShieldCheck,
+  DATABRIDGE: CloudCog,
+  OBSERVABILITY: Orbit,
+  GOVERNANCE: KeyRound,
+  INFRASTRUCTURE: Server,
+};
+
 /** Section dropdown — portal + fixed coords so menus aren't clipped by overflow-x on the nav strip. */
 function SectionDropdown({
   short,
+  icon: Icon,
   items,
   active,
   open,
@@ -281,6 +297,7 @@ function SectionDropdown({
   onClose,
 }: {
   short: string;
+  icon: LucideIcon;
   items: Module[];
   active: boolean;
   open: boolean;
@@ -351,8 +368,9 @@ function SectionDropdown({
         aria-haspopup="menu"
         onClick={() => (open ? onClose() : onOpen())}
       >
+        <Icon size={14} strokeWidth={1.75} className="at-topnav-secico" aria-hidden />
         {short}
-        <ChevronDown size={13} strokeWidth={2} />
+        <ChevronDown size={13} strokeWidth={2} className="at-topnav-chev" aria-hidden />
       </button>
       {open &&
         pos &&
@@ -376,7 +394,7 @@ function SectionDropdown({
                   className={({ isActive }) => cx("at-topnav-item", isActive && "on")}
                   onClick={onClose}
                 >
-                  <m.icon size={14} strokeWidth={1.75} />
+                  <m.icon size={15} strokeWidth={1.75} aria-hidden />
                   <span>{m.label}</span>
                 </NavLink>
               ))}
@@ -406,6 +424,7 @@ function TopNav() {
       SECTIONS.map((sec) => ({
         sec,
         short: SECTION_SHORT[sec] || sec,
+        icon: SECTION_ICON[sec] || Server,
         items: MODULES.filter((m) => m.section === sec && m.path !== "/"),
       })).filter((g) => g.items.length),
     [],
@@ -419,12 +438,14 @@ function TopNav() {
     <nav className="at-topnav" aria-label="Primary">
       <div className="at-topnav-scroll">
         <NavLink to="/" end className={({ isActive }) => cx("at-topnav-home", isActive && "on")}>
+          <LayoutDashboard size={14} strokeWidth={1.75} className="at-topnav-secico" aria-hidden />
           Command Deck
         </NavLink>
         {grouped.map((g) => (
           <SectionDropdown
             key={g.sec}
             short={g.short}
+            icon={g.icon}
             items={g.items}
             active={activeSec === g.sec}
             open={openSec === g.sec}

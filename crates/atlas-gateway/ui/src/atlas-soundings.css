@@ -329,6 +329,7 @@
 .at-topnav-home {
   display: inline-flex;
   align-items: center;
+  gap: 7px;
   height: 40px;
   padding: 0 12px 0 0;
   margin-right: 6px;
@@ -367,7 +368,7 @@
 .at-topnav-ddbtn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   height: 40px;
   padding: 0 11px;
   border: none;
@@ -388,11 +389,23 @@
 .at-topnav-dd.on .at-topnav-ddbtn {
   color: var(--at-cyan);
 }
-.at-topnav-ddbtn svg {
-  opacity: 0.55;
-  transition: transform 0.14s;
+.at-topnav-secico {
+  opacity: 0.7;
+  flex-shrink: 0;
 }
-.at-topnav-dd.open .at-topnav-ddbtn svg {
+.at-topnav-home:hover .at-topnav-secico,
+.at-topnav-home.on .at-topnav-secico,
+.at-topnav-ddbtn:hover .at-topnav-secico,
+.at-topnav-dd.open .at-topnav-secico,
+.at-topnav-dd.on .at-topnav-secico {
+  opacity: 1;
+}
+.at-topnav-chev {
+  opacity: 0.55;
+  flex-shrink: 0;
+  transition: transform 0.14s, opacity 0.14s;
+}
+.at-topnav-dd.open .at-topnav-chev {
   transform: rotate(180deg);
   opacity: 1;
 }
@@ -416,7 +429,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 34px;
+  height: 36px;
   padding: 0 14px;
   color: var(--at-ink-2);
   font-family: var(--at-face);
@@ -425,8 +438,10 @@
   white-space: nowrap;
 }
 .at-topnav-item svg {
-  opacity: 0.55;
+  opacity: 0.7;
   flex-shrink: 0;
+  width: 15px;
+  height: 15px;
 }
 .at-topnav-item:hover {
   background: var(--at-ridge);
