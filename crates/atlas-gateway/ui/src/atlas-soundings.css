@@ -305,7 +305,7 @@
 /* ── Top nav (webpage primary) ── */
 .at-topnav {
   position: relative;
-  z-index: 50;
+  z-index: 70;
   flex-shrink: 0;
   display: flex;
   align-items: stretch;
@@ -319,13 +319,12 @@
   min-width: 0;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 2px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  /* Must stay overflow:visible — overflow-x:auto clips absolute/portaled menus' hit targets
+     via the CSS overflow pairing rule (non-visible on one axis forces the other to auto). */
+  overflow: visible;
   padding: 0 var(--page-inset);
-}
-.at-topnav-scroll::-webkit-scrollbar {
-  height: 0;
 }
 .at-topnav-home {
   display: inline-flex;
@@ -400,14 +399,13 @@
 .at-topnav-scrim {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: 80;
 }
 .at-topnav-menu {
-  position: absolute;
-  top: calc(100% - 1px);
-  left: 0;
-  z-index: 55;
-  min-width: 200px;
+  /* Portaled to document.body with top/left from the trigger's getBoundingClientRect. */
+  position: fixed;
+  z-index: 90;
+  min-width: 220px;
   padding: 6px 0;
   background: var(--at-abyss);
   border: 1px solid var(--at-line-2);

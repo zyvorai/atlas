@@ -1,6 +1,7 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 // Soundings shell: chart floor + rail + top nav + canvas.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Bell,
@@ -13,7 +14,7 @@ import {
   Play,
   Search,
 } from "lucide-react";
-import { MODULES, SECTIONS } from "../nav/modules";
+import { MODULES, SECTIONS, type Module } from "../nav/modules";
 import { http } from "../api/client";
 import { useAlerts, useClusters, useJobs } from "../api/hooks";
 import { useUi } from "../store/ui";
@@ -270,6 +271,123 @@ const SECTION_SHORT: Record<string, string> = {
   INFRASTRUCTURE: "Infra",
 };
 
+/** Section dropdown — portal + fixed coords so menus aren't clipped by overflow-x on the nav strip. */
+function SectionDropdown({
+  short,
+  items,
+  active,
+  open,
+  onOpen,
+  onClose,
+}: {
+  short: string;
+  items: Module[];
+  active: boolean;
+  open: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+}) {
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  const clearLeave = () => {
+    if (leaveTimer.current) {
+      clearTimeout(leaveTimer.current);
+      leaveTimer.current = null;
+    }
+  };
+  const scheduleClose = () => {
+    clearLeave();
+    leaveTimer.current = setTimeout(onClose, 140);
+  };
+
+  useLayoutEffect(() => {
+    if (!open || !btnRef.current) {
+      setPos(null);
+      return;
+    }
+    const place = () => {
+      const r = btnRef.current!.getBoundingClientRect();
+      const menuW = 220;
+      const left = Math.min(Math.max(8, r.left), window.innerWidth - menuW - 8);
+      setPos({ top: r.bottom - 1, left });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  useEffect(() => () => clearLeave(), []);
+
+  return (
+    <div
+      className={cx("at-topnav-dd", active && "on", open && "open")}
+      onMouseEnter={() => {
+        clearLeave();
+        onOpen();
+      }}
+      onMouseLeave={scheduleClose}
+    >
+      <button
+        ref={btnRef}
+        type="button"
+        className="at-topnav-ddbtn"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => (open ? onClose() : onOpen())}
+      >
+        {short}
+        <ChevronDown size={13} strokeWidth={2} />
+      </button>
+      {open &&
+        pos &&
+        createPortal(
+          <>
+            <div className="at-topnav-scrim" onClick={onClose} />
+            <div
+              ref={menuRef}
+              className="at-topnav-menu"
+              role="menu"
+              style={{ top: pos.top, left: pos.left }}
+              onMouseEnter={clearLeave}
+              onMouseLeave={scheduleClose}
+            >
+              {items.map((m) => (
+                <NavLink
+                  key={m.id}
+                  to={m.path}
+                  end={m.path === "/"}
+                  role="menuitem"
+                  className={({ isActive }) => cx("at-topnav-item", isActive && "on")}
+                  onClick={onClose}
+                >
+                  <m.icon size={14} strokeWidth={1.75} />
+                  <span>{m.label}</span>
+                </NavLink>
+              ))}
+            </div>
+          </>,
+          document.body,
+        )}
+    </div>
+  );
+}
+
 function TopNav() {
   const loc = useLocation();
   const [ver, setVer] = useState("");
@@ -303,44 +421,17 @@ function TopNav() {
         <NavLink to="/" end className={({ isActive }) => cx("at-topnav-home", isActive && "on")}>
           Command Deck
         </NavLink>
-        {grouped.map((g) => {
-          const on = activeSec === g.sec;
-          const open = openSec === g.sec;
-          return (
-            <div key={g.sec} className={cx("at-topnav-dd", on && "on", open && "open")}>
-              <button
-                type="button"
-                className="at-topnav-ddbtn"
-                aria-expanded={open}
-                aria-haspopup="menu"
-                onClick={() => setOpenSec(open ? null : g.sec)}
-              >
-                {g.short}
-                <ChevronDown size={13} strokeWidth={2} />
-              </button>
-              {open && (
-                <>
-                  <div className="at-topnav-scrim" onClick={() => setOpenSec(null)} />
-                  <div className="at-topnav-menu" role="menu">
-                    {g.items.map((m) => (
-                      <NavLink
-                        key={m.id}
-                        to={m.path}
-                        end={m.path === "/"}
-                        role="menuitem"
-                        className={({ isActive }) => cx("at-topnav-item", isActive && "on")}
-                        onClick={() => setOpenSec(null)}
-                      >
-                        <m.icon size={14} strokeWidth={1.75} />
-                        <span>{m.label}</span>
-                      </NavLink>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })}
+        {grouped.map((g) => (
+          <SectionDropdown
+            key={g.sec}
+            short={g.short}
+            items={g.items}
+            active={activeSec === g.sec}
+            open={openSec === g.sec}
+            onOpen={() => setOpenSec(g.sec)}
+            onClose={() => setOpenSec((cur) => (cur === g.sec ? null : cur))}
+          />
+        ))}
       </div>
       <a href="https://zyvor.dev" target="_blank" rel="noreferrer" className="at-topnav-ver">
         <span className="dot" /> Atlas{ver ? ` v${ver}` : ""}
