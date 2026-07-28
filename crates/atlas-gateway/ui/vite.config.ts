@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 // The gateway serves the built app from `/` and the API from `/api/atlas/v1`.
@@ -17,5 +17,9 @@ export default defineConfig({
       "/health": { target: GATEWAY, changeOrigin: true },
       "/version": { target: GATEWAY, changeOrigin: true },
     },
+  },
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.ts"],
   },
 });

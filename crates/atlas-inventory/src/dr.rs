@@ -233,11 +233,16 @@ pub async fn set_rpo(pool: &SqlitePool, id: &str, rpo_seconds: Option<i64>) -> R
 }
 
 /// Preflight checklist for a DR failover drill (control-plane view; does not talk to Ceph).
+///
+/// `ready` means the **catalog** is coherent enough to run a failover *job*. It does **not** mean
+/// live `rbd mirror` dataplane has been verified — that stays `dataplane_verified: false` until a
+/// two-site drill lands (see `docs/DR.md`).
 pub async fn preflight(pool: &SqlitePool) -> Result<serde_json::Value> {
     let peers = list_peers(pool).await?;
     let mirrors = list_mirrors(pool).await?;
     let mut checks = Vec::new();
     let mut blockers = Vec::new();
+    let mut warnings = Vec::new();
 
     let peer_ok = !peers.is_empty();
     checks.push(serde_json::json!({
@@ -280,18 +285,109 @@ pub async fn preflight(pool: &SqlitePool) -> Result<serde_json::Value> {
         blockers.push("resolve mirrors in state=error before failing over");
     }
 
+    let enabled = mirrors.iter().filter(|m| m["state"] == "enabled").count();
+    let enabled_ok = mirrors.is_empty() || enabled > 0;
+    checks.push(serde_json::json!({
+        "id": "enabled_mirrors", "ok": enabled_ok,
+        "detail": format!("{enabled}/{} mirror(s) in state=enabled", mirrors.len())
+    }));
+    if !enabled_ok {
+        blockers.push("no enabled mirrors — enable mirroring on a volume before failover");
+    }
+
     let secondaries = mirrors.iter().filter(|m| m["role"] == "secondary").count();
     let failover_ready = secondaries > 0;
     checks.push(serde_json::json!({
         "id": "secondary_available", "ok": failover_ready || mirrors.is_empty(),
         "detail": format!("{secondaries} secondary mirror(s) can be promoted")
     }));
+    if !failover_ready && !mirrors.is_empty() {
+        warnings.push("no secondary role yet — demote a primary (or wait for peer sync) before promote");
+    }
+
+    let with_rpo = mirrors.iter().filter(|m| m["rpo_seconds"].as_i64().is_some()).count();
+    let rpo_ok = mirrors.is_empty() || with_rpo > 0;
+    checks.push(serde_json::json!({
+        "id": "rpo_observed", "ok": rpo_ok,
+        "detail": if mirrors.is_empty() {
+            "no mirrors yet".into()
+        } else {
+            format!("{with_rpo}/{} mirror(s) have an observed RPO", mirrors.len())
+        }
+    }));
+    if !rpo_ok {
+        warnings.push("record observed RPO via POST /dr/mirrors/{id}/rpo after a live sync sample");
+    }
+
+    // Honest: control-plane catalog only. Live rbd mirror needs a second Ceph cluster.
+    checks.push(serde_json::json!({
+        "id": "dataplane_verified", "ok": false,
+        "detail": "live two-site rbd mirror verification pending — see docs/DR.md"
+    }));
+    warnings.push("dataplane unverified: treat failover as a control-plane drill until a peer cluster exists");
 
     Ok(serde_json::json!({
         "ready": blockers.is_empty(),
+        "control_plane_ready": blockers.is_empty(),
+        "dataplane_verified": false,
         "checks": checks,
         "blockers": blockers,
+        "warnings": warnings,
         "peers": peers.len(),
         "mirrors": mirrors.len(),
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn mem_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query(
+            "CREATE TABLE dr_peers (
+                id TEXT PRIMARY KEY, name TEXT NOT NULL, cluster_fsid TEXT,
+                direction TEXT NOT NULL, bootstrap_secret_ref TEXT, state TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+             )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "CREATE TABLE dr_mirrors (
+                id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, volume_id TEXT,
+                pool TEXT NOT NULL, image TEXT NOT NULL, peer_id TEXT,
+                mode TEXT NOT NULL, role TEXT NOT NULL, state TEXT NOT NULL,
+                rpo_seconds INTEGER, last_failover_at TEXT, last_error TEXT,
+                force_promoted INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+                updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+                UNIQUE(pool, image)
+             )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn preflight_blocks_without_peers_and_stays_dataplane_unverified() {
+        let pool = mem_pool().await;
+        let pre = preflight(&pool).await.unwrap();
+        assert_eq!(pre["ready"], false);
+        assert_eq!(pre["dataplane_verified"], false);
+        assert!(pre["blockers"].as_array().unwrap().iter().any(|b| b.as_str().unwrap().contains("peer")));
+
+        register_peer(&pool, "p1", "dc2", Some("fsid"), "bidirectional", Some("sec")).await.unwrap();
+        let pre2 = preflight(&pool).await.unwrap();
+        assert_eq!(pre2["ready"], true);
+        assert_eq!(pre2["control_plane_ready"], true);
+        assert_eq!(pre2["dataplane_verified"], false);
+        assert!(pre2["warnings"].as_array().unwrap().iter().any(|w| {
+            w.as_str().unwrap().contains("dataplane unverified")
+        }));
+    }
+}
+

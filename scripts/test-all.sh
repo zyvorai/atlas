@@ -7,7 +7,7 @@
 #   Tier 0  static gate (clippy + workspace tests + build) + optional-feature compile checks
 #   Tier 1  fake-driver gap tests (folded into the workspace test run)
 #   Tier 2  real DB connectors via ephemeral containers (scripts/test-connectors.sh)
-#   Tier 4  UI production build (when npm is on PATH)
+#   Tier 4  UI unit tests (vitest) + production build (when npm is on PATH)
 #
 # Tier 3 (real Ceph/k8s write path on a remote cluster) is printed as an opt-in follow-up — it
 # mutates a remote, so it isn't automatic. Docker image builds are CI-only (see .github/workflows).
@@ -59,8 +59,8 @@ else
 fi
 
 if [[ "$NO_UI" == "0" ]] && command -v npm >/dev/null; then
-  log "Tier 4: UI production build"
-  (cd crates/atlas-gateway/ui && npm ci && npm run build)
+  log "Tier 4: UI unit tests + production build"
+  (cd crates/atlas-gateway/ui && npm ci && npm test && npm run build)
 else
   echo "!! skipping Tier 4 (no npm, or --no-ui)"
 fi

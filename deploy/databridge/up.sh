@@ -64,6 +64,12 @@ if [[ "$WITH_STREAMING" == "1" ]]; then
   kubectl -n "$NS" rollout status deploy/strimzi-cluster-operator --timeout=180s || true
   # let Kafka Connect resolve ${secrets:...} in connector configs
   kubectl apply -f "$HERE/connect-rbac.yaml"
+  # Lab Kafka the gateway's start_cdc hard-codes (zyvor-kafka-kafka-bootstrap:9092).
+  # Safe to re-apply; Strimzi will reconcile. Skip with --no-kafka if the cluster already has one.
+  if [[ "${SKIP_KAFKA_CR:-0}" != "1" ]]; then
+    log "applying Kafka CR zyvor-kafka (lab RF=1)"
+    kubectl apply -f "$HERE/10-kafka.yaml"
+  fi
 else
   log "4/4 skipping Strimzi/Kafka (--no-streaming: full-load only, no CDC)"
 fi
@@ -73,7 +79,12 @@ cat <<EOF
 Done. Edge operators installed in namespace '$NS'. Verify with:
   kubectl -n cnpg-system get deploy cnpg-controller-manager
   kubectl -n $NS get deploy | grep -E 'percona|strimzi'
+  kubectl -n $NS get kafka zyvor-kafka
   kubectl get storageclass | grep zyvor-rbd-prod   # edge DB data lands here
+
+Build the multi-engine Connect image (required for real CDC):
+  podman build -t databridge-connect:dev -f deploy/databridge/connect/Dockerfile deploy/databridge/connect
+  # set ATLAS_DATABRIDGE_CONNECT_IMAGE on the gateway deployment
 
 Then point Atlas DataBridge at a real source (driver_mode=real, creds in a k8s Secret) and run
 the pipeline from the Migration Plans page, or over REST at /api/atlas/v1/databridge/*.

@@ -13,9 +13,13 @@ API and catalog without calling `rbd`.
 | Peers / mirrors catalog | Done |
 | Enable / disable / promote / demote API + jobs | Done |
 | Role transition guards + force promote | Done |
-| Preflight + one-click failover runbook | Done |
+| Preflight + one-click failover runbook | Done (`control_plane_ready`; always `dataplane_verified: false` until live) |
 | Fake-mode job success (no second cluster) | Done |
 | Live two-site `rbd mirror` verification | **Pending** (needs peer cluster) |
+
+`GET /dr/status` and `GET /dr/preflight` both expose `control_plane_ready` (catalog coherent) and
+`dataplane_verified` (hard-coded `false` until a real two-site drill). Preflight `ready` means you
+can enqueue a failover **job**; it is not a claim that Ceph mirroring is live.
 
 ## API
 

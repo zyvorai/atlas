@@ -9,6 +9,7 @@ import { PageHead } from "../../ui/PageHead";
 import { del } from "../../ui/confirm";
 import { Table } from "../../ui/Table";
 import { fmtBytes } from "../../lib/format";
+import { ENGINE_VERIFICATION } from "../../lib/engineVerification";
 
 const stateKind = (s: string) =>
   s === "discovered" ? "success" : s === "error" ? "danger" : s === "discovering" ? "warning" : "neutral";
@@ -64,6 +65,25 @@ export default function Sources() {
           </>
         )}
       />
+
+      <div className="at-panel" style={{ marginTop: 0 }}>
+        <div className="at-panel-bar">
+          <span className="at-caption">Live verification matrix</span>
+          <span className="grow" />
+          <span className="at-sub" style={{ margin: 0 }}>fake path covers all engines end-to-end · docs/DATABRIDGE.md</span>
+        </div>
+        {ENGINE_VERIFICATION.map((e) => (
+          <div key={e.engine} className="at-list-row" style={{ alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <Badge kind="info">{e.engine}</Badge>
+            {(["discover", "full-load", "validate", "cdc", "cutover"] as const).map((s) => (
+              <Badge key={s} kind={e.live.includes(s) ? "success" : "neutral"}>
+                {s}{e.live.includes(s) ? "" : " · pending"}
+              </Badge>
+            ))}
+            <span className="at-sub" style={{ margin: 0, flex: 1 }}>{e.note}</span>
+          </div>
+        ))}
+      </div>
 
       <FormModal open={create} onClose={() => setCreate(false)} title="Register source database" submitLabel="Register"
         fields={[

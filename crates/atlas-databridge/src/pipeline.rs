@@ -445,6 +445,14 @@ pub async fn start_cdc(
     // 1. KafkaConnect cluster (image must bundle Debezium + JDBC-sink plugins; set at deploy time).
     // The use-connector-resources annotation is REQUIRED or Strimzi ignores the KafkaConnector CRs.
     let connect_image = std::env::var("ATLAS_DATABRIDGE_CONNECT_IMAGE").ok();
+    if connect_image.as_deref().unwrap_or("").trim().is_empty() {
+        anyhow::bail!(
+            "real CDC requires ATLAS_DATABRIDGE_CONNECT_IMAGE (build \
+             deploy/databridge/connect/Dockerfile) and a Strimzi Kafka named zyvor-kafka in \
+             namespace zyvor-databridge (deploy/databridge/up.sh + 10-kafka.yaml) — \
+             see docs/DATABRIDGE.md engine verification matrix"
+        );
+    }
     let mut connect_annotations = std::collections::BTreeMap::new();
     connect_annotations.insert(
         "strimzi.io/use-connector-resources".to_string(),

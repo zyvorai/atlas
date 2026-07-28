@@ -83,12 +83,15 @@ pub(crate) async fn dr_status(
     let errored = mirrors.iter().filter(|m| m["state"] == "error").count();
     let worst_rpo = mirrors.iter().filter_map(|m| m["rpo_seconds"].as_i64()).max();
     let peers = atlas_inventory::dr::list_peers(&s.pool).await?.len();
+    let control_plane_ready = peers > 0 && errored == 0;
     Ok(Json(json!({
         "peers": peers, "mirrors": mirrors.len(),
         "primary": primaries, "secondary": secondaries,
         "error": errored, "worst_rpo_seconds": worst_rpo,
+        "control_plane_ready": control_plane_ready,
+        "dataplane_verified": false,
         "verified": false,
-        "note": "rbd mirror ops need a live second Ceph cluster; see docs/DR.md",
+        "note": "control-plane catalog ready; live rbd mirror needs a second Ceph cluster — see docs/DR.md",
     })))
 }
 

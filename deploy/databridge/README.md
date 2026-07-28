@@ -17,16 +17,29 @@ migrate against real cloud databases.
 
 ## Install
 ```bash
-./up.sh                 # CloudNativePG + Percona + Strimzi
+./up.sh                 # CloudNativePG + Percona + Strimzi + lab Kafka (zyvor-kafka)
 ./up.sh --pg-only       # just CloudNativePG (Postgres only)
 ./up.sh --no-streaming  # skip Kafka (full-load only, no CDC yet)
+SKIP_KAFKA_CR=1 ./up.sh # operators only (reuse an existing Kafka)
 CNPG_VERSION=1.24.1 PXC_VERSION=1.14.0 ./up.sh
 ```
+
+`10-kafka.yaml` installs a single-broker KRaft Kafka named **`zyvor-kafka`** (bootstrap
+`zyvor-kafka-kafka-bootstrap:9092`) — what `start_cdc` hard-codes. Lab RF=1 only.
+
+## Connect image (required for real CDC)
+```bash
+podman build -t databridge-connect:dev -f connect/Dockerfile connect
+# import into the cluster, then set ATLAS_DATABRIDGE_CONNECT_IMAGE on the gateway
+```
+The image bundles Debezium (Postgres / MySQL / MariaDB / MongoDB / Oracle / SQL Server) + JDBC sink
+drivers + Mongo Kafka sink.
 
 ## Verify
 ```bash
 kubectl -n cnpg-system get deploy cnpg-controller-manager
 kubectl -n zyvor-databridge get deploy | grep -E 'percona|strimzi'
+kubectl -n zyvor-databridge get kafka zyvor-kafka
 kubectl get storageclass | grep zyvor-rbd-prod
 ```
 
@@ -39,3 +52,10 @@ Percona `Cluster` binds its PVCs on `zyvor-rbd-prod`; Atlas's reconciler advance
 
 > The fake pipeline (`make run-databridge`) exercises the same control-plane flow end-to-end with no
 > operators installed — start there.
+
+## Engine verification (live)
+| Engine | Discover | Full-load | Validate | CDC | Cutover |
+|---|---|---|---|---|---|
+| Postgres | live | live | live | live | live |
+| MySQL / MariaDB / MongoDB | live | live | live | pending (needs Kafka stack) | pending |
+| Oracle / SQL Server | live | via Debezium `initial` | advisory | pending | pending |

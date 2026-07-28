@@ -301,19 +301,31 @@ stream reports caught-up (0).
   URIs in the loader + validation Jobs omitted `authSource=admin`, so authenticated Mongo sources failed
   SCRAM auth (the mongo tools default the auth db to the app db, not `admin`). The **full-load copied the
   data** (3 customers + 1 order) and **validate confirmed exact document-count parity** (plan → `validated`).
-- **Follow-ups (verify on live infra)**: **streaming CDC + cutover** for the non-Postgres engines, and
-  full-load for SQL Server/Oracle (MySQL + MariaDB + MongoDB are verified through full-load+validate;
-  Postgres through CDC; Oracle/SQL Server full-load is by design the Debezium snapshot → folds into CDC) —
-  the Kafka/Debezium/edge-operator stack is not installed on the shared k3s lab, so these remain
-  wired + unit-tested but not yet live-verified. cross-engine per-table row-count
-  validation for heterogeneous plans is advisory (parity confirmed by snapshot/stream convergence
-  rather than a source-vs-edge count Job).
-- **CDC Connect image — now multi-engine** (`deploy/databridge/connect/Dockerfile`, build-validated): one
-  Strimzi-based image bundles the Debezium PostgreSQL + MySQL/MariaDB + MongoDB source connectors, the
-  Aiven JDBC sink (with Postgres/MySQL/SQL Server/Oracle drivers), and the MongoDB Kafka sink — so every
-  engine's CDC can run from a single `ATLAS_DATABRIDGE_CONNECT_IMAGE`. Live CDC for the non-Postgres
-  engines still needs the Kafka/Debezium *stack running* (Strimzi operator + a Kafka cluster), which is
-  not installed on the shared lab cluster — the image is the buildable prerequisite, not the running stack.
+### Engine verification matrix (live)
+
+| Engine | Discover | Full-load | Validate | CDC | Cutover |
+|---|---|---|---|---|---|
+| Postgres | **live** | **live** | **live** | **live** | **live** |
+| MySQL | **live** | **live** | **live** | pending | pending |
+| MariaDB | **live** | **live** | **live** | pending | pending |
+| MongoDB | **live** | **live** | **live** | pending | pending |
+| SQL Server | **live** | via Debezium `initial` | advisory | pending | pending |
+| Oracle | **live** | via Debezium `initial` | advisory | pending | pending |
+
+Fake path covers **all six** engines discover→cutover in CI (`tests/databridge_engines.rs`).
+
+- **Follow-ups (verify on live infra)**: **streaming CDC + cutover** for the non-Postgres engines
+  (MySQL / MariaDB / MongoDB are verified through full-load+validate; Postgres through CDC;
+  Oracle/SQL Server full-load is by design the Debezium snapshot → folds into CDC). Shared lab now
+  has deploy scaffolding (`deploy/databridge/10-kafka.yaml` + multi-engine Connect Dockerfile);
+  installing that stack on the shared k3s lab is still an operator step. Cross-engine per-table
+  row-count validation for heterogeneous plans is advisory (parity confirmed by snapshot/stream
+  convergence rather than a source-vs-edge count Job).
+- **CDC Connect image — multi-engine** (`deploy/databridge/connect/Dockerfile`): one Strimzi-based
+  image bundles Debezium PostgreSQL + MySQL/MariaDB + MongoDB + Oracle + SQL Server source connectors,
+  the Aiven JDBC sink (Postgres/MySQL/SQL Server/Oracle drivers), and the MongoDB Kafka sink.
+  `start_cdc` in real mode **refuses** without `ATLAS_DATABRIDGE_CONNECT_IMAGE` set. Lab Kafka CR:
+  `deploy/databridge/10-kafka.yaml` (applied by `up.sh`).
 
 ### Full-load secret assumptions
 The real full-load Job runs in `zyvor-databridge`, so the **source Secret must exist in that

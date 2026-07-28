@@ -24,12 +24,12 @@ export default function DR() {
         title="Disaster Recovery"
         state={
           status
-            ? `${status.peers ?? 0} peer${(status.peers ?? 0) === 1 ? "" : "s"} · ${status.mirrors ?? 0} mirror${(status.mirrors ?? 0) === 1 ? "" : "s"} — RBD mirroring & failover (docs/DR.md).`
+            ? `${status.peers ?? 0} peer${(status.peers ?? 0) === 1 ? "" : "s"} · ${status.mirrors ?? 0} mirror${(status.mirrors ?? 0) === 1 ? "" : "s"} — control plane ${status.control_plane_ready ? "ready" : "incomplete"}; dataplane unverified.`
             : "Cross-cluster RBD mirroring & failover — control plane ready; live mirror needs a peer cluster."
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5" style={{ marginBottom: 0 }}>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-6" style={{ marginBottom: 0 }}>
         <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
           <div className="at-caption">Peers</div>
           <div className="at-val md">{status?.peers ?? "—"}</div>
@@ -52,6 +52,14 @@ export default function DR() {
             {status?.worst_rpo_seconds != null ? `${status.worst_rpo_seconds}s` : "—"}
           </div>
         </div>
+        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+          <div className="at-caption">Dataplane</div>
+          <div className="at-val md" style={{ fontSize: 14 }}>
+            <Badge kind={status?.dataplane_verified || status?.verified ? "success" : "warning"}>
+              {status?.dataplane_verified || status?.verified ? "verified" : "unverified"}
+            </Badge>
+          </div>
+        </div>
       </div>
 
       <div className="at-panel">
@@ -72,6 +80,12 @@ export default function DR() {
             <Badge kind={c.ok ? "success" : "danger"}>{c.ok ? "ok" : "fail"}</Badge>
             <span className="mono" style={{ fontSize: 12 }}>{c.id}</span>
             <span className="at-sub" style={{ margin: 0, flex: 1 }}>{c.detail}</span>
+          </div>
+        ))}
+        {(preflight?.warnings ?? []).map((w: string, i: number) => (
+          <div key={`w-${i}`} className="at-list-row" style={{ alignItems: "center" }}>
+            <Badge kind="warning">warn</Badge>
+            <span className="at-sub" style={{ margin: 0, flex: 1 }}>{w}</span>
           </div>
         ))}
         {(preflight?.checks ?? []).length === 0 && (
