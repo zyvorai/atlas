@@ -24,8 +24,11 @@ export function Toaster() {
       {items.map((t) => (
         <div
           key={t.id}
-          className="glass-card px-3.5 py-2.5 flex items-center gap-2.5 text-sm animate-fade-in"
-          style={{ borderLeft: `3px solid ${t.kind === "ok" ? "#30D69E" : t.kind === "err" ? "#E23B3B" : "#38BDF8"}` }}
+          className="at-glass px-3.5 py-2.5 flex items-center gap-2.5 text-sm animate-fade-in"
+          style={{
+            borderRadius: 14,
+            borderLeft: `3px solid ${t.kind === "ok" ? "#30D69E" : t.kind === "err" ? "#E23B3B" : "#38BDF8"}`,
+          }}
         >
           {t.kind === "ok" ? (
             <CheckCircle2 size={16} className="text-success shrink-0" />

@@ -352,8 +352,8 @@ const SECTION_ICON: Record<string, LucideIcon> = {
 };
 
 /**
- * Zeus-style icon section menu: square icon trigger + hover/click flyout with icon rows.
- * Portaled + fixed so the nav strip never clips the panel (Zeus EnhancedLayout lesson).
+ * macOS 26–inspired section menu: capsule title + liquid-glass flyout.
+ * Portaled + fixed so the nav strip never clips the panel.
  */
 function SectionDropdown({
   short,
@@ -395,7 +395,7 @@ function SectionDropdown({
     }
     const place = () => {
       const r = btnRef.current!.getBoundingClientRect();
-      const menuW = 240;
+      const menuW = 248;
       const left = Math.min(Math.max(8, r.left), window.innerWidth - menuW - 8);
       setPos({ top: r.bottom, left });
     };
@@ -448,6 +448,7 @@ function SectionDropdown({
         onClick={() => (open ? onClose() : onOpen())}
       >
         <Icon className="at-topnav-secico" strokeWidth={2} aria-hidden />
+        <span className="at-topnav-dd-title">{short}</span>
       </button>
       {open &&
         pos &&
@@ -532,6 +533,7 @@ function PrimaryNav() {
         className={({ isActive }) => cx("at-topnav-home", isActive && "on")}
       >
         <LayoutDashboard className="at-topnav-secico" strokeWidth={2} aria-hidden />
+        <span className="at-topnav-dd-title">Deck</span>
       </NavLink>
       {grouped.map((g) => (
         <SectionDropdown

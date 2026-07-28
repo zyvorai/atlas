@@ -288,9 +288,9 @@ export function Modal({
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center p-4" onMouseDown={onClose}>
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/45 backdrop-blur-md" />
       <div
-        className="relative at-panel w-[460px] max-w-[94vw] p-5 animate-fade-in"
+        className="relative at-glass w-[460px] max-w-[94vw] p-5 animate-fade-in"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 mb-3">
