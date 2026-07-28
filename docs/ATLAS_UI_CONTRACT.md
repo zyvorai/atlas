@@ -75,7 +75,7 @@ Chart floor · The Sounding (no capacity donut) · Echogram · Basins · Seabed.
 | **D** Telemetry | one wide echogram + breakdowns | `/observatory` |
 | **E** Ops | `at-instrs` / `at-stack` / Soundings kit remap | Ceph, Access, Maintenance, DR, Cluster |
 
-Kit surfaces (`GlassSection`, `StatCard`, `SlideOver`, buttons, fields, badges) render in Soundings tokens under `.at-app`. Default shell theme is mineral void + survey cyan.
+Kit surfaces (`GlassSection`, `StatCard`, `SlideOver`, buttons, fields, badges) render in Soundings tokens under `.at-app`. Default shell theme is **Carbon** (flat IBM-style gray + blue).
 
 ## Shell chrome (Zeus metal patterns)
 
@@ -83,11 +83,13 @@ Single metal **topbar** (brand · centered icon section menus · quick links · 
 follows Zeus OS ~Apr 2026 EnhancedLayout / `dark-steel` / `zinc-metal` (`f0360bae3`): square
 `barIcon` triggers, hover/click flyouts, Look & feel menu (`LayoutTemplate`), icon search (⌘K),
 `TOP_BAR_QUICK_LINKS` (Settings / Observatory / API Docs), menubar capacity sparkline + I/O + recovery
-chips + cluster pulse, and a hamburger drawer below ~960px.
+chips + cluster pulse, and a hamburger drawer below ~960px. Brand / nav / actions use a 3-column
+grid so the subtitle never paints under icon menus.
 
 | Atlas theme (`data-ui-shell`) | Look |
 |---|---|
-| **nebula** (default) | Metal chrome + **survey cyan** (Soundings identity) |
+| **carbon** (default) | Flat Carbon gray (`#161616` / `#262626`) + `#78a9ff` |
+| **nebula** | Metal chrome + **survey cyan** (Soundings identity) |
 | **dark** | **Zeus dark-steel** (brushed metal + `#5d90f7` / `#8ec5ff`) |
 | **zinc** | **Zeus zinc-metal** (brushed zinc + amber) |
 | **aurora** | Neon cyan/violet/pink canvas |

@@ -42,7 +42,45 @@
     --radius: 0.75rem;
   }
 
-  /* Nebula = Soundings identity (mineral void + survey cyan) — default shell. */
+  /* Carbon = flat IBM-style gray — Atlas default shell. */
+  :root[data-ui-shell="carbon"] {
+    --background: 0 0% 9%;
+    --card: 0 0% 15%;
+    --card-foreground: 0 0% 96%;
+    --foreground: 0 0% 96%;
+    --popover: 0 0% 15%;
+    --primary: 214 96% 74%;
+    --primary-foreground: 0 0% 9%;
+    --ring: 214 96% 74%;
+    --info: 214 96% 74%;
+    --muted-foreground: 0 0% 64%;
+    --border: 0 0% 22%;
+    --secondary: 0 0% 18%;
+    --accent: 0 0% 18%;
+    --input: 0 0% 22%;
+
+    --at-void: #161616;
+    --at-abyss: #1e1e1e;
+    --at-shelf: #262626;
+    --at-ridge: #2e2e2e;
+    --at-crest: #393939;
+    --at-line: rgba(244, 244, 244, 0.1);
+    --at-line-2: rgba(244, 244, 244, 0.16);
+    --at-line-3: rgba(244, 244, 244, 0.28);
+    --at-ink: #f4f4f4;
+    --at-ink-2: #e0e0e0;
+    --at-ink-3: #c6c6c6;
+    --at-ink-4: #8d8d8d;
+    --at-cyan: #78a9ff;
+    --at-cyan-2: #a6c8ff;
+    --at-cyan-wash: rgba(120, 169, 255, 0.12);
+    --at-cyan-glow: rgba(120, 169, 255, 0.28);
+    --at-ok: #42be65;
+    --at-warn: #f1c21b;
+    --at-err: #fa4d56;
+  }
+
+  /* Nebula = Soundings identity (mineral void + survey cyan). */
   :root[data-ui-shell="nebula"] {
     --background: 200 30% 3%;
     --card: 200 22% 7%;
@@ -381,6 +419,75 @@
     border-color: rgba(245, 158, 11, 0.45);
     background: rgba(245, 158, 11, 0.12);
   }
+  /* Carbon shell — flat gray layers, IBM blue accent */
+  :root[data-ui-shell="carbon"] .tahoe-canvas {
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(120, 169, 255, 0.06), transparent 55%),
+      linear-gradient(180deg, #161616 0%, #1a1a1a 40%, #121212 100%);
+  }
+  :root[data-ui-shell="carbon"] .btn-primary {
+    background: #78a9ff;
+    color: #161616;
+    border: 1px solid #a6c8ff;
+    box-shadow: none;
+  }
+  :root[data-ui-shell="carbon"] .at-rail {
+    background: #262626;
+    border-bottom-color: #393939;
+    box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+  }
+  :root[data-ui-shell="carbon"] .at-brand-logo {
+    color: #78a9ff;
+    background: #161616;
+    border-color: #393939;
+    box-shadow: none;
+  }
+  :root[data-ui-shell="carbon"] .at-iconbtn {
+    color: #c6c6c6;
+    border-color: #393939;
+    background: #1e1e1e;
+    box-shadow: none;
+  }
+  :root[data-ui-shell="carbon"] .at-iconbtn:hover {
+    color: #f4f4f4;
+    border-color: #525252;
+    background: #393939;
+  }
+  :root[data-ui-shell="carbon"] .at-topnav-home.on,
+  :root[data-ui-shell="carbon"] .at-topnav-dd.on .at-topnav-ddbtn,
+  :root[data-ui-shell="carbon"] .at-quick-link.on {
+    background: rgba(120, 169, 255, 0.12);
+    border-color: rgba(120, 169, 255, 0.35);
+    color: #f4f4f4;
+  }
+  :root[data-ui-shell="carbon"] .at-topnav-home.on::after,
+  :root[data-ui-shell="carbon"] .at-topnav-dd.on .at-topnav-ddbtn::after,
+  :root[data-ui-shell="carbon"] .at-quick-link.on::after {
+    background: linear-gradient(90deg, transparent, #78a9ff, transparent);
+  }
+  :root[data-ui-shell="carbon"] .at-topnav-menu,
+  :root[data-ui-shell="carbon"] .at-theme-menu,
+  :root[data-ui-shell="carbon"] .at-drawer {
+    background: #262626;
+    border-color: #393939;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+  }
+  :root[data-ui-shell="carbon"] .at-panel {
+    background: #1e1e1e;
+    border: 1px solid #393939;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: hidden;
+  }
+  :root[data-ui-shell="carbon"] .at-menubar-metrics {
+    border-color: #393939;
+    background: #1e1e1e;
+  }
+  :root[data-ui-shell="carbon"] .at-choice.on {
+    border-color: rgba(120, 169, 255, 0.45);
+    background: rgba(120, 169, 255, 0.12);
+  }
+
   /* Nebula shell canvas + accents — Soundings survey cyan */
   :root[data-ui-shell="nebula"] .tahoe-canvas {
     background:

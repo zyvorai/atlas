@@ -11,6 +11,7 @@ const REMEMBER_FLAG_KEY = "atlas.login-remember";
 const DEFAULT_USER = "admin";
 
 const THEME_OPTIONS: { id: Theme; label: string }[] = [
+  { id: "carbon", label: "Carbon" },
   { id: "nebula", label: "Nebula" },
   { id: "dark", label: "Dark steel" },
   { id: "zinc", label: "Zinc metal" },

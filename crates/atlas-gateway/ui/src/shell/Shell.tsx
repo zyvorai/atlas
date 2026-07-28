@@ -101,30 +101,34 @@ function MenuBar({
 
   return (
     <header className="at-rail">
-      <button
-        type="button"
-        className="at-iconbtn at-menu-burger"
-        title="Open navigation"
-        aria-label="Open navigation"
-        onClick={onOpenNav}
-      >
-        <Menu size={16} strokeWidth={2} />
-      </button>
+      <div className="at-rail-brand">
+        <button
+          type="button"
+          className="at-iconbtn at-menu-burger"
+          title="Open navigation"
+          aria-label="Open navigation"
+          onClick={onOpenNav}
+        >
+          <Menu size={16} strokeWidth={2} />
+        </button>
 
-      <div className="at-mark">
-        <span className="at-brand-logo" aria-hidden>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="3" fill="currentColor" />
-            <circle cx="12" cy="12" r="6.5" stroke="currentColor" strokeWidth="1.3" opacity=".62" />
-            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.1" opacity=".3" />
-          </svg>
-        </span>
-        <span className="at-wordmark">Atlas</span>
-        <span className="at-mark-sub">Storage Center</span>
+        <div className="at-mark">
+          <span className="at-brand-logo" aria-hidden>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="3" fill="currentColor" />
+              <circle cx="12" cy="12" r="6.5" stroke="currentColor" strokeWidth="1.3" opacity=".62" />
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.1" opacity=".3" />
+            </svg>
+          </span>
+          <span className="at-wordmark">Atlas</span>
+          <span className="at-mark-sub">Storage Center</span>
+        </div>
       </div>
 
-      <PrimaryNav />
-      <QuickLinks />
+      <div className="at-rail-center">
+        <PrimaryNav />
+        <QuickLinks />
+      </div>
 
       <div className="at-rail-actions">
         <MenubarLiveMetrics />
@@ -144,7 +148,7 @@ function MenuBar({
             type="button"
             className="at-iconbtn at-look-btn"
             title={`Look & feel: ${themeTitle(theme)}`}
-            aria-label={`Look & feel — ${themeTitle(theme)}. Choose Nebula, Dark steel, Zinc metal, or Aurora.`}
+            aria-label={`Look & feel — ${themeTitle(theme)}. Choose Carbon, Nebula, Dark steel, Zinc metal, or Aurora.`}
             aria-expanded={themeOpen}
             aria-haspopup="menu"
             onClick={() => setThemeOpen((v) => !v)}

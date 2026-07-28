@@ -138,9 +138,10 @@
   z-index: 70;
   height: var(--rail-h);
   flex-shrink: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  column-gap: 12px;
   padding: 0 var(--page-inset);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 42%),
@@ -152,13 +153,23 @@
     0 12px 32px rgba(0, 0, 0, 0.42);
   backdrop-filter: none;
 }
-.at-menu-burger {
+.at-rail-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-shrink: 0;
+  z-index: 2;
+}
+/* Must beat .at-iconbtn { display:grid } — otherwise the burger leaks onto every width. */
+.at-iconbtn.at-menu-burger {
   display: none;
 }
 .at-mark {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
   flex-shrink: 0;
 }
 .at-brand-logo {
@@ -180,6 +191,7 @@
   font-size: 14px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 .at-mark-sub {
   color: var(--at-ink-3);
@@ -188,15 +200,23 @@
   padding-left: 12px;
   margin-left: 2px;
   border-left: 1px solid var(--at-line-2);
+  white-space: nowrap;
+}
+.at-rail-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
 }
 .at-rail-nav {
-  flex: 1;
-  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 2px;
-  overflow: visible;
+  min-width: 0;
+  overflow: hidden;
 }
 .at-quick-links {
   display: flex;
@@ -828,23 +848,28 @@
   flex-shrink: 0;
 }
 
-@media (max-width: 960px) {
-  .at-menu-burger {
-    display: grid;
-  }
-  .at-rail-nav,
-  .at-quick-links {
-    display: none;
-  }
+@media (max-width: 1180px) {
   .at-mark-sub {
     display: none;
+  }
+}
+@media (max-width: 960px) {
+  .at-iconbtn.at-menu-burger {
+    display: grid;
+  }
+  .at-rail-center {
+    display: none;
+  }
+  .at-rail {
+    grid-template-columns: auto 1fr;
+    column-gap: 6px;
+  }
+  .at-rail-actions {
+    justify-self: end;
   }
   .at-health .msg,
   .at-health .sep {
     display: none;
-  }
-  .at-rail {
-    gap: 6px;
   }
 }
 
