@@ -16,12 +16,19 @@ export interface Module {
   section: string;
 }
 
-/** Icon shortcuts after primary nav (Zeus TOP_BAR_QUICK_LINKS pattern; Atlas targets). */
-export const TOP_BAR_QUICK_LINKS: Module[] = [
-  { id: "ql-settings", codename: "settings", label: "Settings", path: "/settings", icon: Settings, section: "GOVERNANCE" },
-  { id: "ql-observatory", codename: "orrery", label: "Observatory", path: "/observatory", icon: Orbit, section: "OBSERVABILITY" },
-  { id: "ql-api-docs", codename: "hermes-docs", label: "API Docs", path: "/api-docs", icon: BookOpen, section: "GOVERNANCE" },
+/** Menubar shortcut controls — macOS 26–style Control Center chips pinned to the rail. */
+export const MENUBAR_CONTROLS: (Module & { shortcut?: string })[] = [
+  { id: "ctl-deck", codename: "olympus", label: "Deck", path: "/", icon: LayoutDashboard, section: "STORAGE", shortcut: "H" },
+  { id: "ctl-volumes", codename: "atlas", label: "Volumes", path: "/volumes", icon: HardDrive, section: "STORAGE" },
+  { id: "ctl-jobs", codename: "nike", label: "Jobs", path: "/jobs", icon: Clock, section: "OBSERVABILITY" },
+  { id: "ctl-alerts", codename: "hermes", label: "Alerts", path: "/alerts", icon: Bell, section: "OBSERVABILITY" },
+  { id: "ctl-ceph", codename: "kraken", label: "Ceph", path: "/ceph", icon: Aperture, section: "INFRASTRUCTURE" },
+  { id: "ctl-observatory", codename: "orrery", label: "Observatory", path: "/observatory", icon: Orbit, section: "OBSERVABILITY" },
+  { id: "ctl-settings", codename: "settings", label: "Settings", path: "/settings", icon: Settings, section: "GOVERNANCE" },
 ];
+
+/** @deprecated Prefer MENUBAR_CONTROLS — kept for any external imports. */
+export const TOP_BAR_QUICK_LINKS = MENUBAR_CONTROLS;
 
 export const MODULES: Module[] = [
   { id: "overview", codename: "olympus", label: "Command Deck", path: "/", icon: LayoutDashboard, section: "STORAGE" },

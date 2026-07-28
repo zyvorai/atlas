@@ -10,7 +10,6 @@ import {
   Gauge,
   HardDrive as HardDriveIcon,
   KeyRound,
-  LayoutDashboard,
   LayoutTemplate,
   Loader2,
   LogOut,
@@ -23,7 +22,7 @@ import {
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { MODULES, SECTIONS, TOP_BAR_QUICK_LINKS, type Module } from "../nav/modules";
+import { MODULES, SECTIONS, MENUBAR_CONTROLS, type Module } from "../nav/modules";
 import { http } from "../api/client";
 import { useAlerts, useClusters, useJobs } from "../api/hooks";
 import { useUi } from "../store/ui";
@@ -127,10 +126,11 @@ function MenuBar({
 
       <div className="at-rail-center">
         <PrimaryNav />
-        <QuickLinks />
       </div>
 
       <div className="at-rail-actions">
+        <MenubarControls />
+        <span className="at-rail-sep" aria-hidden />
         <MenubarLiveMetrics />
 
         <button
@@ -483,19 +483,21 @@ function SectionDropdown({
   );
 }
 
-function QuickLinks() {
+function MenubarControls() {
   return (
-    <nav className="at-quick-links" aria-label="Quick links">
-      <span className="at-rail-sep at-quick-sep" aria-hidden />
-      {TOP_BAR_QUICK_LINKS.map((m) => (
+    <nav className="at-controls" aria-label="Shortcuts">
+      {MENUBAR_CONTROLS.map((m) => (
         <NavLink
           key={m.id}
           to={m.path}
-          title={m.label}
-          aria-label={m.label}
-          className={({ isActive }) => cx("at-quick-link", isActive && "on")}
+          end={m.path === "/"}
+          title={m.shortcut ? `${m.label} (${m.shortcut})` : m.label}
+          aria-label={m.shortcut ? `${m.label}, shortcut ${m.shortcut}` : m.label}
+          className={({ isActive }) => cx("at-control", isActive && "on")}
         >
-          <m.icon className="at-topnav-secico" strokeWidth={2} aria-hidden />
+          <m.icon className="at-control-ico" strokeWidth={2} aria-hidden />
+          <span className="at-control-label">{m.label}</span>
+          {m.shortcut ? <kbd className="at-control-kbd">{m.shortcut}</kbd> : null}
         </NavLink>
       ))}
     </nav>
@@ -526,16 +528,6 @@ function PrimaryNav() {
 
   return (
     <nav className="at-rail-nav" aria-label="Primary">
-      <NavLink
-        to="/"
-        end
-        title="Command Deck"
-        aria-label="Command Deck"
-        className={({ isActive }) => cx("at-topnav-home", isActive && "on")}
-      >
-        <LayoutDashboard className="at-topnav-secico" strokeWidth={2} aria-hidden />
-        <span className="at-topnav-dd-title">Deck</span>
-      </NavLink>
       {grouped.map((g) => (
         <SectionDropdown
           key={g.sec}
@@ -590,20 +582,18 @@ function MobileNavDrawer({ open, onClose }: { open: boolean; onClose: () => void
           </button>
         </div>
         <div className="at-drawer-body">
-          <NavLink to="/" end className={({ isActive }) => cx("at-drawer-item", isActive && "on")} onClick={onClose}>
-            <LayoutDashboard size={16} strokeWidth={2} aria-hidden />
-            <span>Command Deck</span>
-          </NavLink>
           <div className="at-drawer-label">Shortcuts</div>
-          {TOP_BAR_QUICK_LINKS.map((m) => (
+          {MENUBAR_CONTROLS.map((m) => (
             <NavLink
               key={m.id}
               to={m.path}
+              end={m.path === "/"}
               className={({ isActive }) => cx("at-drawer-item", isActive && "on")}
               onClick={onClose}
             >
               <m.icon size={16} strokeWidth={2} aria-hidden />
-              <span>{m.label}</span>
+              <span className="grow">{m.label}</span>
+              {m.shortcut ? <kbd className="at-control-kbd">{m.shortcut}</kbd> : null}
             </NavLink>
           ))}
           {grouped.map((g) => (
@@ -778,7 +768,7 @@ const SHORTCUTS: [string, string][] = [
   ["⌘K / Ctrl-K", "Open command palette"],
   ["↑ ↓ / Enter", "Navigate & open in palette"],
   ["?", "Show this help"],
-  ["Esc", "Close dialogs"],
+  ["Esc", "Close dialogs / menus"],
 ];
 
 export function Shell() {

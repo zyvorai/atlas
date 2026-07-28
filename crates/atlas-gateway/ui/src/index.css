@@ -347,7 +347,8 @@
   }
   :root[data-ui-shell="dark"] .at-topnav-home.on,
   :root[data-ui-shell="dark"] .at-topnav-dd.on .at-topnav-ddbtn,
-  :root[data-ui-shell="dark"] .at-quick-link.on {
+  :root[data-ui-shell="dark"] .at-quick-link.on,
+  :root[data-ui-shell="dark"] .at-control.on {
     background: rgba(255, 255, 255, 0.14);
     border-color: rgba(255, 255, 255, 0.12);
     color: #eef3f8;
@@ -439,7 +440,8 @@
   }
   :root[data-ui-shell="zinc"] .at-topnav-home.on,
   :root[data-ui-shell="zinc"] .at-topnav-dd.on .at-topnav-ddbtn,
-  :root[data-ui-shell="zinc"] .at-quick-link.on {
+  :root[data-ui-shell="zinc"] .at-quick-link.on,
+  :root[data-ui-shell="zinc"] .at-control.on {
     background: rgba(245, 158, 11, 0.12);
     border-color: rgba(245, 158, 11, 0.28);
     color: #fafafa;
@@ -520,7 +522,8 @@
   }
   :root[data-ui-shell="carbon"] .at-topnav-home.on,
   :root[data-ui-shell="carbon"] .at-topnav-dd.on .at-topnav-ddbtn,
-  :root[data-ui-shell="carbon"] .at-quick-link.on {
+  :root[data-ui-shell="carbon"] .at-quick-link.on,
+  :root[data-ui-shell="carbon"] .at-control.on {
     background: rgba(255, 255, 255, 0.12);
     border-color: rgba(69, 137, 255, 0.35);
     color: #f4f4f4;
@@ -806,6 +809,14 @@
 :root[data-density="compact"] .at-quick-link {
   width: 30px;
   height: 30px;
+}
+:root[data-density="compact"] .at-control {
+  height: 24px;
+  padding: 0 7px;
+}
+:root[data-density="compact"] .at-control-ico {
+  width: 13px;
+  height: 13px;
 }
 
 .animate-fade-in {
