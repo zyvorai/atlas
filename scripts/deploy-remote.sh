@@ -86,7 +86,8 @@ log "2/5 build image with podman on remote"
 $SSH "cd ~/${REMOTE_DIR} && podman build --ulimit nofile=65536:65536 -t atlas-gateway:dev -f Dockerfile ."
 
 log "3/5 import image into k3s containerd"
-$SSH "cd ~/${REMOTE_DIR} && podman save atlas-gateway:dev -o /tmp/atlas-gateway.tar && sudo k3s ctr images import /tmp/atlas-gateway.tar && rm -f /tmp/atlas-gateway.tar"
+# oci-archive avoids containerd docker-archive "doesn't support modifying existing images".
+$SSH "cd ~/${REMOTE_DIR} && podman save --format oci-archive -o /tmp/atlas-gateway.tar atlas-gateway:dev && sudo k3s ctr images import /tmp/atlas-gateway.tar && rm -f /tmp/atlas-gateway.tar"
 
 log "4/5 ensure auth Secret + apply k8s manifests + roll out the new image"
 # Auth is required in-cluster; create a strong jwt-secret (+ one-shot bootstrap token) if missing.

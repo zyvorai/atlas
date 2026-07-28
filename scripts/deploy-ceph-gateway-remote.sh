@@ -82,7 +82,9 @@ podman build --ulimit nofile=65536:65536 -t atlas-gateway:ceph -f Dockerfile.cep
 REMOTE
 
 log "3/6 import image into k3s containerd"
-"${SSH[@]}" "cd ~/${REMOTE_DIR} && podman save atlas-gateway:ceph -o /tmp/atlas-gateway-ceph.tar \
+# oci-archive: docker-archive import fails with "doesn't support modifying existing images"
+# when content-store blobs already exist from a prior import of the same layers.
+"${SSH[@]}" "cd ~/${REMOTE_DIR} && podman save --format oci-archive -o /tmp/atlas-gateway-ceph.tar atlas-gateway:ceph \
   && sudo k3s ctr images import /tmp/atlas-gateway-ceph.tar && rm -f /tmp/atlas-gateway-ceph.tar"
 
 # ${MANIFEST}'s own ClusterRoleBinding (atlas-gateway-readonly-cephns) already
