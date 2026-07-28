@@ -620,19 +620,6 @@ a.at-mark:focus-visible {
   align-items: flex-start;
   gap: 2px;
   width: 100%;
-  padding: 8px 12px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--at-ink-2);
-  text-align: left;
-  text-decoration: none;
-  cursor: pointer;
-  font: inherit;
-}
-  align-items: flex-start;
-  gap: 2px;
-  width: 100%;
   padding: 9px 12px;
   border: none;
   border-radius: 8px;
@@ -641,6 +628,7 @@ a.at-mark:focus-visible {
   font-family: var(--at-face);
   font-size: 13.5px;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
@@ -1859,6 +1847,15 @@ a.at-mark:focus-visible {
     0 0 0 0.5px rgba(0, 0, 0, 0.35);
   -webkit-backdrop-filter: saturate(1.45) blur(30px);
   backdrop-filter: saturate(1.45) blur(30px);
+}
+.at-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 .at-scrim {
   position: fixed;

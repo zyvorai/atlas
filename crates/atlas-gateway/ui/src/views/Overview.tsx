@@ -7,7 +7,7 @@ import { useAlerts, useCephOsdDf, useClusters, useForecast, useHistory, useOsds,
 import { history, onHistory, recordSummary, seed } from "../store/history";
 import { depth, depthWidth } from "../lib/depth";
 import { sendPrompt } from "../lib/prompts";
-import { fmtBytes, fmtBytesOpt, fmtForecastFill, fmtPct, fmtSi } from "../lib/format";
+import { fmtBytes, fmtBytesOpt, fmtBytesParts, fmtForecastFill, fmtPct, fmtSi } from "../lib/format";
 import { Echogram } from "../ui/Echogram";
 import { PageHead } from "../ui/PageHead";
 
@@ -138,15 +138,21 @@ export default function Overview() {
   const deepestDepth = deepest ? depth(deepest.pct) : null;
   const forecastLine = fmtForecastFill(forecast?.days_to_full, forecast?.growth_bytes_per_day);
   const health = cluster?.health || "unknown";
+  const hasSurvey = (s?.raw_capacity_bytes ?? 0) > 0;
+  const usedParts = hasSurvey ? fmtBytesParts(s?.used_capacity_bytes) : null;
 
   const stateLine = useMemo(() => {
-    const used = fmtBytes(s?.used_capacity_bytes);
-    const raw = fmtBytes(s?.raw_capacity_bytes);
+    const used = fmtBytesOpt(hasSurvey ? s?.used_capacity_bytes : null);
+    const raw = fmtBytesOpt(hasSurvey ? s?.raw_capacity_bytes : null);
     const vols = s?.volumes ?? 0;
     const parts: string[] = [];
-    parts.push(
-      `<b>${used}</b> occupied of ${raw} surveyed. ${vols} volume${vols === 1 ? "" : "s"} online`,
-    );
+    if (!hasSurvey) {
+      parts.push("Capacity not surveyed yet");
+    } else {
+      parts.push(
+        `<b>${used}</b> occupied of ${raw} surveyed. ${vols} volume${vols === 1 ? "" : "s"} online`,
+      );
+    }
     if (health === "warn" || health === "critical") {
       const tip = alerts?.[0]?.title;
       parts.push(
@@ -160,11 +166,11 @@ export default function Overview() {
       );
     } else if (recovering > 0) {
       parts.push(`<b>${recovering}</b> PG(s) rebuilding`);
-    } else {
+    } else if (hasSurvey) {
       parts.push("everything else is quiet");
     }
     return parts.join(". ") + ".";
-  }, [s, health, alerts, deepest, deepestDepth, recovering]);
+  }, [s, hasSurvey, health, alerts, deepest, deepestDepth, recovering]);
 
   const osdUp = osdRows.filter((o) => o.up).length;
   const osdTotal = osdRows.length;
@@ -240,23 +246,34 @@ export default function Overview() {
           <div className="at-sound-read">
             <div className="at-caption">Surveyed capacity</div>
             <div className="at-val xl">
-              {fmtBytes(s?.used_capacity_bytes).replace(/ .*/, "")}
-              <span className="at-unit">{fmtBytes(s?.used_capacity_bytes).split(" ").slice(-1)[0]} used</span>
+              {usedParts ? (
+                <>
+                  {usedParts.mag}
+                  <span className="at-unit">{usedParts.unit} used</span>
+                </>
+              ) : (
+                <>
+                  —
+                  <span className="at-unit">not surveyed</span>
+                </>
+              )}
             </div>
             <div className="at-sub">
-              of {fmtBytes(s?.raw_capacity_bytes)} raw · {fmtBytes(s?.available_capacity_bytes)} free
+              {hasSurvey
+                ? `of ${fmtBytesOpt(s?.raw_capacity_bytes)} raw · ${fmtBytesOpt(s?.available_capacity_bytes)} free`
+                : "Waiting on cluster capacity discovery"}
             </div>
             <div className="at-strata" title="used / free">
-              <i className="used" style={{ width: `${usedPct}%` }} />
+              <i className="used" style={{ width: `${hasSurvey ? usedPct : 0}%` }} />
             </div>
             <div className="at-strata-key">
               <span className="at-skey">
                 <span className="sw" style={{ background: "linear-gradient(90deg,var(--d2),var(--d3))" }} />
-                Used <b>{fmtBytes(s?.used_capacity_bytes)}</b>
+                Used <b>{hasSurvey ? fmtBytesOpt(s?.used_capacity_bytes) : "—"}</b>
               </span>
               <span className="at-skey">
                 <span className="sw" style={{ background: "var(--at-ridge)" }} />
-                Free <b>{fmtBytes(s?.available_capacity_bytes)}</b>
+                Free <b>{hasSurvey ? fmtBytesOpt(s?.available_capacity_bytes) : "—"}</b>
               </span>
             </div>
             <div className="at-sub" style={{ marginTop: 16 }}>

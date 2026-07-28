@@ -23,23 +23,19 @@ const VAR: Record<Variant, string> = {
   danger: "btn-danger",
 };
 
-export function Button({
-  variant = "secondary",
-  size,
-  loading,
-  icon: Icon,
-  children,
-  className,
-  ...rest
-}: {
-  variant?: Variant;
-  size?: "sm";
-  loading?: boolean;
-  icon?: React.ComponentType<{ size?: number }>;
-  children?: React.ReactNode;
-} & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+export const Button = React.forwardRef<
+  HTMLButtonElement,
+  {
+    variant?: Variant;
+    size?: "sm";
+    loading?: boolean;
+    icon?: React.ComponentType<{ size?: number }>;
+    children?: React.ReactNode;
+  } & React.ButtonHTMLAttributes<HTMLButtonElement>
+>(function Button({ variant = "secondary", size, loading, icon: Icon, children, className, ...rest }, ref) {
   return (
     <button
+      ref={ref}
       {...rest}
       disabled={rest.disabled || loading}
       className={cx("btn", VAR[variant], size === "sm" && "btn-sm", className)}
@@ -48,7 +44,8 @@ export function Button({
       {children}
     </button>
   );
-}
+});
+Button.displayName = "Button";
 
 export function Card({ className, children, hoverable }: { className?: string; children: React.ReactNode; hoverable?: boolean }) {
   return <div className={cx("at-card", hoverable && "hoverable", className)}>{children}</div>;
@@ -302,7 +299,7 @@ export function Modal({
           </button>
         </div>
         {children}
-        {footer && <div className="flex justify-end gap-2 mt-4">{footer}</div>}
+        {footer && <div className="at-modal-footer">{footer}</div>}
       </div>
     </div>,
     document.body,
@@ -330,6 +327,7 @@ export function FormModal({
   title,
   fields: fieldsProp,
   submitLabel = "Create",
+  danger = false,
   onSubmit,
 }: {
   open: boolean;
@@ -339,6 +337,8 @@ export function FormModal({
       when "Kind" is "backup". */
   fields: FormField[] | ((vals: Record<string, string>) => FormField[]);
   submitLabel?: string;
+  /** Use danger styling on the primary submit (e.g. irreversible creates). */
+  danger?: boolean;
   onSubmit: (v: Record<string, string>) => Promise<void> | void;
 }) {
   const [vals, setVals] = useState<Record<string, string>>({});
@@ -400,7 +400,7 @@ export function FormModal({
         <>
           <Button onClick={onClose}>Cancel</Button>
           <Button
-            variant="primary"
+            variant={danger ? "danger" : "primary"}
             loading={busy}
             disabled={missingRequired}
             onClick={async () => {

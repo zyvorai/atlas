@@ -22,6 +22,15 @@ export function fmtBytesOpt(n?: number | null): string {
   return fmtBytes(n);
 }
 
+/** Split fmtBytes into magnitude + unit for big readouts; null when capacity is unknown. */
+export function fmtBytesParts(n?: number | null): { mag: string; unit: string } | null {
+  if (n == null || Number.isNaN(Number(n))) return null;
+  const s = fmtBytes(n);
+  const sp = s.lastIndexOf(" ");
+  if (sp < 0) return { mag: s, unit: "" };
+  return { mag: s.slice(0, sp), unit: s.slice(sp + 1) };
+}
+
 /**
  * Actionable fill projection for Command Deck / Observatory.
  * Tiny growth rates produce absurd horizons (hundreds of thousands of days) — treat those as steady.
@@ -33,8 +42,12 @@ export function fmtForecastFill(
   if (days == null || !Number.isFinite(days) || days <= 0) return null;
   // > ~10 years is not an operator-actionable signal
   if (days > 3650) return null;
+  // Sub-MiB/day drift is noise on Ceph labs — don't claim a fill date.
+  if (growthBytesPerDay != null && growthBytesPerDay > 0 && growthBytesPerDay < 1024 * 1024) {
+    return null;
+  }
   const growth =
-    growthBytesPerDay != null && growthBytesPerDay > 0
+    growthBytesPerDay != null && growthBytesPerDay >= 1024 * 1024
       ? ` · +${fmtBytes(growthBytesPerDay)}/day`
       : "";
   if (days >= 365) return `Full in ~${(days / 365).toFixed(1)}y${growth}`;

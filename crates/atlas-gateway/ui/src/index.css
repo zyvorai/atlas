@@ -784,14 +784,20 @@
 :root[data-density="compact"] {
   --rail-h: 48px;
   --page-inset: 12px;
+  --at-row-pad-y: 7px;
+  --at-row-pad-x: 10px;
+  --at-stack-gap: 10px;
+  --at-ctrl-h: 26px;
 }
 :root[data-density="compact"] .ztable td,
 :root[data-density="compact"] .at-tbl td {
-  padding: 0.3rem 0.7rem;
+  padding: var(--at-row-pad-y) var(--at-row-pad-x);
+  font-size: 12.5px;
 }
 :root[data-density="compact"] .ztable th,
 :root[data-density="compact"] .at-tbl th {
-  padding: 0.35rem 0.7rem;
+  padding: 6px var(--at-row-pad-x);
+  font-size: 10px;
 }
 :root[data-density="compact"] .glass-card {
   border-radius: 0.7rem;
@@ -800,23 +806,87 @@
 :root[data-density="compact"] .at-main-scroll {
   --page-inset: 12px;
 }
-:root[data-density="compact"] .at-stack {
-  gap: 12px;
+:root[data-density="compact"] .at-stack,
+:root[data-density="compact"] .at-mod,
+:root[data-density="compact"] .at-form-grid,
+:root[data-density="compact"] .at-settings-body {
+  gap: var(--at-stack-gap);
+}
+:root[data-density="compact"] .at-panel-bar {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  min-height: 36px;
+}
+:root[data-density="compact"] .at-page-head,
+:root[data-density="compact"] .at-head {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  gap: 8px;
+}
+:root[data-density="compact"] .at-btn,
+:root[data-density="compact"] .btn {
+  height: var(--at-ctrl-h);
+  padding: 0 11px;
+  font-size: 12.5px;
+}
+:root[data-density="compact"] .btn-sm,
+:root[data-density="compact"] .at-act {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
 }
 :root[data-density="compact"] .at-iconbtn,
 :root[data-density="compact"] .at-topnav-home,
 :root[data-density="compact"] .at-topnav-ddbtn,
 :root[data-density="compact"] .at-quick-link {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
 }
 :root[data-density="compact"] .at-control {
   height: 24px;
-  padding: 0 7px;
+  width: 26px;
+  min-width: 26px;
 }
 :root[data-density="compact"] .at-control-ico {
   width: 13px;
   height: 13px;
+}
+:root[data-density="compact"] input.at-field,
+:root[data-density="compact"] .at-field,
+:root[data-density="compact"] select.at-field,
+:root[data-density="compact"] .field,
+:root[data-density="compact"] input.field,
+:root[data-density="compact"] select.field {
+  height: var(--at-ctrl-h);
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: 12.5px;
+}
+:root[data-density="compact"] .at-chip,
+:root[data-density="compact"] .at-badge-pill,
+:root[data-density="compact"] .badge {
+  font-size: 11px;
+  padding: 1px 7px;
+}
+:root[data-density="compact"] .at-list-row {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+:root[data-density="compact"] .at-slideover-body,
+:root[data-density="compact"] .at-choice {
+  padding: 10px 12px;
+}
+:root[data-density="compact"] .at-choice-grid {
+  gap: 8px;
+}
+:root[data-density="compact"] .at-caption {
+  font-size: 10px;
+}
+:root[data-density="compact"] .at-val.xl {
+  font-size: 1.65rem;
+}
+:root[data-density="compact"] .at-val.lg {
+  font-size: 1.2rem;
 }
 
 .animate-fade-in {

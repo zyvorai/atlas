@@ -13,7 +13,7 @@ import {
 } from "../api/hooks";
 import { history, onHistory, recordSummary, seed } from "../store/history";
 import { depth, depthWidth } from "../lib/depth";
-import { fmtBytes, fmtForecastFill, fmtPct, fmtSi } from "../lib/format";
+import { fmtBytes, fmtBytesOpt, fmtForecastFill, fmtPct, fmtSi } from "../lib/format";
 import { Echogram } from "../ui/Echogram";
 import { PageHead } from "../ui/PageHead";
 import { Spinner } from "../ui/kit";
@@ -305,7 +305,9 @@ export default function Observatory() {
       ? `${alerts.length} open alert${alerts.length === 1 ? "" : "s"} · estate at ${usedPct}% · ${forecastLine || "usage steady"}.`
       : deepest && deepest.pct >= 60
         ? `Deepest pool ${deepest.name} at ${fmtPct(deepest.pct)}% · estate ${usedPct}% occupied.`
-        : `${fmtBytes(s.used_capacity_bytes)} of ${fmtBytes(s.raw_capacity_bytes)} surveyed · ${s.volumes} volumes online.`;
+        : (s.raw_capacity_bytes ?? 0) > 0
+          ? `${fmtBytesOpt(s.used_capacity_bytes)} of ${fmtBytesOpt(s.raw_capacity_bytes)} surveyed · ${s.volumes} volumes online.`
+          : `Capacity not surveyed yet · ${s.volumes} volumes online.`;
 
   const ready = !!(s && backends && pools);
   const base = { s, backends, pools, fc, hist: serverHist, clusters, alerts };
@@ -413,7 +415,7 @@ export default function Observatory() {
                     </div>
                   </div>
                   <div className="at-basin-read">
-                    {fmtBytes(b.used_capacity_bytes)} of {fmtBytes(b.raw_capacity_bytes)}
+                    {fmtBytesOpt(b.used_capacity_bytes)} of {fmtBytesOpt(b.raw_capacity_bytes)}
                   </div>
                   <div className={`at-basin-pct ${b.d.cls} fg`}>{fmtPct(b.pct)}%</div>
                 </button>
@@ -440,7 +442,7 @@ export default function Observatory() {
                   </div>
                 </div>
                 <div className="at-basin-read">
-                  {fmtBytes(p.used_bytes)} of {fmtBytes(p.max_bytes)}
+                  {fmtBytesOpt(p.used_bytes)} of {fmtBytesOpt(p.max_bytes)}
                 </div>
                 <div className={`at-basin-pct ${p.d.cls} fg`}>{fmtPct(p.pct)}%</div>
               </button>

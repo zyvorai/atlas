@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Copy, Trash2, UserPlus } from "lucide-react";
 import { apiError, http, toast } from "../api/client";
 import { Badge, Button, Field, Label, Select } from "../ui/kit";
+import { del } from "../ui/confirm";
 import { PageHead } from "../ui/PageHead";
 import { Table } from "../ui/Table";
 
@@ -251,16 +252,17 @@ export default function Access() {
               <button
                 className="btn btn-ghost btn-sm"
                 title="Delete user"
-                onClick={async () => {
-                  if (!confirm(`Delete user ${u.username}?`)) return;
-                  try {
-                    await http.delete(`/auth/users/${encodeURIComponent(u.username)}`);
-                    toast("user deleted", "ok");
-                    await loadUsers();
-                  } catch (err) {
-                    toast(apiError(err), "err");
-                  }
-                }}
+                onClick={() =>
+                  del(`user ${u.username}`, async () => {
+                    try {
+                      await http.delete(`/auth/users/${encodeURIComponent(u.username)}`);
+                      toast("user deleted", "ok");
+                      await loadUsers();
+                    } catch (err) {
+                      toast(apiError(err), "err");
+                    }
+                  })
+                }
               >
                 <Trash2 size={13} />
               </button>

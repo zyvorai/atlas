@@ -35,10 +35,14 @@ describe("fmtForecastFill / forecastUrgency", () => {
     expect(fmtForecastFill(4000)).toBeNull();
     expect(forecastUrgency(4000)).toBeNull();
   });
+  it("hides sub-MiB/day noise even when days look finite", () => {
+    expect(fmtForecastFill(120, 64 * 1024)).toBeNull();
+  });
   it("formats actionable horizons", () => {
     expect(fmtForecastFill(2)).toBe("Full in ~2.0d");
     expect(fmtForecastFill(60)).toBe("Full in ~60d");
     expect(fmtForecastFill(400)).toMatch(/^Full in ~1\./);
+    expect(fmtForecastFill(30, 5 * 1024 ** 3)).toBe("Full in ~30d · +5.0 GiB/day");
     expect(forecastUrgency(2)).toBe("danger");
     expect(forecastUrgency(10)).toBe("warning");
     expect(forecastUrgency(30)).toBe("muted");
