@@ -83,6 +83,20 @@ Idempotent helpers the script owns (do not do these by hand first):
 **Prereq:** Rook Ceph Ready **and** CSI drivers installed (`zyvor-rbd-prod` must bind). See
 `deploy/rook-ceph-lab/up.sh --single-node` and [docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md).
 
+## `demo/record-atlas-demo.mjs` + `demo/upload-atlas-demo.py` — client demo reel
+Playwright drives a real Chromium session against a live gateway (login → Command Deck → Volumes →
+DataBridge → Observatory → Ceph), burns in a caption/subtitle bar per scene, and `recordVideo` +
+ffmpeg produce a 1440×900 (web) and 1920×1080 mp4. `upload-atlas-demo.py` pushes the result to
+YouTube via the Data API v3 (reuses the OAuth token convention from the other Zyvor product demos).
+
+```bash
+node scripts/demo/record-atlas-demo.mjs http://<gateway-host>:<port>
+python3 scripts/demo/upload-atlas-demo.py atlas-storage-center-demo-1080p.mp4 --token /path/to/token.json
+```
+
+Needs `playwright` (+ Chromium) resolvable from `scripts/demo/` and `ffmpeg` on PATH for the recorder;
+`google-auth-oauthlib` + `google-api-python-client` for the uploader.
+
 ## Related (under `deploy/`)
 - `deploy/rook-ceph-lab/up.sh` — Rook **v1.20.2** + Ceph **Squid v19.2.3** + `ceph-csi-drivers` +
   `zyvor-*` StorageClasses. Use `--single-node` (and `--cluster-only` if the operator is already up).
