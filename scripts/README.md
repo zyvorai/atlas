@@ -97,6 +97,21 @@ python3 scripts/demo/upload-atlas-demo.py atlas-storage-center-demo-1080p.mp4 --
 Needs `playwright` (+ Chromium) resolvable from `scripts/demo/` and `ffmpeg` on PATH for the recorder;
 `google-auth-oauthlib` + `google-api-python-client` for the uploader.
 
+## `demo/record-atlas-workflow-demo.mjs` + `demo/upload-atlas-workflow-demo.py` — hands-on workflow demo
+Same recorder pipeline, but it actually drives the write path instead of just touring pages: create
+a volume with an intent-based policy → open its detail drawer → snapshot it → expand it live to
+40 GiB → cut to `/jobs` and wait for both async jobs to genuinely reconcile (the fake driver
+simulates realistic Ceph resize/snapshot latency) → confirm the resize back on the Volumes list.
+Expect ~2 minutes end to end — this is real job completion time, not scripted delay.
+
+```bash
+node scripts/demo/record-atlas-workflow-demo.mjs http://<gateway-host>:<port>
+python3 scripts/demo/upload-atlas-workflow-demo.py atlas-create-volume-workflow-1080p.mp4 --token /path/to/token.json
+```
+
+Creates and deletes a real `wow-demo-<id>` volume against whatever gateway you point it at — clean
+up manually (`DELETE /api/atlas/v1/volumes/<id>?force=true`) if the script errors out mid-run.
+
 ## Related (under `deploy/`)
 - `deploy/rook-ceph-lab/up.sh` — Rook **v1.20.2** + Ceph **Squid v19.2.3** + `ceph-csi-drivers` +
   `zyvor-*` StorageClasses. Use `--single-node` (and `--cluster-only` if the operator is already up).
