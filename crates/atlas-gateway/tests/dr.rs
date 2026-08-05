@@ -209,5 +209,5 @@ async fn dr_peer_mirror_and_failover() {
     // Preflight always reports dataplane unverified; warnings carry the honesty note.
     let pre2: Value = c.get(format!("{base}/dr/preflight")).send().await.unwrap().json().await.unwrap();
     assert_eq!(pre2["dataplane_verified"], false);
-    assert!(pre2["warnings"].as_array().unwrap().len() >= 1);
+    assert!(!pre2["warnings"].as_array().unwrap().is_empty());
 }

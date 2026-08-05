@@ -306,8 +306,10 @@ mod tests {
 
     #[test]
     fn validate_rejects_weak_secret_when_auth_required() {
-        let mut c = Config::default();
-        c.auth_required = true;
+        let mut c = Config {
+            auth_required: true,
+            ..Default::default()
+        };
         assert!(c.validate_for_start().is_err());
         c.jwt_secret = "a-strong-enough-secret-at-least-32b!".into();
         assert!(c.validate_for_start().is_ok());
