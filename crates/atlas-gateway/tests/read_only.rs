@@ -519,7 +519,7 @@ async fn monitor_raises_and_resolves_alerts() {
             degraded_objects: 0,
         },
     };
-    atlas_inventory::upsert_discovery(&pool, "bkd_ceph_lab", &discovery)
+    atlas_inventory::upsert_discovery(&pool, "bkd_ceph_lab", &discovery, true)
         .await
         .unwrap();
 
@@ -564,7 +564,7 @@ async fn monitor_raises_and_resolves_alerts() {
         volumes: vec![],
         health: discovery.health.clone(),
     };
-    atlas_inventory::upsert_discovery(&pool, "bkd_ceph_lab", &healthy)
+    atlas_inventory::upsert_discovery(&pool, "bkd_ceph_lab", &healthy, true)
         .await
         .unwrap();
     atlas_monitor::evaluate(&pool).await.unwrap();

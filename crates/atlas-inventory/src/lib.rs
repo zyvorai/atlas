@@ -390,10 +390,14 @@ pub async fn list_bindings_for(
 }
 
 /// Persist a full discovery pass for `backend_id`, upserting cluster, pools, osds and volumes.
+/// `authoritative`: false for a fixture-backed driver (see `StorageDriver::is_fixture`) — its
+/// volume list is a fixed snapshot, not a complete rescan, so stale-volume pruning below is
+/// skipped rather than deleting anything the fixture simply didn't happen to mention.
 pub async fn upsert_discovery(
     pool: &SqlitePool,
     backend_id: &str,
     d: &DiscoveryResult,
+    authoritative: bool,
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
 
@@ -506,24 +510,29 @@ pub async fn upsert_discovery(
     // Prune block volumes this backend no longer reports (deleted from Ceph) so orphaned inventory
     // doesn't linger. Protective: never touch volumes a product owns (product_bindings) or that a
     // snapshot depends on. Self-healing — a transient miss just re-adds the row next discovery.
-    let pruned = sqlx::query(
-        "DELETE FROM storage_volumes
-          WHERE backend_id = ? AND kind = 'block' AND updated_at < ?
-            AND id NOT IN (
-                SELECT storage_resource_id FROM product_bindings WHERE storage_resource_type = 'volume'
-            )
-            AND id NOT IN (SELECT volume_id FROM storage_snapshots)",
-    )
-    .bind(backend_id)
-    .bind(&discovery_ts)
-    .execute(&mut *tx)
-    .await?;
-    if pruned.rows_affected() > 0 {
-        tracing::info!(
-            backend = backend_id,
-            pruned = pruned.rows_affected(),
-            "discovery.pruned_stale_volumes"
-        );
+    // Skipped entirely for a fixture-backed driver: its volume list never grows to include
+    // anything created directly via a job (e.g. a raw RBD image), so this would otherwise delete
+    // every such volume on the very next discovery pass.
+    if authoritative {
+        let pruned = sqlx::query(
+            "DELETE FROM storage_volumes
+              WHERE backend_id = ? AND kind = 'block' AND updated_at < ?
+                AND id NOT IN (
+                    SELECT storage_resource_id FROM product_bindings WHERE storage_resource_type = 'volume'
+                )
+                AND id NOT IN (SELECT volume_id FROM storage_snapshots)",
+        )
+        .bind(backend_id)
+        .bind(&discovery_ts)
+        .execute(&mut *tx)
+        .await?;
+        if pruned.rows_affected() > 0 {
+            tracing::info!(
+                backend = backend_id,
+                pruned = pruned.rows_affected(),
+                "discovery.pruned_stale_volumes"
+            );
+        }
     }
 
     tx.commit().await?;

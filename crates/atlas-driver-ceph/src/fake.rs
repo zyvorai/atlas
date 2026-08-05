@@ -96,6 +96,10 @@ impl StorageDriver for FakeCephDriver {
         &self.backend_id
     }
 
+    fn is_fixture(&self) -> bool {
+        true
+    }
+
     async fn discover(&self) -> Result<DiscoveryResult, DriverError> {
         Ok(DiscoveryResult {
             cluster: self.cluster(),

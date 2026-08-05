@@ -37,6 +37,15 @@ pub trait StorageDriver: Send + Sync {
     /// Stable identifier for the backend this driver instance manages.
     fn backend_id(&self) -> &str;
 
+    /// True for a driver backed by static fixtures rather than a real rescan of the backend.
+    /// Discovery uses this to skip pruning inventory rows the driver's `discover()` didn't
+    /// report: a fixture's volume list is a fixed snapshot, not the authoritative current
+    /// state, so an image this pass didn't mention (e.g. one created directly via a job,
+    /// bypassing the fixture) must not be treated as deleted.
+    fn is_fixture(&self) -> bool {
+        false
+    }
+
     /// Full discovery pass: cluster + pools + osds + volumes + health.
     async fn discover(&self) -> Result<DiscoveryResult, DriverError>;
 

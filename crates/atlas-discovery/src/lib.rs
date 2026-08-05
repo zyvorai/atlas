@@ -57,7 +57,7 @@ pub async fn run_discovery(
         }
     }
 
-    atlas_inventory::upsert_discovery(pool, &backend_id, &discovery)
+    atlas_inventory::upsert_discovery(pool, &backend_id, &discovery, !driver.is_fixture())
         .await
         .context("persisting discovery result")?;
 
