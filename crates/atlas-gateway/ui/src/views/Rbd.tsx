@@ -1,7 +1,7 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import { useEffect, useState } from "react";
 import { Plus, RefreshCw } from "lucide-react";
-import { http, submit, submitJob } from "../api/client";
+import { apiError, http, submit, submitJob } from "../api/client";
 import { useInvalidate, useRbdImages, useVolumes } from "../api/hooks";
 import { Button, FormModal, SlideOver } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
@@ -11,7 +11,7 @@ import { fmtBytes, gib } from "../lib/format";
 
 export default function Rbd() {
   const [pool, setPool] = useState("rbd-nvme-prod");
-  const { data, isError, refetch: refetchImages } = useRbdImages(pool);
+  const { data, isError, error, refetch: refetchImages } = useRbdImages(pool);
   const { data: vols } = useVolumes();
   const inv = useInvalidate();
   const refetch = () => inv("rbd");
@@ -61,6 +61,7 @@ export default function Rbd() {
         panelTitle={`Images · ${pool}`}
         rows={data?.images}
         error={isError}
+        errorDetail={isError ? apiError(error) : undefined}
         onRetry={() => refetchImages()}
         rowKey={(i) => i}
         empty="No RBD images in this pool."

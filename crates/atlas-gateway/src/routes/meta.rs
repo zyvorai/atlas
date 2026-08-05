@@ -174,8 +174,10 @@ pub(crate) async fn readyz(State(s): State<AppState>) -> (StatusCode, Json<Value
 
     // Probe the actual backend driver (bounded) instead of assuming healthy. Ok/Warn = reachable and
     // serving (possibly degraded); Critical/Unknown/error/timeout = not reachable.
+    // Keep this under the k8s readinessProbe timeoutSeconds (5s in deploy/k8s) so kubelet sees a
+    // real 503 rather than "context deadline exceeded" and flapping NotReady / empty Endpoints.
     let (driver_ok, driver_status) = match s.driver_for(CEPH_BACKEND_ID) {
-        Some(d) => match tokio::time::timeout(std::time::Duration::from_secs(5), d.health()).await {
+        Some(d) => match tokio::time::timeout(std::time::Duration::from_secs(3), d.health()).await {
             Ok(Ok(h)) => (
                 matches!(h.status, atlas_api_types::Health::Ok | atlas_api_types::Health::Warn),
                 format!("{:?}", h.status).to_lowercase(),

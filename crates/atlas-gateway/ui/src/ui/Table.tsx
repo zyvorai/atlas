@@ -23,6 +23,7 @@ export function Table<T>({
   onToggle,
   onToggleAll,
   error,
+  errorDetail,
   onRetry,
   soundings,
   panelTitle,
@@ -40,6 +41,8 @@ export function Table<T>({
   onToggle?: (key: string) => void;
   onToggleAll?: (keys: string[]) => void;
   error?: boolean;
+  /** Optional gateway/network detail under the generic failed-to-load line. */
+  errorDetail?: string;
   onRetry?: () => void;
   /** Soundings Index archetype — single at-panel + at-tbl + hover row actions. */
   soundings?: boolean;
@@ -75,6 +78,9 @@ export function Table<T>({
           <div className="py-10 text-center text-sm text-danger flex flex-col items-center gap-2">
             <AlertTriangle size={18} />
             <span>Failed to load — the request errored.</span>
+            {errorDetail ? (
+              <span className="text-xs text-muted-foreground mono max-w-md px-4">{errorDetail}</span>
+            ) : null}
             {onRetry ? (
               <Button size="sm" onClick={onRetry} className="mt-1">
                 Retry

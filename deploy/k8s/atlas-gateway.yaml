@@ -154,18 +154,24 @@ spec:
             - containerPort: 5110
           # Liveness: process is up (restart on failure). Readiness: dependencies OK — deep-checks the
           # DB + probes the backend driver, so a wedged gateway is depooled without being killed.
+          # readyz deep-probes the driver; keep timeoutSeconds ≥ the handler's 5s probe budget
+          # so kubelet doesn't flap NotReady on a slow-but-alive gateway.
           livenessProbe:
             httpGet:
               path: /livez
               port: 5110
             initialDelaySeconds: 3
             periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /readyz
               port: 5110
-            initialDelaySeconds: 3
+            initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
           volumeMounts:
             - name: data
               mountPath: /var/lib/atlas

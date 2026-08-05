@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import { Activity } from "lucide-react";
+import { isUnauthorized } from "../api/client";
 import { useClusters, useSummary } from "../api/hooks";
 
 function fmtOps(n: number | undefined): string {
@@ -16,13 +17,21 @@ export function MenubarLiveMetrics() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const historyRef = useRef<number[]>([]);
   const { data: summary } = useSummary();
-  const { data: clusters, isError } = useClusters();
+  const { data: clusters, isError, error } = useClusters();
 
   const pct = summary?.used_capacity_percent;
   const hasPct = pct != null && Number.isFinite(pct);
-  const health = isError ? "auth" : clusters?.[0]?.health || "unknown";
+  // Prefer last-known cluster health over mislabeling network flaps as auth failures.
+  const health =
+    isError && isUnauthorized(error) ? "auth" : clusters?.[0]?.health || (isError ? "unknown" : "unknown");
   const healthClass =
-    health === "ok" ? "ok" : health === "warn" ? "warn" : health === "critical" ? "crit" : "muted";
+    health === "ok"
+      ? "ok"
+      : health === "warn"
+        ? "warn"
+        : health === "critical" || health === "auth"
+          ? "crit"
+          : "muted";
 
   const readOps = summary?.client_io?.read_ops_total;
   const writeOps = summary?.client_io?.write_ops_total;
@@ -79,7 +88,11 @@ export function MenubarLiveMetrics() {
       ? `Recovery · ${recovering} PG · ${degraded} degraded objs`
       : "Recovery idle",
     summary ? `${summary.volumes} volumes · ${summary.pools} pools` : null,
-    isError ? "Auth required" : `Cluster ${String(health).toUpperCase()}`,
+    isError && isUnauthorized(error)
+      ? "Auth required"
+      : isError
+        ? "Cluster status unavailable"
+        : `Cluster ${String(health).toUpperCase()}`,
   ]
     .filter(Boolean)
     .join(" · ");

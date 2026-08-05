@@ -395,19 +395,38 @@ pub(crate) struct RbdListQuery {
     pool: Option<String>,
 }
 
-/// `GET /rbd-images?pool=` — list RBD image names in a pool, straight from Ceph.
+/// `GET /rbd-images?pool=` — list RBD image names in a pool.
+/// Real mode: live `rbd ls`. Fake/dev mode: no `rbd` binary in the image — derive names from the
+/// driver's volume fixture / inventory so the Storage Center RBD page still loads.
 pub(crate) async fn list_rbd_images(
     State(s): State<AppState>,
     Query(q): Query<RbdListQuery>,
 ) -> AppResult<Json<Value>> {
+    use atlas_common::config::CephDriverMode;
+
     let pool_name = q.pool.unwrap_or_else(|| DEFAULT_RBD_POOL.into());
     let driver = s
         .driver_for(CEPH_BACKEND_ID)
         .ok_or_else(|| AppError::Driver("no ceph driver".into()))?;
-    // The image list comes from the live cluster; the fake driver has no RBD CLI, so guard on real.
-    let _ = driver;
-    let images = atlas_driver_ceph::rbd_list(&pool_name)
-        .await
-        .map_err(|e| AppError::Driver(e.to_string()))?;
+
+    let images = match s.config.ceph_driver_mode {
+        CephDriverMode::Fake => {
+            let vols = driver
+                .list_volumes(&pool_name)
+                .await
+                .map_err(|e| AppError::Driver(e.to_string()))?;
+            vols.into_iter()
+                .filter_map(|v| {
+                    let native = v.backend_native_id.as_deref()?;
+                    let path = native.strip_prefix("rbd:").unwrap_or(native);
+                    let (p, img) = path.split_once('/')?;
+                    (p == pool_name).then(|| img.to_string())
+                })
+                .collect::<Vec<_>>()
+        }
+        CephDriverMode::Real => atlas_driver_ceph::rbd_list(&pool_name)
+            .await
+            .map_err(|e| AppError::Driver(e.to_string()))?,
+    };
     Ok(Json(json!({ "pool": pool_name, "images": images })))
 }

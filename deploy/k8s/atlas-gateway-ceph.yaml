@@ -177,18 +177,25 @@ spec:
             - containerPort: 5110
             - containerPort: 5111
             - containerPort: 5443
+          # livez is cheap; readyz shells out to `ceph` (often 0.5–2s under load). Default
+          # timeoutSeconds=1 caused ~2k Unhealthy flaps / 27h on the lab node and yanked the
+          # NodePort out from under the console (AUTH false-positive + "Failed to load").
           livenessProbe:
             httpGet:
               path: /livez
               port: 5110
             initialDelaySeconds: 5
             periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /readyz
               port: 5110
-            initialDelaySeconds: 3
+            initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
           volumeMounts:
             - name: ceph-config
               mountPath: /etc/ceph

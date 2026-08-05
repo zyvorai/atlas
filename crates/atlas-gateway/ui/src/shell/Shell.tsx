@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { MODULES, SECTIONS, MENUBAR_CONTROLS, type Module } from "../nav/modules";
-import { http } from "../api/client";
+import { http, isUnauthorized } from "../api/client";
 import { useAlerts, useClusters, useJobs } from "../api/hooks";
 import { useUi } from "../store/ui";
 import { THEME_OPTIONS, themeTitle } from "../lib/themes";
@@ -54,15 +54,24 @@ function MenuBar({
   onSpotlight: () => void;
   onOpenNav: () => void;
 }) {
-  const { data: clusters, isError: clustersErrored } = useClusters();
+  const { data: clusters, isError: clustersErrored, error: clustersError } = useClusters();
   const { data: jobs } = useJobs();
   const { data: openAlerts } = useAlerts("open");
   const runningJobs = (jobs || []).filter((j) =>
     ["running", "queued", "verifying", "pending"].includes(j.state),
   );
-  const h = clustersErrored ? "unauthenticated" : clusters?.[0]?.health || "unknown";
+  // Only a real 401 is AUTH. Connection refused / probe flaps / 5xx used to be mislabeled as
+  // "API requests rejected — check your session" while live metrics still worked from cache.
+  const authFailed = clustersErrored && isUnauthorized(clustersError);
+  const unreachable = clustersErrored && !authFailed && !clusters;
+  const h = authFailed
+    ? "unauthenticated"
+    : unreachable
+      ? "unreachable"
+      : clusters?.[0]?.health || "unknown";
   const healthWhy = useMemo(() => {
     if (h === "unauthenticated") return "API requests rejected — check your session";
+    if (h === "unreachable") return "Gateway unreachable — retrying";
     if (h !== "warn" && h !== "critical") return undefined;
     return (
       openAlerts?.[0]?.title ||
@@ -71,7 +80,7 @@ function MenuBar({
     );
   }, [h, openAlerts]);
   const healthClass =
-    h === "ok" ? "ok" : h === "warn" ? "warn" : h === "critical" ? "crit" : "muted";
+    h === "ok" ? "ok" : h === "warn" ? "warn" : h === "critical" || h === "unauthenticated" ? "crit" : "muted";
   const healthLabel =
     h === "ok"
       ? "HEALTH_OK"
@@ -81,7 +90,9 @@ function MenuBar({
           ? "HEALTH_ERR"
           : h === "unauthenticated"
             ? "AUTH"
-            : String(h).toUpperCase();
+            : h === "unreachable"
+              ? "UNREACHABLE"
+              : String(h).toUpperCase();
 
   const [tokenOpen, setTokenOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);

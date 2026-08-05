@@ -50,6 +50,9 @@ SSH="ssh -o StrictHostKeyChecking=accept-new ${USER}@${HOST}"
 NS="zyvor-system"
 DEPLOY="atlas-gateway"
 NODEPORT=30510
+# Prefer the user kubeconfig (~/.kube/config). Bare `kubectl` on k3s hosts often points at
+# /etc/rancher/k3s/k3s.yaml (root-only) and fails with permission denied mid-rollout.
+REMOTE_KUBE='if [ -r "$HOME/.kube/config" ]; then export KUBECONFIG="$HOME/.kube/config"; fi; KUBECTL="${KUBECTL:-kubectl}"'
 
 log()  { printf '\033[1;36m==> %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;33m!! %s\033[0m\n' "$*"; }
@@ -57,7 +60,7 @@ warn() { printf '\033[1;33m!! %s\033[0m\n' "$*"; }
 # --rollback: revert to the previous ReplicaSet and exit (skip build/import).
 if [[ "$ROLLBACK" == "1" ]]; then
   log "rollback: reverting ${DEPLOY} to its previous revision"
-  $SSH "kubectl -n ${NS} rollout undo deploy/${DEPLOY} && kubectl -n ${NS} rollout status deploy/${DEPLOY} --timeout=180s"
+  $SSH "${REMOTE_KUBE}; \$KUBECTL -n ${NS} rollout undo deploy/${DEPLOY} && \$KUBECTL -n ${NS} rollout status deploy/${DEPLOY} --timeout=180s"
   $SSH "curl -fsS http://127.0.0.1:${NODEPORT}/version; echo" || true
   log "rollback done."
   exit 0
@@ -79,6 +82,7 @@ log "1/5 rsync repo -> ${USER}@${HOST}:~/${REMOTE_DIR}"
 $SSH "mkdir -p ~/${REMOTE_DIR}"
 rsync -az --delete \
   --exclude target --exclude .git --exclude '*.db' --exclude '*.db-wal' --exclude '*.db-shm' \
+  --exclude node_modules --exclude '**/node_modules' --exclude dist --exclude '**/ui/dist' \
   -e "ssh -o StrictHostKeyChecking=accept-new" \
   "${HERE}/" "${USER}@${HOST}:${REMOTE_DIR}/"
 
@@ -96,13 +100,13 @@ log "4/5 ensure auth Secret + apply k8s manifests + roll out the new image"
 # pod always comes up on the freshly-imported containerd image (imagePullPolicy: Never).
 #
 # Namespace must exist before we can create the auth Secret — apply once first (idempotent).
-$SSH "cd ~/${REMOTE_DIR} \
-  && kubectl apply -f deploy/k8s/atlas-gateway.yaml \
-  && NAMESPACE=zyvor-system bash scripts/ensure-atlas-auth-secret.sh \
-  && kubectl -n zyvor-system rollout restart deploy/atlas-gateway \
-  && kubectl -n zyvor-system rollout status deploy/atlas-gateway --timeout=180s"
+$SSH "${REMOTE_KUBE}; cd ~/${REMOTE_DIR} \
+  && \$KUBECTL apply -f deploy/k8s/atlas-gateway.yaml \
+  && NAMESPACE=zyvor-system KUBECTL=\"\$KUBECTL\" bash scripts/ensure-atlas-auth-secret.sh \
+  && \$KUBECTL -n zyvor-system rollout restart deploy/atlas-gateway \
+  && \$KUBECTL -n zyvor-system rollout status deploy/atlas-gateway --timeout=180s"
 
-BOOT="$($SSH "kubectl -n zyvor-system get secret atlas-gateway-auth -o jsonpath='{.data.bootstrap-admin-token}' 2>/dev/null | base64 -d || true")"
+BOOT="$($SSH "${REMOTE_KUBE}; \$KUBECTL -n zyvor-system get secret atlas-gateway-auth -o jsonpath='{.data.bootstrap-admin-token}' 2>/dev/null | base64 -d || true")"
 
 if [[ "$WITH_CEPH" == "1" ]]; then
   log "4b/5 installing Rook Ceph (DESTRUCTIVE: consumes an empty disk as an OSD)"
