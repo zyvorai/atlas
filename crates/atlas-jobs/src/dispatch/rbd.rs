@@ -68,7 +68,10 @@ pub(crate) async fn dispatch_rbd(
             pool: rbd_pool,
             image,
         } => {
-            if !is_fake_ceph_mode() {
+            if is_fake_ceph_mode() {
+                atlas_inventory::rbd_snapshots::delete_all_for_image(pool, &rbd_pool, &image)
+                    .await?;
+            } else {
                 atlas_driver_ceph::rbd_remove(&rbd_pool, &image)
                     .await
                     .with_context(|| format!("rbd rm {rbd_pool}/{image}"))?;
@@ -92,7 +95,9 @@ pub(crate) async fn dispatch_rbd(
             // straight to recording it.
             let size_bytes = if is_fake_ceph_mode() {
                 // No `rbd` CLI to ask — a clone starts at the parent's virtual size, so read it
-                // back from the catalog we already have.
+                // back from the catalog we already have. Still record the base snapshot the clone
+                // hangs off of, so the parent's Snaps panel matches what real mode would show.
+                atlas_inventory::rbd_snapshots::create(pool, &rbd_pool, &image, &snap).await?;
                 let parent_native = format!("rbd:{rbd_pool}/{image}");
                 atlas_inventory::list_volumes(pool)
                     .await?
@@ -296,7 +301,9 @@ pub(crate) async fn dispatch_rbd(
             image,
             snap,
         } => {
-            if !is_fake_ceph_mode() {
+            if is_fake_ceph_mode() {
+                atlas_inventory::rbd_snapshots::create(pool, &rbd_pool, &image, &snap).await?;
+            } else {
                 atlas_driver_ceph::rbd_snap_create(&rbd_pool, &image, &snap)
                     .await
                     .with_context(|| format!("rbd snap create {rbd_pool}/{image}@{snap}"))?;
@@ -325,7 +332,9 @@ pub(crate) async fn dispatch_rbd(
             // Unprotect is a no-op if the snapshot was never protected (e.g. it was created
             // manually, not via Clone) — always attempt it before rm rather than requiring the
             // caller to know whether a clone was ever taken from it.
-            if !is_fake_ceph_mode() {
+            if is_fake_ceph_mode() {
+                atlas_inventory::rbd_snapshots::delete(pool, &rbd_pool, &image, &snap).await?;
+            } else {
                 atlas_driver_ceph::rbd_snap_unprotect(&rbd_pool, &image, &snap)
                     .await
                     .with_context(|| format!("rbd snap unprotect {rbd_pool}/{image}@{snap}"))?;

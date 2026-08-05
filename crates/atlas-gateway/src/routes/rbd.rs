@@ -290,8 +290,8 @@ pub(crate) async fn flatten_rbd_image(
 }
 
 /// `GET /rbd-images/{pool}/{image}/snapshots` — list a raw image's snapshots.
-/// Real mode: live `rbd snap ls`. Fake/dev mode: no `rbd` binary in the image and no local
-/// snapshot cache — report empty rather than erroring, so the Snaps panel still loads.
+/// Real mode: live `rbd snap ls`. Fake/dev mode: no `rbd` binary in the image — read back the
+/// catalog that create/clone/delete jobs maintain instead.
 pub(crate) async fn list_rbd_snaps(
     State(s): State<AppState>,
     Path((pool_name, image)): Path<(String, String)>,
@@ -299,7 +299,9 @@ pub(crate) async fn list_rbd_snaps(
     use atlas_common::config::CephDriverMode;
 
     let snaps = match s.config.ceph_driver_mode {
-        CephDriverMode::Fake => Vec::new(),
+        CephDriverMode::Fake => {
+            atlas_inventory::rbd_snapshots::list(&s.pool, &pool_name, &image).await?
+        }
         CephDriverMode::Real => atlas_driver_ceph::rbd_snap_list(&pool_name, &image)
             .await
             .map_err(|e| AppError::Driver(e.to_string()))?,
