@@ -289,15 +289,21 @@ pub(crate) async fn flatten_rbd_image(
     ))
 }
 
-/// `GET /rbd-images/{pool}/{image}/snapshots` — list a raw image's snapshots (from Ceph).
+/// `GET /rbd-images/{pool}/{image}/snapshots` — list a raw image's snapshots.
+/// Real mode: live `rbd snap ls`. Fake/dev mode: no `rbd` binary in the image and no local
+/// snapshot cache — report empty rather than erroring, so the Snaps panel still loads.
 pub(crate) async fn list_rbd_snaps(
     State(s): State<AppState>,
     Path((pool_name, image)): Path<(String, String)>,
 ) -> AppResult<Json<Value>> {
-    let _ = &s;
-    let snaps = atlas_driver_ceph::rbd_snap_list(&pool_name, &image)
-        .await
-        .map_err(|e| AppError::Driver(e.to_string()))?;
+    use atlas_common::config::CephDriverMode;
+
+    let snaps = match s.config.ceph_driver_mode {
+        CephDriverMode::Fake => Vec::new(),
+        CephDriverMode::Real => atlas_driver_ceph::rbd_snap_list(&pool_name, &image)
+            .await
+            .map_err(|e| AppError::Driver(e.to_string()))?,
+    };
     Ok(Json(
         json!({ "rbd": format!("{pool_name}/{image}"), "snapshots": snaps }),
     ))
@@ -397,7 +403,8 @@ pub(crate) struct RbdListQuery {
 
 /// `GET /rbd-images?pool=` — list RBD image names in a pool.
 /// Real mode: live `rbd ls`. Fake/dev mode: no `rbd` binary in the image — derive names from the
-/// driver's volume fixture / inventory so the Storage Center RBD page still loads.
+/// inventory catalog (the same source of truth the create/delete/clone jobs write to) so newly
+/// created or removed images show up immediately instead of a static fixture snapshot.
 pub(crate) async fn list_rbd_images(
     State(s): State<AppState>,
     Query(q): Query<RbdListQuery>,
@@ -405,16 +412,10 @@ pub(crate) async fn list_rbd_images(
     use atlas_common::config::CephDriverMode;
 
     let pool_name = q.pool.unwrap_or_else(|| DEFAULT_RBD_POOL.into());
-    let driver = s
-        .driver_for(CEPH_BACKEND_ID)
-        .ok_or_else(|| AppError::Driver("no ceph driver".into()))?;
 
     let images = match s.config.ceph_driver_mode {
         CephDriverMode::Fake => {
-            let vols = driver
-                .list_volumes(&pool_name)
-                .await
-                .map_err(|e| AppError::Driver(e.to_string()))?;
+            let vols = atlas_inventory::list_volumes(&s.pool).await?;
             vols.into_iter()
                 .filter_map(|v| {
                     let native = v.backend_native_id.as_deref()?;

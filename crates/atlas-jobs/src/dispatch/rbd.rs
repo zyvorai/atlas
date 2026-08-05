@@ -7,6 +7,19 @@ use atlas_driver_k8s::K8sDriver;
 
 use crate::spec::JobSpec;
 
+/// Fake driver mode has no `rbd`/`ceph` CLI in the image — job handlers must skip shelling out
+/// and simulate success against the inventory catalog instead (mirrors `AppState::config`'s
+/// `CephDriverMode`, re-read from env here since job dispatch has no `AppState` handle).
+fn is_fake_ceph_mode() -> bool {
+    !matches!(
+        std::env::var("ATLAS_CEPH_DRIVER_MODE")
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .as_str(),
+        "real"
+    )
+}
+
 pub(crate) async fn dispatch_rbd(
     pool: &SqlitePool,
     _k8s: &Option<Arc<K8sDriver>>,
@@ -24,7 +37,7 @@ pub(crate) async fn dispatch_rbd(
             // Idempotent retry: if a prior attempt already created the image (e.g. dispatch
             // succeeded but the job's mark-succeeded write failed, forcing a full re-run), `rbd
             // create` errors on an image that already exists — skip it and just re-record.
-            if atlas_driver_ceph::rbd_info_size(&rbd_pool, &image).await.is_err() {
+            if !is_fake_ceph_mode() && atlas_driver_ceph::rbd_info_size(&rbd_pool, &image).await.is_err() {
                 atlas_driver_ceph::rbd_create(&rbd_pool, &image, size_bytes)
                     .await
                     .with_context(|| format!("rbd create {rbd_pool}/{image}"))?;
@@ -55,9 +68,11 @@ pub(crate) async fn dispatch_rbd(
             pool: rbd_pool,
             image,
         } => {
-            atlas_driver_ceph::rbd_remove(&rbd_pool, &image)
-                .await
-                .with_context(|| format!("rbd rm {rbd_pool}/{image}"))?;
+            if !is_fake_ceph_mode() {
+                atlas_driver_ceph::rbd_remove(&rbd_pool, &image)
+                    .await
+                    .with_context(|| format!("rbd rm {rbd_pool}/{image}"))?;
+            }
             atlas_inventory::delete_volume_row(pool, &volume_id).await?;
             Ok(serde_json::json!({
                 "volume_id": volume_id, "rbd": format!("{rbd_pool}/{image}"), "deleted": true
@@ -75,31 +90,43 @@ pub(crate) async fn dispatch_rbd(
             // finished (only the job's own bookkeeping failed afterwards) — re-running `rbd snap
             // create`/`rbd snap protect` on an already-existing/protected snapshot errors, so skip
             // straight to recording it.
-            let already_cloned = atlas_driver_ceph::rbd_info_size(&rbd_pool, &clone_image).await;
-            let size_bytes = if let Ok(size_bytes) = already_cloned {
-                size_bytes
-            } else {
-                // Snapshot the source (unless a prior attempt already created it), protect it
-                // (required for cloning), then create the COW clone.
-                let existing_snaps = atlas_driver_ceph::rbd_snap_list(&rbd_pool, &image)
-                    .await
-                    .unwrap_or_default();
-                if !existing_snaps.iter().any(|s| s == &snap) {
-                    atlas_driver_ceph::rbd_snap_create(&rbd_pool, &image, &snap)
-                        .await
-                        .with_context(|| format!("rbd snap create {rbd_pool}/{image}@{snap}"))?;
-                }
-                atlas_driver_ceph::rbd_snap_protect(&rbd_pool, &image, &snap)
-                    .await
-                    .with_context(|| format!("rbd snap protect {rbd_pool}/{image}@{snap}"))?;
-                atlas_driver_ceph::rbd_clone(&rbd_pool, &image, &snap, &rbd_pool, &clone_image)
-                    .await
-                    .with_context(|| {
-                        format!("rbd clone {rbd_pool}/{image}@{snap} -> {clone_image}")
-                    })?;
-                atlas_driver_ceph::rbd_info_size(&rbd_pool, &clone_image)
-                    .await
+            let size_bytes = if is_fake_ceph_mode() {
+                // No `rbd` CLI to ask — a clone starts at the parent's virtual size, so read it
+                // back from the catalog we already have.
+                let parent_native = format!("rbd:{rbd_pool}/{image}");
+                atlas_inventory::list_volumes(pool)
+                    .await?
+                    .into_iter()
+                    .find(|v| v.backend_native_id.as_deref() == Some(parent_native.as_str()))
+                    .map(|v| v.size_bytes)
                     .unwrap_or(0)
+            } else {
+                let already_cloned = atlas_driver_ceph::rbd_info_size(&rbd_pool, &clone_image).await;
+                if let Ok(size_bytes) = already_cloned {
+                    size_bytes
+                } else {
+                    // Snapshot the source (unless a prior attempt already created it), protect it
+                    // (required for cloning), then create the COW clone.
+                    let existing_snaps = atlas_driver_ceph::rbd_snap_list(&rbd_pool, &image)
+                        .await
+                        .unwrap_or_default();
+                    if !existing_snaps.iter().any(|s| s == &snap) {
+                        atlas_driver_ceph::rbd_snap_create(&rbd_pool, &image, &snap)
+                            .await
+                            .with_context(|| format!("rbd snap create {rbd_pool}/{image}@{snap}"))?;
+                    }
+                    atlas_driver_ceph::rbd_snap_protect(&rbd_pool, &image, &snap)
+                        .await
+                        .with_context(|| format!("rbd snap protect {rbd_pool}/{image}@{snap}"))?;
+                    atlas_driver_ceph::rbd_clone(&rbd_pool, &image, &snap, &rbd_pool, &clone_image)
+                        .await
+                        .with_context(|| {
+                            format!("rbd clone {rbd_pool}/{image}@{snap} -> {clone_image}")
+                        })?;
+                    atlas_driver_ceph::rbd_info_size(&rbd_pool, &clone_image)
+                        .await
+                        .unwrap_or(0)
+                }
             };
             let vol = StorageVolume {
                 id: volume_id.clone(),
@@ -129,9 +156,11 @@ pub(crate) async fn dispatch_rbd(
             new_size_bytes,
             allow_shrink,
         } => {
-            atlas_driver_ceph::rbd_resize(&rbd_pool, &image, new_size_bytes, allow_shrink)
-                .await
-                .with_context(|| format!("rbd resize {rbd_pool}/{image}"))?;
+            if !is_fake_ceph_mode() {
+                atlas_driver_ceph::rbd_resize(&rbd_pool, &image, new_size_bytes, allow_shrink)
+                    .await
+                    .with_context(|| format!("rbd resize {rbd_pool}/{image}"))?;
+            }
             atlas_inventory::set_volume_size(pool, &volume_id, new_size_bytes).await?;
             Ok(serde_json::json!({
                 "volume_id": volume_id, "rbd": format!("{rbd_pool}/{image}"),
@@ -142,14 +171,16 @@ pub(crate) async fn dispatch_rbd(
             // Idempotent retry: once `rbd migration commit` lands, the image no longer resolves
             // under the source pool, so a re-run of `rbd migrate` would fail `prepare` against a
             // vanished source — detect an already-completed migration and skip straight through.
-            let already_migrated = atlas_driver_ceph::rbd_info_size(&dest_pool, &image)
-                .await
-                .is_ok()
-                && atlas_driver_ceph::rbd_info_size(&rbd_pool, &image).await.is_err();
-            if !already_migrated {
-                atlas_driver_ceph::rbd_migrate(&rbd_pool, &image, &dest_pool)
+            if !is_fake_ceph_mode() {
+                let already_migrated = atlas_driver_ceph::rbd_info_size(&dest_pool, &image)
                     .await
-                    .with_context(|| format!("rbd migrate {rbd_pool}/{image} -> {dest_pool}"))?;
+                    .is_ok()
+                    && atlas_driver_ceph::rbd_info_size(&rbd_pool, &image).await.is_err();
+                if !already_migrated {
+                    atlas_driver_ceph::rbd_migrate(&rbd_pool, &image, &dest_pool)
+                        .await
+                        .with_context(|| format!("rbd migrate {rbd_pool}/{image} -> {dest_pool}"))?;
+                }
             }
             // Record the new pool/image location — otherwise the catalog keeps pointing at the
             // now-defunct source pool.
@@ -174,21 +205,25 @@ pub(crate) async fn dispatch_rbd(
             // Idempotent retry: `rbd flatten` errors on an image with no parent, which is exactly
             // the state a prior successful attempt leaves behind.
             let spec = format!("{rbd_pool}/{image}");
-            let has_parent = atlas_driver_ceph::rbd_cmd(&["info", &spec])
-                .await
-                .map(|info| info.get("parent").is_some())
-                .unwrap_or(true);
-            if has_parent {
-                atlas_driver_ceph::rbd_flatten(&rbd_pool, &image)
+            if !is_fake_ceph_mode() {
+                let has_parent = atlas_driver_ceph::rbd_cmd(&["info", &spec])
                     .await
-                    .with_context(|| format!("rbd flatten {spec}"))?;
+                    .map(|info| info.get("parent").is_some())
+                    .unwrap_or(true);
+                if has_parent {
+                    atlas_driver_ceph::rbd_flatten(&rbd_pool, &image)
+                        .await
+                        .with_context(|| format!("rbd flatten {spec}"))?;
+                }
             }
             Ok(serde_json::json!({ "rbd": spec, "flattened": true }))
         }
         JobSpec::RbdQos { volume_id, pool: rbd_pool, image, iops_limit, bps_limit } => {
-            atlas_driver_ceph::rbd_qos_set(&rbd_pool, &image, iops_limit, bps_limit)
-                .await
-                .with_context(|| format!("rbd qos {rbd_pool}/{image}"))?;
+            if !is_fake_ceph_mode() {
+                atlas_driver_ceph::rbd_qos_set(&rbd_pool, &image, iops_limit, bps_limit)
+                    .await
+                    .with_context(|| format!("rbd qos {rbd_pool}/{image}"))?;
+            }
             if !volume_id.is_empty() {
                 atlas_inventory::set_volume_qos(pool, &volume_id, iops_limit, bps_limit).await?;
             }
@@ -198,9 +233,11 @@ pub(crate) async fn dispatch_rbd(
             }))
         }
         JobSpec::CephOsdOp { osd_id, action, weight } => {
-            atlas_driver_ceph::ceph_osd_op(&action, osd_id, weight)
-                .await
-                .with_context(|| format!("ceph osd {action} {osd_id}"))?;
+            if !is_fake_ceph_mode() {
+                atlas_driver_ceph::ceph_osd_op(&action, osd_id, weight)
+                    .await
+                    .with_context(|| format!("ceph osd {action} {osd_id}"))?;
+            }
             Ok(serde_json::json!({ "osd_id": osd_id, "action": action, "weight": weight, "applied": true }))
         }
         JobSpec::RbdMirror {
@@ -213,13 +250,7 @@ pub(crate) async fn dispatch_rbd(
         } => {
             // Fake driver: catalog transitions are applied by the API before enqueue; skip the live
             // `rbd` CLI and do not rewrite role/state here (avoids racing a later demote/promote).
-            let fake = !matches!(
-                std::env::var("ATLAS_CEPH_DRIVER_MODE")
-                    .unwrap_or_default()
-                    .to_ascii_lowercase()
-                    .as_str(),
-                "real"
-            );
+            let fake = is_fake_ceph_mode();
             if fake {
                 tracing::info!(
                     %action,
@@ -265,9 +296,11 @@ pub(crate) async fn dispatch_rbd(
             image,
             snap,
         } => {
-            atlas_driver_ceph::rbd_snap_create(&rbd_pool, &image, &snap)
-                .await
-                .with_context(|| format!("rbd snap create {rbd_pool}/{image}@{snap}"))?;
+            if !is_fake_ceph_mode() {
+                atlas_driver_ceph::rbd_snap_create(&rbd_pool, &image, &snap)
+                    .await
+                    .with_context(|| format!("rbd snap create {rbd_pool}/{image}@{snap}"))?;
+            }
             Ok(serde_json::json!({ "snapshot": format!("{rbd_pool}/{image}@{snap}") }))
         }
         JobSpec::RbdRollback {
@@ -275,9 +308,11 @@ pub(crate) async fn dispatch_rbd(
             image,
             snap,
         } => {
-            atlas_driver_ceph::rbd_snap_rollback(&rbd_pool, &image, &snap)
-                .await
-                .with_context(|| format!("rbd snap rollback {rbd_pool}/{image}@{snap}"))?;
+            if !is_fake_ceph_mode() {
+                atlas_driver_ceph::rbd_snap_rollback(&rbd_pool, &image, &snap)
+                    .await
+                    .with_context(|| format!("rbd snap rollback {rbd_pool}/{image}@{snap}"))?;
+            }
             Ok(serde_json::json!({
                 "rbd": format!("{rbd_pool}/{image}"), "rolled_back_to": snap
             }))
@@ -290,12 +325,14 @@ pub(crate) async fn dispatch_rbd(
             // Unprotect is a no-op if the snapshot was never protected (e.g. it was created
             // manually, not via Clone) — always attempt it before rm rather than requiring the
             // caller to know whether a clone was ever taken from it.
-            atlas_driver_ceph::rbd_snap_unprotect(&rbd_pool, &image, &snap)
-                .await
-                .with_context(|| format!("rbd snap unprotect {rbd_pool}/{image}@{snap}"))?;
-            atlas_driver_ceph::rbd_snap_rm(&rbd_pool, &image, &snap)
-                .await
-                .with_context(|| format!("rbd snap rm {rbd_pool}/{image}@{snap}"))?;
+            if !is_fake_ceph_mode() {
+                atlas_driver_ceph::rbd_snap_unprotect(&rbd_pool, &image, &snap)
+                    .await
+                    .with_context(|| format!("rbd snap unprotect {rbd_pool}/{image}@{snap}"))?;
+                atlas_driver_ceph::rbd_snap_rm(&rbd_pool, &image, &snap)
+                    .await
+                    .with_context(|| format!("rbd snap rm {rbd_pool}/{image}@{snap}"))?;
+            }
             Ok(serde_json::json!({ "deleted_snapshot": format!("{rbd_pool}/{image}@{snap}") }))
         }
         _ => anyhow::bail!("not an rbd spec"),
