@@ -411,7 +411,6 @@ pub(crate) async fn dispatch_object(
             let mut manifest: serde_json::Value =
                 serde_json::from_str(&manifest_json).unwrap_or_else(|_| serde_json::json!({}));
             let mut data_summary = serde_json::Value::Null;
-            let mut record_checksum: Option<String> = None;
             if mode == "data" {
                 // Stream `rbd export-diff` straight into an S3 multipart upload — no in-memory cap.
                 const PART_SIZE: usize = 16 * 1024 * 1024;
@@ -470,18 +469,24 @@ pub(crate) async fn dispatch_object(
                 });
                 manifest["data"] = data_summary.clone();
                 manifest["format"] = serde_json::json!("rbd-export-diff");
-                record_checksum = Some(data_checksum);
             }
 
             // 4. write the manifest object to RGW, then read it back to verify.
             let manifest_bytes = serde_json::to_vec(&manifest)?;
-            let manifest_checksum = sha256_hex(&manifest_bytes);
+            // Always the *manifest's* checksum — restore's read-back verification (create_restore
+            // in routes/object_store.rs) compares the fetched manifest against backups.checksum,
+            // so storing the data checksum here (as this used to do for mode=="data") made that
+            // comparison — sha256(manifest bytes) vs the RBD data's hash — fail on every single
+            // data-mode restore, logging a false "manifest checksum mismatch" for a manifest that
+            // was never actually corrupt. The data's own checksum is independently verified via
+            // the manifest's embedded data.data_checksum field, which create_restore already
+            // checks separately (its "data_verified" result) — nothing needs it here too.
+            let checksum = sha256_hex(&manifest_bytes);
             s3.put_object(&object_key, manifest_bytes.clone())
                 .await
                 .with_context(|| format!("PUT backup manifest {object_key}"))?;
             let verified =
                 matches!(s3.get_object(&object_key).await, Ok(got) if got == manifest_bytes);
-            let checksum = record_checksum.unwrap_or(manifest_checksum);
             // The row was inserted with format="manifest-v1" regardless of mode; reflect the real
             // format now that we know whether data was actually streamed, so the UI can tell
             // manifest-only backups apart from full rbd-export-diff ones.
