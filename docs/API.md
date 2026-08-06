@@ -247,6 +247,36 @@ defaults to `restore-<snap-suffix>`. `resource.mode` is `"restore"`.
 Delete the VolumeSnapshot + snapshot row (async job). **Blocked with `409 CONFLICT`** if any volume
 was cloned/restored from it (PDF §8.3); pass `?force=true` to override.
 
+## Direct RBD (bypassing CSI)
+
+The **only** bypass-CSI surface in Atlas — for non-Kubernetes consumers (machina/libvirt, bare VMs)
+that need a raw RBD image with no PVC. Every other backend (NFS, ZFS, CephFS) goes through the
+`POST /volumes` PVC path above. Direct-RBD create/clone get the same admission checks as `POST
+/volumes`: **cordon check** (`503` if the backend is cordoned), a **name-collision check** (`409`
+if `backend_native_id` already exists), **quota admission**, and an **audit-log record**. Volume ids
+are deterministic (`vol_{pool}_{image}`) and `backend_native_id` is `rbd:{pool}/{image}` — stable
+across resize/flatten and rewritten by migrate, which keeps DR mirroring and QoS pointed at the
+right image.
+
+- `POST /api/atlas/v1/rbd-images {name, size_bytes, pool?}` — `rbd create`; records a volume row
+  (no PVC). `202 + job id`. `atlasctl create-rbd-image`.
+- `GET /api/atlas/v1/rbd-images[?pool=]` — list RBD images (from inventory).
+- `DELETE /api/atlas/v1/rbd-images/{pool}/{image}` — `rbd rm`; `202 + job id`.
+- `POST /api/atlas/v1/rbd-images/{pool}/{image}/clone {name, snap?}` — snapshot + protect the base,
+  `rbd clone` a COW copy (golden-image → per-VM workflow). `202 + job id`.
+- `GET /api/atlas/v1/rbd-images/{pool}/{image}/snapshots` · `POST .../snapshots {name}` — list / take
+  a raw RBD snapshot.
+- `POST /api/atlas/v1/rbd-images/{pool}/{image}/rollback {snap}` — `rbd snap rollback`.
+- `DELETE /api/atlas/v1/rbd-images/{pool}/{image}/snapshots/{snap}` — unprotect + `rbd snap rm`
+  (idempotent: an already-unprotected snap is treated as success).
+- `POST /api/atlas/v1/rbd-images/{pool}/{image}/flatten` — detach a COW clone from its parent
+  snapshot. `202 + job id`.
+- `POST /api/atlas/v1/rbd-usage/refresh` — recompute `used_bytes` via `rbd du` for every volume
+  (resolves the image from the `rbd:` id, or the PVC→PV for CSI volumes). `atlasctl refresh-usage`.
+
+See also QoS/resize/migrate under "Maintenance & cluster ops" above — those are day-2 operator
+actions on an existing RBD image, not creation.
+
 ## Object storage & backups (RGW) — slice 3
 
 ### `POST /api/atlas/v1/buckets`

@@ -176,22 +176,36 @@ cert/ingress gives trusted TLS).
   for product consoles (see `docs/PRODUCTS.md`).
 - Follow-ups: generated gRPC client stubs vendored into each product (Veyron, Hyper2KVM, …).
 
-## ✅ DataBridge — cloud-to-edge database mobility (done, verified on two clusters)
+## ✅ DataBridge — cloud-to-edge database mobility (six source engines)
 
 A migration control plane layered on Atlas (`atlas-databridge`): migrate managed cloud databases
-(AWS RDS/Aurora, GCP Cloud SQL — PostgreSQL & MySQL) to open engines at the edge on Ceph-backed storage.
+to open engines at the edge on Ceph-backed storage.
 
 - Pipeline as async jobs + a reconciler: **discover → assess → provision → full-load → CDC → validate →
   cutover → rollback**. Admin-guarded cutover (validated + validation passed + CDC lag threshold); rollback window.
-- Edge targets: **CloudNativePG** (Postgres) / **Percona XtraDB** (MySQL), data + WAL on `zyvor-rbd-prod` (Ceph RBD).
-- CDC: **Debezium** on Strimzi/Kafka → JDBC sink to the edge DB.
-- Real Postgres source connector (`tokio-postgres`); `migrations/0011_databridge.sql`;
-  `/api/atlas/v1/databridge/*`; **DataBridge** console section; `deploy/databridge/` operator bundle + Connect image.
-- **Verified end-to-end on two independent live Rook Ceph clusters** (`175.110.122.71`, `80.79.5.173`):
-  a real Postgres → Ceph edge Postgres migration incl. live CDC replication, driven through the deployed gateway.
+- **Six source engines**: Postgres, MySQL, MariaDB (homogeneous → CNPG/Percona) + Oracle, SQL Server
+  (heterogeneous → Postgres edge, seeded by Debezium's initial snapshot) + MongoDB (homogeneous
+  document → Percona Server for MongoDB, Mongo Kafka sink), all on Ceph-backed storage.
+- Real connectors: Postgres/MySQL/MariaDB default; SQL Server (`tiberius`) / Oracle (OCI) / MongoDB
+  behind cargo features; precise Kafka CDC lag behind the `kafka-lag` feature.
+- CDC: **Debezium** on Strimzi/Kafka → JDBC sink to the edge DB (Postgres path).
+- `migrations/0011_databridge.sql`; `/api/atlas/v1/databridge/*`; **DataBridge** console section;
+  `deploy/databridge/` operator bundle + Connect image. Gateway image bundles the OCI Instant Client
+  and builds the `oracle` feature.
+- **Postgres verified end-to-end** on two independent live Rook Ceph clusters (`175.110.122.71`,
+  `80.79.5.173`) including real CDC replication, driven through the deployed gateway.
+- **All six engines' real-connector discovery verified live** — MySQL 8.4, MariaDB 11.x, MongoDB 7.0
+  (replica set), SQL Server 2022, Postgres, Oracle 23ai/26ai Free — through the deployed k3s gateway
+  (binlog ROW / replica-set change streams / `is_cdc_enabled` / supplemental-log-min → `cdc_capable`,
+  real db + table/collection names, PKs, counts).
+- **MySQL, MariaDB, MongoDB verified through provision → real full-load (data physically copied
+  source→edge) → validate** (row/document-count parity) against a lightweight edge.
 - Fake-first: the entire pipeline runs with no cloud/k8s (`make run-databridge`), CI-locked by
   `tests/databridge_pipeline.rs`.
-- Follow-ups: real MySQL source connector + TLS for cloud SSL; precise numeric CDC lag (embedded Kafka AdminClient).
+- Follow-ups: streaming CDC + cutover for the non-Postgres engines need the Kafka/Debezium stack
+  (not installed on the shared lab); TLS for cloud SSL sources.
+
+See [DATABRIDGE.md](DATABRIDGE.md).
 
 See [DATABRIDGE.md](DATABRIDGE.md).
 
@@ -257,11 +271,23 @@ See [DATABRIDGE.md](DATABRIDGE.md).
 - Multi-tenancy: **complete** (quotas + service accounts + per-tenant policies, PDF §14).
 - DR: RBD mirroring, secondary-cluster restore, one-click failover runbook (PDF §16.3).
 
-## Known limitations (slice 1)
+## Known limitations (current)
 
-- Read-only: no provisioning/snapshot/backup yet (stubs return `NotImplemented`).
+- **DR data-plane unverified**: RBD-mirroring catalog, failover API, and jobs are complete and
+  fake-mode-tested, but the real `rbd mirror` CLI paths need a live second Ceph cluster to be
+  production-verified (`dataplane_verified` is hard-coded `false` until that drill runs). See
+  [DR.md](DR.md).
+- **Non-Postgres DataBridge streaming CDC + cutover**: MySQL, MariaDB, and MongoDB are verified
+  through provision → real full-load → validate (row/document-count parity); their streaming-CDC
+  and cutover stages need the Kafka/Debezium stack, which isn't installed on the shared lab. SQL
+  Server and Oracle are verified through discovery only. Postgres is the only engine verified
+  end-to-end including real CDC.
 - Single Ceph backend id (`bkd_ceph_lab`) wired at startup; multi-backend registry exists but is
   not yet driven by `POST /backends` creating live drivers.
-- `/nodes` derives from OSD hosts; `/alerts` and `/jobs` return `[]`.
 - Pool `kind` is name-heuristic (doesn't yet read `ceph osd pool application` metadata).
 - Single-node Ceph reports `HEALTH_WARN` (expected: 1 OSD < default size 3).
+- Per-product integrations beyond the gRPC surface (Veyron VM datastores, Hyper2KVM direct-to-RBD
+  migration, GuestKit, etc.) are not yet built — see the per-product rows above.
+- `scripts/test-connectors.sh` (container-backed DataBridge connector tests) needs podman/docker;
+  the `kafka-lag` feature needs `cmake` to build `rdkafka` — both are opt-in and skipped where that
+  tooling isn't present.
