@@ -85,6 +85,15 @@ pub(crate) async fn create_rbd_image(
     if body.size_bytes <= 0 {
         return Err(AppError::Validation("size_bytes must be > 0".into()));
     }
+
+    // Maintenance: a cordoned backend rejects new provisioning (existing images are untouched) —
+    // this direct-RBD path bypasses CSI, so it needs the same guard the PVC path has.
+    if atlas_inventory::is_backend_cordoned(&s.pool, CEPH_BACKEND_ID).await? {
+        return Err(AppError::Unavailable(format!(
+            "backend {CEPH_BACKEND_ID} is cordoned for maintenance"
+        )));
+    }
+
     let pool_name = body.pool.unwrap_or_else(|| DEFAULT_RBD_POOL.into());
     let tenant_id = body.tenant_id.unwrap_or_else(|| "global".into());
     let volume_id = ids::volume_id();
@@ -161,6 +170,14 @@ pub(crate) async fn clone_rbd_image(
     if body.name.trim().is_empty() {
         return Err(AppError::Validation("name is required".into()));
     }
+
+    // Maintenance: a cordoned backend rejects new provisioning — a clone is a new image.
+    if atlas_inventory::is_backend_cordoned(&s.pool, CEPH_BACKEND_ID).await? {
+        return Err(AppError::Unavailable(format!(
+            "backend {CEPH_BACKEND_ID} is cordoned for maintenance"
+        )));
+    }
+
     let snap = body.snap.unwrap_or_else(|| format!("{}-base", body.name));
     let tenant_id = body.tenant_id.unwrap_or_else(|| "global".into());
     let volume_id = ids::volume_id();
