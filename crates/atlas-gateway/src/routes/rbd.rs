@@ -97,6 +97,23 @@ pub(crate) async fn create_rbd_image(
     let pool_name = body.pool.unwrap_or_else(|| DEFAULT_RBD_POOL.into());
     let tenant_id = body.tenant_id.unwrap_or_else(|| "global".into());
 
+    // Reject a name collision up front: nothing else in the create path checks this (job dispatch
+    // always upserts under a fresh volume_id), so without this guard two create calls for the same
+    // pool/name — concurrent or just sequential — silently produce two distinct catalog rows both
+    // claiming the same rbd:pool/image identity instead of one erroring like a real `rbd create`
+    // would on an existing name.
+    let native = format!("rbd:{pool_name}/{}", body.name);
+    if atlas_inventory::list_volumes(&s.pool)
+        .await?
+        .iter()
+        .any(|v| v.backend_native_id.as_deref() == Some(native.as_str()))
+    {
+        return Err(AppError::Conflict(format!(
+            "rbd image {pool_name}/{} already exists",
+            body.name
+        )));
+    }
+
     // Tenant quota admission (PDF §14): this direct-RBD path bypasses CSI, so it needs the same
     // guard `POST /volumes` has — otherwise a tenant's byte/volume-count quota is pure decoration.
     match atlas_inventory::tenants::check_admission(&s.pool, &tenant_id, body.size_bytes).await? {
@@ -113,7 +130,12 @@ pub(crate) async fn create_rbd_image(
         }
     }
 
-    let volume_id = ids::volume_id();
+    // Deterministic, not ids::volume_id(): must match the id a discovery pass would derive for
+    // this same pool/image (atlas-driver-ceph real.rs/fake.rs, `vol_{pool}_{name}`). Otherwise the
+    // next discovery cycle inserts a *second* row under its own id for the same physical image,
+    // and the create's original row — now the older, untouched one — gets pruned as stale on that
+    // same pass: the volume_id returned by this response silently stops resolving.
+    let volume_id = format!("vol_{pool_name}_{}", body.name);
     let job_id = ids::job_id();
     let spec = JobSpec::RbdCreate {
         volume_id: volume_id.clone(),
@@ -222,12 +244,26 @@ pub(crate) async fn clone_rbd_image(
     let snap = body.snap.unwrap_or_else(|| format!("{}-base", body.name));
     let tenant_id = body.tenant_id.unwrap_or_else(|| "global".into());
 
+    // Reject a clone-target name collision up front — same reasoning as create_rbd_image: nothing
+    // downstream checks this, so cloning onto an existing name would silently produce two catalog
+    // rows for one identity instead of erroring like a real `rbd clone` would.
+    let clone_native = format!("rbd:{pool_name}/{}", body.name);
+    let existing = atlas_inventory::list_volumes(&s.pool).await?;
+    if existing
+        .iter()
+        .any(|v| v.backend_native_id.as_deref() == Some(clone_native.as_str()))
+    {
+        return Err(AppError::Conflict(format!(
+            "rbd image {pool_name}/{} already exists",
+            body.name
+        )));
+    }
+
     // Tenant quota admission (PDF §14): a clone starts at the parent's virtual size — resolve it
     // from the catalog (populated by discovery/create in both real and fake mode) so quotas apply
     // here the same as they do to `POST /volumes`.
     let parent_native = format!("rbd:{pool_name}/{image}");
-    let parent_size = atlas_inventory::list_volumes(&s.pool)
-        .await?
+    let parent_size = existing
         .into_iter()
         .find(|v| v.backend_native_id.as_deref() == Some(parent_native.as_str()))
         .map(|v| v.size_bytes)
@@ -246,7 +282,10 @@ pub(crate) async fn clone_rbd_image(
         }
     }
 
-    let volume_id = ids::volume_id();
+    // Deterministic, matching create_rbd_image's reasoning: must be the same id a discovery pass
+    // would derive for this clone's pool/image, or the clone's own row gets orphaned/pruned the
+    // next time discovery runs.
+    let volume_id = format!("vol_{pool_name}_{}", body.name);
     let job_id = ids::job_id();
     let spec = JobSpec::RbdClone {
         volume_id: volume_id.clone(),

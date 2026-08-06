@@ -214,7 +214,7 @@ impl StorageDriver for RealCephDriver {
                     id: format!("vol_{pool}_{name}"),
                     cluster_id: None,
                     pool_id: Some(format!("pool_{pool}")),
-                    backend_native_id: Some(format!("{pool}/{name}")),
+                    backend_native_id: Some(format!("rbd:{pool}/{name}")),
                     size_bytes: size,
                     used_bytes: used.get(&name).copied(),
                     name,
