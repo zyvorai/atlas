@@ -155,6 +155,40 @@ pub(crate) async fn get_job(State(s): State<AppState>, Path(id): Path<String>) -
     Ok(Json(json!(job)))
 }
 
+/// `POST /jobs/{id}/cancel` — the operator escape hatch for a wedged job. The job engine's worker
+/// is single-threaded (PDF-aligned ordering guarantee), so a job stuck inside a shelled-out
+/// `ceph`/`rbd` call that never errors or returns (e.g. `rbd migration prepare` against a degraded
+/// pool — verified live) blocks every other job on the gateway for up to the 2h default
+/// `ATLAS_JOB_TIMEOUT_SECS`, for every tenant, with no prior recovery path short of finding and
+/// killing the underlying OS process inside the pod by hand. `409` if the job is already terminal.
+pub(crate) async fn cancel_job(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
+    let job = atlas_inventory::jobs::get_job(&s.pool, &id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("job {id}")))?;
+    if job.state == "succeeded" || job.state == "failed" {
+        return Err(AppError::Conflict(format!(
+            "job {id} is already {}",
+            job.state
+        )));
+    }
+    let cancelled = s.jobs.cancel_job(&id).await?;
+    if !cancelled {
+        return Err(AppError::Conflict(format!(
+            "job {id} could not be cancelled (already terminal)"
+        )));
+    }
+    let _ = atlas_inventory::audit::record(
+        &s.pool, None, &actor.id, "job.cancel", "job", &id, "success", None, None,
+    )
+    .await;
+    Ok(Json(json!({ "id": id, "cancelled": true })))
+}
+
 /// `GET /jobs/{id}/watch` — Server-Sent Events; emits the job on each state change until terminal
 /// (REST parity with the gRPC `WatchJob` stream).
 pub(crate) async fn watch_job_sse(

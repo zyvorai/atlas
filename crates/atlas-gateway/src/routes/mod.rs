@@ -204,6 +204,7 @@ pub fn router(state: AppState) -> Router {
         .route("/jobs", get(list_jobs))
         .route("/jobs/{id}", get(get_job))
         .route("/jobs/{id}/watch", get(watch_job_sse))
+        .route("/jobs/{id}/cancel", post(cancel_job))
         .route("/audit", get(list_audit))
         .route("/audit.csv", get(export_audit_csv))
         .route("/events", get(list_events))

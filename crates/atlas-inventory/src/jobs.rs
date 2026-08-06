@@ -145,6 +145,23 @@ pub async fn mark_failed(pool: &SqlitePool, id: &str, error: &str) -> Result<()>
     Ok(())
 }
 
+/// Cancel a job that hasn't started running yet (`pending`/`queued`) — the worker never picks it
+/// up. A job already `running` can't be cancelled this way (see `JobEngine::cancel_job`, which
+/// signals the in-process worker directly instead). Returns `false` if the job doesn't exist or is
+/// no longer in one of those states.
+pub async fn cancel_if_queued(pool: &SqlitePool, id: &str) -> Result<bool> {
+    let res = sqlx::query(
+        "UPDATE storage_jobs SET state='failed', error='cancelled by operator', locked_by=NULL,
+         locked_at=NULL, completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+         WHERE id=? AND state IN ('pending','queued')",
+    )
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected() > 0)
+}
+
 /// Job ids currently in any of `states`, oldest first — used by boot recovery to re-enqueue work the
 /// in-memory channel lost across a restart.
 pub async fn ids_by_states(pool: &SqlitePool, states: &[&str]) -> Result<Vec<String>> {

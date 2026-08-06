@@ -224,6 +224,8 @@ enum Command {
     },
     /// GET /api/atlas/v1/jobs  (or a single job with an id)
     Jobs { id: Option<String> },
+    /// POST /api/atlas/v1/jobs/{id}/cancel — admin escape hatch for a wedged job (409 if terminal)
+    CancelJob { id: String },
     /// GET /api/atlas/v1/snapshots
     Snapshots,
     /// POST /api/atlas/v1/volumes — create a Ceph-backed volume (PVC)
@@ -635,6 +637,7 @@ async fn main() -> Result<()> {
             Some(id) => ("GET", format!("/api/atlas/v1/jobs/{id}"), None),
             None => ("GET", "/api/atlas/v1/jobs".to_string(), None),
         },
+        Command::CancelJob { id } => ("POST", format!("/api/atlas/v1/jobs/{id}/cancel"), None),
         Command::Snapshots => ("GET", "/api/atlas/v1/snapshots".to_string(), None),
         Command::CreateVolume {
             name,

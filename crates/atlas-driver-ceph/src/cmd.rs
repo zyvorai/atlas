@@ -6,6 +6,15 @@
 
 use atlas_driver_core::DriverError;
 
+/// Build a `Command` for a ceph/rbd/radosgw-admin binary with `kill_on_drop(true)` — if the
+/// enclosing future is dropped (job cancellation, `tokio::select!` racing a timeout), the child
+/// process is killed rather than left running as an orphan holding cluster-side locks/watchers.
+fn cmd(bin: &str) -> tokio::process::Command {
+    let mut c = tokio::process::Command::new(bin);
+    c.kill_on_drop(true);
+    c
+}
+
 /// Run `ceph <args...> --format json` and parse stdout as JSON.
 pub async fn ceph_cmd(args: &[&str]) -> Result<serde_json::Value, DriverError> {
     run_json("ceph", args).await
@@ -19,7 +28,7 @@ pub async fn rbd_cmd(args: &[&str]) -> Result<serde_json::Value, DriverError> {
 /// Create an RBD snapshot `pool/image@snap` (idempotent-ish; errors if it already exists).
 pub async fn rbd_snap_create(pool: &str, image: &str, snap: &str) -> Result<(), DriverError> {
     let spec = format!("{pool}/{image}@{snap}");
-    let output = tokio::process::Command::new("rbd")
+    let output = cmd("rbd")
         .args(["snap", "create", &spec])
         .output()
         .await
@@ -65,7 +74,7 @@ pub async fn rbd_mirror_op(
         other => return Err(DriverError::Backend(format!("unknown mirror op: {other}"))),
     };
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    let output = tokio::process::Command::new("rbd")
+    let output = cmd("rbd")
         .args(&refs)
         .output()
         .await
@@ -92,7 +101,7 @@ pub async fn rbd_qos_set(
     ] {
         let Some(v) = val else { continue };
         let vs = v.to_string();
-        let output = tokio::process::Command::new("rbd")
+        let output = cmd("rbd")
             .args(["config", "image", "set", &spec, key, &vs])
             .output()
             .await
@@ -127,7 +136,7 @@ pub async fn ceph_osd_op(op: &str, osd_id: i64, weight: Option<f64>) -> Result<(
         other => return Err(DriverError::Backend(format!("unknown osd op: {other}"))),
     };
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    let output = tokio::process::Command::new("ceph")
+    let output = cmd("ceph")
         .args(&refs)
         .output()
         .await
@@ -170,7 +179,7 @@ pub async fn radosgw_bucket_quota(
 
 /// Run `radosgw-admin <args...> --format json` and parse stdout (e.g. `bucket stats`).
 pub async fn radosgw_admin_json(args: &[&str]) -> Result<serde_json::Value, DriverError> {
-    let output = tokio::process::Command::new("radosgw-admin")
+    let output = cmd("radosgw-admin")
         .args(args)
         .arg("--format")
         .arg("json")
@@ -204,7 +213,7 @@ pub async fn rbd_snap_list(pool: &str, image: &str) -> Result<Vec<String>, Drive
 /// Roll an RBD image back to a snapshot (`rbd snap rollback pool/image@snap`). Destructive.
 pub async fn rbd_snap_rollback(pool: &str, image: &str, snap: &str) -> Result<(), DriverError> {
     let spec = format!("{pool}/{image}@{snap}");
-    let output = tokio::process::Command::new("rbd")
+    let output = cmd("rbd")
         .args(["snap", "rollback", &spec])
         .output()
         .await
@@ -219,7 +228,7 @@ pub async fn rbd_snap_rollback(pool: &str, image: &str, snap: &str) -> Result<()
 }
 
 async fn radosgw_admin(args: &[&str]) -> Result<(), DriverError> {
-    let output = tokio::process::Command::new("radosgw-admin")
+    let output = cmd("radosgw-admin")
         .args(args)
         .output()
         .await
@@ -245,7 +254,7 @@ pub async fn rbd_create(pool: &str, image: &str, size_bytes: i64) -> Result<(), 
     #[allow(clippy::manual_div_ceil)]
     let mib_val = size_bytes.saturating_add(1024 * 1024 - 1) / (1024 * 1024);
     let mib = std::cmp::max(1, mib_val).to_string();
-    let output = tokio::process::Command::new("rbd")
+    let output = cmd("rbd")
         .args(["create", &spec, "--size", &mib])
         .output()
         .await
@@ -260,7 +269,7 @@ pub async fn rbd_create(pool: &str, image: &str, size_bytes: i64) -> Result<(), 
 /// Remove an RBD image directly (`rbd rm pool/image`; idempotent on "not found").
 pub async fn rbd_remove(pool: &str, image: &str) -> Result<(), DriverError> {
     let spec = format!("{pool}/{image}");
-    let output = tokio::process::Command::new("rbd")
+    let output = cmd("rbd")
         .args(["rm", &spec])
         .output()
         .await
@@ -297,7 +306,7 @@ pub async fn rbd_resize(
     if allow_shrink {
         args.push("--allow-shrink");
     }
-    let output = tokio::process::Command::new("rbd")
+    let output = cmd("rbd")
         .args(&args)
         .output()
         .await
@@ -319,7 +328,7 @@ pub async fn rbd_migrate(pool: &str, image: &str, dest_pool: &str) -> Result<(),
         vec!["migration", "execute", &dst],
         vec!["migration", "commit", &dst],
     ] {
-        let output = tokio::process::Command::new("rbd")
+        let output = cmd("rbd")
             .args(&stage)
             .output()
             .await
@@ -335,7 +344,7 @@ pub async fn rbd_migrate(pool: &str, image: &str, dest_pool: &str) -> Result<(),
 /// Flatten a cloned image so it no longer depends on its parent snapshot (`rbd flatten`).
 pub async fn rbd_flatten(pool: &str, image: &str) -> Result<(), DriverError> {
     let spec = format!("{pool}/{image}");
-    let output = tokio::process::Command::new("rbd")
+    let output = cmd("rbd")
         .args(["flatten", &spec])
         .output()
         .await
@@ -396,7 +405,7 @@ pub async fn rbd_snap_protect(pool: &str, image: &str, snap: &str) -> Result<(),
 /// Unprotect a snapshot (`rbd snap unprotect`); best-effort on "not protected".
 pub async fn rbd_snap_unprotect(pool: &str, image: &str, snap: &str) -> Result<(), DriverError> {
     let spec = format!("{pool}/{image}@{snap}");
-    let output = tokio::process::Command::new("rbd")
+    let output = cmd("rbd")
         .args(["snap", "unprotect", &spec])
         .output()
         .await
@@ -427,7 +436,7 @@ pub async fn rbd_clone(
 ) -> Result<(), DriverError> {
     let src = format!("{parent_pool}/{parent_image}@{snap}");
     let dst = format!("{clone_pool}/{clone_image}");
-    let output = tokio::process::Command::new("rbd")
+    let output = cmd("rbd")
         .args(["clone", &src, &dst])
         .output()
         .await
@@ -445,7 +454,7 @@ async fn snap_op(op: &[&str], pool: &str, image: &str, snap: &str) -> Result<(),
     let spec = format!("{pool}/{image}@{snap}");
     let mut args: Vec<&str> = op.to_vec();
     args.push(&spec);
-    let output = tokio::process::Command::new("rbd")
+    let output = cmd("rbd")
         .args(&args)
         .output()
         .await
@@ -475,7 +484,7 @@ pub async fn rbd_list(pool: &str) -> Result<Vec<String>, DriverError> {
 /// Remove an RBD snapshot `pool/image@snap` (best-effort; ignores "not found").
 pub async fn rbd_snap_rm(pool: &str, image: &str, snap: &str) -> Result<(), DriverError> {
     let spec = format!("{pool}/{image}@{snap}");
-    let output = tokio::process::Command::new("rbd")
+    let output = cmd("rbd")
         .args(["snap", "rm", &spec])
         .output()
         .await
@@ -497,7 +506,7 @@ pub async fn rbd_snap_rm(pool: &str, image: &str, snap: &str) -> Result<(), Driv
 /// For a fresh/sparse image this is small; the caller must cap the size it buffers.
 pub async fn rbd_export_diff(pool: &str, image: &str, snap: &str) -> Result<Vec<u8>, DriverError> {
     let spec = format!("{pool}/{image}@{snap}");
-    let output = tokio::process::Command::new("rbd")
+    let output = cmd("rbd")
         .args(["export-diff", &spec, "-"])
         .output()
         .await
@@ -520,7 +529,7 @@ pub fn rbd_export_diff_child(
     snap: &str,
 ) -> Result<tokio::process::Child, DriverError> {
     let spec = format!("{pool}/{image}@{snap}");
-    tokio::process::Command::new("rbd")
+    cmd("rbd")
         .args(["export-diff", &spec, "-"])
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -535,7 +544,7 @@ pub fn rbd_import_diff_child(
     image: &str,
 ) -> Result<tokio::process::Child, DriverError> {
     let spec = format!("{pool}/{image}");
-    tokio::process::Command::new("rbd")
+    cmd("rbd")
         .args(["import-diff", "-", &spec])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
@@ -549,7 +558,7 @@ pub fn rbd_import_diff_child(
 pub async fn rbd_import_diff(pool: &str, image: &str, data: Vec<u8>) -> Result<(), DriverError> {
     use tokio::io::AsyncWriteExt;
     let spec = format!("{pool}/{image}");
-    let mut child = tokio::process::Command::new("rbd")
+    let mut child = cmd("rbd")
         .args(["import-diff", "-", &spec])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
@@ -581,7 +590,7 @@ pub async fn rbd_import_diff(pool: &str, image: &str, data: Vec<u8>) -> Result<(
 }
 
 async fn run_json(bin: &str, args: &[&str]) -> Result<serde_json::Value, DriverError> {
-    let output = tokio::process::Command::new(bin)
+    let output = cmd(bin)
         .args(args)
         .arg("--format")
         .arg("json")

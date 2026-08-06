@@ -410,6 +410,20 @@ heterogeneous per [DATABRIDGE.md](DATABRIDGE.md)). Stage triggers return `202 + 
   "created_at": "...", "updated_at": "..." }
 ```
 
+### `POST /api/atlas/v1/jobs/{id}/cancel` (admin)
+The operator escape hatch for a wedged job. The job engine's worker is single-threaded by design
+(PDF-aligned ordering guarantee — one job at a time), so a job stuck inside a shelled-out
+`ceph`/`rbd` call that never errors or returns (e.g. `rbd migration prepare` against a degraded
+destination pool) blocks every other job on the gateway, for every tenant, for up to the 2h default
+`ATLAS_JOB_TIMEOUT_SECS` — verified live against a real degraded pool; before this endpoint existed
+the only recovery was finding and `kill -9`ing the underlying OS process inside the pod by hand.
+Cancelling the currently-running job drops its dispatch future, which kills any live `rbd`/`ceph`
+child process (`kill_on_drop`); a `queued`/`pending` job is marked failed before the worker ever
+picks it up. `404` if the job doesn't exist; `409` if it's already `succeeded`/`failed`.
+```json
+// 200 → { "id": "job_...", "cancelled": true }
+```
+
 ### `GET /api/atlas/v1/snapshots`
 ```json
 [{ "id": "snap_29a557037a28", "tenant_id": "global", "volume_id": "vol_b16c40e12b76",

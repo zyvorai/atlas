@@ -1,15 +1,22 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
 use atlas_api_types::JobRecord;
 use atlas_driver_k8s::K8sDriver;
 use sqlx::SqlitePool;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Notify};
 
 use crate::spec::JobSpec;
+
+/// The job the worker is currently executing, plus a signal to cancel it. Single-worker, so at
+/// most one entry ever exists.
+struct RunningJob {
+    id: String,
+    cancel: Arc<Notify>,
+}
 
 /// Handle used by the gateway to enqueue jobs.
 #[derive(Clone)]
@@ -20,6 +27,10 @@ pub struct JobEngine {
     paused: Arc<AtomicBool>,
     /// Stable id stamped on `locked_by` when this process claims a job.
     worker_id: String,
+    /// The job currently occupying the single worker, if any — lets `cancel_job` signal it
+    /// directly instead of waiting out `job_timeout()` (see that function's doc comment: with no
+    /// operator override, one wedged job blocks every other job on the gateway for up to 2 hours).
+    current: Arc<Mutex<Option<RunningJob>>>,
 }
 
 /// Tunables for the durable queue poller. Defaults match production; tests pass zeros to disable.
@@ -53,6 +64,7 @@ impl JobEngine {
     ) -> Self {
         let (tx, rx) = mpsc::unbounded_channel::<String>();
         let paused = Arc::new(AtomicBool::new(false));
+        let current = Arc::new(Mutex::new(None));
         let worker_id = format!(
             "{}-{}",
             std::env::var("HOSTNAME").unwrap_or_else(|_| "gateway".into()),
@@ -61,6 +73,7 @@ impl JobEngine {
         let worker_pool = pool.clone();
         let worker_tx = tx.clone();
         let worker_paused = paused.clone();
+        let worker_current = current.clone();
         let worker_id_clone = worker_id.clone();
         tokio::spawn(async move {
             run_worker(
@@ -69,6 +82,7 @@ impl JobEngine {
                 rx,
                 worker_tx,
                 worker_paused,
+                worker_current,
                 worker_id_clone,
             )
             .await
@@ -105,6 +119,7 @@ impl JobEngine {
             tx,
             paused,
             worker_id,
+            current,
         }
     }
 
@@ -186,6 +201,25 @@ impl JobEngine {
             .await?
             .ok_or_else(|| anyhow!("job disappeared after insert"))
     }
+
+    /// Cancel a job: if it's the one currently occupying the worker, signal it directly (the
+    /// dispatch future is dropped, killing any child process via `kill_on_drop`); otherwise, if
+    /// it's still `queued`/`pending`, mark it failed before the worker ever picks it up. Returns
+    /// `false` if the job doesn't exist or has already reached a terminal state.
+    pub async fn cancel_job(&self, job_id: &str) -> Result<bool> {
+        let cancel = {
+            let guard = self.current.lock().unwrap();
+            guard
+                .as_ref()
+                .filter(|r| r.id == job_id)
+                .map(|r| r.cancel.clone())
+        };
+        if let Some(cancel) = cancel {
+            cancel.notify_one();
+            return Ok(true);
+        }
+        atlas_inventory::jobs::cancel_if_queued(&self.pool, job_id).await
+    }
 }
 
 /// Recover jobs the in-memory channel lost across a restart: fail-safe any `running` job (it was
@@ -249,6 +283,7 @@ async fn run_worker(
     mut rx: mpsc::UnboundedReceiver<String>,
     tx: mpsc::UnboundedSender<String>,
     paused: Arc<AtomicBool>,
+    current: Arc<Mutex<Option<RunningJob>>>,
     worker_id: String,
 ) {
     tracing::info!(%worker_id, "atlas-jobs worker started");
@@ -257,7 +292,14 @@ async fn run_worker(
         while paused.load(Ordering::Relaxed) {
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
-        if let Err(e) = execute_job(&pool, &k8s, &job_id, &worker_id).await {
+        let cancel = Arc::new(Notify::new());
+        *current.lock().unwrap() = Some(RunningJob {
+            id: job_id.clone(),
+            cancel: cancel.clone(),
+        });
+        let outcome = execute_job(&pool, &k8s, &job_id, &worker_id, &cancel).await;
+        *current.lock().unwrap() = None;
+        if let Err(e) = outcome {
             let err = format!("{e:#}");
             match atlas_inventory::jobs::retry_budget(&pool, &job_id).await {
                 Ok((count, max)) if count < max => {
@@ -293,7 +335,11 @@ async fn run_worker(
 /// watch that never resolves) would otherwise wedge every subsequent job forever: the stale-running
 /// reclaim only fires after 15 minutes and only for jobs already `running`, never for ones queued
 /// behind a stuck one. Generous enough for a large `rbd export-diff` backup stream; overridable for
-/// unusually large clusters.
+/// unusually large clusters. `POST /jobs/{id}/cancel` (`JobEngine::cancel_job`) is the operator
+/// escape hatch that doesn't require waiting this out — verified live: a real `rbd migration
+/// prepare` wedged indefinitely against a degraded destination pool (librbd itself never errored
+/// or returned), blocking every other job on the gateway; before this API existed the only fix was
+/// shelling into the pod to `kill -9` the underlying `rbd` process by hand.
 fn job_timeout() -> Duration {
     std::env::var("ATLAS_JOB_TIMEOUT_SECS")
         .ok()
@@ -307,6 +353,7 @@ async fn execute_job(
     k8s: &Option<Arc<K8sDriver>>,
     job_id: &str,
     worker_id: &str,
+    cancel: &Notify,
 ) -> Result<()> {
     // Atomic claim: channel + poller may both wake us for the same id.
     if !atlas_inventory::jobs::try_claim(pool, job_id, worker_id).await? {
@@ -320,14 +367,26 @@ async fn execute_job(
     let request = load_request(pool, job_id).await?;
     let spec: JobSpec = serde_json::from_value(request).context("decode job request")?;
 
-    let result = tokio::time::timeout(
-        job_timeout(),
-        crate::dispatch::dispatch(pool, k8s, &job.tenant_id, spec),
-    )
-    .await
-    .map_err(|_| anyhow!("job exceeded the {:?} timeout", job_timeout()))??;
-    atlas_inventory::jobs::mark_succeeded(pool, job_id, &result).await?;
-    Ok(())
+    // Race the dispatch against an operator cancellation. On cancel, the `dispatch` future is
+    // dropped — any `tokio::process::Command` it's awaiting on is killed via `kill_on_drop`
+    // (crates/atlas-driver-ceph/src/cmd.rs), rather than left running as an orphan. Marked
+    // `failed` here (not returned as an error) so run_worker's retry-with-backoff never re-runs
+    // an operator's explicit cancel.
+    tokio::select! {
+        _ = cancel.notified() => {
+            tracing::warn!(job = %job_id, "job cancelled by operator");
+            atlas_inventory::jobs::mark_failed(pool, job_id, "cancelled by operator").await?;
+            Ok(())
+        }
+        r = tokio::time::timeout(
+            job_timeout(),
+            crate::dispatch::dispatch(pool, k8s, &job.tenant_id, spec),
+        ) => {
+            let result = r.map_err(|_| anyhow!("job exceeded the {:?} timeout", job_timeout()))??;
+            atlas_inventory::jobs::mark_succeeded(pool, job_id, &result).await?;
+            Ok(())
+        }
+    }
 }
 
 async fn load_request(pool: &SqlitePool, job_id: &str) -> Result<serde_json::Value> {

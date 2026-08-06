@@ -38,9 +38,10 @@ Implemented:
 
 Day-2 operations added (slices, all fake-first tested): control-plane durability (job recovery, graceful
 shutdown, self-state backup, deep readyz/livez), alerting maturity (ack/silence + job/CDC/quota rules),
-cluster-ops & maintenance (OSD ops, backend cordon, worker pause), governance (token revocation, rate
-limiting), volume lifecycle (orphan GC, QoS), DataBridge CDC self-heal, upgrade pre-flight + rollback,
-and cross-cluster DR **scaffolding** (RBD-mirroring peers/mirrors/failover API + jobs).
+cluster-ops & maintenance (OSD ops, backend cordon, worker pause, job cancellation), governance
+(token revocation, rate limiting), volume lifecycle (orphan GC, QoS), DataBridge CDC self-heal,
+upgrade pre-flight + rollback, and cross-cluster DR **scaffolding** (RBD-mirroring
+peers/mirrors/failover API + jobs).
 
 Deferred: **real** RBD-mirroring/DR verification (needs a 2nd cluster; the API/jobs are scaffolded but
 the `rbd mirror` paths are unverified), per-product integrations beyond the gRPC surface.

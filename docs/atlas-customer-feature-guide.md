@@ -157,6 +157,8 @@ _Atlas is operable, not just observe-and-provision — with alerts, maintenance,
   - **How:** REST `POST /api/atlas/v1/alerts/{id}/ack` · `/silence[?secs=3600]` · `/resolve`; webhook sink via `ATLAS_ALERT_WEBHOOK_URL`.
 - **Maintenance Pause** — Pause the job worker so new work holds in queue until you resume — cluster-wide freeze for maintenance. — _Do risky work with nothing new landing mid-flight._
   - **How:** REST `POST /api/atlas/v1/maintenance { "paused": true }` (resume with `false`); read state with `GET /api/atlas/v1/maintenance`.
+- **Cancel a Wedged Job** — Free a job stuck on a slow or unresponsive backend call instead of waiting out its timeout. — _One stuck operation on one volume never has to freeze provisioning for everyone else._
+  - **How:** REST `POST /api/atlas/v1/jobs/{id}/cancel` (admin) — kills any live `ceph`/`rbd` process the job is waiting on and marks it failed; `409` if it already finished.
 - **Upgrade Pre-Flight** — A preflight check blocks upgrades on HEALTH_ERR clusters, open critical alerts, in-flight jobs, or lagging CDC. — _Never ship an upgrade into an unhealthy cluster._
   - **How:** REST `GET /api/atlas/v1/upgrade/preflight` → `{ ready, checks, blockers }`; `scripts/deploy-remote.sh` gates on it automatically.
 - **Gated Rollout & Rollback** — deploy-remote.sh auto-gates on pre-flight and supports rollout undo, with a --force override. — _Ship and un-ship with guardrails baked into the script._

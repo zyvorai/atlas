@@ -160,6 +160,69 @@ async fn pause_holds_jobs_until_resumed() {
     panic!("job did not drain after resume (last state: '{last}')");
 }
 
+/// `POST /jobs/{id}/cancel` on a job still `queued` (held by maintenance pause) marks it `failed`
+/// immediately, without waiting for the worker — the operator escape hatch for a job that would
+/// otherwise sit behind a wedged one for up to `ATLAS_JOB_TIMEOUT_SECS`.
+#[tokio::test]
+async fn cancel_queued_job() {
+    let base = format!("http://{}/api/atlas/v1", spawn().await);
+    let c = reqwest::Client::new();
+
+    assert_eq!(
+        c.post(format!("{base}/maintenance")).json(&json!({ "paused": true })).send().await.unwrap().status(),
+        200
+    );
+    let job: Value = c.post(format!("{base}/osds/7/out")).send().await.unwrap().json().await.unwrap();
+    let job_id = job["job_id"].as_str().unwrap().to_string();
+
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let held: Value = c.get(format!("{base}/jobs/{job_id}")).send().await.unwrap().json().await.unwrap();
+    assert!(matches!(held["state"].as_str(), Some("queued") | Some("pending")));
+
+    let cancel = c.post(format!("{base}/jobs/{job_id}/cancel")).send().await.unwrap();
+    assert_eq!(cancel.status(), 200);
+    assert_eq!(cancel.json::<Value>().await.unwrap()["cancelled"], true);
+
+    let after: Value = c.get(format!("{base}/jobs/{job_id}")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(after["state"], "failed");
+    assert_eq!(after["error"], "cancelled by operator");
+
+    // Resuming maintenance must not resurrect the cancelled job — it's terminal, try_claim skips it.
+    assert_eq!(
+        c.post(format!("{base}/maintenance")).json(&json!({ "paused": false })).send().await.unwrap().status(),
+        200
+    );
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let still: Value = c.get(format!("{base}/jobs/{job_id}")).send().await.unwrap().json().await.unwrap();
+    assert_eq!(still["state"], "failed");
+}
+
+/// Cancelling an already-terminal or unknown job is rejected rather than silently accepted.
+#[tokio::test]
+async fn cancel_rejects_terminal_and_unknown() {
+    let base = format!("http://{}/api/atlas/v1", spawn().await);
+    let c = reqwest::Client::new();
+
+    // Unknown job id → 404.
+    assert_eq!(c.post(format!("{base}/jobs/job_does_not_exist/cancel")).send().await.unwrap().status(), 404);
+
+    // A fake-mode OSD op completes almost immediately (no real `ceph` CLI call) — cancel after
+    // it's terminal should be 409, not silently accepted.
+    let job: Value = c.post(format!("{base}/osds/8/out")).send().await.unwrap().json().await.unwrap();
+    let job_id = job["job_id"].as_str().unwrap().to_string();
+    let mut terminal = false;
+    for _ in 0..40 {
+        let j: Value = c.get(format!("{base}/jobs/{job_id}")).send().await.unwrap().json().await.unwrap();
+        if matches!(j["state"].as_str(), Some("succeeded") | Some("failed")) {
+            terminal = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(terminal, "job never reached a terminal state");
+    assert_eq!(c.post(format!("{base}/jobs/{job_id}/cancel")).send().await.unwrap().status(), 409);
+}
+
 /// OSD ops enqueue as jobs; reweight validates its weight.
 #[tokio::test]
 async fn osd_ops_enqueue_and_validate() {

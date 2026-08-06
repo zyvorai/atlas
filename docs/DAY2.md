@@ -28,6 +28,11 @@ Rules: cluster health, pool near-full (75/85%), OSD down, capacity forecast, OSD
 ## Maintenance & cluster ops (admin)
 - **Cordon** `POST /backends/{id}/cordon` · `/uncordon` — a cordoned backend rejects new provisioning (503).
 - **Pause** `GET`/`POST /maintenance {paused}` — the job worker holds jobs (`queued`) until resumed.
+- **Cancel a wedged job** `POST /jobs/{id}/cancel` — the job worker is single-threaded, so a job
+  stuck inside a shelled-out `ceph`/`rbd` call that never returns (e.g. `rbd migration prepare`
+  against a degraded pool — verified live) blocks every other job on the gateway for up to
+  `ATLAS_JOB_TIMEOUT_SECS` (2h default). Cancel drops the dispatch future, killing any live
+  `rbd`/`ceph` child process; `404`/`409` if the job is unknown or already terminal.
 - **OSD ops** `POST /osds/{id}/out|in|reweight?weight=` (`ceph osd …`). *Real Ceph.*
 - **Dynamic backends** `POST /backends {backend_type:"nfs"|"zfs", server, targets}` — instantiates a live
   driver + discovers it immediately (not just a catalog row).
@@ -68,3 +73,7 @@ Fake mode skips the `rbd` CLI so drills succeed locally.
 - **Leaked credential**: `POST /auth/tokens/{jti}/revoke` (find the jti via the issue response or audit).
 - **Stalled migration**: alert fires on `CDC replication error` → `POST …/cdc/restart` (or wait for the
   reconciler's bounded auto-restart).
+- **Wedged job blocking the queue**: `GET /jobs?state=running` to spot a job stuck well past its
+  expected duration → `POST /jobs/{id}/cancel` to free the worker immediately instead of waiting out
+  `ATLAS_JOB_TIMEOUT_SECS` (or restarting the pod, which only re-dispatches the same job if the
+  underlying condition — e.g. a degraded pool — hasn't cleared).
