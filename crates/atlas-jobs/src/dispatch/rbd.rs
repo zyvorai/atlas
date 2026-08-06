@@ -188,18 +188,23 @@ pub(crate) async fn dispatch_rbd(
                 }
             }
             // Record the new pool/image location — otherwise the catalog keeps pointing at the
-            // now-defunct source pool.
+            // now-defunct source pool. The row's id is derived deterministically from pool+name
+            // (matching what create/discovery use — see routes/rbd.rs's create_rbd_image), so a
+            // pool move makes the *old* id stale too: rename it, or the next discovery pass
+            // derives a different id for the new pool, treats the old row as an orphan, and
+            // prunes it — the same volume_id-goes-404 bug the create path had.
+            let new_volume_id = format!("vol_{dest_pool}_{image}");
             if !volume_id.is_empty() {
-                sqlx::query(
-                    "UPDATE storage_volumes SET backend_native_id=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+                atlas_inventory::rename_volume_id(
+                    pool,
+                    &volume_id,
+                    &new_volume_id,
+                    &format!("rbd:{dest_pool}/{image}"),
                 )
-                .bind(format!("rbd:{dest_pool}/{image}"))
-                .bind(&volume_id)
-                .execute(pool)
                 .await?;
             }
             Ok(serde_json::json!({
-                "volume_id": volume_id, "from": format!("{rbd_pool}/{image}"),
+                "volume_id": new_volume_id, "from": format!("{rbd_pool}/{image}"),
                 "to": format!("{dest_pool}/{image}")
             }))
         }

@@ -325,6 +325,80 @@ pub async fn delete_volume_row(pool: &SqlitePool, id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Rename a volume's primary key, re-pointing every table that references it (foreign-key
+/// constrained or not) in one transaction — used when a backend-side move changes what a
+/// deterministic id derives to (e.g. `rbd migrate` moving an image to a new pool: its id is
+/// `vol_{pool}_{name}`, so the pool change alone makes the old id stale) but the row itself is
+/// still the same logical volume, just relocated.
+///
+/// `new_backend_native_id` must be the *new* native id, not a copy of the old one — the old row
+/// still holds the old native_id until it's deleted at the end, and migrations/0027's UNIQUE
+/// index on backend_native_id would otherwise reject the new row the instant both rows briefly
+/// share the same (old) native_id.
+///
+/// Inserts the new row before re-pointing children so FOREIGN KEY constraints (storage_snapshots,
+/// snapshot_schedules) never see a moment where they'd reference a missing parent; the old row is
+/// only deleted once nothing points at it anymore.
+pub async fn rename_volume_id(
+    pool: &SqlitePool,
+    old_id: &str,
+    new_id: &str,
+    new_backend_native_id: &str,
+) -> Result<()> {
+    if old_id == new_id {
+        return Ok(());
+    }
+    let mut tx = pool.begin().await?;
+    // updated_at is stamped fresh (not copied) so the renamed row isn't immediately eligible for
+    // upsert_discovery's stale-volume pruning below, which compares updated_at against the
+    // current discovery pass's timestamp.
+    sqlx::query(
+        "INSERT INTO storage_volumes
+            (id, tenant_id, backend_id, cluster_id, pool_id, name, kind, backend_native_id,
+             size_bytes, used_bytes, state, health, policy_id, encryption_state,
+             kubernetes_namespace, pvc_name, storage_class_name, metadata, created_at, updated_at)
+         SELECT ?, tenant_id, backend_id, cluster_id, pool_id, name, kind, ?,
+             size_bytes, used_bytes, state, health, policy_id, encryption_state,
+             kubernetes_namespace, pvc_name, storage_class_name, metadata, created_at,
+             strftime('%Y-%m-%dT%H:%M:%fZ','now')
+         FROM storage_volumes WHERE id = ?",
+    )
+    .bind(new_id)
+    .bind(new_backend_native_id)
+    .bind(old_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query("UPDATE storage_snapshots SET volume_id=? WHERE volume_id=?")
+        .bind(new_id)
+        .bind(old_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("UPDATE snapshot_schedules SET volume_id=? WHERE volume_id=?")
+        .bind(new_id)
+        .bind(old_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        "UPDATE product_bindings SET storage_resource_id=?
+          WHERE storage_resource_type='volume' AND storage_resource_id=?",
+    )
+    .bind(new_id)
+    .bind(old_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query("UPDATE dr_mirrors SET volume_id=? WHERE volume_id=?")
+        .bind(new_id)
+        .bind(old_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM storage_volumes WHERE id=?")
+        .bind(old_id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
 /// Record product ownership of a storage resource (PDF §5.5 ownership mapping).
 #[allow(clippy::too_many_arguments)]
 pub async fn insert_binding(
