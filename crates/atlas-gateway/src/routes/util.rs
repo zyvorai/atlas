@@ -39,6 +39,15 @@ pub(crate) fn ceph_default_caps(t: BackendType) -> Capabilities {
             expansion: true,
             replication: true,
         },
+        // atlas-driver-nfs / atlas-driver-zfs only implement discover/health/list_pools/
+        // list_volumes/metrics (read-only) — every write-path StorageDriver method falls back to
+        // the trait default (NotImplemented), and both classify their volumes as
+        // VolumeKind::Filesystem. `Capabilities::default()` (all false, including `file`) was
+        // reporting a live, functioning NFS/ZFS backend as supporting nothing at all.
+        BackendType::Nfs | BackendType::Zfs => Capabilities {
+            file: true,
+            ..Capabilities::default()
+        },
         _ => Capabilities::default(),
     }
 }
