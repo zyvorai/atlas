@@ -385,6 +385,14 @@ pub(crate) async fn create_bucket(
     if body.name.trim().is_empty() {
         return Err(AppError::Validation("name is required".into()));
     }
+
+    // Maintenance: a cordoned backend rejects new provisioning (existing buckets are untouched).
+    if atlas_inventory::is_backend_cordoned(&s.pool, CEPH_BACKEND_ID).await? {
+        return Err(AppError::Unavailable(format!(
+            "backend {CEPH_BACKEND_ID} is cordoned for maintenance"
+        )));
+    }
+
     // The OBC (and its Secret/ConfigMap) live where this gateway can read them.
     let namespace = body.namespace.unwrap_or_else(|| "rook-ceph".into());
     let storage_class = body
@@ -830,6 +838,14 @@ pub(crate) async fn create_restore(
         .or_else(|| src.as_ref().and_then(|v| v.storage_class_name.clone()))
         .unwrap_or_else(|| atlas_policy::DEFAULT_BLOCK_SC.to_string());
     let size_bytes = src.as_ref().map(|v| v.size_bytes).unwrap_or(1_073_741_824);
+
+    // Maintenance: a restore provisions a new volume just like `POST /volumes` does, so it needs
+    // the same cordon guard — a cordoned backend rejects new provisioning.
+    if atlas_inventory::is_backend_cordoned(&s.pool, CEPH_BACKEND_ID).await? {
+        return Err(AppError::Unavailable(format!(
+            "backend {CEPH_BACKEND_ID} is cordoned for maintenance"
+        )));
+    }
 
     // Tenant quota admission (PDF §14): a restore provisions a new volume just like `POST /volumes`
     // does, so it must be admission-checked the same way.
