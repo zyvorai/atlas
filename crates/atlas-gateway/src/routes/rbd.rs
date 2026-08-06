@@ -110,6 +110,18 @@ pub(crate) async fn create_rbd_image(
         .enqueue(&job_id, &tenant_id, &actor.id, spec, None)
         .await
         .map_err(AppError::from)?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        Some(&tenant_id),
+        &actor.id,
+        "rbd_image.create.requested",
+        "rbd_image",
+        &volume_id,
+        "accepted",
+        Some(json!({ "rbd": format!("{pool_name}/{}", body.name), "size_bytes": body.size_bytes })),
+        None,
+    )
+    .await;
     Ok(accepted(
         &job,
         json!({ "volume_id": volume_id, "rbd": format!("{pool_name}/{}", body.name) }),
@@ -142,6 +154,18 @@ pub(crate) async fn delete_rbd_image(
         .enqueue(&job_id, "global", &actor.id, spec, None)
         .await
         .map_err(AppError::from)?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "rbd_image.delete.requested",
+        "rbd_image",
+        &format!("{pool_name}/{image}"),
+        "accepted",
+        None,
+        None,
+    )
+    .await;
     Ok(accepted(
         &job,
         json!({ "rbd": format!("{pool_name}/{image}") }),
@@ -195,6 +219,19 @@ pub(crate) async fn clone_rbd_image(
         .enqueue(&job_id, &tenant_id, &actor.id, spec, None)
         .await
         .map_err(AppError::from)?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        Some(&tenant_id),
+        &actor.id,
+        "rbd_image.clone.requested",
+        "rbd_image",
+        &volume_id,
+        "accepted",
+        Some(json!({ "clone": format!("{pool_name}/{}", body.name),
+                     "parent": format!("{pool_name}/{image}@{snap}") })),
+        None,
+    )
+    .await;
     Ok(accepted(
         &job,
         json!({ "volume_id": volume_id, "clone": format!("{pool_name}/{}", body.name),
@@ -242,6 +279,18 @@ pub(crate) async fn resize_rbd_image(
         .enqueue(&job_id, "global", &actor.id, spec, None)
         .await
         .map_err(AppError::from)?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "rbd_image.resize.requested",
+        "rbd_image",
+        &format!("{pool_name}/{image}"),
+        "accepted",
+        Some(json!({ "new_size_bytes": body.size_bytes, "allow_shrink": body.allow_shrink })),
+        None,
+    )
+    .await;
     Ok(accepted(
         &job,
         json!({ "rbd": format!("{pool_name}/{image}"), "new_size_bytes": body.size_bytes, "allow_shrink": body.allow_shrink }),
@@ -280,6 +329,18 @@ pub(crate) async fn migrate_rbd_image(
         dest_pool: q.dest_pool.clone(),
     };
     let job = s.jobs.enqueue(&job_id, "global", &actor.id, spec, None).await?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "rbd_image.migrate.requested",
+        "rbd_image",
+        &format!("{pool_name}/{image}"),
+        "accepted",
+        Some(json!({ "dest_pool": q.dest_pool })),
+        None,
+    )
+    .await;
     Ok(accepted(&job, json!({ "from": format!("{pool_name}/{image}"), "to": format!("{}/{image}", q.dest_pool) })))
 }
 
@@ -300,6 +361,18 @@ pub(crate) async fn flatten_rbd_image(
         .enqueue(&job_id, "global", &actor.id, spec, None)
         .await
         .map_err(AppError::from)?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "rbd_image.flatten.requested",
+        "rbd_image",
+        &format!("{pool_name}/{image}"),
+        "accepted",
+        None,
+        None,
+    )
+    .await;
     Ok(accepted(
         &job,
         json!({ "rbd": format!("{pool_name}/{image}") }),
@@ -355,6 +428,18 @@ pub(crate) async fn create_rbd_snap(
         .enqueue(&job_id, "global", &actor.id, spec, None)
         .await
         .map_err(AppError::from)?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "rbd_snapshot.create.requested",
+        "rbd_snapshot",
+        &format!("{pool_name}/{image}@{}", body.name),
+        "accepted",
+        None,
+        None,
+    )
+    .await;
     Ok(accepted(
         &job,
         json!({ "snapshot": format!("{pool_name}/{image}@{}", body.name) }),
@@ -383,6 +468,18 @@ pub(crate) async fn rollback_rbd_image(
         .enqueue(&job_id, "global", &actor.id, spec, None)
         .await
         .map_err(AppError::from)?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "rbd_image.rollback.requested",
+        "rbd_image",
+        &format!("{pool_name}/{image}"),
+        "accepted",
+        Some(json!({ "rollback_to": body.name })),
+        None,
+    )
+    .await;
     Ok(accepted(
         &job,
         json!({ "rbd": format!("{pool_name}/{image}"), "rollback_to": body.name }),
@@ -409,6 +506,18 @@ pub(crate) async fn delete_rbd_snap(
         .enqueue(&job_id, "global", &actor.id, spec, None)
         .await
         .map_err(AppError::from)?;
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        None,
+        &actor.id,
+        "rbd_snapshot.delete.requested",
+        "rbd_snapshot",
+        &format!("{pool_name}/{image}@{snap}"),
+        "accepted",
+        None,
+        None,
+    )
+    .await;
     Ok(accepted(
         &job,
         json!({ "rbd": format!("{pool_name}/{image}"), "deleted_snapshot": snap }),
