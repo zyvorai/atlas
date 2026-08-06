@@ -96,6 +96,23 @@ pub(crate) async fn create_rbd_image(
 
     let pool_name = body.pool.unwrap_or_else(|| DEFAULT_RBD_POOL.into());
     let tenant_id = body.tenant_id.unwrap_or_else(|| "global".into());
+
+    // Tenant quota admission (PDF §14): this direct-RBD path bypasses CSI, so it needs the same
+    // guard `POST /volumes` has — otherwise a tenant's byte/volume-count quota is pure decoration.
+    match atlas_inventory::tenants::check_admission(&s.pool, &tenant_id, body.size_bytes).await? {
+        atlas_inventory::tenants::QuotaCheck::Ok => {}
+        atlas_inventory::tenants::QuotaCheck::Bytes { limit, would_be } => {
+            return Err(AppError::Conflict(format!(
+                "tenant {tenant_id} byte quota exceeded: {would_be} > {limit}"
+            )));
+        }
+        atlas_inventory::tenants::QuotaCheck::Count { limit, current } => {
+            return Err(AppError::Conflict(format!(
+                "tenant {tenant_id} volume-count quota exceeded: {current} already at limit {limit}"
+            )));
+        }
+    }
+
     let volume_id = ids::volume_id();
     let job_id = ids::job_id();
     let spec = JobSpec::RbdCreate {
@@ -204,6 +221,31 @@ pub(crate) async fn clone_rbd_image(
 
     let snap = body.snap.unwrap_or_else(|| format!("{}-base", body.name));
     let tenant_id = body.tenant_id.unwrap_or_else(|| "global".into());
+
+    // Tenant quota admission (PDF §14): a clone starts at the parent's virtual size — resolve it
+    // from the catalog (populated by discovery/create in both real and fake mode) so quotas apply
+    // here the same as they do to `POST /volumes`.
+    let parent_native = format!("rbd:{pool_name}/{image}");
+    let parent_size = atlas_inventory::list_volumes(&s.pool)
+        .await?
+        .into_iter()
+        .find(|v| v.backend_native_id.as_deref() == Some(parent_native.as_str()))
+        .map(|v| v.size_bytes)
+        .unwrap_or(0);
+    match atlas_inventory::tenants::check_admission(&s.pool, &tenant_id, parent_size).await? {
+        atlas_inventory::tenants::QuotaCheck::Ok => {}
+        atlas_inventory::tenants::QuotaCheck::Bytes { limit, would_be } => {
+            return Err(AppError::Conflict(format!(
+                "tenant {tenant_id} byte quota exceeded: {would_be} > {limit}"
+            )));
+        }
+        atlas_inventory::tenants::QuotaCheck::Count { limit, current } => {
+            return Err(AppError::Conflict(format!(
+                "tenant {tenant_id} volume-count quota exceeded: {current} already at limit {limit}"
+            )));
+        }
+    }
+
     let volume_id = ids::volume_id();
     let job_id = ids::job_id();
     let spec = JobSpec::RbdClone {
