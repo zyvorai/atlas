@@ -592,6 +592,9 @@ pub(crate) fn make_backup_delete_spec(
         manifest_key: backup.object_key.clone(),
         data_key: format!("{}.rbd-diff", backup.object_key),
         volume_namespace,
+        // Same derivation `create_backup` used for the CSI VolumeSnapshot name (object_store.rs)
+        // — recomputed here since it isn't persisted anywhere the delete path can read back.
+        snapshot_name: format!("{pvc_name}-bkp-{}", &backup.id[4..]),
         pvc_name,
         rbd_snap: format!("atlasbkp-{}", &backup.id[4..]),
         bucket_namespace: bucket.namespace.unwrap_or_else(|| "rook-ceph".into()),

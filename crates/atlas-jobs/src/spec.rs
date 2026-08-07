@@ -271,7 +271,11 @@ pub enum JobSpec {
     /// DataBridge (object leg): copy a cloud object store -> Ceph RGW (full | incremental).
     #[serde(rename = "databridge.object.migrate")]
     ObjectMigrate { migration_id: String },
-    /// Delete a backup: remove its S3 manifest + data objects and the RBD snapshot (best-effort).
+    /// Delete a backup: remove its S3 manifest + data objects, the RBD snapshot, and the CSI
+    /// VolumeSnapshot the backup created (best-effort). The VolumeSnapshot carries the
+    /// `pvc-as-source-protection` finalizer — leaving it behind permanently blocks the source
+    /// volume from ever actually being deleted (it sits `Terminating` forever), even though Atlas
+    /// reports both the backup and a later volume delete as successful.
     #[serde(rename = "backup.delete")]
     BackupDelete {
         backup_id: String,
@@ -280,6 +284,7 @@ pub enum JobSpec {
         volume_namespace: String,
         pvc_name: String,
         rbd_snap: String,
+        snapshot_name: String,
         bucket_namespace: String,
         bucket_secret_ref: String,
         bucket_endpoint: String,

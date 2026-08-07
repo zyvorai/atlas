@@ -206,6 +206,7 @@ pub(crate) async fn dispatch_object(
             volume_namespace,
             pvc_name,
             rbd_snap,
+            snapshot_name,
             bucket_namespace,
             bucket_secret_ref,
             bucket_endpoint,
@@ -247,6 +248,17 @@ pub(crate) async fn dispatch_object(
                 {
                     tracing::warn!("rbd snap rm {pool_name}/{image}@{rbd_snap}: {e:#}");
                 }
+            }
+            // Best-effort: remove the CSI VolumeSnapshot the backup created. Without this it's
+            // orphaned forever, still holding the `pvc-as-source-protection` finalizer — the
+            // source PVC then sits `Terminating` indefinitely the moment anyone tries to delete
+            // it, even though both the backup and the volume delete report success. Verified
+            // live: a backup's PVC was still stuck Terminating 17h after "successful" deletion.
+            if let Err(e) = k8s
+                .delete_volume_snapshot(&volume_namespace, &snapshot_name)
+                .await
+            {
+                tracing::warn!("delete VolumeSnapshot {volume_namespace}/{snapshot_name}: {e:#}");
             }
             atlas_inventory::backups::delete_backup_row(pool, &backup_id).await?;
             Ok(serde_json::json!({ "backup_id": backup_id, "deleted": true }))

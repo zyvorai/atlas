@@ -249,6 +249,10 @@ async fn prune_scheduled_backups(pool: &SqlitePool, jobs: &JobEngine, volume_id:
             manifest_key: old.object_key.clone(),
             data_key: format!("{}.rbd-diff", old.object_key),
             volume_namespace: ns,
+            // Same derivation `create_backup` used for the CSI VolumeSnapshot name
+            // (routes/object_store.rs) — recomputed here since it isn't persisted anywhere this
+            // pruning path can read back.
+            snapshot_name: format!("{pvc}-bkp-{}", &old.id[4..]),
             pvc_name: pvc,
             rbd_snap: format!("atlasbkp-{}", &old.id[4..]),
             bucket_namespace: bucket.namespace.unwrap_or_else(|| "rook-ceph".into()),
