@@ -197,6 +197,20 @@ pub async fn upsert_backend(pool: &SqlitePool, b: &StorageBackend) -> Result<()>
 }
 
 /// Insert or update a single volume (write path). Sets tenant/policy which discovery leaves default.
+///
+/// Races the periodic discovery worker: a `VolumeCreate` job only calls this once, at the very
+/// end, after `poll_pvc_phase` has already waited for the PVC to reach `Bound` — by which point
+/// the real RBD image is already visible to `rbd ls`. If a discovery tick fires in that window it
+/// can insert its own row for the same `backend_native_id` first (under its driver-derived id,
+/// via `upsert_discovery`'s own canonical-id resolution finding nothing yet to reconcile with).
+/// This insert would then hit the partial UNIQUE index on `backend_native_id` (migration 0027)
+/// and fail outright — worse, the caller's subsequent `product_bindings` insert uses `v.id`
+/// regardless, which would silently reference a volume_id that was never actually created.
+/// Verified live: `scripts/live/05-volume-lifecycle.sh`'s `POST /volumes` failed with
+/// `UNIQUE constraint failed: storage_volumes.backend_native_id` under real concurrent discovery.
+/// Reconcile by renaming the discovery-created row onto our intended id first, so the id the
+/// caller is already waiting on (and about to bind product ownership to) is the one that ends up
+/// live in inventory.
 pub async fn upsert_volume(
     pool: &SqlitePool,
     backend_id: &str,
@@ -204,6 +218,18 @@ pub async fn upsert_volume(
     v: &StorageVolume,
     policy_id: Option<&str>,
 ) -> Result<()> {
+    if let Some(native) = v.backend_native_id.as_deref() {
+        if let Some(existing_id) = sqlx::query_scalar::<_, String>(
+            "SELECT id FROM storage_volumes WHERE backend_native_id = ? AND id != ?",
+        )
+        .bind(native)
+        .bind(&v.id)
+        .fetch_optional(pool)
+        .await?
+        {
+            rename_volume_id(pool, &existing_id, &v.id, native).await?;
+        }
+    }
     sqlx::query(
         "INSERT INTO storage_volumes
             (id, tenant_id, backend_id, cluster_id, pool_id, name, kind, backend_native_id, size_bytes, used_bytes,
@@ -331,10 +357,14 @@ pub async fn delete_volume_row(pool: &SqlitePool, id: &str) -> Result<()> {
 /// `vol_{pool}_{name}`, so the pool change alone makes the old id stale) but the row itself is
 /// still the same logical volume, just relocated.
 ///
-/// `new_backend_native_id` must be the *new* native id, not a copy of the old one — the old row
-/// still holds the old native_id until it's deleted at the end, and migrations/0027's UNIQUE
-/// index on backend_native_id would otherwise reject the new row the instant both rows briefly
-/// share the same (old) native_id.
+/// `new_backend_native_id` is usually the *new* native id (e.g. `rbd migrate` moving an image to
+/// a new pool changes it) — but it may also be the *same* value as the old row's, when the
+/// caller's only goal is re-pointing which id owns an unchanged real resource (e.g.
+/// `upsert_volume` reconciling a discovery-won race onto the id its own caller already promised).
+/// Either way, the old row's own claim on `backend_native_id` is released (set NULL) before the
+/// new row is inserted, so migrations/0027's partial UNIQUE index never sees both rows holding
+/// the same non-null value at once — needed for the same-value case, and harmless for the
+/// different-value case the release predates.
 ///
 /// Inserts the new row before re-pointing children so FOREIGN KEY constraints (storage_snapshots,
 /// snapshot_schedules) never see a moment where they'd reference a missing parent; the old row is
@@ -349,6 +379,10 @@ pub async fn rename_volume_id(
         return Ok(());
     }
     let mut tx = pool.begin().await?;
+    sqlx::query("UPDATE storage_volumes SET backend_native_id = NULL WHERE id = ?")
+        .bind(old_id)
+        .execute(&mut *tx)
+        .await?;
     // updated_at is stamped fresh (not copied) so the renamed row isn't immediately eligible for
     // upsert_discovery's stale-volume pruning below, which compares updated_at against the
     // current discovery pass's timestamp.

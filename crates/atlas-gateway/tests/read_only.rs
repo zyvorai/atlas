@@ -1308,3 +1308,86 @@ async fn discovery_reconciles_id_by_backend_native_id_not_duplicate() {
     );
     assert_eq!(matches[0].used_bytes, Some(52428800), "discovery's fresh data must still land");
 }
+
+/// The mirror-image race: a `VolumeCreate` job only calls `upsert_volume` once, at the very end,
+/// after the PVC is already `Bound` — so a concurrent discovery tick can win the race and insert
+/// its own row for the same `backend_native_id` first, under its own driver-derived id (discovery
+/// finds nothing to reconcile with yet, since the create job hasn't inserted anything). Verified
+/// live: `scripts/live/05-volume-lifecycle.sh` hit `UNIQUE constraint failed:
+/// storage_volumes.backend_native_id` under this exact race against the real cluster.
+/// `upsert_volume` must reconcile onto the *caller's* intended id — not just avoid erroring —
+/// because the caller's response already promised that id and is about to insert a
+/// `product_bindings` row referencing it.
+#[tokio::test]
+async fn create_volume_reconciles_onto_intended_id_after_discovery_race() {
+    let (_addr, pool) = spawn().await;
+
+    let backend = atlas_api_types::StorageBackend {
+        id: "bkd_ceph_lab".into(),
+        name: "b".into(),
+        backend_type: atlas_api_types::BackendType::Ceph,
+        mode: atlas_api_types::BackendMode::ManagedRook,
+        status: "active".into(),
+        capabilities: Default::default(),
+        connection_ref: None,
+        cordoned: false,
+    };
+    atlas_inventory::upsert_backend(&pool, &backend)
+        .await
+        .unwrap();
+
+    // Discovery wins the race: it inserts a row for the real RBD image under its own derived id,
+    // before the VolumeCreate job's own upsert_volume call runs.
+    let raced_in = atlas_api_types::StorageVolume {
+        id: "vol_rbd-nvme-prod_csi-vol-raced".into(),
+        cluster_id: None,
+        pool_id: None,
+        name: "csi-vol-raced".into(),
+        kind: atlas_api_types::VolumeKind::Block,
+        backend_native_id: Some("rbd:rbd-nvme-prod/csi-vol-raced".into()),
+        size_bytes: 1073741824,
+        used_bytes: Some(0),
+        state: "available".into(),
+        health: atlas_api_types::Health::Ok,
+        kubernetes_namespace: Some("default".into()),
+        pvc_name: Some("live-race-vol".into()),
+        storage_class_name: Some("zyvor-rbd-prod".into()),
+    };
+    atlas_inventory::upsert_volume(&pool, "bkd_ceph_lab", "global", &raced_in, None)
+        .await
+        .unwrap();
+
+    // The VolumeCreate job now runs its own (losing) upsert_volume with the id the caller's
+    // response already promised — must not error, must land on this id.
+    let intended = atlas_api_types::StorageVolume {
+        id: "vol_caller_promised_this_id".into(),
+        cluster_id: None,
+        pool_id: None,
+        name: "live-race-vol".into(),
+        kind: atlas_api_types::VolumeKind::Block,
+        backend_native_id: Some("rbd:rbd-nvme-prod/csi-vol-raced".into()),
+        size_bytes: 1073741824,
+        used_bytes: None,
+        state: "bound".into(),
+        health: atlas_api_types::Health::Ok,
+        kubernetes_namespace: Some("default".into()),
+        pvc_name: Some("live-race-vol".into()),
+        storage_class_name: Some("zyvor-rbd-prod".into()),
+    };
+    atlas_inventory::upsert_volume(&pool, "bkd_ceph_lab", "tnt_default", &intended, Some("development"))
+        .await
+        .expect("must reconcile onto the intended id instead of erroring on the UNIQUE index");
+
+    let all = atlas_inventory::list_volumes(&pool).await.unwrap();
+    let matches: Vec<_> = all
+        .iter()
+        .filter(|v| v.backend_native_id.as_deref() == Some("rbd:rbd-nvme-prod/csi-vol-raced"))
+        .collect();
+    assert_eq!(matches.len(), 1, "expected exactly one row, got: {all:?}");
+    assert_eq!(
+        matches[0].id, "vol_caller_promised_this_id",
+        "the id the caller's API response already promised must be the one that's live \
+         (a product_bindings insert right after this uses that exact id)"
+    );
+    assert_eq!(matches[0].state, "bound", "create-time data must win, not be lost to the race");
+}
