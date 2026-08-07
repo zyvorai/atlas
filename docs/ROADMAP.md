@@ -282,8 +282,13 @@ See [DATABRIDGE.md](DATABRIDGE.md).
   and cutover stages need the Kafka/Debezium stack, which isn't installed on the shared lab. SQL
   Server and Oracle are verified through discovery only. Postgres is the only engine verified
   end-to-end including real CDC.
-- Single Ceph backend id (`bkd_ceph_lab`) wired at startup; multi-backend registry exists but is
-  not yet driven by `POST /backends` creating live drivers.
+- **NFS/ZFS drivers are fixture-only**: `POST /backends {backend_type: "nfs"|"zfs", server, ...}`
+  does instantiate a live driver instance and run it through discovery immediately (verified
+  live) — but `atlas-driver-nfs`/`atlas-driver-zfs` are explicitly MVP/architecture-proof drivers
+  (see their crate-level doc comments) that never actually connect to the given server: they
+  always report the same deterministic capacity fixture (8 TB / 30% used) regardless of the
+  address, rather than running `showmount`/`df` or `zpool list`/`zfs list`. Only the Ceph driver
+  talks to real infrastructure today.
 - Pool `kind` is name-heuristic (doesn't yet read `ceph osd pool application` metadata).
 - Single-node Ceph reports `HEALTH_WARN` (expected: 1 OSD < default size 3).
 - Per-product integrations beyond the gRPC surface (Veyron VM datastores, Hyper2KVM direct-to-RBD

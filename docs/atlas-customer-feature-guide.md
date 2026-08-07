@@ -43,9 +43,16 @@ This is the customer-facing onboarding guide — how to access the product, your
   1. `curl -s -X POST localhost:5110/api/atlas/v1/backends/bkd_ceph_lab/discover` (or `atlasctl discover`) normalizes backend state into the SQLite inventory.
   1. `curl -s localhost:5110/api/atlas/v1/pools | jq` and `.../volumes` — expected fake inventory: 3 pools, 2 volumes, 6 OSDs.
   1. In the console: Storage Center → Inventory / Pools / Volumes.
-- **Register a live NFS or ZFS backend**
+- **Register an NFS or ZFS backend**
   1. `POST /api/atlas/v1/backends` with `{ "name": "nas-1", "backend_type": "nfs", ... }` — Atlas instantiates the driver and discovers it immediately (not just a catalog row).
   1. Confirm with `GET /api/atlas/v1/backends`; filter pools by `GET /api/atlas/v1/pools?backend=`.
+  1. **Honest status**: NFS and ZFS are architecture-proof drivers today — they exist to show a
+     non-Ceph backend flows through the same discovery → inventory → REST/gRPC/UI surface as Ceph,
+     not to talk to a real NFS/ZFS host yet. Registration always succeeds and always reports the
+     same deterministic capacity fixture (8 TB / 30% used) regardless of what server/exports you
+     give it — it never actually runs `showmount`/`df` or `zpool list`/`zfs list` against it. Real
+     capacity/volume discovery for these two backends is not implemented; only Ceph is backed by
+     the real driver.
 - **Provision a volume by intent**
   1. `POST /api/atlas/v1/volumes` with `{ "tenant_id": "...", "name": "billing-db-root", "size_bytes": 3221225472, "kind": "block", "policy": "database", "owner": {...} }` → `202 + job_id`.
   1. Poll `GET /api/atlas/v1/jobs/{id}` (or watch SSE at `/api/atlas/v1/jobs/{id}/watch`) until `succeeded`.
@@ -64,7 +71,7 @@ _An intent-driven gateway that decouples every product from the storage undernea
 
 - **Intent-Based Provisioning** — Products request an intent class ("production block storage") and Atlas resolves it to a concrete backend, pool, and placement. — _Callers stay decoupled from Ceph or any future backend — no pool internals leak into product code._
   - **How:** REST `POST /api/atlas/v1/volumes` with a `policy` intent (e.g. `"database"`), which `atlas-policy` resolves to a StorageClass; browse the catalog at `GET /api/atlas/v1/policies`. Console: Storage Center → Volumes → Create.
-- **Pluggable Storage Drivers** — A single StorageDriver trait fronts every backend, with real Ceph, NFS, ZFS, and Kubernetes drivers plus a fake driver for local runs. — _Add a backend once and every product gets it through the same stable API._
+- **Pluggable Storage Drivers** — A single StorageDriver trait fronts every backend: real Ceph and a real read-only Kubernetes driver, plus NFS/ZFS drivers proving the architecture scales past Ceph (fixture data, not live yet — see §4), and a fake driver for local runs. — _Add a backend once and every product gets it through the same stable API._
   - **How:** The driver is chosen by `backend_type` at registration — `POST /api/atlas/v1/backends { "backend_type": "ceph|nfs|zfs|kubernetes" }`; run local with `ATLAS_CEPH_DRIVER_MODE=fake`. Console: Storage Center → Backends.
 - **Atlas Gateway** — An axum server that centralizes auth, audit, and the API surface, and embeds the Storage Center console in the binary. — _One deployable front door for storage across all nine Zyvor products._
   - **How:** Start it with `make run`; it serves the console at `http://127.0.0.1:5110/` and REST at `/api/atlas/v1/*` from one binary. Health: `curl localhost:5110/health`.
@@ -116,9 +123,9 @@ _Snapshots, clones, and off-cluster backups — scheduled, verified, and retenti
 _Run Ceph, NFS, and ZFS side by side — and operate Ceph natively when it's the driver._
 
 - **Three Storage Backends** — Ceph, NFS, and ZFS all live behind the same StorageDriver, with filters, per-backend gauges, and a backends summary. — _Mix backends under one control plane and one API._
-  - **How:** REST `GET /api/atlas/v1/backends`; filter inventory with `GET /api/atlas/v1/pools?backend=` and `/volumes?backend=`. Console: Storage Center → Backends.
-- **Dynamic Backend Registration** — Register a live NFS or ZFS backend over the API and Atlas instantiates the driver and discovers it immediately. — _Onboard new storage without redeploying the gateway._
-  - **How:** REST `POST /api/atlas/v1/backends { "backend_type": "nfs"|"zfs", "server": ..., "targets": [...] }` — instantiates the driver and discovers on the spot. Console: Storage Center → Backends → Add.
+  - **How:** REST `GET /api/atlas/v1/backends`; filter inventory with `GET /api/atlas/v1/pools?backend=` and `/volumes?backend=`. Console: Storage Center → Backends. Only the Ceph driver talks to real infrastructure today — NFS and ZFS are architecture-proof drivers that always report a fixed capacity fixture (see below), not real capacity/volumes from your server.
+- **Dynamic Backend Registration** — Register an NFS or ZFS backend over the API and Atlas instantiates the driver and discovers it immediately. — _Onboard new storage without redeploying the gateway._
+  - **How:** REST `POST /api/atlas/v1/backends { "backend_type": "nfs"|"zfs", "server": ..., "targets": [...] }` — instantiates the driver and discovers on the spot. Console: Storage Center → Backends → Add. The NFS/ZFS drivers don't yet run real `showmount`/`df` or `zpool list`/`zfs list` against the target — registration always succeeds and always returns the same deterministic 8 TB / 30%-used fixture regardless of the server address given, so treat this as a proof of the pluggable-driver architecture rather than production-ready NFS/ZFS support.
 - **Backend Cordon & Drain** — Cordon a backend to reject new provisioning (503) while you drain and service it, then uncordon. — _Take storage offline for maintenance without breaking callers._
   - **How:** REST `POST /api/atlas/v1/backends/{id}/cordon` then `.../uncordon` (creates against a cordoned backend return `503`). Console: Storage Center → Backends → Cordon.
 - **Ceph-Native Introspection** — Read ceph status, osd-tree, osd-df, and df directly through dedicated endpoints. — _Diagnose the real cluster without leaving the control plane._
