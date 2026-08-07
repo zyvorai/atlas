@@ -32,9 +32,16 @@ Each crate has its own `README.md`:
 | [`atlas-api-types`](../crates/atlas-api-types/README.md) | shared serde DTOs (the contract) |
 | [`atlas-driver-core`](../crates/atlas-driver-core/README.md) | `StorageDriver` trait + registry |
 | [`atlas-driver-ceph`](../crates/atlas-driver-ceph/README.md) | real + fake Ceph drivers |
+| `atlas-driver-nfs` | `NfsDriver` — second backend, fixture-only MVP |
+| `atlas-driver-zfs` | `ZfsDriver` — third backend, fixture-only MVP |
+| `atlas-driver-rgw` | S3 client for RGW buckets/backups |
 | [`atlas-driver-k8s`](../crates/atlas-driver-k8s/README.md) | live Kubernetes driver |
+| `atlas-jobs` | async job engine (durable DB queue, single worker) |
+| `atlas-policy` | intent → StorageClass + access/volume mode |
+| `atlas-monitor` | discovery + alert-rule worker, Ceph mgr metrics scrape |
 | [`atlas-inventory`](../crates/atlas-inventory/README.md) | SQLite read/upsert model + audit |
 | [`atlas-discovery`](../crates/atlas-discovery/README.md) | discovery worker |
+| `atlas-databridge` | cloud-to-edge DB + object migration control plane |
 | [`atlas-gateway`](../crates/atlas-gateway/README.md) | axum server (bin) |
 | [`atlas-cli`](../crates/atlas-cli/README.md) | `atlasctl` REST client |
 

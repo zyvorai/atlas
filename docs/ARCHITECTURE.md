@@ -14,7 +14,8 @@ Before Atlas, storage logic was scattered: `hyper2kvm` shipped its own ceph-csi 
 Atlas centralizes it:
 
 - **One API** — products never talk to Ceph directly.
-- **Pluggable drivers** — Ceph today; NFS/ZFS/SAN/cloud later, with no product changes.
+- **Pluggable drivers** — Ceph (real), NFS/ZFS (fixture-only MVP proofs-of-architecture) today;
+  SAN/cloud and real NFS/ZFS backends later, with no product changes.
 - **Backend-agnostic model** — a `StorageVolume` may be backed by RBD now and SAN tomorrow.
 - **Ownership + audit** — every volume maps to product/resource/tenant/policy/pool/cluster.
 
@@ -25,17 +26,25 @@ atlas-api-types  ─────────────┐ (DTOs: the shared co
         ▲                      │
         │                      ▼
 atlas-common            atlas-driver-core ──► StorageDriver trait, DriverError, DriverRegistry
-(config/error/ids)              ▲   ▲
-        ▲                       │   │
-        │            ┌──────────┘   └──────────┐
-        │      atlas-driver-ceph          atlas-driver-k8s
-        │      (real + fake)              (live StorageClass/PVC/PV)
+(config/error/ids)              ▲   ▲   ▲   ▲
+        ▲                       │   │   │   │
+        │            ┌──────────┘   │   │   └──────────┐
+        │      atlas-driver-ceph    │   │         atlas-driver-k8s
+        │      (real + fake)        │   │         (live StorageClass/PVC/PV)
+        │            │       atlas-driver-nfs  atlas-driver-zfs
+        │            │       (fixture MVP)     (fixture MVP)
+        │            ▼
+        │      atlas-driver-rgw (S3 client for RGW buckets/backups)
+        │            ▲
+        │      atlas-jobs (async job engine)  atlas-policy (intent → placement)
         │            ▲
         │      atlas-inventory (SQLite RO model + audit)
         │            ▲
-        │      atlas-discovery (driver → inventory)
+        │      atlas-discovery (driver → inventory)   atlas-monitor (alert rules + metrics scrape)
         │            ▲
         └───── atlas-gateway (axum server: state, auth, routes)  ◄── atlas-cli (atlasctl)
+                     ▲
+               atlas-databridge (DB/object migration control plane, layered on the same job engine)
 ```
 
 Dependency rule: the gateway and discovery worker depend only on the **`StorageDriver` trait**,
@@ -75,6 +84,8 @@ purely additive.
 |---|---|---|---|
 | Real Ceph | `atlas-driver-ceph` | Parses `ceph status`, `ceph df detail`, `ceph osd tree`, `rbd ls -l` into DTOs | Arg-arrays only, `--format json`. `ATLAS_CEPH_DRIVER_MODE=real`. |
 | Fake Ceph | `atlas-driver-ceph` | Deterministic fixtures | For local dev/tests/demo. `ATLAS_CEPH_DRIVER_MODE=fake`. |
+| NFS | `atlas-driver-nfs` | Exports → pools, shares → filesystem volumes | **Fixture-only MVP**: instantiated live and discovered immediately via `POST /backends`, but never actually connects — always the same deterministic capacity fixture regardless of the server address. |
+| ZFS | `atlas-driver-zfs` | Zpools → pools, datasets → filesystem volumes | Same fixture-only MVP caveat as NFS. |
 | Kubernetes | `atlas-driver-k8s` | Lists StorageClasses / PVCs / PVs via `kube-rs`; tags Ceph-backed classes | Always live when a cluster is reachable. |
 
 ## Request flow (discovery)

@@ -131,12 +131,19 @@ atlas/
 │   ├── atlas-api-types/    # shared serde DTOs (the wire/domain contract)
 │   ├── atlas-driver-core/  # StorageDriver trait + DriverError + DriverRegistry
 │   ├── atlas-driver-ceph/  # ceph/rbd CLI wrapper (real) + FakeCephDriver
+│   ├── atlas-driver-nfs/   # NfsDriver (second backend; fixture-only MVP)
+│   ├── atlas-driver-zfs/   # ZfsDriver (third backend; fixture-only MVP)
+│   ├── atlas-driver-rgw/   # S3 client for RGW buckets/backups (rusty-s3 + reqwest)
 │   ├── atlas-driver-k8s/   # kube-rs read-only StorageClass/PVC/PV listing
+│   ├── atlas-jobs/         # async job engine (single-worker durable DB queue)
+│   ├── atlas-policy/       # intent → StorageClass + access/volume mode
+│   ├── atlas-monitor/      # discovery + alert-rule worker, Ceph mgr metrics scrape
 │   ├── atlas-inventory/    # SQLite read/upsert model + audit
 │   ├── atlas-discovery/    # discovery worker (driver → inventory)
+│   ├── atlas-databridge/   # cloud-to-edge DB + object migration control plane
 │   ├── atlas-gateway/      # axum server (bin: atlas-gateway) + tests
 │   └── atlas-cli/          # atlasctl REST client
-├── migrations/             # SQLite schema (0001_init.sql)
+├── migrations/             # SQLite schema (0001_init.sql .. latest)
 ├── deploy/
 │   ├── rook-ceph-lab/      # Rook Ceph + KubeVirt/CDI manifests + up.sh
 │   └── k8s/                # atlas-gateway Deployment/RBAC/Service (fake + real ceph)

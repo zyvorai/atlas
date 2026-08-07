@@ -113,6 +113,12 @@ right size**. Credentials are never stored — the record holds only a reference
 Secret (`{access_key, secret_key}` or `{AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY}`),
 resolved in-process at run time and never logged.
 
+**Verified live** on the real Rook Ceph lab: a self-migration through the gateway's own RGW
+(one bucket as `source`, another as `dest`, both on the same cluster) driven through
+`create → start → copying → verifying → completed`, confirming objects are actually copied
+byte-for-byte (not just an empty-bucket smoke test) with `objects_done`/`bytes_done` and
+per-object sha256 verification matching source and destination.
+
 ### Multi-cloud providers
 The mover speaks the **S3 protocol**, so it covers any S3-compatible source today. Non-S3
 clouds are recognized in the model so the API is multi-cloud from day one, but need their own

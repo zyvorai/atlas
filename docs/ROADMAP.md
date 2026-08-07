@@ -207,7 +207,37 @@ to open engines at the edge on Ceph-backed storage.
 
 See [DATABRIDGE.md](DATABRIDGE.md).
 
-See [DATABRIDGE.md](DATABRIDGE.md).
+## ✅ Day-2 operations (done, fake-first tested)
+
+Atlas is operable, not just observe-and-provision. See [DAY2.md](DAY2.md) for the full operator
+runbook; summary:
+
+- **Control-plane durability**: job recovery on boot, graceful shutdown, deep `/readyz` (DB +
+  driver + worker heartbeats), optional self-state SQLite→S3 backup.
+- **Job cancellation**: `POST /jobs/{id}/cancel` (admin) — the single-worker queue's escape hatch
+  for a job wedged inside a hung `ceph`/`rbd` call; `kill_on_drop` on every subprocess spawn
+  actually kills the child, not just the Rust future. Verified live: cancelled a genuinely stuck
+  `rbd snap unprotect`/`rbd.snap_delete` job mid-run on real Ceph.
+- **Alerting maturity**: ack/silence(`?secs=`)/resolve lifecycle; rules for jobs-failing, CDC
+  replication error, and tenant-quota-approaching added to the original cluster/pool/OSD set.
+  Verified live against a real open alert (ack → silence honored → resolve).
+- **Cluster ops & maintenance**: backend cordon/uncordon, `POST/GET /maintenance {paused}` worker
+  pause, OSD out/in/reweight, dynamic backend registration (`POST /backends
+  {backend_type:"nfs"|"zfs"}` — instantiates a live driver + discovers immediately; verified live
+  that an unreachable server still registers/discovers cleanly since NFS/ZFS are fixture-only).
+- **Governance**: token revocation (`POST /auth/tokens/{jti}/revoke`), per-minute rate limiting,
+  audit CSV export + retention pruning, chargeback.
+- **Volume lifecycle**: orphan-backup GC (`GET /maintenance/orphans`), per-image QoS
+  (iops/bps), safe resize-down (`allow_shrink` guard).
+- **DataBridge self-heal**: `POST /databridge/plans/{id}/cdc/restart` + reconciler auto-restart
+  (bounded, 3×) for a stalled CDC stream.
+- **Upgrade pre-flight + rollback**: `GET /upgrade/preflight` gates `deploy-remote.sh`/
+  `deploy-ceph-gateway-remote.sh`; `--rollback` reverts via `kubectl rollout undo`.
+- **Cross-cluster DR scaffolding**: peers/mirrors catalog, enable/disable/promote/demote (role
+  guards + `force`), preflight checklist, one-click failover runbook (`confirm`/`force`), RPO
+  recording. Verified live (control-plane guards + preflight blockers + forced override) against
+  the real lab; the underlying `rbd mirror` data-plane still needs a second Ceph cluster to be
+  production-verified — see [DR.md](DR.md).
 
 ## ⏭ Slice 3+ — Enterprise & product integration
 - Product integrations: Veyron (VM datastores), Hyper2KVM (direct-to-RBD migration), GuestKit

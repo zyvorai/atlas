@@ -42,7 +42,13 @@ Override only together: `ROOK_VERSION=… CEPH_IMAGE=… ./up.sh …`.
 # e.g. ./scripts/deploy-remote.sh 212.8.248.187 sus
 ```
 
-NodePort **30510**. Verifies `/health` + `/storage-classes`.
+NodePort **30510**. Verifies `/health` + `/storage-classes`. Gates automatically on
+`GET /upgrade/preflight` before rolling out (pass `--force` to override a blocked pre-flight).
+
+Optional flags: `--with-ceph` (also runs `deploy/rook-ceph-lab/up.sh` on the remote — destructive
+to an empty disk, off by default), `--with-k3s-disk` (moves the k3s data-dir onto the disk carved
+by `resize-osd.sh`, off by default), `--rollback` (skip build/deploy and `kubectl rollout undo` the
+gateway Deployment to its previous ReplicaSet — for a bad upgrade).
 
 ## 2. Stand up Rook Ceph (single-node lab)
 
@@ -189,6 +195,12 @@ For multi-replica HA, switch `ATLAS_DATABASE_URL` to Postgres once the sqlx port
 - **Graceful shutdown** — REST + gRPC drain on `SIGTERM` (`terminationGracePeriodSeconds: 30`).
 - **Liveness vs readiness** — `/livez` vs `/readyz` (DB + backend driver + worker heartbeats).
 - **Self-state backup** — optional SQLite → S3/RGW via `ATLAS_STATE_BACKUP_*` (off by default).
+- **Gated rollout + rollback** — `deploy-remote.sh`/`deploy-ceph-gateway-remote.sh` check
+  `GET /upgrade/preflight` before rolling out (no HEALTH_ERR cluster / open critical alerts /
+  in-flight jobs / lagging CDC), and support `--rollback` (`kubectl rollout undo`) for a bad upgrade.
+- **Wedged job escape hatch** — `POST /jobs/{id}/cancel` frees the single-worker queue from a job
+  stuck inside a hung `ceph`/`rbd` call instead of waiting out `ATLAS_JOB_TIMEOUT_SECS`. See
+  [DAY2.md](DAY2.md).
 
 ## Image name note
 
