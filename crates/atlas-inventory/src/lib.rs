@@ -546,6 +546,40 @@ pub async fn upsert_discovery(
         .await?;
 
     for v in &d.volumes {
+        // Resolve to an already-inventoried row's id when this discovered volume is the same real
+        // resource under a different id. Driver-derived ids don't always match the id minted at
+        // creation time — e.g. `POST /volumes` mints a random id, but discovery derives
+        // `vol_{pool}_{image}` for that same RBD image. Without this, an authoritative pass would
+        // insert a *duplicate* row under the new id while the original — the id every label,
+        // quota-count, DR mirror, and snapshot schedule still points at — goes untouched by this
+        // pass and gets pruned below as stale, permanently orphaning it. Verified live: a
+        // PVC-created volume vanished from inventory entirely while its PVC stayed Bound on the
+        // real cluster. `backend_native_id` is the general anchor (unique when set, migration
+        // 0027); `(kubernetes_namespace, pvc_name)` is the fallback for the rare case a volume's
+        // native id isn't populated yet.
+        let canonical_id: String = if let Some(native) = v.backend_native_id.as_deref() {
+            sqlx::query_scalar::<_, String>(
+                "SELECT id FROM storage_volumes WHERE backend_native_id = ? AND id != ? LIMIT 1",
+            )
+            .bind(native)
+            .bind(&v.id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .unwrap_or_else(|| v.id.clone())
+        } else if let (Some(ns), Some(pvc)) = (&v.kubernetes_namespace, &v.pvc_name) {
+            sqlx::query_scalar::<_, String>(
+                "SELECT id FROM storage_volumes
+                  WHERE kubernetes_namespace = ? AND pvc_name = ? AND id != ? LIMIT 1",
+            )
+            .bind(ns)
+            .bind(pvc)
+            .bind(&v.id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .unwrap_or_else(|| v.id.clone())
+        } else {
+            v.id.clone()
+        };
         sqlx::query(
             "INSERT INTO storage_volumes
                 (id, backend_id, cluster_id, pool_id, name, kind, backend_native_id, size_bytes, used_bytes,
@@ -563,7 +597,7 @@ pub async fn upsert_discovery(
                 storage_class_name=COALESCE(excluded.storage_class_name, storage_volumes.storage_class_name),
                 updated_at=excluded.updated_at",
         )
-        .bind(&v.id)
+        .bind(&canonical_id)
         .bind(backend_id)
         .bind(&v.cluster_id)
         .bind(&v.pool_id)

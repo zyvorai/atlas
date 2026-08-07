@@ -61,7 +61,10 @@ pub(crate) async fn dispatch_volumes(
             // to a PVC reference when it isn't a bound ceph-csi RBD volume.
             let native = if phase.as_deref() == Some("Bound") {
                 match k8s.resolve_rbd(&namespace, &name).await {
-                    Ok(Some((pool, image))) => format!("{pool}/{image}"),
+                    // Match atlas-driver-ceph::real::list_volumes's `rbd:{pool}/{image}` format —
+                    // a mismatch here (this used to omit the prefix) meant a fresh discovery pass
+                    // could never recognize this row as the same real image by backend_native_id.
+                    Ok(Some((pool, image))) => format!("rbd:{pool}/{image}"),
                     _ => format!("pvc/{namespace}/{name}"),
                 }
             } else {

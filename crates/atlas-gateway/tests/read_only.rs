@@ -1201,3 +1201,110 @@ async fn snapshot_delete_blocked_by_dependents() {
         .unwrap();
     assert_eq!(forced.status(), reqwest::StatusCode::ACCEPTED);
 }
+
+/// A discovery pass whose driver-derived id for a real volume differs from the id it was created
+/// under (e.g. `POST /volumes` mints a random id; the real Ceph driver independently derives
+/// `vol_{pool}_{image}` for the same RBD image) must resolve to the *existing* row via
+/// `backend_native_id` instead of inserting a duplicate — otherwise the original row (the id every
+/// label/quota/DR-mirror/schedule points at) goes untouched by the pass and gets pruned as stale on
+/// the very next authoritative discovery. Verified live against a real cluster before this fix: a
+/// PVC-created volume vanished from inventory entirely while its PVC stayed Bound on the cluster.
+#[tokio::test]
+async fn discovery_reconciles_id_by_backend_native_id_not_duplicate() {
+    let (_addr, pool) = spawn().await;
+
+    let backend = atlas_api_types::StorageBackend {
+        id: "bkd_ceph_lab".into(),
+        name: "b".into(),
+        backend_type: atlas_api_types::BackendType::Ceph,
+        mode: atlas_api_types::BackendMode::ManagedRook,
+        status: "active".into(),
+        capabilities: Default::default(),
+        connection_ref: None,
+        cordoned: false,
+    };
+    atlas_inventory::upsert_backend(&pool, &backend)
+        .await
+        .unwrap();
+
+    // Simulate `POST /volumes`: a PVC-backed volume created with a random id and the real RBD
+    // native id already resolved (this session's other fix — it used to be missing the "rbd:"
+    // prefix that discovery uses).
+    let created = atlas_api_types::StorageVolume {
+        id: "vol_creation_time_random".into(),
+        cluster_id: None,
+        pool_id: None,
+        name: "csi-vol-abc123".into(),
+        kind: atlas_api_types::VolumeKind::Block,
+        backend_native_id: Some("rbd:rbd-nvme-prod/csi-vol-abc123".into()),
+        size_bytes: 1073741824,
+        used_bytes: None,
+        state: "bound".into(),
+        health: atlas_api_types::Health::Ok,
+        kubernetes_namespace: Some("default".into()),
+        pvc_name: Some("my-app-data".into()),
+        storage_class_name: Some("zyvor-rbd-prod".into()),
+    };
+    atlas_inventory::upsert_volume(&pool, "bkd_ceph_lab", "t1", &created, None)
+        .await
+        .unwrap();
+
+    // A discovery pass independently derives its own id for the same real image.
+    let discovery = atlas_api_types::DiscoveryResult {
+        cluster: atlas_api_types::StorageCluster {
+            id: "cls_1".into(),
+            backend_id: "bkd_ceph_lab".into(),
+            name: "lab".into(),
+            native_fsid: None,
+            health: atlas_api_types::Health::Ok,
+            raw_capacity_bytes: Some(100),
+            used_capacity_bytes: Some(10),
+            available_capacity_bytes: Some(90),
+        },
+        pools: vec![],
+        osds: vec![],
+        volumes: vec![atlas_api_types::StorageVolume {
+            id: "vol_rbd-nvme-prod_csi-vol-abc123".into(),
+            cluster_id: Some("cls_1".into()),
+            pool_id: None,
+            name: "csi-vol-abc123".into(),
+            kind: atlas_api_types::VolumeKind::Block,
+            backend_native_id: Some("rbd:rbd-nvme-prod/csi-vol-abc123".into()),
+            size_bytes: 1073741824,
+            used_bytes: Some(52428800),
+            state: "available".into(),
+            health: atlas_api_types::Health::Ok,
+            kubernetes_namespace: Some("default".into()),
+            pvc_name: Some("my-app-data".into()),
+            storage_class_name: Some("zyvor-rbd-prod".into()),
+        }],
+        health: atlas_api_types::StorageHealth {
+            status: atlas_api_types::Health::Ok,
+            summary: "OK".into(),
+            raw_capacity_bytes: None,
+            used_capacity_bytes: None,
+            available_capacity_bytes: None,
+            recovering: false,
+            degraded_objects: 0,
+        },
+    };
+    atlas_inventory::upsert_discovery(&pool, "bkd_ceph_lab", &discovery, true)
+        .await
+        .unwrap();
+
+    let all = atlas_inventory::list_volumes(&pool).await.unwrap();
+    let matches: Vec<_> = all
+        .iter()
+        .filter(|v| v.backend_native_id.as_deref() == Some("rbd:rbd-nvme-prod/csi-vol-abc123"))
+        .collect();
+    assert_eq!(
+        matches.len(),
+        1,
+        "expected exactly one row for this native id, got: {all:?}"
+    );
+    assert_eq!(
+        matches[0].id, "vol_creation_time_random",
+        "the original id must survive re-discovery, not get orphaned behind a duplicate"
+    );
+    assert_eq!(matches[0].used_bytes, Some(52428800), "discovery's fresh data must still land");
+}
