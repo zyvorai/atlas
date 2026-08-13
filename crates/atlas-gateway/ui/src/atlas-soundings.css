@@ -604,6 +604,15 @@ a.at-mark:focus-visible {
   max-height: 70vh;
   overflow: auto;
 }
+/* Portaled to document.body (createPortal) so ancestors with `overflow: hidden`
+   (.at-rail-nav, .at-controls) can't clip the panel; top/left set inline from
+   getBoundingClientRect(), same pattern as .at-topnav-flyout. */
+.at-theme-menu-fixed {
+  position: fixed;
+  right: auto;
+  top: 0;
+  left: 0;
+}
 .at-theme-menu-label {
   padding: 8px 12px 6px;
   font-size: 10px;

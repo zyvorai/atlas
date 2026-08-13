@@ -529,6 +529,8 @@ function MenubarControls() {
   const wrapRef = useRef<HTMLElement>(null);
   const budget = useRailBudget(wrapRef);
   const [moreOpen, setMoreOpen] = useState(false);
+  const moreBtnRef = useRef<HTMLButtonElement>(null);
+  const [morePos, setMorePos] = useState<{ top: number; left: number } | null>(null);
 
   // Icon-only Control Center pills (~28px) + chrome; labels live in the fold menu.
   const visible = fitCount(budget, MENUBAR_CONTROLS.length, 30, 3, 30);
@@ -539,6 +541,26 @@ function MenubarControls() {
   useEffect(() => {
     setMoreOpen(false);
   }, [loc.pathname]);
+
+  useLayoutEffect(() => {
+    if (!moreOpen || !moreBtnRef.current) {
+      setMorePos(null);
+      return;
+    }
+    const place = () => {
+      const r = moreBtnRef.current!.getBoundingClientRect();
+      const menuW = 220;
+      const left = Math.min(Math.max(8, r.right - menuW), window.innerWidth - menuW - 8);
+      setMorePos({ top: r.bottom + 8, left });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [moreOpen]);
 
   return (
     <nav ref={wrapRef} className="at-controls" aria-label="Shortcuts">
@@ -559,6 +581,7 @@ function MenubarControls() {
       {folded.length > 0 && (
         <div className="at-controls-more">
           <button
+            ref={moreBtnRef}
             type="button"
             className={cx("at-control", foldedOn && "on", moreOpen && "open")}
             title="More shortcuts"
@@ -569,30 +592,38 @@ function MenubarControls() {
           >
             <MoreHorizontal className="at-control-ico" strokeWidth={2} aria-hidden />
           </button>
-          {moreOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
-              <div className="at-theme-menu at-controls-menu" role="menu" aria-label="More shortcuts">
-                <div className="at-theme-menu-label">Shortcuts</div>
-                {folded.map((m) => (
-                  <NavLink
-                    key={m.id}
-                    to={m.path}
-                    end={m.path === "/"}
-                    role="menuitem"
-                    className={({ isActive }) => cx("at-theme-item", isActive && "on")}
-                    onClick={() => setMoreOpen(false)}
-                  >
-                    <span className="at-controls-menu-row">
-                      <m.icon size={14} strokeWidth={2} aria-hidden />
-                      <span>{m.label}</span>
-                    </span>
-                    {m.shortcut ? <span className="hint">{m.shortcut}</span> : null}
-                  </NavLink>
-                ))}
-              </div>
-            </>
-          )}
+          {moreOpen &&
+            morePos &&
+            createPortal(
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
+                <div
+                  className="at-theme-menu at-theme-menu-fixed at-controls-menu"
+                  role="menu"
+                  aria-label="More shortcuts"
+                  style={{ top: morePos.top, left: morePos.left }}
+                >
+                  <div className="at-theme-menu-label">Shortcuts</div>
+                  {folded.map((m) => (
+                    <NavLink
+                      key={m.id}
+                      to={m.path}
+                      end={m.path === "/"}
+                      role="menuitem"
+                      className={({ isActive }) => cx("at-theme-item", isActive && "on")}
+                      onClick={() => setMoreOpen(false)}
+                    >
+                      <span className="at-controls-menu-row">
+                        <m.icon size={14} strokeWidth={2} aria-hidden />
+                        <span>{m.label}</span>
+                      </span>
+                      {m.shortcut ? <span className="hint">{m.shortcut}</span> : null}
+                    </NavLink>
+                  ))}
+                </div>
+              </>,
+              document.body,
+            )}
         </div>
       )}
     </nav>
@@ -605,10 +636,31 @@ function PrimaryNav() {
   const budget = useRailBudget(wrapRef);
   const [openSec, setOpenSec] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  const moreBtnRef = useRef<HTMLButtonElement>(null);
+  const [morePos, setMorePos] = useState<{ top: number; left: number } | null>(null);
   useEffect(() => {
     setOpenSec(null);
     setMoreOpen(false);
   }, [loc.pathname]);
+  useLayoutEffect(() => {
+    if (!moreOpen || !moreBtnRef.current) {
+      setMorePos(null);
+      return;
+    }
+    const place = () => {
+      const r = moreBtnRef.current!.getBoundingClientRect();
+      const menuW = 240;
+      const left = Math.min(Math.max(8, r.left), window.innerWidth - menuW - 8);
+      setMorePos({ top: r.bottom + 8, left });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [moreOpen]);
   const grouped = useMemo(
     () =>
       SECTIONS.map((sec) => ({
@@ -651,6 +703,7 @@ function PrimaryNav() {
       {folded.length > 0 && (
         <div className={cx("at-topnav-dd", foldedOn && "on", moreOpen && "open")}>
           <button
+            ref={moreBtnRef}
             type="button"
             className="at-topnav-ddbtn"
             title="More"
@@ -665,33 +718,41 @@ function PrimaryNav() {
             <MoreHorizontal className="at-topnav-secico" strokeWidth={2} aria-hidden />
             <span className="at-topnav-dd-title">More</span>
           </button>
-          {moreOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
-              <div className="at-theme-menu at-nav-more-menu" role="menu" aria-label="More sections">
-                {folded.map((g) => (
-                  <div key={g.sec} className="at-nav-more-group">
-                    <div className="at-theme-menu-label">{g.short}</div>
-                    {g.items.map((m) => (
-                      <NavLink
-                        key={m.id}
-                        to={m.path}
-                        end={m.path === "/"}
-                        role="menuitem"
-                        className={({ isActive }) => cx("at-theme-item", isActive && "on")}
-                        onClick={() => setMoreOpen(false)}
-                      >
-                        <span className="at-controls-menu-row">
-                          <m.icon size={14} strokeWidth={2} aria-hidden />
-                          <span>{m.label}</span>
-                        </span>
-                      </NavLink>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+          {moreOpen &&
+            morePos &&
+            createPortal(
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
+                <div
+                  className="at-theme-menu at-theme-menu-fixed at-nav-more-menu"
+                  role="menu"
+                  aria-label="More sections"
+                  style={{ top: morePos.top, left: morePos.left }}
+                >
+                  {folded.map((g) => (
+                    <div key={g.sec} className="at-nav-more-group">
+                      <div className="at-theme-menu-label">{g.short}</div>
+                      {g.items.map((m) => (
+                        <NavLink
+                          key={m.id}
+                          to={m.path}
+                          end={m.path === "/"}
+                          role="menuitem"
+                          className={({ isActive }) => cx("at-theme-item", isActive && "on")}
+                          onClick={() => setMoreOpen(false)}
+                        >
+                          <span className="at-controls-menu-row">
+                            <m.icon size={14} strokeWidth={2} aria-hidden />
+                            <span>{m.label}</span>
+                          </span>
+                        </NavLink>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </>,
+              document.body,
+            )}
         </div>
       )}
     </nav>
