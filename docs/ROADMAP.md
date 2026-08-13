@@ -62,6 +62,9 @@ Read-only control plane + real Ceph lab.
   (point-in-time restore, admin). Verified live (create → list `[pit1]` → rollback).
 - ✅ **Object-storage observability**: `GET /buckets/{id}/stats` (`radosgw-admin bucket stats` —
   object count, size, quota) and `GET /buckets/{id}/objects[?prefix=]` (S3 `ListObjectsV2`). Verified.
+  `/stats` now has a Fake-mode branch (returns a zeroed-but-`available` stub) instead of crashing
+  on deployments without a `radosgw-admin` binary; the underlying `radosgw-admin` call is bounded
+  to 12s so a slow/unresponsive RGW soft-fails (`available: false`) rather than hanging.
 
 ## ✅ Web dashboard — Storage Center (Zeus OS-style React console)
 
@@ -217,7 +220,11 @@ runbook; summary:
 - **Job cancellation**: `POST /jobs/{id}/cancel` (admin) — the single-worker queue's escape hatch
   for a job wedged inside a hung `ceph`/`rbd` call; `kill_on_drop` on every subprocess spawn
   actually kills the child, not just the Rust future. Verified live: cancelled a genuinely stuck
-  `rbd snap unprotect`/`rbd.snap_delete` job mid-run on real Ceph.
+  `rbd snap unprotect`/`rbd.snap_delete` job mid-run on real Ceph. Also verified live: a
+  `bucket.create` quota-set step stuck `running` indefinitely (unbounded `radosgw-admin` call)
+  blocking the whole queue — cancel freed it immediately; every `radosgw-admin` call is now
+  additionally bounded to 12s at the driver layer so this specific case self-resolves instead of
+  needing manual intervention.
 - **Alerting maturity**: ack/silence(`?secs=`)/resolve lifecycle; rules for jobs-failing, CDC
   replication error, and tenant-quota-approaching added to the original cluster/pool/OSD set.
   Verified live against a real open alert (ack → silence honored → resolve).
@@ -262,6 +269,14 @@ runbook; summary:
   libraries, templates, and multi-writer product data (GuestKit, Machina). Single-node CephFS
   filesystem + StorageClass manifest at `deploy/rook-ceph-lab/single-node/cephfs-sc.yaml`. Verified
   live on real Ceph: two pods mounted the same volume concurrently and saw each other's writes.
+  The `shared` policy now also correctly tags the volume `kind: "filesystem"` in inventory
+  (previously it silently defaulted to `kind: "block"` since the request's `kind` field is
+  optional and policy resolution didn't correct it) — a mistagged CephFS volume looked exactly
+  like a deleted RBD image to the real driver's RBD-only discovery and got silently pruned from
+  inventory on the very next discovery pass, even though the PVC kept existing and consuming
+  capacity, invisibly to Atlas. Verified live: created a `shared` volume, ran a discovery pass, it
+  now survives (previously vanished from `GET /volumes` and returned `404`, requiring manual
+  `kubectl delete pvc` to clean up the now-orphaned real resource).
 - **Zeus OS UI** — Storage Center. Note two known collisions to resolve first:
   - `atlas` is already a Zeus OS module codename ("Machine Finder") in `v9s`.
   - A `ZeusStorageCenter.tsx` + `web/src/routes/storage.rs` already ship — decide whether Atlas's
@@ -285,6 +300,15 @@ runbook; summary:
   clamped to `[60s, 90d]` and issuance is audited. `atlasctl issue-token`. Verified: minted operator
   token creates volumes, viewer is `403`, no token `401`, and a non-admin cannot mint (test); live
   the endpoint returns a valid JWT with the expected claims.
+- ✅ **OIDC/SSO login**: `GET /auth/oidc/{status,login,callback}` (optional — auto-disabled unless
+  `ATLAS_OIDC_ISSUER_URL`/`_CLIENT_ID`/`_REDIRECT_URL` are set) is a second way to *obtain* a
+  console session — a successful OIDC round-trip mints the exact same kind of Atlas JWT
+  `/auth/login` does, so it sits alongside local username/password login, not in place of it. PKCE
+  + CSRF state + nonce; the `groups` ID-token claim maps to a role via
+  `ATLAS_OIDC_ADMIN_GROUP`/`_OPERATOR_GROUP` (no match → `viewer`). Verified live end-to-end
+  against a throwaway Dex instance (`deploy/dex-lab/`): three static test users in different Dex
+  groups each landed with the correct Atlas role (admin/operator/viewer-by-default) after the full
+  browser redirect → login → callback → session round-trip.
 - ✅ **Audit-log query API**: `GET /audit` (operator) returns the compliance trail newest-first with
   `actor`/`action`/`resource_type`/`resource_id` filters + bounded `limit`. Verified live.
 - ✅ **Enriched `/metrics/summary`**: capacity-used %, snapshot/bucket/backup counts, client-I/O

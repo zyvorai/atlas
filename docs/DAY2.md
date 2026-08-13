@@ -32,7 +32,10 @@ Rules: cluster health, pool near-full (75/85%), OSD down, capacity forecast, OSD
   stuck inside a shelled-out `ceph`/`rbd` call that never returns (e.g. `rbd migration prepare`
   against a degraded pool — verified live) blocks every other job on the gateway for up to
   `ATLAS_JOB_TIMEOUT_SECS` (2h default). Cancel drops the dispatch future, killing any live
-  `rbd`/`ceph` child process; `404`/`409` if the job is unknown or already terminal.
+  `rbd`/`ceph` child process; `404`/`409` if the job is unknown or already terminal. `radosgw-admin`
+  calls (bucket stats/quota) are separately bounded to 12s and can no longer wedge the queue this
+  way — verified live: a `bucket.create` quota-set step stuck `running` was freed by cancel before
+  the timeout fix landed; `ceph`/`rbd` calls have no equivalent bound and still need this endpoint.
 - **OSD ops** `POST /osds/{id}/out|in|reweight?weight=` (`ceph osd …`). *Real Ceph.*
 - **Dynamic backends** `POST /backends {backend_type:"nfs"|"zfs", server, targets}` — instantiates a live
   driver + discovers it immediately (not just a catalog row).

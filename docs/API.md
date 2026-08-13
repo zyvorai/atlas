@@ -68,7 +68,10 @@ Register a backend row (no cluster lifecycle; starts `pending`).
 `mode` ∈ `managed_rook|external|read_only` (default `external`).
 
 ### `POST /api/atlas/v1/backends/{id}/discover`
-Run a discovery pass for the backend and persist inventory (PDF §8.1). Writes an audit row.
+Run a discovery pass for the backend and persist inventory (PDF §8.1). Writes an audit row. Also
+reconciles any snapshot still stuck `creating` (re-checks the underlying VolumeSnapshot's
+`readyToUse` status) — previously only the periodic monitor tick did this, so a manual resync was
+a no-op for a stuck snapshot.
 ```json
 { "state": "succeeded",
   "summary": { "backend_id": "bkd_ceph_lab", "cluster_id": "cls_5ace73d1-...",
@@ -202,6 +205,12 @@ All write operations enqueue a job and return **`202 Accepted`** with a `job_id`
 ### `POST /api/atlas/v1/volumes`
 Create a Ceph-backed volume (a PVC). Intent `policy` is resolved to a StorageClass by `atlas-policy`;
 `kubernetes.storage_class` overrides it. Idempotent on `(tenant_id, name, size_bytes)` (PDF §17.4).
+A named policy's storage kind is **authoritative over the request's `kind` field** — e.g.
+`policy: "shared"` always provisions CephFS (`kind: "filesystem"`) regardless of what `kind` the
+request sends or defaults to; the resolved kind is what gets persisted to inventory. `name` is
+validated as a Kubernetes resource name (RFC 1123: lowercase alphanumeric, `-`/`.`, must start/end
+alphanumeric) — an invalid name is rejected with `400 VALIDATION_ERROR` up front rather than being
+accepted with `202` and failing later with a raw Kubernetes API error.
 ```json
 // request
 { "tenant_id": "tenant_acme", "name": "billing-db-root", "size_bytes": 3221225472,
@@ -214,6 +223,12 @@ Create a Ceph-backed volume (a PVC). Intent `policy` is resolved to a StorageCla
   "resource": { "volume_id": "vol_b16c40e12b76", "storage_class": "zyvor-rbd-prod",
                 "namespace": "default", "pvc": "billing-db-root" },
   "links": { "job": "/api/atlas/v1/jobs/job_3819884b6149" } }
+```
+CephFS shared/RWX volume (see also "CephFS shared volumes (RWX)" in ROADMAP.md):
+```json
+// request — kind is optional and, if given, is overridden to "filesystem" by the "shared" policy
+{ "tenant_id": "tenant_acme", "name": "iso-library", "size_bytes": 107374182400,
+  "policy": "shared", "kubernetes": { "namespace": "default", "create_pvc": true } }
 ```
 
 ### `DELETE /api/atlas/v1/volumes/{id}`
@@ -280,13 +295,30 @@ actions on an existing RBD image, not creation.
 ## Object storage & backups (RGW) — slice 3
 
 ### `POST /api/atlas/v1/buckets`
-Provision an RGW bucket via an ObjectBucketClaim (async job).
+Provision an RGW bucket via an ObjectBucketClaim (async job). `name` is validated as a Kubernetes
+resource name (same RFC 1123 rule as `POST /volumes`) — invalid names are rejected up front with
+`400 VALIDATION_ERROR`. The inventory row is only written once the OBC create call is accepted by
+Kubernetes (from the job dispatcher, not this endpoint) — a failed create (bad name, cordoned
+backend, cluster issue) leaves **no** row behind, rather than a permanent orphan with
+`bucket_name: null`.
 ```json
 { "name": "atlas-backups", "namespace": "rook-ceph", "storage_class": "zyvor-rgw-bucket",
   "max_objects": 1000, "max_size": "2G" }
 // 202 → resource: { bucket_id, namespace }
 ```
-`max_objects` / `max_size` (optional) set an RGW per-bucket quota (enforced via `radosgw-admin`).
+`max_objects` / `max_size` (optional) set an RGW per-bucket quota (enforced via `radosgw-admin`,
+best-effort — the job result's `quota_set` field is `false` if the quota call failed or timed out,
+even though the job itself still reports `succeeded`; every `radosgw-admin` call is bounded to 12s
+so it can no longer wedge the single-threaded job queue).
+
+### `GET /api/atlas/v1/buckets/{id}/stats`
+RGW usage + quota for the bucket (`radosgw-admin bucket stats`, 12s bound). Soft-fails instead of
+erroring — `available: false` on timeout/driver error (e.g. no `radosgw-admin` binary in a
+fake-driver deployment) so the console can show "unavailable" instead of hanging or crashing.
+```json
+{ "bucket_id": "bkt_9624f5a6596f", "bucket": "atlas-backups-63f4f511-...", "available": true,
+  "num_objects": 42, "size_bytes": 1048576, "quota": { "max_objects": 1000 } }
+```
 
 ### `GET /api/atlas/v1/buckets` · `GET /api/atlas/v1/buckets/{id}`
 ```json
@@ -420,6 +452,11 @@ the only recovery was finding and `kill -9`ing the underlying OS process inside 
 Cancelling the currently-running job drops its dispatch future, which kills any live `rbd`/`ceph`
 child process (`kill_on_drop`); a `queued`/`pending` job is marked failed before the worker ever
 picks it up. `404` if the job doesn't exist; `409` if it's already `succeeded`/`failed`.
+
+Every `radosgw-admin` call (bucket stats, bucket quota set/enable) is separately bounded to 12s at
+the driver layer, so `bucket.create`'s quota-set step can no longer be a source of this scenario —
+this endpoint stays necessary for genuine `ceph`/`rbd` hangs (e.g. `rbd migration prepare` above),
+which have no equivalent bound.
 ```json
 // 200 → { "id": "job_...", "cancelled": true }
 ```
@@ -453,6 +490,26 @@ scheduler-created snapshots to `keep`.
 `kind` is `snapshot` (default) or `backup`; backups need a bound `bucket_id` (+ optional `mode`).
 Worker cadence is `ATLAS_SNAPSHOT_TICK_SECS` (0 disables). Scheduled snapshots are named
 `<volume>-sched-<id>`; retention only prunes scheduler-created snapshots/backups, never manual ones.
+
+### Console login
+Two ways to obtain a console session JWT — both mint the exact same kind of Atlas-issued HS256
+token via `mint_token`, so everything downstream (role gating, revocation) is identical regardless
+of which path a session came from.
+
+- `POST /api/atlas/v1/auth/login` `{ username, password, ttl_secs? }` — local credentials (an
+  admin-created `console_users` row, or the `ATLAS_ADMIN_USERNAME`/`_PASSWORD` bootstrap fallback).
+  `202` → `{ token, jti, subject, role, level, expires_at, ttl_secs }`. `ttl_secs` defaults to 24h,
+  clamped to `[60, 7776000]`.
+- **OIDC/SSO** (optional — only mounted when `ATLAS_OIDC_ISSUER_URL`/`_CLIENT_ID`/`_REDIRECT_URL`
+  are all set; see `deploy/dex-lab/` for a throwaway test IdP):
+  - `GET /api/atlas/v1/auth/oidc/status` — unauthenticated, `{ "enabled": bool }`; the console's
+    "Sign in with SSO" button only renders when this is `true`.
+  - `GET /api/atlas/v1/auth/oidc/login` — `302` redirect to the identity provider's authorization
+    endpoint (PKCE + CSRF state + nonce). Must be a real browser navigation.
+  - `GET /api/atlas/v1/auth/oidc/callback?code=&state=` — the IdP redirects back here. Exchanges
+    the code, verifies the ID token (signature/issuer/audience/nonce/expiry), maps the `groups`
+    claim to a role via `ATLAS_OIDC_ADMIN_GROUP`/`ATLAS_OIDC_OPERATOR_GROUP` (no match → `viewer`),
+    mints an Atlas JWT, and `302`s to `/?atlas_token=<jwt>&atlas_role=<role>` for the SPA to pick up.
 
 ### `POST /api/atlas/v1/auth/tokens`
 Mint a scoped service-account JWT for a product (admin). The shared secret never leaves Atlas.

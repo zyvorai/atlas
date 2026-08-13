@@ -39,7 +39,9 @@ Implemented:
 Day-2 operations added (slices, all fake-first tested): control-plane durability (job recovery, graceful
 shutdown, self-state backup, deep readyz/livez), alerting maturity (ack/silence + job/CDC/quota rules),
 cluster-ops & maintenance (OSD ops, backend cordon, worker pause, job cancellation), governance
-(token revocation, rate limiting), volume lifecycle (orphan GC, QoS), DataBridge CDC self-heal,
+(token revocation, rate limiting, optional OIDC/SSO login alongside local username/password —
+verified live against a throwaway Dex instance, `deploy/dex-lab/`), volume lifecycle (orphan GC,
+QoS), DataBridge CDC self-heal,
 upgrade pre-flight + rollback, and cross-cluster DR **scaffolding** (RBD-mirroring
 peers/mirrors/failover API + jobs).
 
