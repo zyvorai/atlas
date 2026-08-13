@@ -32,13 +32,26 @@ pub(crate) async fn get_bucket(State(s): State<AppState>, Path(id): Path<String>
 
 /// `GET /buckets/{id}/stats` — RGW usage + quota for the bucket (via `radosgw-admin bucket stats`).
 /// Soft-fails on timeout/driver errors so the console can show "unavailable" instead of hanging.
+/// Fake mode: no `radosgw-admin` binary in the image — there's no persisted usage/quota to read
+/// back either (unlike RBD images/snapshots, buckets don't cache stats in inventory), so report a
+/// zeroed-but-available stub instead of shelling out and failing.
 pub(crate) async fn bucket_stats(State(s): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
+    use atlas_common::config::CephDriverMode;
+
     let b = atlas_inventory::buckets::get_bucket(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("bucket {id}")))?;
     let name = b
         .bucket_name
         .ok_or_else(|| AppError::Validation("bucket has no bucket_name".into()))?;
+
+    if s.config.ceph_driver_mode == CephDriverMode::Fake {
+        return Ok(Json(json!({
+            "bucket_id": id, "bucket": name, "available": true,
+            "num_objects": 0, "size_bytes": 0, "quota": Value::Null,
+        })));
+    }
+
     let timed = tokio::time::timeout(
         std::time::Duration::from_secs(12),
         atlas_driver_ceph::radosgw_admin_json(&["bucket", "stats", "--bucket", &name]),
@@ -385,6 +398,7 @@ pub(crate) async fn create_bucket(
     if body.name.trim().is_empty() {
         return Err(AppError::Validation("name is required".into()));
     }
+    super::util::validate_k8s_name(&body.name)?;
 
     // Maintenance: a cordoned backend rejects new provisioning (existing buckets are untouched).
     if atlas_inventory::is_backend_cordoned(&s.pool, CEPH_BACKEND_ID).await? {
@@ -401,11 +415,11 @@ pub(crate) async fn create_bucket(
     let bucket_id = ids::bucket_id();
     let obc_name = body.name.clone();
 
-    atlas_inventory::buckets::insert_bucket(
-        &s.pool, &bucket_id, "global", &body.name, &namespace, &obc_name,
-    )
-    .await?;
-
+    // The inventory row is inserted from the job dispatcher (`dispatch::object::BucketCreate`)
+    // only after k8s has accepted the OBC create call — inserting it here, eagerly, before the
+    // job even runs, left a permanent orphan row (`bucket_name: null`) whenever the OBC creation
+    // later failed (e.g. an invalid name), unlike `volume.create`'s equivalent path which only
+    // ever writes its inventory row after the PVC create call succeeds.
     let job_id = ids::job_id();
     let spec = JobSpec::BucketCreate {
         bucket_id: bucket_id.clone(),

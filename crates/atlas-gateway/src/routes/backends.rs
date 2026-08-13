@@ -170,6 +170,12 @@ pub(crate) async fn discover_backend(
 
     let rbd_owners = s.rbd_owners().await;
     let result = atlas_discovery::run_discovery(&s.pool, driver, rbd_owners.as_ref()).await;
+    // Discovery only ever touches clusters/pools/osds/volumes — snapshots stuck in "creating"
+    // need their own reconcile pass so a manual resync can actually resolve one instead of being
+    // a no-op (see atlas_monitor::reconcile_snapshots doc comment).
+    if let Err(e) = atlas_monitor::reconcile_snapshots(&s.pool, &s.k8s).await {
+        tracing::warn!("snapshot reconcile during backend discover failed: {e:#}");
+    }
     let (status, payload) = match &result {
         Ok(sum) => ("success", serde_json::to_value(sum).unwrap_or(Value::Null)),
         Err(e) => ("failed", json!({ "error": e.to_string() })),

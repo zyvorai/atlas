@@ -101,7 +101,12 @@ pub fn spawn(
 /// can still bind afterward with nothing left to notice — the job already reported "succeeded" and
 /// nothing else ever re-polls the row. Without this a fully-usable snapshot can show "creating"
 /// forever.
-async fn reconcile_snapshots(
+///
+/// Public so `POST /backends/{id}/discover` (`atlas-gateway::routes::backends::discover_backend`)
+/// can run it too — that endpoint only ever touched clusters/pools/osds/volumes, so a stuck
+/// snapshot was invisible to an operator's manual "resync" and could only self-heal on the next
+/// leader-only periodic monitor tick.
+pub async fn reconcile_snapshots(
     pool: &SqlitePool,
     k8s: &Option<Arc<atlas_driver_k8s::K8sDriver>>,
 ) -> Result<()> {

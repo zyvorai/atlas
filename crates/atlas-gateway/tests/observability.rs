@@ -55,6 +55,7 @@ fn base_config(db: &str, o: Opts) -> Config {
         zfs_enable: o.extra_backends,
         zfs_host: None,
         zfs_pools: Vec::new(),
+        oidc: None,
     }
 }
 
@@ -187,14 +188,16 @@ async fn readyz_probes_driver_and_livez_is_alive() {
     assert_eq!(live.status(), 200);
     assert_eq!(live.json::<Value>().await.unwrap()["status"], "alive");
 
-    // readyz: 200, driver genuinely probed (fake reports HEALTH_OK), workers component present.
+    // readyz: 200, driver genuinely probed (fake reports HEALTH_WARN — one simulated OSD down,
+    // consistent with cluster()/osds()/ceph_status()), workers component present. Warn still
+    // counts as ready (readyz treats Ok|Warn as reachable-and-serving), so `ok` stays true.
     let r = c.get(format!("http://{addr}/readyz")).send().await.unwrap();
     assert_eq!(r.status(), 200);
     let v: Value = r.json().await.unwrap();
     let driver = &v["components"]["ceph_driver"];
     assert_eq!(driver["mode"], "fake");
     assert_eq!(driver["ok"], true);
-    assert_eq!(driver["status"], "ok"); // real probe result, not a hardcoded true
+    assert_eq!(driver["status"], "warn"); // real probe result, not a hardcoded true
     assert!(v["components"]["workers"].is_array());
 
     let ver: Value = c

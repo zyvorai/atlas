@@ -15,6 +15,10 @@ pub struct Policy {
     pub storage_class: &'static str,
     pub access_mode: &'static str,
     pub volume_mode: &'static str,
+    /// The volume kind this policy actually provisions — authoritative over whatever `kind` the
+    /// caller passed in, since a named policy fully determines the backing storage (e.g. `shared`
+    /// is always CephFS/`Filesystem`, never `Block`, no matter what the request said or defaulted to).
+    pub kind: VolumeKind,
     pub description: &'static str,
 }
 
@@ -29,6 +33,7 @@ pub const POLICIES: &[Policy] = &[
         storage_class: DEFAULT_BLOCK_SC,
         access_mode: "ReadWriteOnce",
         volume_mode: "Filesystem",
+        kind: VolumeKind::Block,
         description: "Business VMs / app servers — RBD, 3 replicas, daily snapshots",
     },
     Policy {
@@ -36,6 +41,7 @@ pub const POLICIES: &[Policy] = &[
         storage_class: DEFAULT_BLOCK_SC,
         access_mode: "ReadWriteOnce",
         volume_mode: "Filesystem",
+        kind: VolumeKind::Block,
         description: "Databases — RBD NVMe, hourly snapshots, daily backup",
     },
     Policy {
@@ -43,6 +49,7 @@ pub const POLICIES: &[Policy] = &[
         storage_class: DEFAULT_BLOCK_SC,
         access_mode: "ReadWriteOnce",
         volume_mode: "Filesystem",
+        kind: VolumeKind::Block,
         description: "Dev/test VMs — RBD, 2 replicas, manual snapshots",
     },
     Policy {
@@ -50,6 +57,7 @@ pub const POLICIES: &[Policy] = &[
         storage_class: DEFAULT_FILE_SC,
         access_mode: "ReadWriteMany",
         volume_mode: "Filesystem",
+        kind: VolumeKind::Filesystem,
         description: "ISO library, templates, shared reports — CephFS RWX",
     },
     Policy {
@@ -57,6 +65,7 @@ pub const POLICIES: &[Policy] = &[
         storage_class: DEFAULT_BLOCK_SC,
         access_mode: "ReadWriteOnce",
         volume_mode: "Filesystem",
+        kind: VolumeKind::Block,
         description: "AI datasets / model workspaces — high-throughput RBD/CephFS",
     },
 ];
@@ -74,7 +83,8 @@ pub fn resolve(
     kind: VolumeKind,
     storage_class_override: Option<&str>,
 ) -> Placement {
-    // Explicit override wins.
+    // Explicit override wins — the caller is taking full control of placement, so its `kind`
+    // (not a policy's) is authoritative here.
     if let Some(sc) = storage_class_override {
         let (access, mode) = defaults_for_kind(kind);
         return Placement {
@@ -82,15 +92,18 @@ pub fn resolve(
             storage_class: sc.to_string(),
             access_mode: access.to_string(),
             volume_mode: mode.to_string(),
+            kind,
         };
     }
-    // Named policy.
+    // Named policy — the policy fully determines the backing storage, so its `kind` overrides
+    // whatever the caller passed (which may just be the client library's default).
     if let Some(p) = intent.and_then(find) {
         return Placement {
             intent: p.intent.to_string(),
             storage_class: p.storage_class.to_string(),
             access_mode: p.access_mode.to_string(),
             volume_mode: p.volume_mode.to_string(),
+            kind: p.kind,
         };
     }
     // Fall back to a sensible default for the kind.
@@ -103,6 +116,7 @@ pub fn resolve(
         },
         access_mode: access.to_string(),
         volume_mode: mode.to_string(),
+        kind,
     }
 }
 

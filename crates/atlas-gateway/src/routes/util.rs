@@ -2,6 +2,7 @@
 
 use axum::{http::StatusCode, Json};
 use atlas_api_types::{BackendType, Capabilities};
+use atlas_common::AppError;
 use serde_json::{json, Value};
 
 pub(crate) const CEPH_BACKEND_ID: &str = "bkd_ceph_lab";
@@ -26,6 +27,29 @@ pub(crate) fn csv_field(v: &Value, key: &str) -> String {
     let needs_guard = matches!(s.as_bytes().first(), Some(b'=' | b'+' | b'-' | b'@'));
     let guarded = if needs_guard { format!("'{s}") } else { s.to_string() };
     format!("\"{}\"", guarded.replace('"', "\"\""))
+}
+
+/// Validate `name` as a Kubernetes-safe RFC 1123 name — lowercase alphanumeric and `-`/`.` only,
+/// each `.`-separated label must start and end with an alphanumeric character, max 253 chars.
+/// Without this, a name like `RT-Upper_Invalid!!` (uppercase, underscore, `!`) sails through
+/// Atlas's own validation with a `202 Accepted` and only fails minutes later, deep in a PVC/OBC
+/// create call, surfacing a raw Kubernetes API error straight to the operator instead of a clean
+/// upfront `400`.
+pub(crate) fn validate_k8s_name(name: &str) -> Result<(), AppError> {
+    let valid_label = |s: &str| {
+        !s.is_empty()
+            && s.len() <= 63
+            && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            && s.chars().next().is_some_and(|c| c.is_ascii_alphanumeric())
+            && s.chars().last().is_some_and(|c| c.is_ascii_alphanumeric())
+    };
+    if name.len() > 253 || !name.split('.').all(valid_label) {
+        return Err(AppError::Validation(format!(
+            "name {name:?} must be a valid Kubernetes resource name: lowercase alphanumeric \
+             characters, '-', or '.', and must start and end with an alphanumeric character"
+        )));
+    }
+    Ok(())
 }
 
 pub(crate) fn ceph_default_caps(t: BackendType) -> Capabilities {

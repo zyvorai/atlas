@@ -50,6 +50,7 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
         zfs_enable: false,
         zfs_host: None,
         zfs_pools: Vec::new(),
+        oidc: None,
     };
 
     let state = build_state(
@@ -216,6 +217,7 @@ async fn spawn_auth(secret: &str) -> String {
         zfs_enable: false,
         zfs_host: None,
         zfs_pools: Vec::new(),
+        oidc: None,
     };
     let state = build_state(
         config,
@@ -413,7 +415,9 @@ async fn discovery_populates_inventory_and_audit() {
     assert_eq!(clusters.as_array().unwrap().len(), 1);
     let cluster_id = clusters[0]["id"].as_str().unwrap();
 
-    // Cluster health + capabilities resolve.
+    // Cluster health + capabilities resolve. FakeCephDriver's fixture simulates one down OSD
+    // (osd.3) consistently across cluster()/osds()/ceph_status(), so this reads "warn" — matching
+    // what GET /ceph/status reports for the same simulated cluster.
     let health: serde_json::Value = client()
         .get(format!("{base}/api/atlas/v1/clusters/{cluster_id}/health"))
         .send()
@@ -422,7 +426,7 @@ async fn discovery_populates_inventory_and_audit() {
         .json()
         .await
         .unwrap();
-    assert_eq!(health["status"], "ok");
+    assert_eq!(health["status"], "warn");
 
     let caps: serde_json::Value = client()
         .get(format!(
@@ -849,6 +853,10 @@ async fn clone_requires_name_and_enqueues() {
 
 #[tokio::test]
 async fn bucket_create_enqueues_and_lists() {
+    // No k8s driver in tests → the create job runs and terminates as `failed` (can't provision).
+    // The inventory row is now only written once k8s has accepted the OBC create (dispatch-side,
+    // not the HTTP handler) — a failed job must leave no row at all, matching `volume.create`'s
+    // behavior, instead of a permanent orphan with `bucket_name: null`.
     let (addr, _pool) = spawn().await;
     let base = format!("http://{addr}");
     let resp = client()
@@ -858,6 +866,26 @@ async fn bucket_create_enqueues_and_lists() {
         .await
         .unwrap();
     assert_eq!(resp.status(), reqwest::StatusCode::ACCEPTED);
+    let accepted: serde_json::Value = resp.json().await.unwrap();
+    let job_id = accepted["job_id"].as_str().unwrap().to_string();
+
+    let mut state = String::new();
+    for _ in 0..50 {
+        let job: serde_json::Value = client()
+            .get(format!("{base}/api/atlas/v1/jobs/{job_id}"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        state = job["state"].as_str().unwrap_or_default().to_string();
+        if state == "succeeded" || state == "failed" {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert_eq!(state, "failed");
 
     let buckets: serde_json::Value = client()
         .get(format!("{base}/api/atlas/v1/buckets"))
@@ -867,7 +895,7 @@ async fn bucket_create_enqueues_and_lists() {
         .json()
         .await
         .unwrap();
-    assert!(buckets
+    assert!(!buckets
         .as_array()
         .unwrap()
         .iter()

@@ -308,6 +308,14 @@ pub(crate) async fn dispatch_object(
                     .with_context(|| format!("create OBC {namespace}/{obc_name}"))?;
             }
 
+            // Only record the bucket in inventory once k8s has actually accepted the OBC create
+            // (or a prior attempt already had) — inserting this earlier, from the HTTP handler
+            // before the job even ran, left a permanent orphan row whenever OBC creation failed.
+            atlas_inventory::buckets::insert_bucket(
+                pool, &bucket_id, "global", &obc_name, &namespace, &obc_name,
+            )
+            .await?;
+
             // Rook writes a ConfigMap (same name) with BUCKET_* once the OBC binds.
             let cm = poll_configmap(&k8s, &namespace, &obc_name)
                 .await

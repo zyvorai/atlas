@@ -29,7 +29,11 @@ impl FakeCephDriver {
             backend_id: self.backend_id.clone(),
             name: "zyvor-ceph-lab".into(),
             native_fsid: Some("f5100000-0000-4000-8000-000000000001".into()),
-            health: Health::Ok,
+            // Kept in sync with ceph_status()/ceph_osd_tree()/ceph_osd_df() below, which all
+            // hardcode osd.3 as down — this fixture must agree so Command Deck (fed by
+            // discover()/cluster()/osds()) and the /ceph page (fed by the ceph_status() family)
+            // never disagree about cluster health for the same simulated cluster.
+            health: Health::Warn,
             raw_capacity_bytes: Some(220_000_000_000_000),
             used_capacity_bytes: Some(97_000_000_000_000),
             available_capacity_bytes: Some(123_000_000_000_000),
@@ -79,11 +83,13 @@ impl FakeCephDriver {
             .map(|id| Osd {
                 id,
                 cluster_id: self.cluster_id.clone(),
-                up: true,
+                // osd.3 matches the "down" OSD hardcoded in ceph_status()/ceph_osd_tree()/
+                // ceph_osd_df() below — one fixture, reused everywhere, so every endpoint agrees.
+                up: id != 3,
                 in_cluster: true,
                 device_class: Some(if id < 3 { "nvme" } else { "ssd" }.into()),
                 host: Some(format!("node0{}", (id / 2) + 1)),
-                used_bytes: Some(16_000_000_000_000),
+                used_bytes: if id == 3 { Some(0) } else { Some(16_000_000_000_000) },
                 capacity_bytes: Some(36_000_000_000_000),
             })
             .collect()
@@ -112,13 +118,15 @@ impl StorageDriver for FakeCephDriver {
 
     async fn health(&self) -> Result<StorageHealth, DriverError> {
         Ok(StorageHealth {
-            status: Health::Ok,
-            summary: "HEALTH_OK".into(),
+            // Matches cluster()/osds() (osd.3 down) and ceph_status()'s 8
+            // active+undersized+degraded PGs — one simulated cluster state, not two.
+            status: Health::Warn,
+            summary: "HEALTH_WARN: 1 osds down".into(),
             raw_capacity_bytes: Some(220_000_000_000_000),
             used_capacity_bytes: Some(97_000_000_000_000),
             available_capacity_bytes: Some(123_000_000_000_000),
             recovering: false,
-            degraded_objects: 0,
+            degraded_objects: 8,
         })
     }
 

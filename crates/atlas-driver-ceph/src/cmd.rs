@@ -4,7 +4,18 @@
 //! Security rule (PDF §17.3): pass arguments as an **array only**; never build a shell string.
 //! Modeled on `machina/agent/src/provision_ops.rs`, but async and JSON-parsing.
 
+use std::time::Duration;
+
 use atlas_driver_core::DriverError;
+
+/// `radosgw-admin` talks to RGW over its admin ops socket/REST API rather than directly to the
+/// mons, so it can hang far longer than an `rbd`/`ceph` CLI call when RGW is slow or unresponsive
+/// — and unlike those, nothing here waits on a multi-stage operation the caller explicitly wants
+/// to block on. Bounding every `radosgw-admin` invocation at this shared layer means no caller
+/// (present or future) can wedge the single-threaded job engine's worker indefinitely — a hung
+/// `bucket.create` quota-set call was observed blocking every other tenant's jobs for the full
+/// 2h `ATLAS_JOB_TIMEOUT_SECS` ceiling until manually cancelled via `POST /jobs/{id}/cancel`.
+const RADOSGW_ADMIN_TIMEOUT: Duration = Duration::from_secs(12);
 
 /// Build a `Command` for a ceph/rbd/radosgw-admin binary with `kill_on_drop(true)` — if the
 /// enclosing future is dropped (job cancellation, `tokio::select!` racing a timeout), the child
@@ -179,13 +190,13 @@ pub async fn radosgw_bucket_quota(
 
 /// Run `radosgw-admin <args...> --format json` and parse stdout (e.g. `bucket stats`).
 pub async fn radosgw_admin_json(args: &[&str]) -> Result<serde_json::Value, DriverError> {
-    let output = cmd("radosgw-admin")
-        .args(args)
-        .arg("--format")
-        .arg("json")
-        .output()
-        .await
-        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `radosgw-admin`: {e}")))?;
+    let output = tokio::time::timeout(
+        RADOSGW_ADMIN_TIMEOUT,
+        cmd("radosgw-admin").args(args).arg("--format").arg("json").output(),
+    )
+    .await
+    .map_err(|_| DriverError::Unreachable("radosgw-admin timed out".into()))?
+    .map_err(|e| DriverError::Unreachable(format!("failed to spawn `radosgw-admin`: {e}")))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         return Err(DriverError::Backend(format!(
@@ -228,10 +239,9 @@ pub async fn rbd_snap_rollback(pool: &str, image: &str, snap: &str) -> Result<()
 }
 
 async fn radosgw_admin(args: &[&str]) -> Result<(), DriverError> {
-    let output = cmd("radosgw-admin")
-        .args(args)
-        .output()
+    let output = tokio::time::timeout(RADOSGW_ADMIN_TIMEOUT, cmd("radosgw-admin").args(args).output())
         .await
+        .map_err(|_| DriverError::Unreachable("radosgw-admin timed out".into()))?
         .map_err(|e| DriverError::Unreachable(format!("failed to spawn `radosgw-admin`: {e}")))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();

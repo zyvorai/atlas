@@ -13,7 +13,7 @@ use atlas_jobs::{JobSpec, OwnerRef};
 
 use crate::auth::Actor;
 use crate::state::AppState;
-use super::util::{accepted, CEPH_BACKEND_ID};
+use super::util::{accepted, validate_k8s_name, CEPH_BACKEND_ID};
 
 // ---- snapshots (read) ----
 
@@ -33,6 +33,7 @@ pub(crate) async fn create_volume(
     if body.name.trim().is_empty() {
         return Err(AppError::Validation("name is required".into()));
     }
+    validate_k8s_name(&body.name)?;
     if body.size_bytes <= 0 {
         return Err(AppError::Validation("size_bytes must be > 0".into()));
     }
@@ -81,6 +82,10 @@ pub(crate) async fn create_volume(
                 placement.storage_class = tp.storage_class;
                 placement.access_mode = tp.access_mode;
                 placement.volume_mode = tp.volume_mode;
+                // `tenant_policies` has no `kind` column, so `placement.kind` (already set from
+                // the built-in policy's kind, or the request's kind if the intent isn't a known
+                // built-in) is the best available signal here — still correct for the common case
+                // of a tenant overriding just the StorageClass for an existing named intent.
             }
         }
     }
@@ -122,7 +127,11 @@ pub(crate) async fn create_volume(
         access_mode,
         volume_mode,
         size_bytes: body.size_bytes,
-        kind: format!("{:?}", body.kind).to_lowercase(),
+        // Use the *resolved* kind, not the raw request's — a named policy (e.g. `shared`) always
+        // implies a specific kind (CephFS/`Filesystem`) regardless of what the client passed or
+        // defaulted to; trusting `body.kind` here mis-tags the volume and it gets silently pruned
+        // by discovery on drivers that only enumerate one storage kind.
+        kind: format!("{:?}", placement.kind).to_lowercase(),
         policy: Some(placement.intent.clone()),
         owner,
     };

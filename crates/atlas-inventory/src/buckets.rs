@@ -5,7 +5,10 @@ use anyhow::Result;
 use atlas_api_types::StorageBucket;
 use sqlx::{Row, SqlitePool};
 
-/// Insert a pending bucket row (before the OBC binds).
+/// Insert a pending bucket row (after the OBC create call has been accepted by k8s, before it's
+/// necessarily bound). `OR IGNORE` makes this safe to call again on a job retry that re-enters
+/// the same `BucketCreate` dispatch arm with the same `id` — the row from the first attempt is
+/// left alone rather than erroring on the primary-key conflict.
 pub async fn insert_bucket(
     pool: &SqlitePool,
     id: &str,
@@ -15,7 +18,7 @@ pub async fn insert_bucket(
     obc_name: &str,
 ) -> Result<()> {
     sqlx::query(
-        "INSERT INTO storage_buckets (id, tenant_id, name, namespace, obc_name, state)
+        "INSERT OR IGNORE INTO storage_buckets (id, tenant_id, name, namespace, obc_name, state)
          VALUES (?, ?, ?, ?, ?, 'pending')",
     )
     .bind(id)

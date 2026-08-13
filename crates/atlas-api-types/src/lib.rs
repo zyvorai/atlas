@@ -255,6 +255,13 @@ pub struct Placement {
     pub storage_class: String,
     pub access_mode: String,
     pub volume_mode: String,
+    /// The volume kind this placement actually provisions (e.g. a named `shared` policy always
+    /// means CephFS, i.e. `Filesystem`, regardless of what the caller passed as `kind`). Callers
+    /// must build the create job from this field, not the request's raw `kind`, or a
+    /// caller-defaulted/incorrect `kind` silently mis-tags the volume in inventory and it gets
+    /// pruned by discovery on drivers that only enumerate one storage kind (e.g. real Ceph's
+    /// RBD-only discovery treats a mistagged CephFS volume as a deleted RBD image).
+    pub kind: VolumeKind,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
