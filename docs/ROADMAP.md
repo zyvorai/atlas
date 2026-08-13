@@ -93,6 +93,12 @@ service-account token, live gateway health/version) with a session gate + sign-o
 CTAs; a running-jobs popover; ⌘K spotlight with arrow-nav; copy-to-clipboard IDs; a capacity radial +
 per-pool utilization bars on the Command Deck; per-page titles, hexagon favicon, responsive sidebar.
 
+- ✅ **Nav overflow-menu fix** — the "More sections"/"More shortcuts" fold-menus in the top nav (shown
+  when the rail is too narrow to fit every section/shortcut) opened but rendered invisible: they used
+  `position: absolute` inside `.at-rail-nav`/`.at-controls`, both `overflow: hidden`, so the panel was
+  clipped before it painted. Fixed by portaling both to `document.body` with `position: fixed` +
+  `getBoundingClientRect()`-computed coordinates, matching the pattern the section flyouts already used.
+
 **HTTPS**: an optional TLS listener (`ATLAS_HTTPS_ADDR` + `ATLAS_TLS_CERT`/`ATLAS_TLS_KEY` PEM), served
 alongside HTTP via `axum-server` + rustls (ring provider — no cmake in the build). The ceph deployment
 mounts a self-signed `atlas-tls` Secret and exposes NodePort **30543** (`https://<node>:30543/`; a real
