@@ -8,7 +8,122 @@ use std::time::Instant;
 use atlas_common::Config;
 use atlas_driver_core::DriverRegistry;
 use atlas_driver_k8s::K8sDriver;
+use openidconnect::{EndpointMaybeSet, EndpointNotSet, EndpointSet};
 use sqlx::SqlitePool;
+
+/// `CoreClient::from_provider_metadata(..).set_redirect_uri(..)`'s exact concrete type — the
+/// crate's endpoint-presence type-state machinery means this can't be named as the bare
+/// `openidconnect::core::CoreClient` alias (that alias defaults every endpoint to
+/// `EndpointNotSet`, but discovery always sets the auth/token endpoints and optionally the
+/// userinfo endpoint). Determined empirically via a deliberate type-mismatch compile probe
+/// against openidconnect 4.0.1 / oauth2 5.0.0 — if either crate is upgraded and this stops
+/// compiling, re-derive it the same way rather than guessing.
+type DiscoveredOidcClient = openidconnect::core::CoreClient<
+    EndpointSet,      // HasAuthUrl — discovery always provides authorization_endpoint
+    EndpointNotSet,   // HasDeviceAuthUrl — not part of OIDC discovery
+    EndpointNotSet,   // HasIntrospectionUrl — not part of OIDC discovery
+    EndpointNotSet,   // HasRevocationUrl — not set unless discovered separately (we don't)
+    EndpointMaybeSet, // HasTokenUrl — discovery *should* provide token_endpoint but it's optional
+    EndpointMaybeSet, // HasUserInfoUrl — userinfo_endpoint is optional in the discovery doc
+>;
+
+/// OIDC login state held between the `/auth/oidc/login` redirect and the `/auth/oidc/callback`
+/// return trip, keyed by the CSRF `state` parameter. In-memory only (single-gateway-instance
+/// deployment, per the rest of this codebase's HA posture) — a login abandoned mid-flow just
+/// leaks one small entry until `sweep_expired` clears it.
+pub(crate) struct PendingOidcLogin {
+    pub nonce: String,
+    pub pkce_verifier: String,
+    pub created_at: Instant,
+}
+
+/// Runtime OIDC client, built once at startup by discovering the configured issuer. Wraps the
+/// discovered `CoreClient` plus the in-flight-login map described above. `AppState.oidc` is
+/// `None` whenever `Config.oidc` is `None` (feature not configured) or discovery failed at boot
+/// (logged as a warning — the gateway still starts, just without SSO).
+pub struct OidcRuntime {
+    pub(crate) client: DiscoveredOidcClient,
+    pub(crate) http: openidconnect::reqwest::Client,
+    pending: Mutex<HashMap<String, PendingOidcLogin>>,
+}
+
+const PENDING_LOGIN_TTL_SECS: u64 = 600;
+
+impl OidcRuntime {
+    pub(crate) fn new(client: DiscoveredOidcClient, http: openidconnect::reqwest::Client) -> Self {
+        Self { client, http, pending: Mutex::new(HashMap::new()) }
+    }
+
+    pub(crate) fn stash(&self, csrf_state: String, nonce: String, pkce_verifier: String) {
+        let mut g = match self.pending.lock() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
+        g.retain(|_, v| v.created_at.elapsed().as_secs() < PENDING_LOGIN_TTL_SECS);
+        g.insert(csrf_state, PendingOidcLogin { nonce, pkce_verifier, created_at: Instant::now() });
+    }
+
+    /// Consume (remove) the pending login for `csrf_state`, if present and not expired.
+    pub(crate) fn take(&self, csrf_state: &str) -> Option<PendingOidcLogin> {
+        let mut g = self.pending.lock().ok()?;
+        let entry = g.remove(csrf_state)?;
+        if entry.created_at.elapsed().as_secs() >= PENDING_LOGIN_TTL_SECS {
+            return None;
+        }
+        Some(entry)
+    }
+}
+
+/// Discover the configured OIDC issuer and build a runtime client. Returns `None` (logged as a
+/// warning, never fatal) on any failure — a lab Dex instance being briefly unreachable at boot
+/// shouldn't take down the rest of the gateway; the "Sign in with SSO" button just won't appear.
+pub async fn build_oidc_runtime(cfg: &Config) -> Option<Arc<OidcRuntime>> {
+    let oidc_cfg = cfg.oidc.as_ref()?;
+    use openidconnect::core::{CoreClient, CoreProviderMetadata};
+    use openidconnect::{ClientId, ClientSecret, IssuerUrl, RedirectUrl};
+
+    let issuer_url = match IssuerUrl::new(oidc_cfg.issuer_url.clone()) {
+        Ok(u) => u,
+        Err(e) => {
+            tracing::warn!("OIDC issuer URL invalid, SSO disabled: {e}");
+            return None;
+        }
+    };
+    let redirect_url = match RedirectUrl::new(oidc_cfg.redirect_url.clone()) {
+        Ok(u) => u,
+        Err(e) => {
+            tracing::warn!("OIDC redirect URL invalid, SSO disabled: {e}");
+            return None;
+        }
+    };
+    // A throwaway/lab IdP is commonly plain HTTP with no reverse proxy in front of it — this
+    // client is used server-to-server only (discovery + token exchange), never to fetch
+    // anything an end user supplies, so following redirects isn't the SSRF risk it would be for
+    // a general-purpose HTTP client. `reqwest::Client` (async) implements openidconnect's
+    // `AsyncHttpClient` directly, so no adapter type is needed.
+    let http = openidconnect::reqwest::Client::builder()
+        .redirect(openidconnect::reqwest::redirect::Policy::none())
+        .build()
+        .ok()?;
+
+    let metadata = match CoreProviderMetadata::discover_async(issuer_url, &http).await {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::warn!("OIDC discovery against {} failed, SSO disabled: {e}", oidc_cfg.issuer_url);
+            return None;
+        }
+    };
+
+    let client = CoreClient::from_provider_metadata(
+        metadata,
+        ClientId::new(oidc_cfg.client_id.clone()),
+        Some(ClientSecret::new(oidc_cfg.client_secret.clone())),
+    )
+    .set_redirect_uri(redirect_url);
+
+    tracing::info!(issuer = %oidc_cfg.issuer_url, "OIDC/SSO login enabled");
+    Some(Arc::new(OidcRuntime::new(client, http)))
+}
 
 /// In-process worker heartbeats: each periodic worker stamps its name every tick so `/readyz` can
 /// surface a wedged worker. Empty when workers are disabled (e.g. tests), which readyz treats as
@@ -86,6 +201,8 @@ pub struct AppState {
     pub workers: WorkerHealth,
     /// Per-actor request rate limiter (day-2 governance).
     pub rate: RateLimiter,
+    /// OIDC/SSO login, when configured and discovery succeeded at startup.
+    pub oidc: Option<Arc<OidcRuntime>>,
 }
 
 impl AppState {

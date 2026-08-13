@@ -23,6 +23,38 @@ impl CephDriverMode {
     }
 }
 
+/// OIDC/SSO login configuration. Only built when `ATLAS_OIDC_ISSUER_URL`, `_CLIENT_ID`, and
+/// `_REDIRECT_URL` are all set — absence disables the feature entirely (no route exposed, no
+/// "Sign in with SSO" button), mirroring how `ceph_prometheus_url`/`alert_webhook_url` auto-gate.
+/// A successful OIDC login mints the same Atlas-issued HS256 JWT `POST /auth/login` does — OIDC is
+/// only ever a second way to *obtain* a token, never a parallel validation path, so
+/// `auth_middleware`/`require_role`/token revocation are all untouched.
+#[derive(Clone)]
+pub struct OidcConfig {
+    pub issuer_url: String,
+    pub client_id: String,
+    pub client_secret: String,
+    pub redirect_url: String,
+    /// OIDC group names (from the `groups` claim) that map to the `admin` role.
+    pub admin_groups: Vec<String>,
+    /// OIDC group names that map to the `operator` role. Anything matching neither list, or a
+    /// token with no `groups` claim at all, gets `viewer` (least privilege by default).
+    pub operator_groups: Vec<String>,
+}
+
+impl fmt::Debug for OidcConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OidcConfig")
+            .field("issuer_url", &self.issuer_url)
+            .field("client_id", &self.client_id)
+            .field("client_secret", &"<redacted>")
+            .field("redirect_url", &self.redirect_url)
+            .field("admin_groups", &self.admin_groups)
+            .field("operator_groups", &self.operator_groups)
+            .finish()
+    }
+}
+
 #[derive(Clone)]
 pub struct Config {
     pub bind_addr: String,
@@ -87,6 +119,40 @@ pub struct Config {
     pub zfs_host: Option<String>,
     /// Comma-separated zpool names (defaults to demo zpools when enabled without any).
     pub zfs_pools: Vec<String>,
+    /// OIDC/SSO login (`None` = feature disabled — no unauthenticated OIDC routes are mounted).
+    pub oidc: Option<OidcConfig>,
+}
+
+fn oidc_from_env() -> Option<OidcConfig> {
+    let issuer_url = std::env::var("ATLAS_OIDC_ISSUER_URL")
+        .ok()
+        .filter(|s| !s.trim().is_empty())?;
+    let client_id = std::env::var("ATLAS_OIDC_CLIENT_ID")
+        .ok()
+        .filter(|s| !s.trim().is_empty())?;
+    let redirect_url = std::env::var("ATLAS_OIDC_REDIRECT_URL")
+        .ok()
+        .filter(|s| !s.trim().is_empty())?;
+    let client_secret = std::env::var("ATLAS_OIDC_CLIENT_SECRET").unwrap_or_default();
+    let split_csv = |var: &str| -> Vec<String> {
+        std::env::var(var)
+            .ok()
+            .map(|s| {
+                s.split(',')
+                    .map(|x| x.trim().to_string())
+                    .filter(|x| !x.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    Some(OidcConfig {
+        issuer_url,
+        client_id,
+        client_secret,
+        redirect_url,
+        admin_groups: split_csv("ATLAS_OIDC_ADMIN_GROUP"),
+        operator_groups: split_csv("ATLAS_OIDC_OPERATOR_GROUP"),
+    })
 }
 
 impl Config {
@@ -222,6 +288,7 @@ impl Config {
                         .collect()
                 })
                 .unwrap_or_default(),
+            oidc: oidc_from_env(),
         }
     }
 
@@ -276,6 +343,7 @@ impl Default for Config {
             zfs_enable: false,
             zfs_host: None,
             zfs_pools: Vec::new(),
+            oidc: None,
         }
     }
 }

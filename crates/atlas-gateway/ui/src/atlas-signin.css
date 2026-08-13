@@ -309,6 +309,53 @@
   cursor: wait;
 }
 
+.atlas-signin-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+  color: var(--signin-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.atlas-signin-divider::before,
+.atlas-signin-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--signin-ink) 15%, transparent);
+}
+
+.atlas-signin-sso {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--signin-ink) 25%, transparent);
+  background: transparent;
+  color: var(--signin-ink);
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  padding: 0.65rem 1rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.atlas-signin-sso:hover:not(:disabled) {
+  border-color: var(--signin-accent);
+  background: color-mix(in srgb, var(--signin-accent) 8%, transparent);
+}
+
+.atlas-signin-sso:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .atlas-signin-meta {
   margin: 1.5rem 0 0;
   display: flex;

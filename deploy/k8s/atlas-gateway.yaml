@@ -148,6 +148,22 @@ spec:
                   fieldPath: status.hostIP
             - name: ATLAS_RGW_PUBLIC_ENDPOINT
               value: "http://$(NODE_IP):30800"
+            # OIDC/SSO login against the throwaway Dex instance (see deploy/dex-lab/) — a lab-only
+            # test IdP, not a real identity provider. Remove these four ATLAS_OIDC_* vars (or leave
+            # Dex torn down) to disable the "Sign in with SSO" button; the feature auto-gates off
+            # when unset (see crates/atlas-common/src/config.rs's oidc_from_env()).
+            - name: ATLAS_OIDC_ISSUER_URL
+              value: "http://$(NODE_IP):30556"
+            - name: ATLAS_OIDC_CLIENT_ID
+              value: "atlas-console"
+            - name: ATLAS_OIDC_CLIENT_SECRET
+              value: "4v5Yp5buDhRKTb3KTyWpf28egoYx3Ts"
+            - name: ATLAS_OIDC_REDIRECT_URL
+              value: "http://$(NODE_IP):30510/api/atlas/v1/auth/oidc/callback"
+            - name: ATLAS_OIDC_ADMIN_GROUP
+              value: "admin"
+            - name: ATLAS_OIDC_OPERATOR_GROUP
+              value: "operator"
             - name: RUST_LOG
               value: "info,atlas_gateway=debug"
           ports:

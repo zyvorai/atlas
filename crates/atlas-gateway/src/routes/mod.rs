@@ -11,6 +11,7 @@ mod inventory;
 mod meta;
 mod object_store;
 mod observability;
+mod oidc;
 mod rbd;
 mod util;
 mod volumes;
@@ -33,13 +34,19 @@ use inventory::*;
 use meta::*;
 use object_store::*;
 use observability::*;
+use oidc::*;
 use rbd::*;
 use volumes::*;
 
 pub fn router(state: AppState) -> Router {
     // Password login is intentionally outside the bearer middleware (this is how you get a token).
+    // The OIDC routes below are the same idea — a browser-navigated login round-trip has no
+    // bearer token to present yet by definition.
     let public_api = Router::new()
         .route("/auth/login", post(login))
+        .route("/auth/oidc/status", get(oidc_status))
+        .route("/auth/oidc/login", get(oidc_login))
+        .route("/auth/oidc/callback", get(oidc_callback))
         .with_state(state.clone());
 
     let api = Router::new()

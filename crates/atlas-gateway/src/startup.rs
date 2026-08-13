@@ -195,6 +195,9 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
+    // OIDC/SSO: discover the issuer now (once) if configured; `None` on any failure just means
+    // no "Sign in with SSO" button, not a failed startup.
+    let oidc = crate::state::build_oidc_runtime(&config).await;
     let state = AppState {
         pool,
         config: Arc::new(config),
@@ -203,6 +206,7 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
         jobs,
         workers: crate::state::WorkerHealth::default(),
         rate: crate::state::RateLimiter::new(rpm),
+        oidc,
     };
 
     if opts.initial_discovery {

@@ -191,7 +191,7 @@ pub(crate) async fn login(
     mint_login_response(&s, &s.config.admin_username, "admin", ttl_secs).await
 }
 
-async fn mint_login_response(
+pub(crate) async fn mint_login_response(
     s: &AppState,
     subject: &str,
     role: &str,

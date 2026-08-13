@@ -40,6 +40,7 @@ fn config(db: &str) -> Config {
         zfs_enable: false,
         zfs_host: None,
         zfs_pools: Vec::new(),
+        oidc: None,
     }
 }
 

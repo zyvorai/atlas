@@ -53,6 +53,7 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
         zfs_enable: false,
         zfs_host: None,
         zfs_pools: Vec::new(),
+        oidc: None,
     };
     let state = build_state(
         config,

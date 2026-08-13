@@ -85,6 +85,7 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [ver, setVer] = useState("");
   const [health, setHealth] = useState<"ok" | "down" | "…">("…");
+  const [ssoEnabled, setSsoEnabled] = useState(false);
   const hostLabel = typeof window !== "undefined" ? window.location.hostname : "";
 
   useEffect(() => {
@@ -105,6 +106,10 @@ export function Login() {
     fetch("/health")
       .then((r) => setHealth(r.ok ? "ok" : "down"))
       .catch(() => setHealth("down"));
+    fetch(`${API_BASE}/auth/oidc/status`)
+      .then((r) => r.json())
+      .then((v) => setSsoEnabled(Boolean(v?.enabled)))
+      .catch(() => setSsoEnabled(false));
     return () => {
       document.title = PRODUCT;
     };
@@ -245,6 +250,26 @@ export function Login() {
               <span>{busy ? "Signing in…" : `Sign in to ${PRODUCT}`}</span>
               {!busy ? <ArrowRight className="w-4 h-4" aria-hidden /> : null}
             </button>
+
+            {ssoEnabled && (
+              <>
+                <div className="atlas-signin-divider" role="separator">
+                  <span>or</span>
+                </div>
+                <button
+                  type="button"
+                  className="atlas-signin-sso"
+                  disabled={busy}
+                  onClick={() => {
+                    // Full-page navigation, not fetch — the identity provider needs a real
+                    // browser round-trip (it may set its own cookies / can't run in an iframe).
+                    window.location.href = `${API_BASE}/auth/oidc/login`;
+                  }}
+                >
+                  Sign in with SSO
+                </button>
+              </>
+            )}
 
             <p className="atlas-signin-meta">
               <span
