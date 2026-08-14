@@ -155,11 +155,15 @@ spec:
             # (atlas-state-backup / atlas-self-state) created via radosgw-admin, not an OBC — this
             # needs a standing S3 credential up front, which OBCs don't provide. Distinct prefix
             # from the fake+k8s gateway's backup so the two deployments' snapshots don't collide
-            # in the shared bucket.
+            # in the shared bucket. Deliberately NOT ATLAS_RGW_PUBLIC_ENDPOINT's port (30513) —
+            # that's a separate, more restricted service meant for presigned download URLs and
+            # returns 400 InvalidArgument on the PUT/bucket-management calls this needs; use the
+            # plain rook-ceph-rgw-*-nodeport S3 endpoint instead (30800, same as the fake+k8s
+            # gateway's working config).
             - name: ATLAS_STATE_BACKUP_SECS
               value: "3600"
             - name: ATLAS_STATE_BACKUP_ENDPOINT
-              value: "http://$(NODE_IP):30513"
+              value: "http://$(NODE_IP):30800"
             - name: ATLAS_STATE_BACKUP_BUCKET
               value: "atlas-self-state"
             - name: ATLAS_STATE_BACKUP_PREFIX
