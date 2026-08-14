@@ -106,3 +106,31 @@ async fn failed_export_keeps_rows() {
         .get("c");
     assert_eq!(remaining, 1, "a failed export must not delete the row — retried next tick");
 }
+
+/// Live verification against a real network endpoint — the two tests above prove the export
+/// logic is correct using an in-process axum mock; this proves the actual HTTP client behaves
+/// correctly against an independently-implemented server over a real network path. Opt-in
+/// (depends on external infra, `cargo test` doesn't run `#[ignore]`d tests by default):
+/// `cargo test --test audit_export -- --ignored`. Points at deploy/siem-lab/'s receiver
+/// (`./up.sh` from that directory stands it up); adjust the URL if you deployed it elsewhere.
+#[tokio::test]
+#[ignore]
+async fn live_export_against_siem_lab_receiver() {
+    let pool = spawn_db().await;
+    insert_old_row(&pool, "r-live-siem-lab").await;
+    let url = "http://212.8.248.187:30557/";
+
+    let n = atlas_monitor::audit_export::export_and_prune(&pool, 30, url)
+        .await
+        .expect("export to the live siem-lab receiver should succeed — is it deployed? see deploy/siem-lab/");
+    assert!(n >= 1);
+
+    let remaining: i64 = sqlx::query(
+        "SELECT COUNT(*) AS c FROM storage_audit_logs WHERE resource_id = 'r-live-siem-lab'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .get("c");
+    assert_eq!(remaining, 0, "exported row must be deleted");
+}

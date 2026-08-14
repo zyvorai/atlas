@@ -378,6 +378,17 @@ runbook; summary:
   retry on the next 6h tick rather than silently dropping them, closing the "audit data just
   disappears with no external record" gap a compliance review would flag first. Straight-line
   `prune()` (no export) remains available when `ATLAS_AUDIT_EXPORT_URL` is unset.
+- ✅ **SIEM-export network path verified against real infra**: `deploy/siem-lab/` stands up a
+  minimal HTTP receiver in the lab (stdlib-only Python, no deps) standing in for a SIEM's
+  ingestion endpoint (Splunk HEC, Elastic/Fluent Bit HTTP input, a generic webhook collector). A
+  new opt-in live test (`crates/atlas-gateway/tests/audit_export.rs`'s
+  `live_export_against_siem_lab_receiver`, `#[ignore]`d — run with `cargo test --test
+  audit_export -- --ignored`) exercises the real `export_and_prune` HTTP client against it over
+  the actual lab network, confirmed via the receiver's own logs receiving the exact expected
+  payload — proof against an independently-implemented server, not just the existing tests'
+  in-process axum mock agreeing with itself. Deliberately doesn't touch the live gateway's
+  `ATLAS_AUDIT_EXPORT_URL`/`ATLAS_AUDIT_RETENTION_DAYS` — turning those on for real is a standing
+  retention-policy change for the platform team to make deliberately, not a side effect of this.
 - ✅ **Supply-chain audit gate**: `cargo deny check` (CI job + `make audit`, `deny.toml`) — known-
   vulnerable/yanked advisories, disallowed licenses, unknown registries/git sources. Scoped to
   default features (what's actually shipped); the optional DataBridge connectors are compile-
@@ -430,11 +441,10 @@ runbook; summary:
   user/bucket): the gateway is single-replica with a `Recreate` rollout (planned downtime per
   deploy — SQLite's query layer has no Postgres port yet, only connection/migration scaffolding
   behind a disabled feature); OIDC/SSO is only verified against a throwaway Dex instance, not a
-  real enterprise IdP; `ATLAS_AUDIT_EXPORT_URL` (audit-log SIEM export) is implemented but has no
-  real SIEM endpoint to point at yet. The secrets-manager integration pattern itself is now
-  verified (`deploy/vault-lab/` — see below); a real deployment still needs the bank's actual
-  Vault/CyberArk instance swapped in for the lab one. None of these
-  block a non-production pilot; all are gates before a production go-live.
+  real enterprise IdP. The audit-log SIEM export and secrets-manager integration *patterns* are now
+  both verified against real (lab) infra (`deploy/siem-lab/`, `deploy/vault-lab/` — see below); a
+  real deployment still needs the bank's actual SIEM/Vault swapped in for the lab ones. None of
+  these block a non-production pilot; all are gates before a production go-live.
 - **Non-Postgres DataBridge streaming CDC + cutover**: MySQL, MariaDB, and MongoDB are verified
   through provision → real full-load → validate (row/document-count parity); their streaming-CDC
   and cutover stages need the Kafka/Debezium stack, which isn't installed on the shared lab. SQL
