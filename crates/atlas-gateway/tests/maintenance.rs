@@ -49,6 +49,7 @@ async fn spawn() -> SocketAddr {
         tls_cert_path: None,
         tls_key_path: None,
         tls_self_signed: false,
+        disable_http: false,
         nfs_enable: false,
         nfs_server: None,
         nfs_exports: Vec::new(),

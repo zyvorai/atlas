@@ -35,21 +35,31 @@ async fn main() -> anyhow::Result<()> {
     let https_addr = config.https_addr.clone();
     let tls_cert = config.tls_cert_path.clone();
     let tls_key = config.tls_key_path.clone();
+    let disable_http = config.disable_http;
     let state = build_state(config, BuildOptions::default()).await?;
 
-    // REST server (HTTP).
     let app = routes::router(state.clone())
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive());
-    let addr: SocketAddr = bind_addr.parse()?;
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    info!("atlas-gateway REST listening on http://{addr}");
-    let rest_app = app.clone();
-    let rest = async move {
-        axum::serve(listener, rest_app)
-            .with_graceful_shutdown(shutdown_signal())
-            .await
-            .map_err(anyhow::Error::from)
+
+    // Plain HTTP REST listener. Skippable via ATLAS_DISABLE_HTTP once HTTPS is confirmed
+    // working, so TLS can't be bypassed by hitting the HTTP port directly —
+    // validate_for_start() already refused to allow this without a working HTTPS listener
+    // configured alongside it.
+    let rest_task: Option<tokio::task::JoinHandle<anyhow::Result<()>>> = if disable_http {
+        info!("plain HTTP REST listener disabled (ATLAS_DISABLE_HTTP=1) — HTTPS only");
+        None
+    } else {
+        let addr: SocketAddr = bind_addr.parse()?;
+        let listener = tokio::net::TcpListener::bind(addr).await?;
+        info!("atlas-gateway REST listening on http://{addr}");
+        let rest_app = app.clone();
+        Some(tokio::spawn(async move {
+            axum::serve(listener, rest_app)
+                .with_graceful_shutdown(shutdown_signal())
+                .await
+                .map_err(anyhow::Error::from)
+        }))
     };
 
     // Optional HTTPS listener (same app), enabled by ATLAS_HTTPS_ADDR + cert/key PEM paths.
@@ -80,33 +90,28 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // gRPC edge (served concurrently). Empty ATLAS_GRPC_ADDR disables it.
-    if grpc_addr.trim().is_empty() {
-        rest.await?;
-        if let Some(t) = https_task {
-            if let Err(e) = t.await? {
-                tracing::error!("https server error: {e:#}");
-            }
-        }
-        return Ok(());
-    }
-    let gaddr: SocketAddr = grpc_addr.parse()?;
-    info!("atlas-gateway gRPC listening on {gaddr}");
-    let reflection = tonic_reflection::server::Builder::configure()
-        .register_encoded_file_descriptor_set(atlas_gateway::proto::FILE_DESCRIPTOR_SET)
-        .build_v1()?;
-    let grpc = async move {
-        tonic::transport::Server::builder()
-            .add_service(grpc::service(state))
-            .add_service(reflection)
-            .serve_with_shutdown(gaddr, shutdown_signal())
-            .await
-            .map_err(anyhow::Error::from)
+    let grpc_task: Option<tokio::task::JoinHandle<anyhow::Result<()>>> = if grpc_addr.trim().is_empty()
+    {
+        None
+    } else {
+        let gaddr: SocketAddr = grpc_addr.parse()?;
+        info!("atlas-gateway gRPC listening on {gaddr}");
+        let reflection = tonic_reflection::server::Builder::configure()
+            .register_encoded_file_descriptor_set(atlas_gateway::proto::FILE_DESCRIPTOR_SET)
+            .build_v1()?;
+        Some(tokio::spawn(async move {
+            tonic::transport::Server::builder()
+                .add_service(grpc::service(state))
+                .add_service(reflection)
+                .serve_with_shutdown(gaddr, shutdown_signal())
+                .await
+                .map_err(anyhow::Error::from)
+        }))
     };
 
-    tokio::try_join!(rest, grpc)?;
-    if let Some(t) = https_task {
-        if let Err(e) = t.await? {
-            tracing::error!("https server error: {e:#}");
+    for task in [rest_task, https_task, grpc_task].into_iter().flatten() {
+        if let Err(e) = task.await? {
+            tracing::error!("server task error: {e:#}");
         }
     }
     info!("atlas-gateway shut down cleanly");

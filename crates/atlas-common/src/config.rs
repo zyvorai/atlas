@@ -111,13 +111,19 @@ pub struct Config {
     /// Reclaim `running` jobs whose `locked_at`/`updated_at` is older than this many seconds
     /// (stale mid-flight after a hard kill that never ran boot recovery). `0` disables reclaim.
     pub job_stale_secs: u64,
-    /// Optional HTTPS listen address (empty disables TLS). Served alongside the plain HTTP listener.
+    /// Optional HTTPS listen address (empty disables TLS). Served alongside the plain HTTP
+    /// listener unless `disable_http` is also set.
     pub https_addr: Option<String>,
     /// PEM cert/key paths for HTTPS (both required unless `tls_self_signed`).
     pub tls_cert_path: Option<String>,
     pub tls_key_path: Option<String>,
     /// Generate a self-signed cert at startup when no cert/key is provided (lab convenience).
     pub tls_self_signed: bool,
+    /// Skip binding the plain HTTP listener entirely, so TLS can't be bypassed by hitting the
+    /// HTTP port directly. Only takes effect when HTTPS is actually configured —
+    /// `validate_for_start()` refuses to boot with this set but no working HTTPS listener, since
+    /// that would mean no REST listener at all.
+    pub disable_http: bool,
     /// Register a second NFS backend (demonstrates the pluggable-driver architecture).
     pub nfs_enable: bool,
     /// NFS server host for the NFS backend (defaults to a demo host when enabled without one).
@@ -262,6 +268,14 @@ impl Config {
                     .as_str(),
                 "1" | "true" | "yes"
             ),
+            disable_http: matches!(
+                std::env::var("ATLAS_DISABLE_HTTP")
+                    .unwrap_or_default()
+                    .trim()
+                    .to_lowercase()
+                    .as_str(),
+                "1" | "true" | "yes"
+            ),
             nfs_enable: matches!(
                 std::env::var("ATLAS_NFS_ENABLE")
                     .unwrap_or_default()
@@ -332,6 +346,14 @@ impl Config {
                     .into(),
             );
         }
+        if self.disable_http
+            && (self.https_addr.is_none() || self.tls_cert_path.is_none() || self.tls_key_path.is_none())
+        {
+            return Err(
+                "ATLAS_DISABLE_HTTP is set but ATLAS_HTTPS_ADDR/ATLAS_TLS_CERT/ATLAS_TLS_KEY aren't all configured — that would leave no REST listener at all, refuse to start"
+                    .into(),
+            );
+        }
         Ok(())
     }
 }
@@ -363,6 +385,7 @@ impl Default for Config {
             tls_cert_path: None,
             tls_key_path: None,
             tls_self_signed: false,
+            disable_http: false,
             nfs_enable: false,
             nfs_server: None,
             nfs_exports: Vec::new(),
@@ -431,6 +454,24 @@ mod tests {
     fn validate_allows_weak_secret_when_auth_open() {
         let c = Config::default();
         assert!(!c.auth_required);
+        assert!(c.validate_for_start().is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_disable_http_without_working_https() {
+        let mut c = Config {
+            jwt_secret: "a-strong-enough-secret-at-least-32b!".into(),
+            admin_password: "a-strong-enough-admin-password".into(),
+            disable_http: true,
+            ..Default::default()
+        };
+        // No ATLAS_HTTPS_ADDR/TLS_CERT/TLS_KEY at all — would leave no REST listener.
+        assert!(c.validate_for_start().is_err());
+        c.https_addr = Some("0.0.0.0:5443".into());
+        // Still missing cert/key.
+        assert!(c.validate_for_start().is_err());
+        c.tls_cert_path = Some("/etc/atlas-tls/tls.crt".into());
+        c.tls_key_path = Some("/etc/atlas-tls/tls.key".into());
         assert!(c.validate_for_start().is_ok());
     }
 }

@@ -49,6 +49,7 @@ fn base_config(db: &str, o: Opts) -> Config {
         tls_cert_path: None,
         tls_key_path: None,
         tls_self_signed: false,
+        disable_http: false,
         nfs_enable: o.extra_backends,
         nfs_server: None,
         nfs_exports: Vec::new(),

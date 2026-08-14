@@ -113,6 +113,13 @@ per-pool utilization bars on the Command Deck; per-page titles, hexagon favicon,
 alongside HTTP via `axum-server` + rustls (ring provider — no cmake in the build). The ceph deployment
 mounts a self-signed `atlas-tls` Secret and exposes NodePort **30543** (`https://<node>:30543/`; a real
 cert/ingress gives trusted TLS).
+- ✅ **`ATLAS_DISABLE_HTTP`**: found via the bank production-readiness audit — the plain HTTP
+  listener always ran even when HTTPS was configured, so TLS could be bypassed entirely by
+  hitting the HTTP port directly. This env var skips binding it; `validate_for_start()` refuses
+  to boot with it set unless `ATLAS_HTTPS_ADDR`/`ATLAS_TLS_CERT`/`ATLAS_TLS_KEY` are all also
+  configured (otherwise there'd be no REST listener at all). Left unset in the shipped manifests
+  for now — flipping it on for a real deployment is a decision to make once HTTPS-only access is
+  confirmed working end-to-end for every client, not an automatic default.
 - ✅ **Durable gateway DB** — the SQLite file is now backed by a `ReadWriteOnce` PVC (`Recreate`
   strategy). The real-mode gateway dogfoods `zyvor-rbd-prod` (Ceph); the fake-mode gateway uses the
   cluster default StorageClass so it still deploys without Ceph. Verified: inventory survives a pod
