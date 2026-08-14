@@ -29,15 +29,17 @@ async fn spawn_fake_sink() -> (std::net::SocketAddr, Arc<Mutex<Option<serde_json
     (addr, received)
 }
 
+static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 async fn spawn_db() -> sqlx::SqlitePool {
+    // An atomic counter, not a timestamp: #[tokio::test] fns in the same binary run concurrently,
+    // and two tests can land in the same nanosecond, colliding on the same SQLite file (the bug
+    // that made this test flaky under a parallel `cargo test --workspace` run).
     let db = format!(
         "{}/atlas-audit-export-{}-{}.db",
         std::env::temp_dir().display(),
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
     );
     let _ = std::fs::remove_file(&db);
     let pool = atlas_inventory::connect_sqlite(&format!("sqlite://{db}?mode=rwc"))
@@ -86,10 +88,15 @@ async fn successful_export_deletes_rows() {
 async fn failed_export_keeps_rows() {
     let pool = spawn_db().await;
     insert_old_row(&pool, "r-kept").await;
-    // Nothing listening on this port — the POST will fail to connect.
-    let unreachable_url = "http://127.0.0.1:1/";
+    // Bind an ephemeral port to get one the OS guarantees is free, then drop the listener so the
+    // POST fails to connect — more robust under a parallel `cargo test --workspace` run than a
+    // hardcoded low port, whose refused-connection behavior can vary under system load.
+    let reserved = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let unreachable_addr = reserved.local_addr().unwrap();
+    drop(reserved);
+    let unreachable_url = format!("http://{unreachable_addr}/");
 
-    let result = atlas_monitor::audit_export::export_and_prune(&pool, 30, unreachable_url).await;
+    let result = atlas_monitor::audit_export::export_and_prune(&pool, 30, &unreachable_url).await;
     assert!(result.is_err(), "export to an unreachable sink must error, not silently succeed");
 
     let remaining: i64 = sqlx::query("SELECT COUNT(*) AS c FROM storage_audit_logs WHERE resource_id = 'r-kept'")

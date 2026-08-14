@@ -388,15 +388,16 @@ runbook; summary:
   production-verified (`dataplane_verified` is hard-coded `false` until that drill runs). See
   [DR.md](DR.md).
 - **Bank-grade hardening gaps** (found via a production-readiness audit; tenant-scoped reads,
-  plaintext-secret-in-manifest, weak password hashing, missing supply-chain scanning, and
-  destructive-audit-pruning-with-no-export from that audit are already fixed above): rate
-  limiting and self-state backup both ship implemented but **disabled by default** in
-  `deploy/k8s/atlas-gateway*.yaml` (`ATLAS_RATE_LIMIT_RPM`/`ATLAS_STATE_BACKUP_SECS` unset); the
-  gateway is single-replica with a `Recreate` rollout (planned downtime per deploy — SQLite's
-  query layer has no Postgres port yet, only connection/migration scaffolding behind a disabled
-  feature); OIDC/SSO is only verified against a throwaway Dex instance, not a real enterprise IdP;
-  `ATLAS_AUDIT_EXPORT_URL` (audit-log SIEM export) is implemented but has no real SIEM endpoint to
-  point at yet; no external secrets-manager (Vault/CyberArk) integration exists. None of these
+  plaintext-secret-in-manifest, weak password hashing, missing supply-chain scanning,
+  destructive-audit-pruning-with-no-export, and rate-limiting/self-state-backup-off-by-default
+  from that audit are already fixed above — both `deploy/k8s/atlas-gateway*.yaml` now ship
+  `ATLAS_RATE_LIMIT_RPM=600` and a working `ATLAS_STATE_BACKUP_*` block against a dedicated RGW
+  user/bucket): the gateway is single-replica with a `Recreate` rollout (planned downtime per
+  deploy — SQLite's query layer has no Postgres port yet, only connection/migration scaffolding
+  behind a disabled feature); OIDC/SSO is only verified against a throwaway Dex instance, not a
+  real enterprise IdP; `ATLAS_AUDIT_EXPORT_URL` (audit-log SIEM export) is implemented but has no
+  real SIEM endpoint to point at yet; no external secrets-manager (Vault/CyberArk) integration
+  exists. None of these
   block a non-production pilot; all are gates before a production go-live.
 - **Non-Postgres DataBridge streaming CDC + cutover**: MySQL, MariaDB, and MongoDB are verified
   through provision → real full-load → validate (row/document-count parity); their streaming-CDC

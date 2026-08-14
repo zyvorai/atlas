@@ -151,6 +151,29 @@ spec:
                   fieldPath: status.hostIP
             - name: ATLAS_RGW_PUBLIC_ENDPOINT
               value: "http://$(NODE_IP):30800"
+            # Self-state backup: periodic VACUUM INTO snapshots of Atlas's own control-plane DB
+            # (inventory/jobs/audit/quotas/DataBridge state) uploaded to RGW, separate from the
+            # tenant-volume backups Atlas already does. Uses a dedicated RGW user/bucket
+            # (atlas-state-backup / atlas-self-state) created via radosgw-admin, not an OBC — this
+            # needs a standing S3 credential up front, which OBCs don't provide.
+            - name: ATLAS_STATE_BACKUP_SECS
+              value: "3600"
+            - name: ATLAS_STATE_BACKUP_ENDPOINT
+              value: "http://$(NODE_IP):30800"
+            - name: ATLAS_STATE_BACKUP_BUCKET
+              value: "atlas-self-state"
+            - name: ATLAS_STATE_BACKUP_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-gateway-auth
+                  key: state-backup-access-key
+                  optional: true
+            - name: ATLAS_STATE_BACKUP_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-gateway-auth
+                  key: state-backup-secret-key
+                  optional: true
             # OIDC/SSO login against the throwaway Dex instance (see deploy/dex-lab/) — a lab-only
             # test IdP, not a real identity provider. Remove these four ATLAS_OIDC_* vars (or leave
             # Dex torn down) to disable the "Sign in with SSO" button; the feature auto-gates off
@@ -174,6 +197,12 @@ spec:
               value: "admin"
             - name: ATLAS_OIDC_OPERATOR_GROUP
               value: "operator"
+            # Per-actor rate limit (0 = off, the shipped default). 600/min is generous headroom
+            # for a busy multi-widget console dashboard's background polling (each panel refetches
+            # every ~8s) while still bounding a runaway/malicious client — tune based on real
+            # usage once live traffic patterns are known.
+            - name: ATLAS_RATE_LIMIT_RPM
+              value: "600"
             - name: RUST_LOG
               value: "info,atlas_gateway=debug"
           ports:
