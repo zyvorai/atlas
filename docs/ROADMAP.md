@@ -351,6 +351,17 @@ runbook; summary:
   those five routes, with `admin` staying cross-tenant by design. `crates/atlas-gateway/tests/
   tenant_isolation.rs` is the regression guard. Console users (`POST /auth/users`) and issued
   tokens can now be created with an explicit `tenant_id` (default `"global"`).
+- ✅ **Secrets-manager integration (Vault + External Secrets Operator)**: `deploy/vault-lab/` —
+  a throwaway Vault (dev mode) + ESO demonstrate the real pattern a bank deployment would use:
+  secrets live in Vault, ESO syncs them into an ordinary K8s `Secret` via Vault's Kubernetes auth
+  method, and Atlas's Deployment references that `Secret` through the exact same `secretKeyRef` it
+  already uses for `atlas-gateway-auth` — no Atlas-side code or config shape changes needed.
+  Verified live end-to-end against a dedicated demo secret (not the live `atlas-gateway-auth`,
+  deliberately, to avoid disrupting the running gateways): Vault → K8s-Secret sync confirmed
+  byte-for-byte identical, and a live rotation in Vault propagated to the K8s Secret automatically
+  within the 30s refresh interval, with no `kubectl`/redeploy on the Atlas side. Adopting this for
+  the real `atlas-gateway-auth` Secret is a two-field YAML change once a real Vault is available
+  (see the README's "Adopting this for real").
 - ✅ **JWT secret rotation**: previously a single static `ATLAS_JWT_SECRET` with no rotation path —
   changing it instantly invalidated every outstanding session/service-account token with no grace
   period. `ATLAS_JWT_SECRET_PREVIOUS` (optional) is still accepted for *validating* tokens (never
@@ -420,8 +431,9 @@ runbook; summary:
   deploy — SQLite's query layer has no Postgres port yet, only connection/migration scaffolding
   behind a disabled feature); OIDC/SSO is only verified against a throwaway Dex instance, not a
   real enterprise IdP; `ATLAS_AUDIT_EXPORT_URL` (audit-log SIEM export) is implemented but has no
-  real SIEM endpoint to point at yet; no external secrets-manager (Vault/CyberArk) integration
-  exists. None of these
+  real SIEM endpoint to point at yet. The secrets-manager integration pattern itself is now
+  verified (`deploy/vault-lab/` — see below); a real deployment still needs the bank's actual
+  Vault/CyberArk instance swapped in for the lab one. None of these
   block a non-production pilot; all are gates before a production go-live.
 - **Non-Postgres DataBridge streaming CDC + cutover**: MySQL, MariaDB, and MongoDB are verified
   through provision → real full-load → validate (row/document-count parity); their streaming-CDC
