@@ -123,7 +123,12 @@ cert/ingress gives trusted TLS).
 - ✅ **gRPC TLS**: the gRPC edge previously had no TLS option at all — plaintext regardless of how
   REST was configured. It now reuses the same cert/key as the REST HTTPS listener automatically
   (`tonic`'s `tls` feature, `Identity::from_pem` + `ServerTlsConfig`) whenever both are configured;
-  stays plaintext otherwise (unchanged default).
+  stays plaintext otherwise (unchanged default). Verified live on the real-Ceph gateway (which
+  already carries a real self-signed cert/key pair): `atlas-gateway gRPC (TLS) listening on
+  0.0.0.0:5111` alongside REST HTTP/HTTPS, all three healthy. This same deploy pass also caught
+  and fixed a real self-state-backup misconfiguration on that gateway (wrong RGW endpoint port —
+  it was pointed at the presigned-URL-only service instead of the plain RGW NodePort, so uploads
+  400'd); it now uploads successfully there too.
 - ✅ **Durable gateway DB** — the SQLite file is now backed by a `ReadWriteOnce` PVC (`Recreate`
   strategy). The real-mode gateway dogfoods `zyvor-rbd-prod` (Ceph); the fake-mode gateway uses the
   cluster default StorageClass so it still deploys without Ceph. Verified: inventory survives a pod
