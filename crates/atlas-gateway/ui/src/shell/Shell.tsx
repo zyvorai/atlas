@@ -25,7 +25,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { MODULES, SECTIONS, MENUBAR_CONTROLS, type Module } from "../nav/modules";
 import { http, isUnauthorized } from "../api/client";
-import { useAlerts, useClusters, useJobs } from "../api/hooks";
+import { useAlerts, useCephHealthRollup, useClusters, useJobs } from "../api/hooks";
 import { useUi } from "../store/ui";
 import { THEME_OPTIONS, themeTitle } from "../lib/themes";
 import { cx } from "../lib/format";
@@ -57,6 +57,10 @@ function MenuBar({
   const { data: clusters, isError: clustersErrored, error: clustersError } = useClusters();
   const { data: jobs } = useJobs();
   const { data: openAlerts } = useAlerts("open");
+  // Prefer Atlas's own 5-value severity rollup (Healthy/Degraded/Rebuilding/At Risk/Critical,
+  // synthesized from status/osd-tree/osd-df — see atlas_driver_ceph::health_rollup) over the
+  // older 4-value per-cluster Health field; fall back to the latter if the rollup call errors.
+  const { data: rollup, isError: rollupErrored } = useCephHealthRollup();
   const runningJobs = (jobs || []).filter((j) =>
     ["running", "queued", "verifying", "pending"].includes(j.state),
   );
@@ -68,31 +72,52 @@ function MenuBar({
     ? "unauthenticated"
     : unreachable
       ? "unreachable"
-      : clusters?.[0]?.health || "unknown";
+      : !rollupErrored && rollup?.state
+        ? rollup.state
+        : clusters?.[0]?.health || "unknown";
   const healthWhy = useMemo(() => {
     if (h === "unauthenticated") return "API requests rejected — check your session";
     if (h === "unreachable") return "Gateway unreachable — retrying";
-    if (h !== "warn" && h !== "critical") return undefined;
+    if (h === "ok" || h === "healthy" || h === "unknown") return undefined;
     return (
+      rollup?.summary ||
       openAlerts?.[0]?.title ||
       openAlerts?.[0]?.description ||
       (h === "critical" ? "Cluster health critical" : "Cluster health degraded")
     );
-  }, [h, openAlerts]);
+  }, [h, openAlerts, rollup]);
   const healthClass =
-    h === "ok" ? "ok" : h === "warn" ? "warn" : h === "critical" || h === "unauthenticated" ? "crit" : "muted";
+    h === "ok" || h === "healthy"
+      ? "ok"
+      : h === "warn" || h === "degraded"
+        ? "warn"
+        : h === "rebuilding"
+          ? "info"
+          : h === "at_risk"
+            ? "at-risk"
+            : h === "critical" || h === "unauthenticated"
+              ? "crit"
+              : "muted";
   const healthLabel =
     h === "ok"
       ? "HEALTH_OK"
-      : h === "warn"
-        ? "HEALTH_WARN"
-        : h === "critical"
-          ? "HEALTH_ERR"
-          : h === "unauthenticated"
-            ? "AUTH"
-            : h === "unreachable"
-              ? "UNREACHABLE"
-              : String(h).toUpperCase();
+      : h === "healthy"
+        ? "HEALTHY"
+        : h === "warn"
+          ? "HEALTH_WARN"
+          : h === "degraded"
+            ? "DEGRADED"
+            : h === "rebuilding"
+              ? "REBUILDING"
+              : h === "at_risk"
+                ? "AT RISK"
+                : h === "critical"
+                  ? "HEALTH_ERR"
+                  : h === "unauthenticated"
+                    ? "AUTH"
+                    : h === "unreachable"
+                      ? "UNREACHABLE"
+                      : String(h).toUpperCase();
 
   const [tokenOpen, setTokenOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);

@@ -35,6 +35,9 @@
   --at-warn: #fbbf24;
   --at-fail: #f87171;
   --at-ok: #34d399;
+  /* Between --at-warn and --at-fail: the "At Risk" tier of the 5-value cluster-health rollup. */
+  --at-risk: #fb923c;
+  --at-risk-wash: rgba(251, 146, 60, 0.1);
 
   --at-face: "Space Grotesk", system-ui, sans-serif;
   --at-mono: "DM Mono", ui-monospace, monospace;
@@ -704,6 +707,12 @@ a.at-mark:focus-visible {
 }
 .at-health.muted {
   color: var(--at-ink-3);
+}
+.at-health.info {
+  color: var(--at-cyan);
+}
+.at-health.at-risk {
+  color: var(--at-risk);
 }
 .at-health .dot {
   width: 6px;
@@ -2481,6 +2490,11 @@ a.at-mark:focus-visible {
   color: var(--at-ink-3);
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.1);
+}
+.at-app .badge-at-risk {
+  color: var(--at-risk);
+  background: var(--at-risk-wash);
+  border-color: rgba(251, 146, 60, 0.28);
 }
 .at-app .field {
   background:

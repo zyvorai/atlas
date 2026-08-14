@@ -91,6 +91,20 @@ export const useDrPreflight = () =>
     warnings?: string[];
   }>(["dr-preflight"], "/dr/preflight", 10000);
 export const useCephStatus = () => q<any>(["ceph-status"], "/ceph/status", 8000);
+export type ClusterHealthState = "healthy" | "degraded" | "rebuilding" | "at_risk" | "critical";
+export const useCephHealthRollup = () =>
+  q<{
+    state: ClusterHealthState;
+    summary: string;
+    reasons: string[];
+    raw_status: string;
+    osds_up: number;
+    osds_in: number;
+    osds_total: number;
+    pgs_total: number;
+    pgs_not_clean: number;
+    recovering: boolean;
+  }>(["ceph-health-rollup"], "/ceph/health-rollup", 8000);
 export const useCephOsdTree = () => q<any>(["ceph-osd-tree"], "/ceph/osd-tree", 15000);
 export const useCephOsdDf = () => q<any>(["ceph-osd-df"], "/ceph/osd-df", 12000);
 export const useCephDf = () => q<any>(["ceph-df"], "/ceph/df", 12000);

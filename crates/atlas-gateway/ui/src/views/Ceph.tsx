@@ -4,7 +4,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { useCephDf, useCephOsdDf, useCephOsdTree, useCephStatus, usePools } from "../api/hooks";
+import {
+  useCephDf,
+  useCephHealthRollup,
+  useCephOsdDf,
+  useCephOsdTree,
+  useCephStatus,
+  usePools,
+} from "../api/hooks";
 import { Badge } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
 import { Table } from "../ui/Table";
@@ -12,6 +19,25 @@ import { depth, depthWidth } from "../lib/depth";
 import { fmtBytes, fmtPct, fmtSi, num } from "../lib/format";
 
 const healthKind = (s?: string) => (s === "HEALTH_OK" ? "success" : s === "HEALTH_ERR" ? "danger" : "warning");
+const ROLLUP_LABEL: Record<string, string> = {
+  healthy: "Healthy",
+  degraded: "Degraded",
+  rebuilding: "Rebuilding",
+  at_risk: "At Risk",
+  critical: "Critical",
+};
+const rollupKind = (s?: string) =>
+  s === "healthy"
+    ? "success"
+    : s === "degraded"
+      ? "warning"
+      : s === "rebuilding"
+        ? "info"
+        : s === "at_risk"
+          ? "at-risk"
+          : s === "critical"
+            ? "danger"
+            : "neutral";
 const PG_COLOR = (state: string) =>
   state.includes("clean")
     ? "var(--d1)"
@@ -28,6 +54,7 @@ function bps(n?: number) {
 export default function Ceph() {
   const nav = useNavigate();
   const { data: st } = useCephStatus();
+  const { data: rollup } = useCephHealthRollup();
   const { data: tree } = useCephOsdTree();
   const { data: df } = useCephDf();
   const { data: osdDf } = useCephOsdDf();
@@ -73,7 +100,7 @@ export default function Ceph() {
         title="Ceph"
         state={
           health
-            ? `${health}${healthWhy ? ` — ${healthWhy}` : ""}${fullest ? ` · fullest OSD ${Math.round(fullest.utilization || 0)}%` : ""}.`
+            ? `${rollup ? `${ROLLUP_LABEL[rollup.state] || rollup.state} — ${rollup.summary}. ` : ""}${health}${healthWhy ? ` — ${healthWhy}` : ""}${fullest ? ` · fullest OSD ${Math.round(fullest.utilization || 0)}%` : ""}.`
             : "Waiting on ceph status…"
         }
         actions={
@@ -84,6 +111,15 @@ export default function Ceph() {
       />
 
       <div className="at-instrs" style={{ marginBottom: 24 }}>
+        <div className="at-instr">
+          <div className="at-caption">Atlas rollup</div>
+          <div className="at-val md">
+            <Badge kind={rollupKind(rollup?.state)} dot title={rollup?.reasons?.join("; ")}>
+              {rollup ? ROLLUP_LABEL[rollup.state] || rollup.state : "…"}
+            </Badge>
+          </div>
+          <div className="at-delta">{rollup?.summary || "—"}</div>
+        </div>
         <div className="at-instr">
           <div className="at-caption">Health</div>
           <div className="at-val md">

@@ -7,6 +7,7 @@
 
 mod cmd;
 mod fake;
+pub mod health_rollup;
 mod real;
 
 pub use cmd::{

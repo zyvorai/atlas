@@ -102,7 +102,7 @@ export function StatCard({
   );
 }
 
-type BadgeKind = "success" | "warning" | "danger" | "info" | "neutral";
+type BadgeKind = "success" | "warning" | "danger" | "info" | "neutral" | "at-risk";
 export function Badge({ kind = "neutral", dot, title, className, children }: { kind?: BadgeKind; dot?: boolean; title?: string; className?: string; children: React.ReactNode }) {
   return (
     <span className={cx("badge", `badge-${kind}`, className)} title={title}>

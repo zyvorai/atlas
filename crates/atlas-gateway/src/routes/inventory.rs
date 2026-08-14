@@ -107,6 +107,19 @@ pub(crate) async fn get_ceph_osd_df(State(s): State<AppState>) -> AppResult<Json
     ))
 }
 
+/// `GET /ceph/health-rollup` — Atlas's own Healthy/Degraded/Rebuilding/At-Risk/Critical severity,
+/// synthesized from status/osd-tree/osd-df so a caller doesn't have to parse Ceph's own health
+/// vocabulary. See `atlas_driver_ceph::health_rollup` for the classification rules.
+pub(crate) async fn get_ceph_health_rollup(State(s): State<AppState>) -> AppResult<Json<Value>> {
+    let d = s
+        .driver_for(CEPH_BACKEND_ID)
+        .ok_or_else(|| AppError::Driver("no ceph driver".into()))?;
+    let rollup = atlas_driver_ceph::health_rollup::compute(d.as_ref())
+        .await
+        .map_err(|e| AppError::Driver(e.to_string()))?;
+    Ok(Json(json!(rollup)))
+}
+
 #[derive(Debug, Deserialize)]
 pub(crate) struct PoolQuery {
     backend: Option<String>,

@@ -40,6 +40,22 @@ pub enum Health {
     Unknown,
 }
 
+/// Atlas's own operator-facing severity rollup, synthesized from raw Ceph status/osd-tree/osd-df
+/// (see `atlas_driver_ceph::health_rollup`) and reused for the per-volume Protection Status
+/// verdict (`atlas_inventory::protection`). This is a heuristic collapse for UX, not a Ceph API
+/// concept — the ordering below (used for "worst signal wins" comparisons) is a judgment call,
+/// not a Ceph-defined invariant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ClusterHealthState {
+    #[default]
+    Healthy,
+    Degraded,
+    Rebuilding,
+    AtRisk,
+    Critical,
+}
+
 /// The logical kind of a storage volume.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

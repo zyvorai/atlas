@@ -82,6 +82,7 @@ pub fn router(state: AppState) -> Router {
         .route("/ceph/osd-tree", get(get_ceph_osd_tree))
         .route("/ceph/osd-df", get(get_ceph_osd_df))
         .route("/ceph/df", get(get_ceph_df))
+        .route("/ceph/health-rollup", get(get_ceph_health_rollup))
         .route("/storage-classes", get(list_storage_classes))
         .route("/kubernetes/pvcs", get(list_pvcs))
         .route("/kubernetes/pvs", get(list_pvs))
