@@ -351,6 +351,14 @@ runbook; summary:
   those five routes, with `admin` staying cross-tenant by design. `crates/atlas-gateway/tests/
   tenant_isolation.rs` is the regression guard. Console users (`POST /auth/users`) and issued
   tokens can now be created with an explicit `tenant_id` (default `"global"`).
+- ✅ **JWT secret rotation**: previously a single static `ATLAS_JWT_SECRET` with no rotation path —
+  changing it instantly invalidated every outstanding session/service-account token with no grace
+  period. `ATLAS_JWT_SECRET_PREVIOUS` (optional) is still accepted for *validating* tokens (never
+  for minting new ones) during a rotation window: set it to the outgoing secret when rotating to a
+  new `ATLAS_JWT_SECRET`, deploy, then remove it once confident no outstanding token still uses it
+  (bounded by each token's own TTL, capped at 90 days). `auth::decode_token` is the shared
+  fallback-decode helper — both the REST `auth_middleware` and the gRPC interceptor use it, so the
+  two edges can't drift on this behavior.
 - ✅ **Audit-log export before pruning**: `ATLAS_AUDIT_EXPORT_URL` (optional, alongside the
   existing `ATLAS_AUDIT_RETENTION_DAYS`) batches rows due for retention pruning into one JSON POST
   to an external sink — SIEM webhook, Splunk HEC, Elastic/Fluent Bit HTTP input, anything that

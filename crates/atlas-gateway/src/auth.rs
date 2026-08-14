@@ -108,6 +108,29 @@ pub fn mint_token(
     Ok((token, exp, jti))
 }
 
+/// Decode + validate an HS256 JWT, trying `secret` first and falling back to `previous_secret`
+/// (if set) on a signature mismatch — this is what makes JWT secret rotation possible without
+/// forcing every outstanding session to re-login the instant the secret changes (see
+/// `Config::jwt_secret_previous`). Tokens are only ever *minted* with the current secret; this
+/// fallback exists purely for validating tokens issued before a rotation. Shared by both the REST
+/// `auth_middleware` and the gRPC interceptor so the two edges can't drift.
+pub fn decode_token(
+    token: &str,
+    secret: &str,
+    previous_secret: Option<&str>,
+) -> jsonwebtoken::errors::Result<jsonwebtoken::TokenData<Claims>> {
+    let mut validation = Validation::new(Algorithm::HS256);
+    validation.validate_exp = true;
+    let primary = decode::<Claims>(token, &DecodingKey::from_secret(secret.as_bytes()), &validation);
+    match (primary, previous_secret) {
+        (Ok(data), _) => Ok(data),
+        (Err(_), Some(prev)) => {
+            decode::<Claims>(token, &DecodingKey::from_secret(prev.as_bytes()), &validation)
+        }
+        (Err(e), None) => Err(e),
+    }
+}
+
 /// Enforce a minimum role. No-op when auth is disabled (dev), so open-dev keeps working.
 pub fn require_role(auth_required: bool, actor: &Actor, min: u8) -> atlas_common::AppResult<()> {
     if auth_required && actor.level() < min {
@@ -178,12 +201,10 @@ pub async fn auth_middleware(
                 tenant_id: default_tenant(),
             }
         } else {
-            let mut validation = Validation::new(Algorithm::HS256);
-            validation.validate_exp = true;
-            match decode::<Claims>(
+            match decode_token(
                 token,
-                &DecodingKey::from_secret(state.config.jwt_secret.as_bytes()),
-                &validation,
+                &state.config.jwt_secret,
+                state.config.jwt_secret_previous.as_deref(),
             ) {
                 Ok(data) => {
                     // Deny-list check: a revoked token is rejected even before it expires. Fail open on a
@@ -336,5 +357,48 @@ mod tests {
         let legacy = format!("sha256${salt}${digest}");
         assert!(verify_password_hash("hunter2", &legacy));
         assert!(!verify_password_hash("wrong", &legacy));
+    }
+
+    #[test]
+    fn decode_token_accepts_current_secret() {
+        let (token, _, _) = mint_token("new-secret-32-bytes-or-more!!!!", "alice", "admin", "global", 3600).unwrap();
+        let decoded = decode_token(&token, "new-secret-32-bytes-or-more!!!!", None).unwrap();
+        assert_eq!(decoded.claims.sub, "alice");
+    }
+
+    #[test]
+    fn decode_token_falls_back_to_previous_secret_during_rotation() {
+        // A token minted before rotation, with the OLD secret...
+        let (token, _, _) =
+            mint_token("old-secret-32-bytes-or-more!!!!", "bob", "operator", "global", 3600).unwrap();
+        // ...must still validate against the NEW current secret, as long as the old one is
+        // supplied as jwt_secret_previous — this is the whole point of the rotation window.
+        let decoded = decode_token(
+            &token,
+            "new-secret-32-bytes-or-more!!!!",
+            Some("old-secret-32-bytes-or-more!!!!"),
+        )
+        .unwrap();
+        assert_eq!(decoded.claims.sub, "bob");
+    }
+
+    #[test]
+    fn decode_token_rejects_stale_secret_once_rotation_window_closes() {
+        let (token, _, _) =
+            mint_token("old-secret-32-bytes-or-more!!!!", "carol", "viewer", "global", 3600).unwrap();
+        // No jwt_secret_previous configured (the operator finished the rotation and removed it) —
+        // a token signed with the retired secret must be rejected.
+        let result = decode_token(&token, "new-secret-32-bytes-or-more!!!!", None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn decode_token_rejects_garbage_against_both_secrets() {
+        let result = decode_token(
+            "not-a-jwt-at-all",
+            "new-secret-32-bytes-or-more!!!!",
+            Some("old-secret-32-bytes-or-more!!!!"),
+        );
+        assert!(result.is_err());
     }
 }

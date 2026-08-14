@@ -32,6 +32,7 @@ async fn spawn_auth_with(secret: &str, bootstrap: Option<&str>) -> String {
         ceph_driver_mode: CephDriverMode::Fake,
         kubeconfig_path: None,
         jwt_secret: secret.into(),
+        jwt_secret_previous: None,
         auth_required: true,
         bootstrap_admin_token: bootstrap.map(|s| s.to_string()),
         admin_username: "admin".into(),

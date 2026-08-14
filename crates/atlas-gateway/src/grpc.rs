@@ -4,7 +4,6 @@
 
 use std::pin::Pin;
 
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use tokio_stream::Stream;
 use tonic::service::interceptor::InterceptedService;
 use tonic::service::Interceptor;
@@ -12,7 +11,6 @@ use tonic::{Request, Response, Status};
 
 use atlas_api_types::VolumeKind;
 
-use crate::auth::Claims;
 use crate::proto::atlas_storage_server::{AtlasStorage, AtlasStorageServer};
 use crate::proto::{
     Alert, Bucket, Cluster, CreateSnapshotRequest, CreateVolumeReply, CreateVolumeRequest,
@@ -41,6 +39,7 @@ pub fn service(
     state: AppState,
 ) -> InterceptedService<AtlasStorageServer<GrpcService>, impl Interceptor + Clone> {
     let secret = state.config.jwt_secret.clone();
+    let secret_previous = state.config.jwt_secret_previous.clone();
     let required = state.config.auth_required;
     let bootstrap = state.config.bootstrap_admin_token.clone();
     let rate = state.rate.clone();
@@ -67,13 +66,7 @@ pub fn service(
                         role: "admin".into(),
                     }
                 } else {
-                    let mut validation = Validation::new(Algorithm::HS256);
-                    validation.validate_exp = true;
-                    match decode::<Claims>(
-                        token,
-                        &DecodingKey::from_secret(secret.as_bytes()),
-                        &validation,
-                    ) {
+                    match crate::auth::decode_token(token, &secret, secret_previous.as_deref()) {
                         Ok(data) => GrpcActor {
                             id: data.claims.sub,
                             role: data.claims.role,

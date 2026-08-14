@@ -76,6 +76,12 @@ pub struct Config {
     /// Optional explicit kubeconfig path for the live k8s driver (empty = default resolution).
     pub kubeconfig_path: Option<String>,
     pub jwt_secret: String,
+    /// Previous JWT secret, still accepted for *validating* tokens (never for minting new ones)
+    /// during a rotation window — set this to the outgoing `ATLAS_JWT_SECRET` value when rotating
+    /// to a new one, so already-issued tokens keep working until they naturally expire instead of
+    /// every session being force-logged-out the moment the secret changes. Remove once confident
+    /// no outstanding token still uses it (bounded by each token's own TTL, capped at 90 days).
+    pub jwt_secret_previous: Option<String>,
     /// When true, protected REST routes AND the gRPC edge require a valid JWT; false (dev) = open.
     pub auth_required: bool,
     /// Optional one-shot bootstrap admin bearer (raw string, not a JWT). Accepted only when
@@ -200,6 +206,9 @@ impl Config {
             kubeconfig_path,
             jwt_secret: std::env::var("ATLAS_JWT_SECRET")
                 .unwrap_or_else(|_| DEV_JWT_DEFAULT.into()),
+            jwt_secret_previous: std::env::var("ATLAS_JWT_SECRET_PREVIOUS")
+                .ok()
+                .filter(|s| !s.trim().is_empty()),
             auth_required,
             bootstrap_admin_token: std::env::var("ATLAS_BOOTSTRAP_ADMIN_TOKEN")
                 .ok()
@@ -367,6 +376,7 @@ impl Default for Config {
             ceph_driver_mode: CephDriverMode::Fake,
             kubeconfig_path: None,
             jwt_secret: DEV_JWT_DEFAULT.into(),
+            jwt_secret_previous: None,
             auth_required: false,
             bootstrap_admin_token: None,
             admin_username: "admin".into(),
@@ -406,6 +416,10 @@ impl fmt::Debug for Config {
             .field("ceph_driver_mode", &self.ceph_driver_mode)
             .field("kubeconfig_path", &self.kubeconfig_path)
             .field("jwt_secret", &"<redacted>")
+            .field(
+                "jwt_secret_previous",
+                &self.jwt_secret_previous.as_ref().map(|_| "<redacted>"),
+            )
             .field("auth_required", &self.auth_required)
             .field(
                 "bootstrap_admin_token",

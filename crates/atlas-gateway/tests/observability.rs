@@ -31,6 +31,7 @@ fn base_config(db: &str, o: Opts) -> Config {
         ceph_driver_mode: CephDriverMode::Fake,
         kubeconfig_path: None,
         jwt_secret: "obs-test-secret-key-at-least-32-bytes!".into(),
+        jwt_secret_previous: None,
         auth_required: o.auth_required,
         bootstrap_admin_token: None,
         admin_username: "admin".into(),

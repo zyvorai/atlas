@@ -20,6 +20,7 @@ fn config_for(db: &str) -> Config {
         ceph_driver_mode: CephDriverMode::Fake,
         kubeconfig_path: None,
         jwt_secret: "dur-test-secret-key-at-least-32-bytes!".into(),
+        jwt_secret_previous: None,
         auth_required: false,
         bootstrap_admin_token: None,
         admin_username: "admin".into(),

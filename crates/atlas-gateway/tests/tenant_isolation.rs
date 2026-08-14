@@ -30,6 +30,7 @@ async fn spawn_auth(secret: &str) -> (SocketAddr, sqlx::SqlitePool) {
         ceph_driver_mode: CephDriverMode::Fake,
         kubeconfig_path: None,
         jwt_secret: secret.into(),
+        jwt_secret_previous: None,
         auth_required: true,
         bootstrap_admin_token: None,
         admin_username: "admin".into(),
