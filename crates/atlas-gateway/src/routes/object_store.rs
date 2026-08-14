@@ -398,6 +398,12 @@ pub(crate) async fn create_bucket(
     if body.name.trim().is_empty() {
         return Err(AppError::Validation("name is required".into()));
     }
+    if body.name.len() < 3 {
+        return Err(AppError::Validation(format!(
+            "bucket name {:?} must be at least 3 characters (S3 bucket naming rules)",
+            body.name
+        )));
+    }
     super::util::validate_k8s_name(&body.name)?;
 
     // Maintenance: a cordoned backend rejects new provisioning (existing buckets are untouched).

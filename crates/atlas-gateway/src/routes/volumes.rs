@@ -7,7 +7,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use atlas_api_types::{CreateVolumeRequest, Owner};
+use atlas_api_types::{CreateVolumeRequest, Owner, Placement};
 use atlas_common::{ids, AppError, AppResult};
 use atlas_jobs::{JobSpec, OwnerRef};
 
@@ -70,24 +70,45 @@ pub(crate) async fn create_volume(
         .and_then(|k| k.namespace.clone())
         .unwrap_or_else(|| "default".into());
     let sc_override = k8s_opts.as_ref().and_then(|k| k.storage_class.clone());
-    let mut placement =
-        atlas_policy::resolve(body.policy.as_deref(), body.kind, sc_override.as_deref());
     // Per-tenant policy override (PDF §14): unless the request pins an explicit StorageClass, a
-    // tenant's override for this intent wins over the built-in catalog.
-    if sc_override.is_none() {
-        if let Some(intent) = body.policy.as_deref() {
-            if let Some(tp) =
+    // tenant's override for this intent wins over the built-in catalog — and, since
+    // `PUT /tenants/{id}/policies/{intent}` isn't restricted to the built-in catalog, this can
+    // resolve an `intent` that `atlas_policy::resolve` doesn't recognize at all.
+    let tenant_override = if sc_override.is_none() {
+        match body.policy.as_deref() {
+            Some(intent) => {
                 atlas_inventory::tenants::get_policy(&s.pool, &body.tenant_id, intent).await?
-            {
-                placement.storage_class = tp.storage_class;
-                placement.access_mode = tp.access_mode;
-                placement.volume_mode = tp.volume_mode;
-                // `tenant_policies` has no `kind` column, so `placement.kind` (already set from
-                // the built-in policy's kind, or the request's kind if the intent isn't a known
-                // built-in) is the best available signal here — still correct for the common case
-                // of a tenant overriding just the StorageClass for an existing named intent.
             }
+            None => None,
         }
+    } else {
+        None
+    };
+    let mut placement = match atlas_policy::resolve(
+        body.policy.as_deref(),
+        body.kind,
+        sc_override.as_deref(),
+    ) {
+        Ok(p) => p,
+        // Unrecognized by the built-in catalog, but the tenant has its own override for this
+        // intent — the fields below get overwritten from `tenant_override` immediately after.
+        Err(_) if tenant_override.is_some() => Placement {
+            intent: body.policy.clone().unwrap_or_default(),
+            storage_class: String::new(),
+            access_mode: String::new(),
+            volume_mode: String::new(),
+            kind: body.kind,
+        },
+        Err(e) => return Err(AppError::Validation(e)),
+    };
+    if let Some(tp) = tenant_override {
+        placement.storage_class = tp.storage_class;
+        placement.access_mode = tp.access_mode;
+        placement.volume_mode = tp.volume_mode;
+        // `tenant_policies` has no `kind` column, so `placement.kind` (already set from the
+        // built-in policy's kind, or the request's kind if the intent isn't a known built-in) is
+        // the best available signal here — still correct for the common case of a tenant
+        // overriding just the StorageClass for an existing named intent.
     }
     let access_modes = k8s_opts
         .as_ref()

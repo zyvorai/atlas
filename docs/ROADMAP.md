@@ -65,6 +65,16 @@ Read-only control plane + real Ceph lab.
   `/stats` now has a Fake-mode branch (returns a zeroed-but-`available` stub) instead of crashing
   on deployments without a `radosgw-admin` binary; the underlying `radosgw-admin` call is bounded
   to 12s so a slow/unresponsive RGW soft-fails (`available: false`) rather than hanging.
+- ✅ **Randomized-testing validation fixes** — found via a randomized battery of valid/boundary/
+  invalid API probes: `POST /buckets` now rejects names under 3 characters (`400
+  VALIDATION_ERROR`) matching the S3 bucket-naming rules the console already advertises, instead
+  of silently accepting them (harmless in practice since Rook's OBC always generates a
+  UUID-suffixed real bucket name regardless, but the gap let a caller's mistake through
+  unflagged). `atlas_policy::resolve` now rejects an unrecognized `policy` intent with `400
+  VALIDATION_ERROR` instead of silently falling back to the request kind's default placement — a
+  typo in `policy` used to provision storage silently rather than failing loudly; a
+  tenant-specific policy override (`PUT /tenants/{id}/policies/{intent}`, not restricted to the
+  built-in catalog) still resolves correctly.
 
 ## ✅ Web dashboard — Storage Center (Zeus OS-style React console)
 

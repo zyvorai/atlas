@@ -78,38 +78,53 @@ pub fn find(intent: &str) -> Option<&'static Policy> {
 /// Resolve a placement decision from an optional intent and the requested volume kind.
 ///
 /// Precedence: explicit `storage_class_override` › named policy › kind default.
+///
+/// A `Some(intent)` that doesn't match any entry in [`POLICIES`] is an error (most likely a
+/// typo) rather than a silent fall-through to the kind default — the two cases ("no policy
+/// given" vs. "policy given but unrecognized") were previously indistinguishable to the caller,
+/// so a typo'd `policy` field would provision storage silently rather than failing loudly.
 pub fn resolve(
     intent: Option<&str>,
     kind: VolumeKind,
     storage_class_override: Option<&str>,
-) -> Placement {
+) -> Result<Placement, String> {
     // Explicit override wins — the caller is taking full control of placement, so its `kind`
     // (not a policy's) is authoritative here.
     if let Some(sc) = storage_class_override {
         let (access, mode) = defaults_for_kind(kind);
-        return Placement {
+        return Ok(Placement {
             intent: intent.unwrap_or("custom").to_string(),
             storage_class: sc.to_string(),
             access_mode: access.to_string(),
             volume_mode: mode.to_string(),
             kind,
-        };
+        });
     }
     // Named policy — the policy fully determines the backing storage, so its `kind` overrides
     // whatever the caller passed (which may just be the client library's default).
-    if let Some(p) = intent.and_then(find) {
-        return Placement {
-            intent: p.intent.to_string(),
-            storage_class: p.storage_class.to_string(),
-            access_mode: p.access_mode.to_string(),
-            volume_mode: p.volume_mode.to_string(),
-            kind: p.kind,
+    if let Some(name) = intent {
+        return match find(name) {
+            Some(p) => Ok(Placement {
+                intent: p.intent.to_string(),
+                storage_class: p.storage_class.to_string(),
+                access_mode: p.access_mode.to_string(),
+                volume_mode: p.volume_mode.to_string(),
+                kind: p.kind,
+            }),
+            None => Err(format!(
+                "unknown policy {name:?} — known policies: {}",
+                POLICIES
+                    .iter()
+                    .map(|p| p.intent)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
         };
     }
-    // Fall back to a sensible default for the kind.
+    // No intent given at all — fall back to a sensible default for the kind.
     let (access, mode) = defaults_for_kind(kind);
-    Placement {
-        intent: intent.unwrap_or("default").to_string(),
+    Ok(Placement {
+        intent: "default".to_string(),
         storage_class: match kind {
             VolumeKind::Filesystem => DEFAULT_FILE_SC.to_string(),
             _ => DEFAULT_BLOCK_SC.to_string(),
@@ -117,7 +132,7 @@ pub fn resolve(
         access_mode: access.to_string(),
         volume_mode: mode.to_string(),
         kind,
-    }
+    })
 }
 
 fn defaults_for_kind(kind: VolumeKind) -> (&'static str, &'static str) {
@@ -134,7 +149,7 @@ mod tests {
 
     #[test]
     fn named_policy_resolves() {
-        let p = resolve(Some("database"), VolumeKind::Block, None);
+        let p = resolve(Some("database"), VolumeKind::Block, None).unwrap();
         assert_eq!(p.storage_class, DEFAULT_BLOCK_SC);
         assert_eq!(p.access_mode, "ReadWriteOnce");
         assert_eq!(p.intent, "database");
@@ -142,20 +157,34 @@ mod tests {
 
     #[test]
     fn shared_uses_cephfs_rwx() {
-        let p = resolve(Some("shared"), VolumeKind::Filesystem, None);
+        let p = resolve(Some("shared"), VolumeKind::Filesystem, None).unwrap();
         assert_eq!(p.storage_class, DEFAULT_FILE_SC);
         assert_eq!(p.access_mode, "ReadWriteMany");
     }
 
     #[test]
     fn override_wins() {
-        let p = resolve(Some("production"), VolumeKind::Block, Some("custom-sc"));
+        let p = resolve(Some("production"), VolumeKind::Block, Some("custom-sc")).unwrap();
         assert_eq!(p.storage_class, "custom-sc");
     }
 
     #[test]
-    fn unknown_intent_falls_back_by_kind() {
-        let p = resolve(Some("nonsense"), VolumeKind::Filesystem, None);
+    fn no_intent_falls_back_by_kind() {
+        let p = resolve(None, VolumeKind::Filesystem, None).unwrap();
         assert_eq!(p.storage_class, DEFAULT_FILE_SC);
+    }
+
+    #[test]
+    fn unknown_intent_errors() {
+        let err = resolve(Some("nonsense"), VolumeKind::Filesystem, None).unwrap_err();
+        assert!(err.contains("unknown policy"));
+    }
+
+    #[test]
+    fn override_ignores_unknown_intent() {
+        // storage_class_override wins outright — an unrecognized intent alongside it is not an
+        // error since it's purely a cosmetic label at that point (PDF §12.3 override precedence).
+        let p = resolve(Some("nonsense"), VolumeKind::Block, Some("custom-sc")).unwrap();
+        assert_eq!(p.storage_class, "custom-sc");
     }
 }

@@ -210,7 +210,11 @@ A named policy's storage kind is **authoritative over the request's `kind` field
 request sends or defaults to; the resolved kind is what gets persisted to inventory. `name` is
 validated as a Kubernetes resource name (RFC 1123: lowercase alphanumeric, `-`/`.`, must start/end
 alphanumeric) — an invalid name is rejected with `400 VALIDATION_ERROR` up front rather than being
-accepted with `202` and failing later with a raw Kubernetes API error.
+accepted with `202` and failing later with a raw Kubernetes API error. Likewise, a `policy` value
+that isn't a known built-in intent and isn't a tenant-specific policy
+(`PUT /tenants/{id}/policies/{intent}`) is rejected with `400 VALIDATION_ERROR` rather than silently
+falling back to the kind's default placement — a typo in `policy` fails loudly instead of quietly
+provisioning storage the caller didn't ask for.
 ```json
 // request
 { "tenant_id": "tenant_acme", "name": "billing-db-root", "size_bytes": 3221225472,

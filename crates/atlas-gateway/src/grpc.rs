@@ -234,7 +234,8 @@ impl AtlasStorage for GrpcService {
             return Err(Status::invalid_argument("size_bytes must be > 0"));
         }
         let policy = (!r.policy.is_empty()).then_some(r.policy.as_str());
-        let placement = atlas_policy::resolve(policy, VolumeKind::Block, None);
+        let placement = atlas_policy::resolve(policy, VolumeKind::Block, None)
+            .map_err(Status::invalid_argument)?;
         let namespace = if r.namespace.is_empty() {
             "default".to_string()
         } else {
