@@ -35,6 +35,9 @@ async fn main() -> anyhow::Result<()> {
     let https_addr = config.https_addr.clone();
     let tls_cert = config.tls_cert_path.clone();
     let tls_key = config.tls_key_path.clone();
+    // gRPC reuses the same cert/key as the REST HTTPS listener rather than introducing a
+    // separate set of env vars — cloned here since the HTTPS block below consumes tls_cert/key.
+    let grpc_tls = tls_cert.clone().zip(tls_key.clone());
     let disable_http = config.disable_http;
     let state = build_state(config, BuildOptions::default()).await?;
 
@@ -89,18 +92,39 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
-    // gRPC edge (served concurrently). Empty ATLAS_GRPC_ADDR disables it.
+    // gRPC edge (served concurrently). Empty ATLAS_GRPC_ADDR disables it. TLS (same cert/key as
+    // the REST HTTPS listener) is used automatically when configured — previously this edge had
+    // no TLS option at all, plaintext-only regardless of how REST was configured.
     let grpc_task: Option<tokio::task::JoinHandle<anyhow::Result<()>>> = if grpc_addr.trim().is_empty()
     {
         None
     } else {
         let gaddr: SocketAddr = grpc_addr.parse()?;
-        info!("atlas-gateway gRPC listening on {gaddr}");
         let reflection = tonic_reflection::server::Builder::configure()
             .register_encoded_file_descriptor_set(atlas_gateway::proto::FILE_DESCRIPTOR_SET)
             .build_v1()?;
+        let mut builder = tonic::transport::Server::builder();
+        if let Some((cert, key)) = grpc_tls {
+            // Idempotent: a no-op if the REST HTTPS listener above already installed it, but gRPC
+            // TLS can in principle be configured without ATLAS_HTTPS_ADDR set, so don't rely on
+            // that side effect.
+            let _ = rustls::crypto::ring::default_provider().install_default();
+            let cert_pem = tokio::fs::read(&cert)
+                .await
+                .map_err(|e| anyhow::anyhow!("read gRPC TLS cert {cert}: {e}"))?;
+            let key_pem = tokio::fs::read(&key)
+                .await
+                .map_err(|e| anyhow::anyhow!("read gRPC TLS key {key}: {e}"))?;
+            let identity = tonic::transport::Identity::from_pem(cert_pem, key_pem);
+            builder = builder
+                .tls_config(tonic::transport::ServerTlsConfig::new().identity(identity))
+                .map_err(|e| anyhow::anyhow!("configure gRPC TLS: {e}"))?;
+            info!("atlas-gateway gRPC (TLS) listening on {gaddr}");
+        } else {
+            info!("atlas-gateway gRPC listening on {gaddr}");
+        }
         Some(tokio::spawn(async move {
-            tonic::transport::Server::builder()
+            builder
                 .add_service(grpc::service(state))
                 .add_service(reflection)
                 .serve_with_shutdown(gaddr, shutdown_signal())

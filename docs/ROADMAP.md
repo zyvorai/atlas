@@ -120,6 +120,10 @@ cert/ingress gives trusted TLS).
   configured (otherwise there'd be no REST listener at all). Left unset in the shipped manifests
   for now — flipping it on for a real deployment is a decision to make once HTTPS-only access is
   confirmed working end-to-end for every client, not an automatic default.
+- ✅ **gRPC TLS**: the gRPC edge previously had no TLS option at all — plaintext regardless of how
+  REST was configured. It now reuses the same cert/key as the REST HTTPS listener automatically
+  (`tonic`'s `tls` feature, `Identity::from_pem` + `ServerTlsConfig`) whenever both are configured;
+  stays plaintext otherwise (unchanged default).
 - ✅ **Durable gateway DB** — the SQLite file is now backed by a `ReadWriteOnce` PVC (`Recreate`
   strategy). The real-mode gateway dogfoods `zyvor-rbd-prod` (Ceph); the fake-mode gateway uses the
   cluster default StorageClass so it still deploys without Ceph. Verified: inventory survives a pod
