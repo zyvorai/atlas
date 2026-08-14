@@ -9,6 +9,7 @@ import Snapshots from "./views/Snapshots";
 import Schedules from "./views/Schedules";
 import Backups from "./views/Backups";
 import Buckets from "./views/Buckets";
+import ProtectionStatus from "./views/ProtectionStatus";
 import Alerts from "./views/Alerts";
 import Activity from "./views/Activity";
 import Observatory from "./views/Observatory";
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="/schedules" element={<Schedules />} />
         <Route path="/backups" element={<Backups />} />
         <Route path="/buckets" element={<Buckets />} />
+        <Route path="/protection" element={<ProtectionStatus />} />
         <Route path="/observatory" element={<Observatory />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/alerts" element={<Alerts />} />

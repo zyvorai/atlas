@@ -2,6 +2,26 @@
 // TypeScript mirrors of the Atlas DTOs (crates/atlas-api-types/src/lib.rs).
 
 export type Health = "ok" | "warn" | "critical" | "unknown";
+export type ClusterHealthState = "healthy" | "degraded" | "rebuilding" | "at_risk" | "critical";
+
+export interface VolumeProtectionStatus {
+  volume_id: string;
+  volume_name: string;
+  storage_backend: string;
+  replication_factor?: number | null;
+  last_snapshot_at?: string | null;
+  last_backup_at?: string | null;
+  last_backup_location?: string | null;
+  dr_role?: string | null;
+  dr_state?: string | null;
+  rpo_target_seconds?: number | null;
+  rpo_target_source: "policy" | "schedule" | "none";
+  rpo_current_seconds?: number | null;
+  rto_target_seconds?: number | null;
+  rto_note: string;
+  verdict: ClusterHealthState;
+  verdict_reasons: string[];
+}
 
 export interface StorageVolume {
   id: string;

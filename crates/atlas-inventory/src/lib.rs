@@ -26,6 +26,7 @@ pub mod events;
 pub mod jobs;
 pub mod leader;
 pub mod metrics;
+pub mod protection;
 pub mod rbd_snapshots;
 pub mod schedules;
 pub mod snapshots;

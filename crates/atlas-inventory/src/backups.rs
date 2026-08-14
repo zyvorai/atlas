@@ -127,6 +127,28 @@ pub async fn list_older_than(
     Ok(rows.into_iter().map(row_to_backup).collect())
 }
 
+/// The most recent backup per volume, in one query — used by `protection::list_protection_status`
+/// so a bank-scale fleet doesn't pay one query per volume.
+pub async fn latest_by_volume(
+    pool: &SqlitePool,
+) -> Result<std::collections::HashMap<String, BackupRecord>> {
+    let rows = sqlx::query(
+        "SELECT b.id, b.tenant_id, b.volume_id, b.snapshot_id, b.bucket_id, b.object_key, \
+                b.format, b.checksum, b.state, b.created_at \
+         FROM storage_backups b \
+         INNER JOIN (SELECT volume_id, MAX(created_at) AS max_created FROM storage_backups GROUP BY volume_id) latest \
+           ON latest.volume_id = b.volume_id AND latest.max_created = b.created_at",
+    )
+    .fetch_all(pool)
+    .await?;
+    let mut out = std::collections::HashMap::new();
+    for r in rows {
+        let backup = row_to_backup(r);
+        out.entry(backup.volume_id.clone()).or_insert(backup);
+    }
+    Ok(out)
+}
+
 fn select(tail: &str) -> String {
     format!(
         "SELECT id, tenant_id, volume_id, snapshot_id, bucket_id, object_key, format, checksum, state, created_at

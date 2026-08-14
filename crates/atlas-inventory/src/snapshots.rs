@@ -98,6 +98,28 @@ pub async fn delete_snapshot_row(pool: &SqlitePool, id: &str) -> Result<()> {
     Ok(())
 }
 
+/// The most recent snapshot per volume, in one query — used by `protection::list_protection_status`
+/// so a bank-scale fleet doesn't pay one query per volume.
+pub async fn latest_by_volume(
+    pool: &SqlitePool,
+) -> Result<std::collections::HashMap<String, StorageSnapshot>> {
+    let rows = sqlx::query(
+        "SELECT s.id, s.tenant_id, s.volume_id, s.name, s.backend_native_id, s.consistency, \
+                s.state, s.protected, s.parent_snapshot_id, s.created_at \
+         FROM storage_snapshots s \
+         INNER JOIN (SELECT volume_id, MAX(created_at) AS max_created FROM storage_snapshots GROUP BY volume_id) latest \
+           ON latest.volume_id = s.volume_id AND latest.max_created = s.created_at",
+    )
+    .fetch_all(pool)
+    .await?;
+    let mut out = std::collections::HashMap::new();
+    for r in rows {
+        let snap = row_to_snapshot(r);
+        out.entry(snap.volume_id.clone()).or_insert(snap);
+    }
+    Ok(out)
+}
+
 fn select(tail: &str) -> String {
     format!(
         "SELECT id, tenant_id, volume_id, name, backend_native_id, consistency, state, protected, parent_snapshot_id, created_at

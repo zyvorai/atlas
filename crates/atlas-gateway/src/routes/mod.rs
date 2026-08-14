@@ -12,6 +12,7 @@ mod meta;
 mod object_store;
 mod observability;
 mod oidc;
+mod protection;
 mod rbd;
 mod util;
 mod volumes;
@@ -35,6 +36,7 @@ use meta::*;
 use object_store::*;
 use observability::*;
 use oidc::*;
+use protection::*;
 use rbd::*;
 use volumes::*;
 
@@ -68,6 +70,7 @@ pub fn router(state: AppState) -> Router {
         .route("/dr/mirrors/{id}/demote", post(demote_mirror))
         .route("/dr/mirrors/{id}/rpo", post(set_mirror_rpo))
         .route("/dr/failover", post(dr_failover))
+        .route("/protection-status", get(list_protection_status))
         .route("/volumes/{id}/mirror", post(enable_mirror).delete(disable_mirror))
         .route("/clusters", get(list_clusters))
         .route("/clusters/{id}/health", get(cluster_health))
@@ -90,6 +93,7 @@ pub fn router(state: AppState) -> Router {
         .route("/volumes.csv", get(volumes_csv))
         .route("/volumes/{id}", get(get_volume).delete(delete_volume))
         .route("/volumes/{id}/expand", post(expand_volume))
+        .route("/volumes/{id}/protection", get(get_volume_protection))
         .route("/rbd-images", get(list_rbd_images).post(create_rbd_image))
         .route(
             "/rbd-images/{pool}/{image}",

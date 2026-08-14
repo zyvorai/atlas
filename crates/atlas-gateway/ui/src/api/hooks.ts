@@ -4,9 +4,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { http } from "./client";
 import { useUi } from "../store/ui";
 import type {
-  ActivityEvent, AlertRecord, AuditRow, BackupRecord, JobRecord, MetricForecast, MetricHistoryPoint, MetricSample, MetricsSummary, Osd,
+  ActivityEvent, AlertRecord, AuditRow, BackupRecord, ClusterHealthState, JobRecord, MetricForecast, MetricHistoryPoint, MetricSample, MetricsSummary, Osd,
   SnapshotSchedule, StorageBucket, StorageCluster, StoragePool, StorageSnapshot, StorageVolume,
-  TenantPolicy, TenantQuota,
+  TenantPolicy, TenantQuota, VolumeProtectionStatus,
   MigrationSource, MigrationPlan, EdgeDbCluster, CdcStream, ValidationRun,
 } from "./types";
 
@@ -90,8 +90,16 @@ export const useDrPreflight = () =>
     blockers: string[];
     warnings?: string[];
   }>(["dr-preflight"], "/dr/preflight", 10000);
+export const useProtectionStatus = (params?: { tenant?: string; verdict?: string }) => {
+  const qs = new URLSearchParams();
+  if (params?.tenant) qs.set("tenant", params.tenant);
+  if (params?.verdict) qs.set("verdict", params.verdict);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return q<VolumeProtectionStatus[]>(["protection-status", params?.tenant, params?.verdict], `/protection-status${suffix}`, 15000);
+};
+export const useVolumeProtection = (id: string) =>
+  q<VolumeProtectionStatus>(["volume-protection", id], `/volumes/${id}/protection`, 15000, !!id);
 export const useCephStatus = () => q<any>(["ceph-status"], "/ceph/status", 8000);
-export type ClusterHealthState = "healthy" | "degraded" | "rebuilding" | "at_risk" | "critical";
 export const useCephHealthRollup = () =>
   q<{
     state: ClusterHealthState;

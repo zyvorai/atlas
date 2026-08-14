@@ -3,7 +3,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity, Aperture, Archive, Bell, BookOpen, Boxes, Camera, Clock, Cloud, Database, FileClock, Gauge, HardDrive,
-  KeyRound, Layers, LayoutDashboard, Orbit, Server, Settings, ShieldCheck, Sparkles, Timer, Users, CloudCog,
+  HeartPulse, KeyRound, Layers, LayoutDashboard, Orbit, Server, Settings, ShieldCheck, Sparkles, Timer, Users, CloudCog,
   Route as RouteIcon, Radio, Wrench, GitBranch,
 } from "lucide-react";
 
@@ -39,6 +39,7 @@ export const MODULES: Module[] = [
 
   { id: "backups", codename: "hades", label: "Backups", path: "/backups", icon: Archive, section: "DATA PROTECTION" },
   { id: "buckets", codename: "poseidon", label: "Buckets", path: "/buckets", icon: Cloud, section: "DATA PROTECTION" },
+  { id: "protection", codename: "asclepius", label: "Protection Status", path: "/protection", icon: HeartPulse, section: "DATA PROTECTION" },
 
   { id: "observatory", codename: "orrery", label: "Observatory", path: "/observatory", icon: Orbit, section: "OBSERVABILITY" },
   { id: "activity", codename: "kairos", label: "Activity", path: "/activity", icon: Activity, section: "OBSERVABILITY" },
