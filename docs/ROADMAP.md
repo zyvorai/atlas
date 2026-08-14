@@ -389,6 +389,19 @@ runbook; summary:
   in-process axum mock agreeing with itself. Deliberately doesn't touch the live gateway's
   `ATLAS_AUDIT_EXPORT_URL`/`ATLAS_AUDIT_RETENTION_DAYS` — turning those on for real is a standing
   retention-policy change for the platform team to make deliberately, not a side effect of this.
+- ✅ **Postgres HA scaffolding verified against real infra**: `deploy/postgres-lab/` stands up a
+  throwaway Postgres in the lab; a new opt-in live test
+  (`crates/atlas-inventory/tests/postgres_live.rs`'s `connect_and_migrate_against_real_postgres`,
+  `#[ignore]`d, `--features postgres`) proves `connect_postgres()`/`migrate_postgres()` actually
+  open a connection and apply `migrations-postgres/` against a real server — not just a compile
+  check behind the feature flag. Also caught and fixed a real gap: `migrations-postgres/` had
+  drifted 3 migrations behind `migrations/` (missing `rbd_snapshots`, the native-id unique index,
+  and — critically — this session's own `console_users.tenant_id` tenant-isolation column), now
+  back in file-for-file parity and re-verified idempotent (migrate-twice is a no-op, matching what
+  a rolling pod restart does). This proves the connection/schema half of Phase-1 HA; the
+  SQLite-only query layer (`SqlitePool` used throughout `atlas-inventory`) is unchanged and still
+  the explicitly out-of-scope larger effort — see `deploy/postgres-lab/README.md` and the
+  known-limitations note below.
 - ✅ **Supply-chain audit gate**: `cargo deny check` (CI job + `make audit`, `deny.toml`) — known-
   vulnerable/yanked advisories, disallowed licenses, unknown registries/git sources. Scoped to
   default features (what's actually shipped); the optional DataBridge connectors are compile-
@@ -439,12 +452,15 @@ runbook; summary:
   from that audit are already fixed above — both `deploy/k8s/atlas-gateway*.yaml` now ship
   `ATLAS_RATE_LIMIT_RPM=600` and a working `ATLAS_STATE_BACKUP_*` block against a dedicated RGW
   user/bucket): the gateway is single-replica with a `Recreate` rollout (planned downtime per
-  deploy — SQLite's query layer has no Postgres port yet, only connection/migration scaffolding
-  behind a disabled feature); OIDC/SSO is only verified against a throwaway Dex instance, not a
-  real enterprise IdP. The audit-log SIEM export and secrets-manager integration *patterns* are now
-  both verified against real (lab) infra (`deploy/siem-lab/`, `deploy/vault-lab/` — see below); a
-  real deployment still needs the bank's actual SIEM/Vault swapped in for the lab ones. None of
-  these block a non-production pilot; all are gates before a production go-live.
+  deploy — SQLite's query layer has no Postgres port yet; the connection/migration scaffolding
+  behind the disabled `postgres` feature is now verified against a real Postgres
+  (`deploy/postgres-lab/`), but that only proves connect+migrate work, not that Atlas can run its
+  reads/writes against Postgres — porting the query layer is still a separate, larger, deferred
+  effort); OIDC/SSO is only verified against a throwaway Dex instance, not a real enterprise IdP.
+  The audit-log SIEM export and secrets-manager integration *patterns* are now both verified
+  against real (lab) infra (`deploy/siem-lab/`, `deploy/vault-lab/` — see below); a real deployment
+  still needs the bank's actual SIEM/Vault swapped in for the lab ones. None of these block a
+  non-production pilot; all are gates before a production go-live.
 - **Non-Postgres DataBridge streaming CDC + cutover**: MySQL, MariaDB, and MongoDB are verified
   through provision → real full-load → validate (row/document-count parity); their streaming-CDC
   and cutover stages need the Kafka/Debezium stack, which isn't installed on the shared lab. SQL
