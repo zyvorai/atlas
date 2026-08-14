@@ -14,6 +14,6 @@ tokio = { workspace = true }
 futures-util = { workspace = true }
 sha2 = "0.10"
 hex = "0.4"
-rusty-s3 = { version = "0.5", features = ["full"] }
+rusty-s3 = { version = "0.10", features = ["full"] }
 url = "2"
 percent-encoding = "2"

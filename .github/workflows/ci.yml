@@ -32,6 +32,13 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
         run: cargo test --workspace
+      # Supply-chain gate: known-vulnerable/yanked advisories, disallowed licenses, unknown
+      # registries/git sources (deny.toml). Scoped to default features — what's actually shipped;
+      # see deny.toml's [graph] comment for why the optional DataBridge connectors are excluded.
+      - name: Supply-chain audit (cargo-deny)
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories bans licenses sources
       - name: Build
         run: cargo build --workspace
       # Optional DataBridge connectors / lag — compile-checked so feature gates don't rot.

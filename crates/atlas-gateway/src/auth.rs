@@ -241,15 +241,33 @@ pub(crate) fn verify_console_credentials(
     user_ok & pass_ok
 }
 
-/// Hash a password as `sha256$<salt>$<digest>` for storage in `console_users`.
+/// Hash a password as a standard Argon2id PHC string (`$argon2id$v=19$m=...,t=...,p=...$salt$hash`)
+/// for storage in `console_users`. Argon2 is memory-hard, unlike the plain SHA-256 this replaced —
+/// a leaked `console_users` table can no longer be brute-forced offline at GPU/ASIC speed.
 pub(crate) fn hash_password(password: &str) -> String {
-    let salt = uuid::Uuid::new_v4().to_string();
-    let digest = sha256_hex(&format!("{salt}:{password}"));
-    format!("sha256${salt}${digest}")
+    use argon2::password_hash::{rand_core::OsRng, PasswordHasher, SaltString};
+    use argon2::Argon2;
+    let salt = SaltString::generate(&mut OsRng);
+    Argon2::default()
+        .hash_password(password.as_bytes(), &salt)
+        .expect("argon2 hashing with a freshly generated salt cannot fail")
+        .to_string()
 }
 
-/// Verify a password against a stored `sha256$…` hash (constant-time digest compare).
+/// Verify a password against a stored hash. Accepts the current Argon2id PHC-string format
+/// (`$argon2...`) and, for backward compatibility with hashes created before this change, the
+/// legacy `sha256$<salt>$<digest>` format — no forced password reset on upgrade.
 pub(crate) fn verify_password_hash(password: &str, stored: &str) -> bool {
+    if stored.starts_with('$') {
+        use argon2::password_hash::{PasswordHash, PasswordVerifier};
+        use argon2::Argon2;
+        let Ok(parsed) = PasswordHash::new(stored) else {
+            return false;
+        };
+        return Argon2::default()
+            .verify_password(password.as_bytes(), &parsed)
+            .is_ok();
+    }
     let Some((algo, rest)) = stored.split_once('$') else {
         return false;
     };
@@ -295,4 +313,28 @@ fn too_many_requests(actor: &str) -> Response {
         Json(json!({ "error": { "code": "RATE_LIMITED", "message": format!("rate limit exceeded for '{actor}'") } })),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn argon2_hash_round_trips() {
+        let hash = hash_password("correct horse battery staple");
+        assert!(hash.starts_with("$argon2"));
+        assert!(verify_password_hash("correct horse battery staple", &hash));
+        assert!(!verify_password_hash("wrong password", &hash));
+    }
+
+    #[test]
+    fn legacy_sha256_hash_still_verifies() {
+        // A hash created by the pre-Argon2 hash_password — must keep verifying without forcing
+        // every existing console_users row to be reset on upgrade.
+        let salt = "fixed-salt-for-test";
+        let digest = sha256_hex(&format!("{salt}:hunter2"));
+        let legacy = format!("sha256${salt}${digest}");
+        assert!(verify_password_hash("hunter2", &legacy));
+        assert!(!verify_password_hash("wrong", &legacy));
+    }
 }

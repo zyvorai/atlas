@@ -1,6 +1,6 @@
 # Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 .PHONY: dev build release test lint fmt fmt-check run run-databridge cli clean ui ui-dev \
-	features docker-smoke ci
+	features docker-smoke ci audit
 
 dev: lint test
 
@@ -15,6 +15,12 @@ test:
 
 lint:
 	cargo clippy --workspace --all-targets -- -D warnings
+
+# Supply-chain gate: known-vulnerable/yanked advisories, disallowed licenses, unknown sources
+# (deny.toml). Installs cargo-deny on first run if missing.
+audit:
+	@command -v cargo-deny >/dev/null || cargo install cargo-deny --locked
+	cargo deny check advisories bans licenses sources
 
 fmt:
 	cargo fmt --all
@@ -38,7 +44,7 @@ docker-smoke:
 	  $$RT build --target ui -t atlas-gateway-ceph:ui -f Dockerfile.ceph .
 
 # Local equivalent of the CI static gate (no Docker, no containers).
-ci: lint test features ui
+ci: lint test audit features ui
 
 # Run the gateway with the fake Ceph driver (no cluster required).
 run:

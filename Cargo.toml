@@ -74,6 +74,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Auth / util
 jsonwebtoken = "9"
+# Console password hashing (memory-hard KDF, replaces plain SHA-256).
+argon2 = "0.5"
 # OIDC/SSO login. default-features off + explicit "reqwest" feature keeps it on the workspace's
 # existing rustls-based reqwest instead of pulling openidconnect's own bundled HTTP stack.
 openidconnect = { version = "4", default-features = false, features = ["reqwest"] }

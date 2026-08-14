@@ -335,6 +335,21 @@ runbook; summary:
   those five routes, with `admin` staying cross-tenant by design. `crates/atlas-gateway/tests/
   tenant_isolation.rs` is the regression guard. Console users (`POST /auth/users`) and issued
   tokens can now be created with an explicit `tenant_id` (default `"global"`).
+- ✅ **Supply-chain audit gate**: `cargo deny check` (CI job + `make audit`, `deny.toml`) — known-
+  vulnerable/yanked advisories, disallowed licenses, unknown registries/git sources. Scoped to
+  default features (what's actually shipped); the optional DataBridge connectors are compile-
+  checked separately and excluded here since `tiberius` (SQL Server) currently pulls in an
+  unmaintained/vulnerable rustls 0.21-era chain not worth blocking the default build over. Found
+  and fixed a real memory-exhaustion DoS (RUSTSEC-2026-0195) by bumping `rusty-s3` 0.5→0.10 (zero
+  code changes needed — it also dropped the vulnerable `quick-xml` dependency entirely). The
+  handful of remaining "unmaintained, no safe upgrade available" advisories (`rsa`'s Marvin Attack
+  timing side-channel; a small family of unmaintained-but-not-vulnerable crates transitive via
+  `kube-runtime` 0.95) are explicitly `ignore`d with justification, re-checked whenever deps update.
+- ✅ **Console password hashing**: switched from plain SHA-256 to Argon2id (`crates/atlas-gateway/
+  src/auth.rs`'s `hash_password`/`verify_password_hash`) — a leaked `console_users` table can no
+  longer be brute-forced offline at GPU/ASIC speed. Backward-compatible: existing `sha256$...`
+  hashes still verify, so no forced password reset on upgrade; every newly hashed/changed password
+  gets the new Argon2id format.
 - ✅ **No plaintext secrets in committed manifests**: `ATLAS_ADMIN_PASSWORD` and
   `ATLAS_OIDC_CLIENT_SECRET` moved from a literal `value:` in `deploy/k8s/atlas-gateway*.yaml` to
   `secretKeyRef` (`scripts/ensure-atlas-auth-secret.sh` now also generates a strong
@@ -364,16 +379,16 @@ runbook; summary:
   fake-mode-tested, but the real `rbd mirror` CLI paths need a live second Ceph cluster to be
   production-verified (`dataplane_verified` is hard-coded `false` until that drill runs). See
   [DR.md](DR.md).
-- **Bank-grade hardening gaps** (found via a production-readiness audit; tenant-scoped reads and
-  plaintext-secret-in-manifest issues from that audit are already fixed above): rate limiting and
-  self-state backup both ship implemented but **disabled by default** in `deploy/k8s/atlas-
-  gateway*.yaml` (`ATLAS_RATE_LIMIT_RPM`/`ATLAS_STATE_BACKUP_SECS` unset); the gateway is
-  single-replica with a `Recreate` rollout (planned downtime per deploy — SQLite's query layer has
-  no Postgres port yet, only connection/migration scaffolding behind a disabled feature); OIDC/SSO
-  is only verified against a throwaway Dex instance, not a real enterprise IdP; the audit log has
-  no SIEM export and is destructively pruned rather than archived; no external secrets-manager
-  (Vault/CyberArk) integration exists; `cargo audit`/`cargo deny` aren't wired into CI. None of
-  these block a non-production pilot; all are gates before a production go-live.
+- **Bank-grade hardening gaps** (found via a production-readiness audit; tenant-scoped reads,
+  plaintext-secret-in-manifest, weak password hashing, and missing supply-chain scanning from that
+  audit are already fixed above): rate limiting and self-state backup both ship implemented but
+  **disabled by default** in `deploy/k8s/atlas-gateway*.yaml` (`ATLAS_RATE_LIMIT_RPM`/
+  `ATLAS_STATE_BACKUP_SECS` unset); the gateway is single-replica with a `Recreate` rollout
+  (planned downtime per deploy — SQLite's query layer has no Postgres port yet, only connection/
+  migration scaffolding behind a disabled feature); OIDC/SSO is only verified against a throwaway
+  Dex instance, not a real enterprise IdP; the audit log has no SIEM export and is destructively
+  pruned rather than archived; no external secrets-manager (Vault/CyberArk) integration exists.
+  None of these block a non-production pilot; all are gates before a production go-live.
 - **Non-Postgres DataBridge streaming CDC + cutover**: MySQL, MariaDB, and MongoDB are verified
   through provision → real full-load → validate (row/document-count parity); their streaming-CDC
   and cutover stages need the Kafka/Debezium stack, which isn't installed on the shared lab. SQL

@@ -1,0 +1,70 @@
+# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Supply-chain gate: `cargo deny check` (CI job + `make audit`). Scoped to what's actionable in
+# this workspace's size — a large dependency graph naturally carries duplicate transitive versions
+# and a handful of unmaintained leaf crates that aren't worth blocking every PR over, so only
+# known-vulnerable advisories are a hard failure; everything else is visible but non-blocking.
+
+[graph]
+# Default features only — what's actually compiled into the deployed binary. The optional
+# DataBridge connectors (sqlserver/mongodb/oracle/azure-blob/kafka-lag) are compile-checked
+# separately in CI but intentionally excluded here: `tiberius` (sqlserver) currently pulls in an
+# unmaintained/vulnerable rustls 0.21-era chain (RUSTSEC-2025-0134, RUSTSEC-2026-0098/0099/0104)
+# that the default build never links — see docs/ROADMAP.md's known-limitations for the tracked fix.
+
+[advisories]
+version = 2
+# Known vulnerabilities in a dependency we actually build — the one thing this gate must never
+# silently miss. Every entry below has an upstream advisory that says "no safe upgrade available"
+# — re-check on each `cargo update` in case that's changed, don't just re-add them by rote.
+yanked = "deny"
+ignore = [
+    # rsa (Marvin Attack timing side-channel, RUSTSEC-2023-0071) via openidconnect (OIDC/SSO
+    # login) and sqlx-mysql (DataBridge's default MySQL/MariaDB connector). No patched rsa exists
+    # upstream as of this writing (RustCrypto/RSA#626 is still open). Timing side-channels need an
+    # attacker positioned to observe response-time variance; both call sites here talk to a
+    # server-configured IdP/DB endpoint, not an arbitrary untrusted peer.
+    "RUSTSEC-2023-0071",
+    # rustls-pemfile is unmaintained (RUSTSEC-2025-0134), not itself vulnerable — via axum-server
+    # (our own HTTPS listener) and kube-client. Both are actively-maintained crates that haven't
+    # migrated to rustls-pki-types' PemObject API yet; nothing we can fix by bumping a version.
+    "RUSTSEC-2025-0134",
+    # derivative (RUSTSEC-2024-0388) and instant (RUSTSEC-2024-0384) are both unmaintained, not
+    # vulnerable, transitive via kube-runtime/backoff (atlas-driver-k8s's Kubernetes client).
+    # `kube` has since jumped from 0.95 to a 4.x major that presumably drops both, but that's a
+    # real migration (breaking API changes across kube-client/kube-runtime) worth its own
+    # dedicated effort, not something to do opportunistically while wiring up this lint gate.
+    "RUSTSEC-2024-0388",
+    "RUSTSEC-2024-0384",
+    # backoff (RUSTSEC-2025-0012), same kube-runtime 0.95 transitive family as the two above.
+    "RUSTSEC-2025-0012",
+]
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "Unlicense",
+    "BSL-1.0",
+    # Atlas's own crates (workspace Cargo.toml) — not a third-party license risk.
+    "LicenseRef-Zyvor-Proprietary",
+]
+confidence-threshold = 0.8
+
+[bans]
+# A workspace this size will always carry duplicate transitive versions (syn, base64, windows-sys,
+# ...) as the dependency graph settles — that's dead weight, not a security issue, so it's surfaced
+# without failing the build.
+multiple-versions = "warn"
+wildcards = "warn"
+deny = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "warn"
