@@ -318,7 +318,11 @@ fn spawn_leader_election(
 }
 
 /// Periodically prune audit rows older than `ATLAS_AUDIT_RETENTION_DAYS` (day-2 governance). Runs
-/// every 6h; disabled when the var is unset/0 (keep forever).
+/// every 6h; disabled when the var is unset/0 (keep forever). When `ATLAS_AUDIT_EXPORT_URL` is
+/// also set, rows are exported to that sink (SIEM/webhook, batched JSON POST) before deletion —
+/// if the export fails, nothing is deleted this tick, so a sink outage can't silently lose audit
+/// history the way straight-line pruning would. Both vars are kept out of `Config` so they don't
+/// touch every test's `Config` literal (same pattern as `ATLAS_STATE_BACKUP_*` below).
 fn spawn_audit_retention(pool: sqlx::SqlitePool) {
     let days: i64 = std::env::var("ATLAS_AUDIT_RETENTION_DAYS")
         .ok()
@@ -327,13 +331,23 @@ fn spawn_audit_retention(pool: sqlx::SqlitePool) {
     if days <= 0 {
         return;
     }
+    let export_url = std::env::var("ATLAS_AUDIT_EXPORT_URL")
+        .ok()
+        .filter(|s| !s.trim().is_empty());
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(6 * 3600));
         loop {
             tick.tick().await;
-            match atlas_inventory::audit::prune(&pool, days).await {
+            let result = match &export_url {
+                Some(url) => atlas_monitor::audit_export::export_and_prune(&pool, days, url).await,
+                None => atlas_inventory::audit::prune(&pool, days).await,
+            };
+            match result {
                 Ok(n) if n > 0 => tracing::info!("audit retention: pruned {n} row(s) older than {days}d"),
                 Ok(_) => {}
+                Err(e) if export_url.is_some() => {
+                    tracing::warn!("audit export failed, rows kept for retry next tick: {e:#}")
+                }
                 Err(e) => tracing::warn!("audit retention prune failed: {e:#}"),
             }
         }

@@ -15,6 +15,7 @@ use atlas_driver_core::StorageDriver;
 use serde_json::json;
 use sqlx::{Row, SqlitePool};
 
+pub mod audit_export;
 pub mod notify;
 pub mod prometheus;
 

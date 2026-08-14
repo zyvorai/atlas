@@ -49,7 +49,11 @@ Rules: cluster health, pool near-full (75/85%), OSD down, capacity forecast, OSD
 ## Governance (admin/operator)
 - **Token revocation** `POST /auth/tokens/{jti}/revoke` + `GET /auth/tokens/revoked` — kill a leaked
   token before its TTL. **Rate limiting** `ATLAS_RATE_LIMIT_RPM` (0=off) → 429.
-- **Audit** `GET /audit.csv` export; `ATLAS_AUDIT_RETENTION_DAYS` prunes old rows.
+- **Audit** `GET /audit.csv` export; `ATLAS_AUDIT_RETENTION_DAYS` prunes old rows. When
+  `ATLAS_AUDIT_EXPORT_URL` is also set, rows are exported (batched JSON POST) to that sink — a
+  SIEM webhook, Splunk HTTP Event Collector, Elastic/Fluent Bit HTTP input, anything that accepts
+  a JSON POST — *before* deletion; a failed export leaves the rows in place for retry on the next
+  6h tick, so a sink outage can never silently lose audit history.
 - **Chargeback** `GET /chargeback` (`ATLAS_CHARGEBACK_USD_PER_GIB_MONTH`). **Policy drift** `GET /policy-drift`.
 
 ## DataBridge day-2

@@ -335,6 +335,14 @@ runbook; summary:
   those five routes, with `admin` staying cross-tenant by design. `crates/atlas-gateway/tests/
   tenant_isolation.rs` is the regression guard. Console users (`POST /auth/users`) and issued
   tokens can now be created with an explicit `tenant_id` (default `"global"`).
+- ✅ **Audit-log export before pruning**: `ATLAS_AUDIT_EXPORT_URL` (optional, alongside the
+  existing `ATLAS_AUDIT_RETENTION_DAYS`) batches rows due for retention pruning into one JSON POST
+  to an external sink — SIEM webhook, Splunk HEC, Elastic/Fluent Bit HTTP input, anything that
+  accepts JSON — and only deletes the rows that were actually exported
+  (`atlas_monitor::audit_export::export_and_prune`); a failed export leaves rows in place for
+  retry on the next 6h tick rather than silently dropping them, closing the "audit data just
+  disappears with no external record" gap a compliance review would flag first. Straight-line
+  `prune()` (no export) remains available when `ATLAS_AUDIT_EXPORT_URL` is unset.
 - ✅ **Supply-chain audit gate**: `cargo deny check` (CI job + `make audit`, `deny.toml`) — known-
   vulnerable/yanked advisories, disallowed licenses, unknown registries/git sources. Scoped to
   default features (what's actually shipped); the optional DataBridge connectors are compile-
@@ -380,15 +388,16 @@ runbook; summary:
   production-verified (`dataplane_verified` is hard-coded `false` until that drill runs). See
   [DR.md](DR.md).
 - **Bank-grade hardening gaps** (found via a production-readiness audit; tenant-scoped reads,
-  plaintext-secret-in-manifest, weak password hashing, and missing supply-chain scanning from that
-  audit are already fixed above): rate limiting and self-state backup both ship implemented but
-  **disabled by default** in `deploy/k8s/atlas-gateway*.yaml` (`ATLAS_RATE_LIMIT_RPM`/
-  `ATLAS_STATE_BACKUP_SECS` unset); the gateway is single-replica with a `Recreate` rollout
-  (planned downtime per deploy — SQLite's query layer has no Postgres port yet, only connection/
-  migration scaffolding behind a disabled feature); OIDC/SSO is only verified against a throwaway
-  Dex instance, not a real enterprise IdP; the audit log has no SIEM export and is destructively
-  pruned rather than archived; no external secrets-manager (Vault/CyberArk) integration exists.
-  None of these block a non-production pilot; all are gates before a production go-live.
+  plaintext-secret-in-manifest, weak password hashing, missing supply-chain scanning, and
+  destructive-audit-pruning-with-no-export from that audit are already fixed above): rate
+  limiting and self-state backup both ship implemented but **disabled by default** in
+  `deploy/k8s/atlas-gateway*.yaml` (`ATLAS_RATE_LIMIT_RPM`/`ATLAS_STATE_BACKUP_SECS` unset); the
+  gateway is single-replica with a `Recreate` rollout (planned downtime per deploy — SQLite's
+  query layer has no Postgres port yet, only connection/migration scaffolding behind a disabled
+  feature); OIDC/SSO is only verified against a throwaway Dex instance, not a real enterprise IdP;
+  `ATLAS_AUDIT_EXPORT_URL` (audit-log SIEM export) is implemented but has no real SIEM endpoint to
+  point at yet; no external secrets-manager (Vault/CyberArk) integration exists. None of these
+  block a non-production pilot; all are gates before a production go-live.
 - **Non-Postgres DataBridge streaming CDC + cutover**: MySQL, MariaDB, and MongoDB are verified
   through provision → real full-load → validate (row/document-count parity); their streaming-CDC
   and cutover stages need the Kafka/Debezium stack, which isn't installed on the shared lab. SQL
