@@ -1,7 +1,7 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 use axum::{
     extract::{Path, Query, State},
-    Json,
+    Extension, Json,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 use atlas_api_types::{Capabilities, StorageClassInfo};
 use atlas_common::{AppError, AppResult};
 
+use crate::auth::Actor;
 use crate::state::AppState;
 use super::util::CEPH_BACKEND_ID;
 
@@ -135,8 +136,14 @@ pub(crate) struct VolumeQuery {
 
 pub(crate) async fn list_volumes(
     State(s): State<AppState>,
-    Query(q): Query<VolumeQuery>,
+    Extension(actor): Extension<Actor>,
+    Query(mut q): Query<VolumeQuery>,
 ) -> AppResult<Json<Value>> {
+    // Tenant isolation: a non-admin actor can only ever see their own tenant's volumes, even if
+    // they pass a different `?tenant=` explicitly.
+    if let Some(t) = crate::auth::tenant_scope(s.config.auth_required, &actor) {
+        q.tenant = Some(t.to_string());
+    }
     let vols = if q.state.is_some() || q.tenant.is_some() || q.backend.is_some() || q.kind.is_some()
     {
         atlas_inventory::list_volumes_filtered(
@@ -157,9 +164,13 @@ pub(crate) async fn list_volumes(
 /// (honors the same filters as `/volumes`), for spreadsheets / capacity reporting.
 pub(crate) async fn volumes_csv(
     State(s): State<AppState>,
-    Query(q): Query<VolumeQuery>,
+    Extension(actor): Extension<Actor>,
+    Query(mut q): Query<VolumeQuery>,
 ) -> impl axum::response::IntoResponse {
     use std::fmt::Write;
+    if let Some(t) = crate::auth::tenant_scope(s.config.auth_required, &actor) {
+        q.tenant = Some(t.to_string());
+    }
     let vols = if q.state.is_some() || q.tenant.is_some() || q.backend.is_some() || q.kind.is_some()
     {
         atlas_inventory::list_volumes_filtered(
@@ -226,10 +237,21 @@ pub(crate) async fn volumes_csv(
     )
 }
 
-pub(crate) async fn get_volume(State(s): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
+pub(crate) async fn get_volume(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
     let v = atlas_inventory::get_volume(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("volume {id}")))?;
+    let resource_tenant = atlas_inventory::volume_tenant(&s.pool, &id).await?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        &actor,
+        &resource_tenant,
+        format!("volume {id}"),
+    )?;
     Ok(Json(json!(v)))
 }
 // ---- live Kubernetes ----

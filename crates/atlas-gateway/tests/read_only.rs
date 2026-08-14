@@ -85,7 +85,8 @@ async fn issued_tokens_enforce_rbac() {
     let c = client();
 
     // Bootstrap admin token (as the platform operator would mint offline with the shared secret).
-    let (admin, _, _) = atlas_gateway::auth::mint_token(secret, "bootstrap", "admin", 3600).unwrap();
+    let (admin, _, _) =
+        atlas_gateway::auth::mint_token(secret, "bootstrap", "admin", "global", 3600).unwrap();
 
     // Admin issues an operator token for a product service account.
     let issue = |role: &str| {
@@ -250,6 +251,7 @@ fn mint(secret: &str, role: &str) -> String {
         role: role.into(),
         exp,
         jti: String::new(),
+        tenant_id: "global".into(),
     };
     encode(
         &Header::default(),

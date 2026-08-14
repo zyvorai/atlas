@@ -17,16 +17,31 @@ use super::volumes::ForceParams;
 
 // ---- object storage (buckets) ----
 
-pub(crate) async fn list_buckets(State(s): State<AppState>) -> AppResult<Json<Value>> {
-    Ok(Json(json!(
-        atlas_inventory::buckets::list_buckets(&s.pool).await?
-    )))
+pub(crate) async fn list_buckets(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+) -> AppResult<Json<Value>> {
+    let mut items = atlas_inventory::buckets::list_buckets(&s.pool).await?;
+    if let Some(t) = crate::auth::tenant_scope(s.config.auth_required, &actor) {
+        items.retain(|b| b.tenant_id == t);
+    }
+    Ok(Json(json!(items)))
 }
 
-pub(crate) async fn get_bucket(State(s): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
+pub(crate) async fn get_bucket(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
     let b = atlas_inventory::buckets::get_bucket(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("bucket {id}")))?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        &actor,
+        &b.tenant_id,
+        format!("bucket {id}"),
+    )?;
     Ok(Json(json!(b)))
 }
 

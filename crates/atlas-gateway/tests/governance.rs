@@ -82,7 +82,8 @@ async fn revoked_token_is_rejected() {
     let secret = "gov-test-secret-key-at-least-32-bytes!!";
     let base = format!("{}/api/atlas/v1", spawn_auth(secret).await);
     let c = reqwest::Client::new();
-    let (admin, _, _) = atlas_gateway::auth::mint_token(secret, "boot", "admin", 3600).unwrap();
+    let (admin, _, _) =
+        atlas_gateway::auth::mint_token(secret, "boot", "admin", "global", 3600).unwrap();
 
     // Admin issues two operator tokens; the response carries the jti used for revocation.
     let issue = |c: &reqwest::Client, admin: &str| {

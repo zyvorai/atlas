@@ -325,6 +325,23 @@ runbook; summary:
   against a throwaway Dex instance (`deploy/dex-lab/`): three static test users in different Dex
   groups each landed with the correct Atlas role (admin/operator/viewer-by-default) after the full
   browser redirect → login → callback → session round-trip.
+- ✅ **Tenant-scoped reads**: found via a production-readiness audit ahead of a prospective
+  multi-tenant bank deployment — JWTs carried no `tenant_id`, so `GET /volumes`, `/volumes.csv`,
+  `/volumes/{id}`, `/buckets`, and `/buckets/{id}` returned every tenant's data to any
+  authenticated `viewer`, not just their own. `Claims`/`Actor` now carry `tenant_id` (set at mint
+  time for local login, `POST /auth/tokens`, and OIDC login — the latter via a configurable
+  `ATLAS_OIDC_TENANT_CLAIM` ID-token claim, defaulting to `"global"` when unset so existing
+  single-tenant deployments are unaffected); `auth::tenant_scope`/`require_tenant` enforce it on
+  those five routes, with `admin` staying cross-tenant by design. `crates/atlas-gateway/tests/
+  tenant_isolation.rs` is the regression guard. Console users (`POST /auth/users`) and issued
+  tokens can now be created with an explicit `tenant_id` (default `"global"`).
+- ✅ **No plaintext secrets in committed manifests**: `ATLAS_ADMIN_PASSWORD` and
+  `ATLAS_OIDC_CLIENT_SECRET` moved from a literal `value:` in `deploy/k8s/atlas-gateway*.yaml` to
+  `secretKeyRef` (`scripts/ensure-atlas-auth-secret.sh` now also generates a strong
+  `admin-password`; the OIDC secret points at the same `dex-oidc-client` Secret `deploy/dex-lab/
+  up.sh` already creates, rather than duplicating the value). `Config::validate_for_start()` now
+  also refuses to boot with `ATLAS_AUTH_REQUIRED=1` and a weak/default admin password, mirroring
+  the existing JWT-secret guard.
 - ✅ **Audit-log query API**: `GET /audit` (operator) returns the compliance trail newest-first with
   `actor`/`action`/`resource_type`/`resource_id` filters + bounded `limit`. Verified live.
 - ✅ **Enriched `/metrics/summary`**: capacity-used %, snapshot/bucket/backup counts, client-I/O
@@ -347,6 +364,16 @@ runbook; summary:
   fake-mode-tested, but the real `rbd mirror` CLI paths need a live second Ceph cluster to be
   production-verified (`dataplane_verified` is hard-coded `false` until that drill runs). See
   [DR.md](DR.md).
+- **Bank-grade hardening gaps** (found via a production-readiness audit; tenant-scoped reads and
+  plaintext-secret-in-manifest issues from that audit are already fixed above): rate limiting and
+  self-state backup both ship implemented but **disabled by default** in `deploy/k8s/atlas-
+  gateway*.yaml` (`ATLAS_RATE_LIMIT_RPM`/`ATLAS_STATE_BACKUP_SECS` unset); the gateway is
+  single-replica with a `Recreate` rollout (planned downtime per deploy — SQLite's query layer has
+  no Postgres port yet, only connection/migration scaffolding behind a disabled feature); OIDC/SSO
+  is only verified against a throwaway Dex instance, not a real enterprise IdP; the audit log has
+  no SIEM export and is destructively pruned rather than archived; no external secrets-manager
+  (Vault/CyberArk) integration exists; `cargo audit`/`cargo deny` aren't wired into CI. None of
+  these block a non-production pilot; all are gates before a production go-live.
 - **Non-Postgres DataBridge streaming CDC + cutover**: MySQL, MariaDB, and MongoDB are verified
   through provision → real full-load → validate (row/document-count parity); their streaming-CDC
   and cutover stages need the Kafka/Debezium stack, which isn't installed on the shared lab. SQL

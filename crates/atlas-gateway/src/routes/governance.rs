@@ -140,6 +140,9 @@ pub(crate) struct IssueTokenBody {
     /// Role: `viewer`, `operator`, `admin`, or a `product.service.<name>` (→ operator). Default viewer.
     #[serde(default)]
     role: Option<String>,
+    /// Tenant this token is scoped to on read endpoints (default `"global"`).
+    #[serde(default)]
+    tenant_id: Option<String>,
     /// Lifetime in seconds (default 3600, capped at 90 days).
     #[serde(default)]
     ttl_secs: Option<u64>,
@@ -168,14 +171,15 @@ pub(crate) async fn login(
     let user = body.username.trim();
 
     // 1) DB console users (admin-created, with privilege level).
-    if let Some((hash, role)) = atlas_inventory::users::credentials_for_login(&s.pool, user)
-        .await
-        .map_err(|e| AppError::Database(e.to_string()))?
+    if let Some((hash, role, tenant_id)) =
+        atlas_inventory::users::credentials_for_login(&s.pool, user)
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?
     {
         if !crate::auth::verify_password_hash(&body.password, &hash) {
             return Err(AppError::Auth("invalid username or password".into()));
         }
-        return mint_login_response(&s, user, &role, ttl_secs).await;
+        return mint_login_response(&s, user, &role, &tenant_id, ttl_secs).await;
     }
 
     // 2) Bootstrap env admin (default admin / Admin@321).
@@ -188,17 +192,19 @@ pub(crate) async fn login(
     if !ok {
         return Err(AppError::Auth("invalid username or password".into()));
     }
-    mint_login_response(&s, &s.config.admin_username, "admin", ttl_secs).await
+    // Bootstrap admin is platform-wide (admin role bypasses tenant scoping regardless).
+    mint_login_response(&s, &s.config.admin_username, "admin", "global", ttl_secs).await
 }
 
 pub(crate) async fn mint_login_response(
     s: &AppState,
     subject: &str,
     role: &str,
+    tenant_id: &str,
     ttl_secs: u64,
 ) -> AppResult<(StatusCode, Json<Value>)> {
     let (token, exp, jti) =
-        crate::auth::mint_token(&s.config.jwt_secret, subject, role, ttl_secs)?;
+        crate::auth::mint_token(&s.config.jwt_secret, subject, role, tenant_id, ttl_secs)?;
     let _ = atlas_inventory::audit::record(
         &s.pool,
         None,
@@ -207,7 +213,7 @@ pub(crate) async fn mint_login_response(
         "console",
         subject,
         "ok",
-        Some(json!({ "role": role, "ttl_secs": ttl_secs, "jti": jti })),
+        Some(json!({ "role": role, "tenant_id": tenant_id, "ttl_secs": ttl_secs, "jti": jti })),
         None,
     )
     .await;
@@ -218,6 +224,7 @@ pub(crate) async fn mint_login_response(
             "jti": jti,
             "subject": subject,
             "role": role,
+            "tenant_id": tenant_id,
             "level": crate::auth::role_level(role),
             "expires_at": exp,
             "ttl_secs": ttl_secs,
@@ -232,6 +239,10 @@ pub(crate) struct CreateUserBody {
     /// Privilege level: `viewer`, `operator`, or `admin` (default viewer).
     #[serde(default)]
     role: Option<String>,
+    /// Tenant this user is scoped to on read endpoints (default `"global"`); ignored in practice
+    /// for `role: "admin"`, which stays cross-tenant regardless of this value.
+    #[serde(default)]
+    tenant_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -260,6 +271,7 @@ pub(crate) async fn list_users(
             json!({
                 "username": u.username,
                 "role": u.role,
+                "tenant_id": u.tenant_id,
                 "level": crate::auth::role_level(&u.role),
                 "disabled": u.disabled,
                 "created_by": u.created_by,
@@ -274,6 +286,7 @@ pub(crate) async fn list_users(
         json!({
             "username": s.config.admin_username,
             "role": "admin",
+            "tenant_id": "global",
             "level": crate::auth::ROLE_ADMIN,
             "disabled": false,
             "created_by": null,
@@ -312,8 +325,14 @@ pub(crate) async fn create_user(
     }
     let role = crate::auth::normalize_console_role(body.role.as_deref().unwrap_or("viewer"))
         .map_err(AppError::Validation)?;
+    let tenant_id = body
+        .tenant_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .unwrap_or("global");
     let hash = crate::auth::hash_password(&body.password);
-    let user = atlas_inventory::users::create(&s.pool, username, &hash, role, &actor.id)
+    let user = atlas_inventory::users::create(&s.pool, username, &hash, role, tenant_id, &actor.id)
         .await
         .map_err(|e| {
             let msg = e.to_string();
@@ -331,7 +350,7 @@ pub(crate) async fn create_user(
         "console_user",
         &user.username,
         "ok",
-        Some(json!({ "role": user.role })),
+        Some(json!({ "role": user.role, "tenant_id": user.tenant_id })),
         None,
     )
     .await;
@@ -340,6 +359,7 @@ pub(crate) async fn create_user(
         Json(json!({
             "username": user.username,
             "role": user.role,
+            "tenant_id": user.tenant_id,
             "level": crate::auth::role_level(&user.role),
             "disabled": user.disabled,
             "created_by": user.created_by,
@@ -484,11 +504,17 @@ pub(crate) async fn issue_token(
         return Err(AppError::Validation("subject is required".into()));
     }
     let role = body.role.unwrap_or_else(|| "viewer".into());
+    let tenant_id = body
+        .tenant_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .unwrap_or("global");
     // Cap the lifetime so a leaked token has a bounded blast radius.
     const MAX_TTL: u64 = 90 * 24 * 3600;
     let ttl_secs = body.ttl_secs.unwrap_or(3600).clamp(60, MAX_TTL);
     let (token, exp, jti) =
-        crate::auth::mint_token(&s.config.jwt_secret, &body.subject, &role, ttl_secs)?;
+        crate::auth::mint_token(&s.config.jwt_secret, &body.subject, &role, tenant_id, ttl_secs)?;
     let _ = atlas_inventory::audit::record(
         &s.pool,
         None,
@@ -497,14 +523,14 @@ pub(crate) async fn issue_token(
         "service_account",
         &body.subject,
         "ok",
-        Some(json!({ "role": role, "ttl_secs": ttl_secs, "jti": jti })),
+        Some(json!({ "role": role, "tenant_id": tenant_id, "ttl_secs": ttl_secs, "jti": jti })),
         None,
     )
     .await;
     Ok((
         StatusCode::CREATED,
         Json(json!({
-            "token": token, "jti": jti, "subject": body.subject, "role": role,
+            "token": token, "jti": jti, "subject": body.subject, "role": role, "tenant_id": tenant_id,
             "level": crate::auth::role_level(&role), "expires_at": exp, "ttl_secs": ttl_secs
         })),
     ))

@@ -9,6 +9,9 @@ use sqlx::{Row, SqlitePool};
 pub struct ConsoleUser {
     pub username: String,
     pub role: String,
+    /// Tenant this user is scoped to on read endpoints (ignored for `role = "admin"`, which stays
+    /// cross-tenant regardless of this value). Defaults to `"global"`.
+    pub tenant_id: String,
     pub disabled: bool,
     pub created_by: Option<String>,
     pub created_at: String,
@@ -19,6 +22,7 @@ fn map_row(r: sqlx::sqlite::SqliteRow) -> ConsoleUser {
     ConsoleUser {
         username: r.get("username"),
         role: r.get("role"),
+        tenant_id: r.get("tenant_id"),
         disabled: r.get::<i64, _>("disabled") != 0,
         created_by: r.get("created_by"),
         created_at: r.get("created_at"),
@@ -28,7 +32,7 @@ fn map_row(r: sqlx::sqlite::SqliteRow) -> ConsoleUser {
 
 pub async fn list(pool: &SqlitePool) -> Result<Vec<ConsoleUser>> {
     let rows = sqlx::query(
-        "SELECT username, role, disabled, created_by, created_at, updated_at \
+        "SELECT username, role, tenant_id, disabled, created_by, created_at, updated_at \
          FROM console_users ORDER BY username COLLATE NOCASE",
     )
     .fetch_all(pool)
@@ -38,7 +42,7 @@ pub async fn list(pool: &SqlitePool) -> Result<Vec<ConsoleUser>> {
 
 pub async fn get(pool: &SqlitePool, username: &str) -> Result<Option<ConsoleUser>> {
     let row = sqlx::query(
-        "SELECT username, role, disabled, created_by, created_at, updated_at \
+        "SELECT username, role, tenant_id, disabled, created_by, created_at, updated_at \
          FROM console_users WHERE username = ? COLLATE NOCASE",
     )
     .bind(username)
@@ -47,13 +51,14 @@ pub async fn get(pool: &SqlitePool, username: &str) -> Result<Option<ConsoleUser
     Ok(row.map(map_row))
 }
 
-/// Fetch password hash + role for login. Returns None when the user is missing or disabled.
+/// Fetch password hash + role + tenant_id for login. Returns None when the user is missing or
+/// disabled.
 pub async fn credentials_for_login(
     pool: &SqlitePool,
     username: &str,
-) -> Result<Option<(String, String)>> {
+) -> Result<Option<(String, String, String)>> {
     let row = sqlx::query(
-        "SELECT password_hash, role, disabled FROM console_users WHERE username = ? COLLATE NOCASE",
+        "SELECT password_hash, role, tenant_id, disabled FROM console_users WHERE username = ? COLLATE NOCASE",
     )
     .bind(username)
     .fetch_optional(pool)
@@ -64,7 +69,11 @@ pub async fn credentials_for_login(
     if r.get::<i64, _>("disabled") != 0 {
         return Ok(None);
     }
-    Ok(Some((r.get("password_hash"), r.get("role"))))
+    Ok(Some((
+        r.get("password_hash"),
+        r.get("role"),
+        r.get("tenant_id"),
+    )))
 }
 
 pub async fn create(
@@ -72,14 +81,16 @@ pub async fn create(
     username: &str,
     password_hash: &str,
     role: &str,
+    tenant_id: &str,
     created_by: &str,
 ) -> Result<ConsoleUser> {
     let res = sqlx::query(
-        "INSERT INTO console_users (username, password_hash, role, created_by) VALUES (?, ?, ?, ?)",
+        "INSERT INTO console_users (username, password_hash, role, tenant_id, created_by) VALUES (?, ?, ?, ?, ?)",
     )
     .bind(username)
     .bind(password_hash)
     .bind(role)
+    .bind(tenant_id)
     .bind(created_by)
     .execute(pool)
     .await;

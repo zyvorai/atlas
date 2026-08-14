@@ -138,7 +138,10 @@ spec:
             - name: ATLAS_ADMIN_USERNAME
               value: "admin"
             - name: ATLAS_ADMIN_PASSWORD
-              value: "Admin@321"
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-gateway-auth
+                  key: admin-password
             # Browser-reachable RGW endpoint for presigned object upload/download URLs.
             # NODE_IP is this node's address (public on the lab hosts); 30800 is the RGW NodePort
             # created alongside the CephObjectStore (see deploy/rook-ceph-lab/*rgw*.yaml).
@@ -156,8 +159,15 @@ spec:
               value: "http://$(NODE_IP):30556"
             - name: ATLAS_OIDC_CLIENT_ID
               value: "atlas-console"
+            # Points at the Secret deploy/dex-lab/up.sh already creates (dex-oidc-client) — never
+            # duplicate the value into a plaintext env var. A real IdP integration would instead
+            # point this at whatever Secret the bank's own Vault/secrets-manager sync populates.
             - name: ATLAS_OIDC_CLIENT_SECRET
-              value: "4v5Yp5buDhRKTb3KTyWpf28egoYx3Ts"
+              valueFrom:
+                secretKeyRef:
+                  name: dex-oidc-client
+                  key: client-secret
+                  optional: true
             - name: ATLAS_OIDC_REDIRECT_URL
               value: "http://$(NODE_IP):30510/api/atlas/v1/auth/oidc/callback"
             - name: ATLAS_OIDC_ADMIN_GROUP

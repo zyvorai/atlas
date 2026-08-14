@@ -133,8 +133,17 @@ pub(crate) async fn oidc_callback(
     } else {
         "viewer"
     };
+    // Tenant scoping (see auth::tenant_scope/require_tenant): read from the configured claim
+    // (e.g. a bank's IdP might emit "tenant" or "department") when set, else "global" — admin
+    // role bypasses this filter entirely regardless of what's resolved here.
+    let tenant_id = oidc_cfg
+        .tenant_claim
+        .as_deref()
+        .and_then(|claim| id_token_string_claim(id_token, claim))
+        .unwrap_or_else(|| "global".to_string());
 
-    let (token, exp, jti) = crate::auth::mint_token(&s.config.jwt_secret, &subject, role, 86_400)?;
+    let (token, exp, jti) =
+        crate::auth::mint_token(&s.config.jwt_secret, &subject, role, &tenant_id, 86_400)?;
     let _ = atlas_inventory::audit::record(
         &s.pool,
         None,
@@ -143,7 +152,7 @@ pub(crate) async fn oidc_callback(
         "console",
         &subject,
         "ok",
-        Some(json!({ "role": role, "groups": groups, "jti": jti, "exp": exp })),
+        Some(json!({ "role": role, "tenant_id": tenant_id, "groups": groups, "jti": jti, "exp": exp })),
         None,
     )
     .await;
@@ -156,23 +165,30 @@ pub(crate) async fn oidc_callback(
 }
 
 fn id_token_groups(id_token: &openidconnect::core::CoreIdToken) -> Vec<String> {
-    use base64::Engine;
-    let Ok(serde_json::Value::String(compact)) = serde_json::to_value(id_token) else {
-        return Vec::new();
-    };
-    let Some(payload_b64) = compact.split('.').nth(1) else {
-        return Vec::new();
-    };
-    let Ok(payload_bytes) = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(payload_b64)
-    else {
-        return Vec::new();
-    };
-    let Ok(payload): Result<serde_json::Value, _> = serde_json::from_slice(&payload_bytes) else {
-        return Vec::new();
-    };
-    payload
-        .get("groups")
-        .and_then(|g| g.as_array())
+    id_token_raw_payload(id_token)
+        .and_then(|p| p.get("groups").cloned())
+        .and_then(|g| g.as_array().cloned())
         .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
         .unwrap_or_default()
+}
+
+/// Read an arbitrary string claim (e.g. a bank IdP's `"tenant"` or `"department"` claim) from the
+/// already-signature-verified token's raw JSON payload — same rationale as `id_token_groups`.
+fn id_token_string_claim(id_token: &openidconnect::core::CoreIdToken, claim: &str) -> Option<String> {
+    id_token_raw_payload(id_token)?
+        .get(claim)?
+        .as_str()
+        .map(String::from)
+}
+
+fn id_token_raw_payload(id_token: &openidconnect::core::CoreIdToken) -> Option<serde_json::Value> {
+    use base64::Engine;
+    let Ok(serde_json::Value::String(compact)) = serde_json::to_value(id_token) else {
+        return None;
+    };
+    let payload_b64 = compact.split('.').nth(1)?;
+    let payload_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(payload_b64)
+        .ok()?;
+    serde_json::from_slice(&payload_bytes).ok()
 }

@@ -17,7 +17,9 @@ use serde_json::json;
 use crate::state::AppState;
 
 /// JWT claims. `sub` is the actor id used in audit logs; `role` gates write actions; `jti` is the
-/// token id used for revocation (empty on legacy tokens, which are simply not revocable).
+/// token id used for revocation (empty on legacy tokens, which are simply not revocable);
+/// `tenant_id` scopes read access (see `tenant_scope`/`require_tenant`) — defaults to `"global"`
+/// so tokens minted before this field existed keep decoding.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: String,
@@ -27,6 +29,12 @@ pub struct Claims {
     pub exp: usize,
     #[serde(default)]
     pub jti: String,
+    #[serde(default = "default_tenant")]
+    pub tenant_id: String,
+}
+
+fn default_tenant() -> String {
+    "global".to_string()
 }
 
 /// The authenticated actor, injected as a request extension.
@@ -34,6 +42,7 @@ pub struct Claims {
 pub struct Actor {
     pub id: String,
     pub role: String,
+    pub tenant_id: String,
 }
 
 impl Actor {
@@ -41,6 +50,7 @@ impl Actor {
         Self {
             id: "anonymous".into(),
             role: "viewer".into(),
+            tenant_id: default_tenant(),
         }
     }
 
@@ -73,6 +83,7 @@ pub fn mint_token(
     secret: &str,
     subject: &str,
     role: &str,
+    tenant_id: &str,
     ttl_secs: u64,
 ) -> atlas_common::AppResult<(String, usize, String)> {
     let now = std::time::SystemTime::now()
@@ -86,6 +97,7 @@ pub fn mint_token(
         role: role.to_string(),
         exp,
         jti: jti.clone(),
+        tenant_id: tenant_id.to_string(),
     };
     let token = encode(
         &Header::default(),
@@ -105,6 +117,31 @@ pub fn require_role(auth_required: bool, actor: &Actor, min: u8) -> atlas_common
         )));
     }
     Ok(())
+}
+
+/// The tenant a non-admin actor is restricted to on read/list endpoints, or `None` when the
+/// actor is unscoped (admin role, or auth disabled) and may see every tenant's resources.
+pub fn tenant_scope(auth_required: bool, actor: &Actor) -> Option<&str> {
+    if !auth_required || actor.level() >= ROLE_ADMIN {
+        None
+    } else {
+        Some(actor.tenant_id.as_str())
+    }
+}
+
+/// Enforce that a non-admin actor may only fetch a single resource belonging to their own
+/// tenant. Returns 404 rather than 403 so a scoped actor can't distinguish "doesn't exist" from
+/// "exists in another tenant" by probing IDs.
+pub fn require_tenant(
+    auth_required: bool,
+    actor: &Actor,
+    resource_tenant: &str,
+    not_found_msg: impl Into<String>,
+) -> atlas_common::AppResult<()> {
+    if !auth_required || actor.level() >= ROLE_ADMIN || actor.tenant_id == resource_tenant {
+        return Ok(());
+    }
+    Err(atlas_common::AppError::NotFound(not_found_msg.into()))
 }
 
 pub async fn auth_middleware(
@@ -138,6 +175,7 @@ pub async fn auth_middleware(
             Actor {
                 id: "bootstrap".into(),
                 role: "admin".into(),
+                tenant_id: default_tenant(),
             }
         } else {
             let mut validation = Validation::new(Algorithm::HS256);
@@ -161,6 +199,7 @@ pub async fn auth_middleware(
                     Actor {
                         id: data.claims.sub,
                         role: data.claims.role,
+                        tenant_id: data.claims.tenant_id,
                     }
                 }
                 Err(e) => return unauthorized(&format!("invalid token: {e}")),

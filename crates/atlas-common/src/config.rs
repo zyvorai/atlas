@@ -4,6 +4,11 @@
 use std::fmt;
 
 const DEV_JWT_DEFAULT: &str = "atlas-dev-jwt-secret-change-me-please-32b";
+/// Dev-only fallback console admin password — fine for local `make run` (auth disabled), but
+/// `validate_for_start()` refuses to boot with this value when `ATLAS_AUTH_REQUIRED` is set. Real
+/// deployments get a strong random one from `scripts/ensure-atlas-auth-secret.sh` via
+/// `secretKeyRef` (see `deploy/k8s/atlas-gateway*.yaml`), never this literal.
+const DEV_ADMIN_PASSWORD_DEFAULT: &str = "Admin@321";
 
 /// Which Ceph driver implementation the gateway wires up.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,6 +45,11 @@ pub struct OidcConfig {
     /// OIDC group names that map to the `operator` role. Anything matching neither list, or a
     /// token with no `groups` claim at all, gets `viewer` (least privilege by default).
     pub operator_groups: Vec<String>,
+    /// Name of the ID-token claim carrying the caller's tenant id (e.g. `"tenant"` or
+    /// `"department"` — configurable since enterprise IdPs vary in what they call it). A token
+    /// missing this claim, or an unset `ATLAS_OIDC_TENANT_CLAIM`, resolves to the `"global"`
+    /// tenant so existing single-tenant deployments keep working unchanged.
+    pub tenant_claim: Option<String>,
 }
 
 impl fmt::Debug for OidcConfig {
@@ -51,6 +61,7 @@ impl fmt::Debug for OidcConfig {
             .field("redirect_url", &self.redirect_url)
             .field("admin_groups", &self.admin_groups)
             .field("operator_groups", &self.operator_groups)
+            .field("tenant_claim", &self.tenant_claim)
             .finish()
     }
 }
@@ -152,6 +163,9 @@ fn oidc_from_env() -> Option<OidcConfig> {
         redirect_url,
         admin_groups: split_csv("ATLAS_OIDC_ADMIN_GROUP"),
         operator_groups: split_csv("ATLAS_OIDC_OPERATOR_GROUP"),
+        tenant_claim: std::env::var("ATLAS_OIDC_TENANT_CLAIM")
+            .ok()
+            .filter(|s| !s.trim().is_empty()),
     })
 }
 
@@ -193,7 +207,7 @@ impl Config {
             admin_password: std::env::var("ATLAS_ADMIN_PASSWORD")
                 .ok()
                 .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| "Admin@321".into()),
+                .unwrap_or_else(|| DEV_ADMIN_PASSWORD_DEFAULT.into()),
             monitor_interval_secs: std::env::var("ATLAS_MONITOR_INTERVAL_SECS")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -297,12 +311,24 @@ impl Config {
         self.jwt_secret == DEV_JWT_DEFAULT || self.jwt_secret.len() < 32
     }
 
-    /// Refuse to start in authenticated mode with a forgeable secret. Local `make run` keeps
-    /// `ATLAS_AUTH_REQUIRED` unset/false so the weak default remains fine for lab use.
+    /// True when the console admin password is the shipped dev default or too short to be safe.
+    pub fn admin_password_is_weak(&self) -> bool {
+        self.admin_password == DEV_ADMIN_PASSWORD_DEFAULT || self.admin_password.len() < 12
+    }
+
+    /// Refuse to start in authenticated mode with a forgeable secret or a known/weak admin
+    /// password. Local `make run` keeps `ATLAS_AUTH_REQUIRED` unset/false so the weak defaults
+    /// remain fine for lab use.
     pub fn validate_for_start(&self) -> Result<(), String> {
         if self.auth_required && self.jwt_secret_is_weak() {
             return Err(
                 "ATLAS_AUTH_REQUIRED is set but ATLAS_JWT_SECRET is the shipped dev default or shorter than 32 bytes — refuse to start"
+                    .into(),
+            );
+        }
+        if self.auth_required && self.admin_password_is_weak() {
+            return Err(
+                "ATLAS_AUTH_REQUIRED is set but ATLAS_ADMIN_PASSWORD is the shipped dev default or shorter than 12 characters — refuse to start"
                     .into(),
             );
         }
@@ -322,7 +348,7 @@ impl Default for Config {
             auth_required: false,
             bootstrap_admin_token: None,
             admin_username: "admin".into(),
-            admin_password: "Admin@321".into(),
+            admin_password: DEV_ADMIN_PASSWORD_DEFAULT.into(),
             monitor_interval_secs: 0,
             ceph_prometheus_url: None,
             alert_webhook_url: None,
@@ -380,6 +406,24 @@ mod tests {
         };
         assert!(c.validate_for_start().is_err());
         c.jwt_secret = "a-strong-enough-secret-at-least-32b!".into();
+        // Still weak: admin_password is still the Default's dev fallback.
+        assert!(c.validate_for_start().is_err());
+        c.admin_password = "a-strong-enough-admin-password".into();
+        assert!(c.validate_for_start().is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_weak_admin_password_when_auth_required() {
+        let mut c = Config {
+            auth_required: true,
+            jwt_secret: "a-strong-enough-secret-at-least-32b!".into(),
+            admin_password: "Admin@321".into(),
+            ..Default::default()
+        };
+        assert!(c.validate_for_start().is_err());
+        c.admin_password = "short".into();
+        assert!(c.validate_for_start().is_err());
+        c.admin_password = "a-strong-enough-admin-password".into();
         assert!(c.validate_for_start().is_ok());
     }
 

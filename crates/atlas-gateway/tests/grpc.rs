@@ -203,6 +203,7 @@ async fn grpc_enforces_jwt_when_auth_required() {
         role: "admin".into(),
         exp,
         jti: String::new(),
+        tenant_id: "global".into(),
     };
     let token = encode(
         &Header::default(),
