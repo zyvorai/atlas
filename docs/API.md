@@ -577,6 +577,47 @@ Ceph-backed classes are tagged `is_ceph: true` (PDF §7.1). `502 DRIVER_ERROR` i
 ### `GET /api/atlas/v1/kubernetes/pvcs` · `GET /api/atlas/v1/kubernetes/pvs`
 Live PVC/PV listings (namespace/phase/storage class/capacity/csi driver).
 
+## Rook integration
+
+Reads Rook's own `ceph.rook.io` CRs via the Kubernetes API — a second, precise source of truth
+alongside the `ceph`/`rbd` CLI path (`ATLAS_ROOK_NAMESPACE`/`ATLAS_ROOK_CLUSTER_NAME`, both
+default `rook-ceph`). `404` if no k8s driver is attached.
+
+### `GET /api/atlas/v1/ceph/rook-status`
+Raw CR view: `CephCluster` phase/health plus every `CephBlockPool`/`CephFilesystem`/
+`CephObjectStore`'s name and phase.
+```json
+{ "namespace": "rook-ceph",
+  "cluster": { "name": "rook-ceph", "phase": "Ready", "health": "HEALTH_WARN" },
+  "block_pools": [{ "name": "rbd-nvme-prod", "phase": "Ready" }],
+  "filesystems": [{ "name": "zyvorfs", "phase": "Ready" }],
+  "object_stores": [{ "name": "zyvor-rgw", "phase": "Ready" }] }
+```
+
+### `GET`/`POST /api/atlas/v1/ceph/pools` · `DELETE /api/atlas/v1/ceph/pools/{name}[?force=true]`
+Create/list/delete a `CephBlockPool` + matching StorageClass (replicated pools only — erasure
+coding isn't modeled). `POST` body: `{name, namespace?, storage_class?, replicated_size?,
+failure_domain?, device_class?}` (defaults: `replicated_size: 3, failure_domain: "host"`,
+`storage_class: "zyvor-<name>"`). Returns `202` + job id (`ceph.pool.create`/`.delete`). `DELETE`
+is `409` while a volume still references the StorageClass, unless `force=true`.
+
+### `GET`/`POST /api/atlas/v1/ceph/filesystems` · `DELETE .../ceph/filesystems/{name}[?force=true]`
+Create/list/delete a `CephFilesystem` (RWX CephFS) + StorageClass. `POST` body: `{name,
+namespace?, storage_class?, data_pool_name?, replicated_size?}` (defaults: `data_pool_name:
+"data0"`, `replicated_size: 3`, `storage_class: "zyvor-<name>-shared"`).
+
+### `GET`/`POST /api/atlas/v1/ceph/object-stores` · `DELETE .../ceph/object-stores/{name}[?force=true]`
+Create/list/delete a `CephObjectStore` (RGW) + bucket StorageClass. `POST` body: `{name,
+namespace?, storage_class?, replicated_size?, gateway_port?, gateway_instances?}` (defaults:
+`gateway_port: 80, gateway_instances: 1`, `storage_class: "zyvor-<name>-bucket"`). `DELETE` is
+`409` while a bucket still references the StorageClass, unless `force=true`.
+
+> **Cluster-side prerequisite for delete:** Ceph defaults `mon_allow_pool_delete=false`. Atlas's
+> `DELETE` correctly removes the k8s-level CR + StorageClass regardless, but Rook's own finalizer
+> can't complete the underlying pool purge until a cluster operator sets that mon config — until
+> then the CR sits `Terminating` (harmless; nothing can provision against it once the StorageClass
+> is gone).
+
 ## HTTP status codes
 
 | Code | Meaning |
@@ -598,6 +639,9 @@ Thin REST client (`ATLAS_BASE_URL`, `ATLAS_TOKEN`). Full list: `atlasctl --help`
 atlasctl health | ready | version | backends | backends-summary | discover [backend]
 atlasctl clusters | pools | osds | volumes | storage-classes | metrics | alerts
 atlasctl ceph-status | ceph-osd-tree | ceph-osd-df | ceph-df | history | forecast | self-metrics
+atlasctl ceph-pools | create-ceph-pool NAME | delete-ceph-pool NAME [--force]
+atlasctl ceph-filesystems | create-ceph-filesystem NAME | delete-ceph-filesystem NAME [--force]
+atlasctl ceph-object-stores | create-ceph-object-store NAME | delete-ceph-object-store NAME [--force]
 
 # Write path / RBD / object
 atlasctl create-volume NAME --size-gib 5 --policy database

@@ -96,6 +96,16 @@ _Provision and manage RBD block, CephFS file, and RGW/S3 object storage from one
   - **How:** REST `POST /api/atlas/v1/buckets` with `{ "name": "...", "max_objects": ..., "max_size": "2G" }`; list `GET /buckets`; usage/quota via `GET /buckets/{id}/stats`. CLI: `atlasctl create-bucket NAME`. Console: Storage Center → Buckets. `name` must be a valid Kubernetes/S3-style name, 3-63 characters (lowercase, `-`/`.`, no uppercase or underscores) — an invalid name is rejected immediately rather than failing after the fact.
 - **Direct RBD Image Ops** — Provision, clone, resize, flatten, snapshot, and roll back RBD images directly, with per-image usage tracking. — _Full low-level control when you need to bypass the PVC abstraction — the only bypass-CSI path in Atlas, for non-Kubernetes consumers like machina/libvirt._
   - **How:** REST `POST /api/atlas/v1/rbd-images {name, size_bytes, pool?}` to create, `.../clone {name, snap?}` for a golden-image copy, `.../resize`, `.../flatten`, `.../snapshots`, `.../rollback`, `DELETE /rbd-images/{pool}/{image}`. Same cordon + quota admission as `POST /volumes`. CLI: `atlasctl create-rbd-image`. Console: Storage Center → Ceph → RBD Images.
+  - **Mounting it on the consuming host:** Atlas records the volume; attaching it is a standard
+    Ceph client operation on the host itself, with a working `ceph.conf` + keyring for the
+    cluster: `sudo rbd map <pool>/<image>` (→ `/dev/rbd0`), `sudo mkfs.ext4 /dev/rbd0` (first use
+    only), `sudo mount /dev/rbd0 /mnt/<name>`; reverse with `sudo umount` + `sudo rbd unmap`. For
+    libvirt/QEMU VM disks (the machina path), the image is normally attached directly as the VM's
+    block device via `rbd map` + a `<disk type="block">` domain entry (or librbd in QEMU directly)
+    — the guest OS owns the filesystem, so no host-level `mkfs`/`mount` is needed. To mount a
+    `shared` CephFS volume from a non-Kubernetes host (it's CSI-mounted automatically inside
+    Kubernetes), use the kernel client: `sudo mount -t ceph mon1,mon2,mon3:/volumes/csi/<subvolume>
+    /mnt/shared -o name=client.<id>,secretfile=/etc/ceph/client.<id>.secret`.
 - **Safe Resize (Grow & Shrink)** — Expand volumes freely; shrink is opt-in behind an explicit allow_shrink flag as a data-loss guard. — _Reclaim over-provisioned space without accidentally destroying data._
   - **How:** Grow: `POST /api/atlas/v1/volumes/{id}/expand { "new_size_bytes": ... }`. Shrink: `POST /api/atlas/v1/rbd-images/{pool}/{image}/resize { "size_bytes": ..., "allow_shrink": true }`.
 - **Kubernetes Storage Inventory** — Read-only listing of StorageClasses, PVCs, and PVs live from the cluster via kube-rs. — _See exactly how Atlas storage surfaces inside Kubernetes._
