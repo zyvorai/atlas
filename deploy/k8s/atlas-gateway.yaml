@@ -20,8 +20,12 @@ metadata:
   name: atlas-gateway-readonly   # name kept for compatibility; now includes the write path
 rules:
   - apiGroups: ["storage.k8s.io"]
-    resources: ["storageclasses", "volumesnapshotclasses"]
+    resources: ["volumesnapshotclasses"]
     verbs: ["get", "list", "watch"]
+  # Rook pool/filesystem/object-store lifecycle jobs also create/delete the paired StorageClass.
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: [""]
     resources: ["persistentvolumes"]
     verbs: ["get", "list", "watch"]
@@ -56,6 +60,14 @@ rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]
     verbs: ["get", "list", "watch", "create", "delete"]
+  # Rook CRD read integration + pool/filesystem/object-store lifecycle automation: CephCluster is
+  # read-only (health/status cross-check); the other three are also created/deleted by Atlas.
+  - apiGroups: ["ceph.rook.io"]
+    resources: ["cephclusters"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["ceph.rook.io"]
+    resources: ["cephblockpools", "cephfilesystems", "cephobjectstores"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

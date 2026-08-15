@@ -3,6 +3,7 @@ mod databridge;
 mod helpers;
 mod object;
 mod rbd;
+mod rook;
 mod volumes;
 
 use std::sync::Arc;
@@ -43,6 +44,12 @@ pub(crate) async fn dispatch(
         | JobSpec::RestoreBackup { .. }
         | JobSpec::BackupDelete { .. }
         | JobSpec::BucketDelete { .. } => object::dispatch_object(pool, k8s, tenant_id, spec).await,
+        JobSpec::CephPoolCreate { .. }
+        | JobSpec::CephPoolDelete { .. }
+        | JobSpec::CephFilesystemCreate { .. }
+        | JobSpec::CephFilesystemDelete { .. }
+        | JobSpec::CephObjectStoreCreate { .. }
+        | JobSpec::CephObjectStoreDelete { .. } => rook::dispatch_rook(pool, k8s, tenant_id, spec).await,
         JobSpec::SourceDiscover { .. }
         | JobSpec::MigrationAssess { .. }
         | JobSpec::EdgeDbProvision { .. }

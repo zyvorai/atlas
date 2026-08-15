@@ -217,6 +217,34 @@ pub(crate) async fn poll_snapshot_ready(k8s: &K8sDriver, ns: &str, name: &str) -
     }
 }
 
+/// Poll a Rook (or any) custom resource's `status.phase` until it reaches `"Ready"` or the bind
+/// timeout elapses. Returns the last-seen phase (`None` if the CR never got a status at all).
+pub(crate) async fn poll_cr_ready(
+    k8s: &K8sDriver,
+    group: &str,
+    version: &str,
+    kind: &str,
+    ns: &str,
+    name: &str,
+) -> Option<String> {
+    let deadline = std::time::Instant::now() + BIND_TIMEOUT;
+    loop {
+        let phase = k8s
+            .get_cr_status(group, version, kind, ns, name)
+            .await
+            .ok()
+            .flatten()
+            .and_then(|s| s.get("phase").and_then(|p| p.as_str()).map(|p| p.to_string()));
+        if phase.as_deref() == Some("Ready") {
+            return phase;
+        }
+        if std::time::Instant::now() >= deadline {
+            return phase;
+        }
+        tokio::time::sleep(POLL_INTERVAL).await;
+    }
+}
+
 pub(crate) fn parse_kind(s: &str) -> VolumeKind {
     match s {
         "filesystem" => VolumeKind::Filesystem,

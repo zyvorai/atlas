@@ -20,6 +20,8 @@ use kube::core::{ApiResource, DynamicObject, GroupVersionKind};
 use kube::{Api, Client};
 use std::collections::BTreeMap;
 
+pub mod rook;
+
 /// Request to create a PVC (the MVP write path).
 #[derive(Debug, Clone)]
 pub struct PvcCreateSpec {
@@ -125,6 +127,54 @@ impl K8sDriver {
         let api: Api<PersistentVolume> = Api::all(self.client.clone());
         let items = list_all(&api, 500).await?;
         Ok(items.into_iter().map(PvSummary::from).collect())
+    }
+
+    /// Create-or-replace a StorageClass. Used by the Rook pool/filesystem/object-store lifecycle
+    /// jobs (`atlas-jobs::dispatch::rook`) to pair a freshly-applied Rook CR with the StorageClass
+    /// pointing CSI at it, mirroring the static pairs in `deploy/rook-ceph-lab/*.yaml`.
+    pub async fn apply_storage_class(
+        &self,
+        name: &str,
+        provisioner: &str,
+        parameters: &BTreeMap<String, String>,
+        labels: &BTreeMap<String, String>,
+        allow_volume_expansion: bool,
+    ) -> Result<(), K8sError> {
+        let api: Api<StorageClass> = Api::all(self.client.clone());
+        let sc = StorageClass {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                labels: (!labels.is_empty()).then(|| labels.clone()),
+                ..Default::default()
+            },
+            provisioner: provisioner.to_string(),
+            parameters: (!parameters.is_empty()).then(|| parameters.clone()),
+            reclaim_policy: Some("Delete".to_string()),
+            allow_volume_expansion: Some(allow_volume_expansion),
+            volume_binding_mode: Some("Immediate".to_string()),
+            ..Default::default()
+        };
+        match api.get_opt(name).await? {
+            Some(existing) => {
+                let mut sc = sc;
+                sc.metadata.resource_version = existing.metadata.resource_version;
+                api.replace(name, &PostParams::default(), &sc).await?;
+            }
+            None => {
+                api.create(&PostParams::default(), &sc).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Delete a StorageClass (ignores not-found).
+    pub async fn delete_storage_class(&self, name: &str) -> Result<(), K8sError> {
+        let api: Api<StorageClass> = Api::all(self.client.clone());
+        match api.delete(name, &DeleteParams::default()).await {
+            Ok(_) => Ok(()),
+            Err(kube::Error::Api(e)) if e.code == 404 => Ok(()),
+            Err(e) => Err(e.into()),
+        }
     }
 
     // ---- write path (slice 2) ----
@@ -365,6 +415,20 @@ impl K8sDriver {
             Err(kube::Error::Api(e)) if e.code == 404 => Ok(()),
             Err(e) => Err(e.into()),
         }
+    }
+
+    /// List every custom resource of a given `group/version/kind` in a namespace, following
+    /// pagination. Used where `get_cr_status` (single, by-name) isn't enough — e.g. enumerating
+    /// every Rook `CephBlockPool`/`CephFilesystem`/`CephObjectStore` CR in a namespace.
+    pub async fn list_crs(
+        &self,
+        group: &str,
+        version: &str,
+        kind: &str,
+        ns: &str,
+    ) -> Result<Vec<DynamicObject>, K8sError> {
+        let api = self.cr_api(group, version, kind, ns);
+        Ok(list_all(&api, 500).await?)
     }
 
     // ---- object storage (RGW via ObjectBucketClaim) ----

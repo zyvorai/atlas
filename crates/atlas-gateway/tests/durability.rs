@@ -47,6 +47,8 @@ fn config_for(db: &str) -> Config {
         zfs_host: None,
         zfs_pools: Vec::new(),
         oidc: None,
+        rook_namespace: "rook-ceph".into(),
+        rook_cluster_name: "rook-ceph".into(),
     }
 }
 

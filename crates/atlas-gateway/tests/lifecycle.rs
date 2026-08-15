@@ -56,6 +56,8 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
         zfs_host: None,
         zfs_pools: Vec::new(),
         oidc: None,
+        rook_namespace: "rook-ceph".into(),
+        rook_cluster_name: "rook-ceph".into(),
     };
     let state = build_state(
         config,
@@ -84,7 +86,7 @@ async fn orphan_backups_are_reported() {
     let base = format!("http://{addr}/api/atlas/v1");
     let c = reqwest::Client::new();
 
-    atlas_inventory::buckets::insert_bucket(&pool, "bkt1", "t", "b", "ns", "obc")
+    atlas_inventory::buckets::insert_bucket(&pool, "bkt1", "t", "b", "ns", "obc", "zyvor-rgw-bucket")
         .await
         .unwrap();
     // A live volume + its backup (not an orphan).

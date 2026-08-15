@@ -296,6 +296,61 @@ runbook; summary:
   recovery alert warns while PGs recover/backfill and escalates to critical on unfound objects,
   clearing when done. Verified live: client counters populated; recovery alert stays clear on an idle
   cluster (no false positive).
+- ✅ **Rook CRD read integration**: `atlas-driver-k8s::rook` reads Rook's own `ceph.rook.io/v1`
+  CRs (`CephCluster`, `CephBlockPool`, `CephFilesystem`, `CephObjectStore`) as a second, precise
+  source of truth alongside the existing `ceph`/`rbd` CLI path — additive, nothing CLI-based was
+  removed. Pool `kind` classification (previously a pure name heuristic) is now overridden with an
+  exact Rook-CR-derived kind during discovery when a k8s driver is attached
+  (`atlas_driver_k8s::rook::known_rook_pool_kinds`, wired through `atlas-discovery::run_discovery`'s
+  new `rook_pool_kinds` parameter, mirroring the existing `RbdOwners` enrichment). `GET
+  /ceph/health-rollup` cross-checks the CLI-derived severity against `CephCluster.status.ceph.health`
+  and surfaces a `rook_disagreement` when they differ, falling back to a coarser Rook-CRD-only
+  rollup if the `ceph` CLI path itself fails but Rook is reachable. New additive `GET
+  /ceph/rook-status` exposes the raw CephCluster/CephBlockPool/CephFilesystem/CephObjectStore CR
+  view. `ATLAS_ROOK_NAMESPACE`/`ATLAS_ROOK_CLUSTER_NAME` (both default `rook-ceph`) configure it.
+  **Verified live** against the real single-node Rook lab (`212.8.248.187`, redeployed via
+  `scripts/deploy-remote.sh`): `GET /ceph/rook-status` returned the real `CephCluster` (`phase:
+  Ready, health: HEALTH_WARN`) plus the real `rbd-nvme-prod`/`zyvorfs`/`zyvor-rgw` CRs all
+  `Ready`; `GET /ceph/health-rollup` showed `sources: ["cli","rook-crd"]` with no
+  `rook_disagreement` (the CLI and Rook's own health agreed). This pass also caught and fixed a
+  real RBAC gap: the `atlas-gateway` ServiceAccount's ClusterRole had no `ceph.rook.io` grant at
+  all, so the very first live call 403'd (`cephclusters.ceph.rook.io is forbidden`) — the
+  ClusterRole in `deploy/k8s/atlas-gateway.yaml` now grants `get/list/watch` on `cephclusters` and
+  full CRUD on `cephblockpools`/`cephfilesystems`/`cephobjectstores`, plus `create`/`update`/
+  `delete` on `storageclasses` (previously read-only) for the lifecycle-automation jobs below.
+- ✅ **Rook lifecycle automation**: create/list/delete Ceph pools/filesystems/object stores through
+  Rook CRs from the API instead of hand-edited YAML manifests, following the same async-job pattern
+  `bucket.create` already uses (CR apply → poll `status.phase == "Ready"` → done). `POST`/`GET
+  /ceph/pools` applies a `CephBlockPool` (replicated pools only — erasure coding isn't modeled) + a
+  matching `zyvor.dev`-labelled StorageClass; `POST`/`GET /ceph/filesystems` applies a
+  `CephFilesystem` + RWX CephFS StorageClass; `POST`/`GET /ceph/object-stores` applies a
+  `CephObjectStore` + RGW bucket StorageClass. `DELETE /ceph/{pools,filesystems,object-stores}/
+  {name}` removes the CR + StorageClass, guarded `409` while a volume/bucket still references it
+  (`?force=true` to override) — `storage_buckets` gained a `storage_class` column (migration 0029)
+  so the object-store guard can find dependent buckets, mirroring
+  `storage_volumes.storage_class_name`'s existing role for pools/filesystems. `atlasctl
+  {ceph-pools,create-ceph-pool,delete-ceph-pool}` (and the filesystem/object-store equivalents).
+  CephCluster-level changes (OSD/mon topology) are explicitly out of scope — left as a documented
+  follow-up, not built.
+  **Verified live** against the real single-node Rook lab (`212.8.248.187`): `POST /ceph/pools`
+  created a real `CephBlockPool` (`replicated_size: 1, failure_domain: "osd"`, matching this
+  cluster's actual 1-OSD capacity) that reached `phase: Ready`; a real PVC (`storageClassName:
+  zyvor-atlas-test-pool-3`) bound against the StorageClass the job created
+  (`kubectl get pvc` → `Bound`); `DELETE` removed the StorageClass and the PVC was cleaned up.
+  Two real gaps found and fixed along the way: (1) the pool/filesystem/object-store `replicated`
+  spec hard-coded `requireSafeReplicaSize: <size >= 3>`, an invented heuristic that doesn't match
+  any static manifest in this repo — every one of `deploy/rook-ceph-lab/*.yaml` sets it `false`
+  unconditionally (the lab never has enough failure domains for Ceph's "safe" check to pass);
+  `crates/atlas-jobs/src/dispatch/rook.rs` now always passes `false`, like the manifests. (2) the
+  gateway's ClusterRole had no RBAC for `ceph.rook.io` at all (see the read-integration entry
+  above) — fixed in the same pass. **Known follow-up, not a bug in this code**: a real Ceph
+  cluster defaults `mon_allow_pool_delete=false` (confirmed via Rook's own reconcile error,
+  `Error EPERM: pool deletion is disabled`) — `DELETE /ceph/pools/{name}` correctly deletes the
+  k8s-level CR + StorageClass, but Rook's *own* finalizer can't complete the underlying Ceph pool
+  purge until an operator sets that mon config explicitly; until then the CR sits `Terminating`
+  indefinitely (harmless — StorageClass is already gone, so nothing new can provision against it).
+  A future pass could have the delete job set/restore that mon config around the delete the same
+  way this verification did manually, or document it as an explicit day-2 prerequisite.
 - ✅ **CephFS shared volumes (RWX)**: `POST /volumes {"policy":"shared"}` provisions a
   **ReadWriteMany** CephFS volume (`zyvor-cephfs-shared`) that multiple pods mount at once — for ISO
   libraries, templates, and multi-writer product data (GuestKit, Machina). Single-node CephFS
@@ -473,7 +528,10 @@ runbook; summary:
   always report the same deterministic capacity fixture (8 TB / 30% used) regardless of the
   address, rather than running `showmount`/`df` or `zpool list`/`zfs list`. Only the Ceph driver
   talks to real infrastructure today.
-- Pool `kind` is name-heuristic (doesn't yet read `ceph osd pool application` metadata).
+- Pool `kind` is name-heuristic when no k8s driver/Rook CRs are available (non-Rook Ceph). On a
+  Rook-managed cluster it's now overridden with an exact classification read from live
+  `CephBlockPool`/`CephFilesystem`/`CephObjectStore` CRs (see the Rook CRD read integration entry
+  above) — implemented and unit-tested, pending a live-cluster verification pass.
 - Single-node Ceph reports `HEALTH_WARN` (expected: 1 OSD < default size 3).
 - Per-product integrations beyond the gRPC surface (Veyron VM datastores, Hyper2KVM direct-to-RBD
   migration, GuestKit, etc.) are not yet built — see the per-product rows above.

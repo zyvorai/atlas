@@ -289,6 +289,70 @@ enum Command {
         #[arg(long)]
         max_size: Option<String>,
     },
+    /// GET /api/atlas/v1/ceph/pools — live CephBlockPool CRs
+    CephPools,
+    /// POST /api/atlas/v1/ceph/pools — create a CephBlockPool + StorageClass
+    CreateCephPool {
+        name: String,
+        #[arg(long)]
+        namespace: Option<String>,
+        #[arg(long)]
+        storage_class: Option<String>,
+        #[arg(long)]
+        replicated_size: Option<i64>,
+        #[arg(long)]
+        failure_domain: Option<String>,
+        #[arg(long)]
+        device_class: Option<String>,
+    },
+    /// DELETE /api/atlas/v1/ceph/pools/{name}  (--force if volumes still reference it)
+    DeleteCephPool {
+        name: String,
+        #[arg(long)]
+        force: bool,
+    },
+    /// GET /api/atlas/v1/ceph/filesystems — live CephFilesystem CRs
+    CephFilesystems,
+    /// POST /api/atlas/v1/ceph/filesystems — create a CephFilesystem (RWX) + StorageClass
+    CreateCephFilesystem {
+        name: String,
+        #[arg(long)]
+        namespace: Option<String>,
+        #[arg(long)]
+        storage_class: Option<String>,
+        #[arg(long)]
+        data_pool_name: Option<String>,
+        #[arg(long)]
+        replicated_size: Option<i64>,
+    },
+    /// DELETE /api/atlas/v1/ceph/filesystems/{name}  (--force if volumes still reference it)
+    DeleteCephFilesystem {
+        name: String,
+        #[arg(long)]
+        force: bool,
+    },
+    /// GET /api/atlas/v1/ceph/object-stores — live CephObjectStore CRs
+    CephObjectStores,
+    /// POST /api/atlas/v1/ceph/object-stores — create a CephObjectStore (RGW) + StorageClass
+    CreateCephObjectStore {
+        name: String,
+        #[arg(long)]
+        namespace: Option<String>,
+        #[arg(long)]
+        storage_class: Option<String>,
+        #[arg(long)]
+        replicated_size: Option<i64>,
+        #[arg(long)]
+        gateway_port: Option<i64>,
+        #[arg(long)]
+        gateway_instances: Option<i64>,
+    },
+    /// DELETE /api/atlas/v1/ceph/object-stores/{name}  (--force if buckets still reference it)
+    DeleteCephObjectStore {
+        name: String,
+        #[arg(long)]
+        force: bool,
+    },
     /// POST /api/atlas/v1/backup-jobs — back up a volume to a bucket
     BackupVolume {
         volume_id: String,
@@ -704,6 +768,70 @@ async fn main() -> Result<()> {
                 "name": name, "namespace": namespace,
                 "max_objects": max_objects, "max_size": max_size
             })),
+        ),
+        Command::CephPools => ("GET", "/api/atlas/v1/ceph/pools".to_string(), None),
+        Command::CreateCephPool {
+            name,
+            namespace,
+            storage_class,
+            replicated_size,
+            failure_domain,
+            device_class,
+        } => (
+            "POST",
+            "/api/atlas/v1/ceph/pools".to_string(),
+            Some(serde_json::json!({
+                "name": name, "namespace": namespace, "storage_class": storage_class,
+                "replicated_size": replicated_size, "failure_domain": failure_domain,
+                "device_class": device_class
+            })),
+        ),
+        Command::DeleteCephPool { name, force } => (
+            "DELETE",
+            format!("/api/atlas/v1/ceph/pools/{name}?force={force}"),
+            None,
+        ),
+        Command::CephFilesystems => ("GET", "/api/atlas/v1/ceph/filesystems".to_string(), None),
+        Command::CreateCephFilesystem {
+            name,
+            namespace,
+            storage_class,
+            data_pool_name,
+            replicated_size,
+        } => (
+            "POST",
+            "/api/atlas/v1/ceph/filesystems".to_string(),
+            Some(serde_json::json!({
+                "name": name, "namespace": namespace, "storage_class": storage_class,
+                "data_pool_name": data_pool_name, "replicated_size": replicated_size
+            })),
+        ),
+        Command::DeleteCephFilesystem { name, force } => (
+            "DELETE",
+            format!("/api/atlas/v1/ceph/filesystems/{name}?force={force}"),
+            None,
+        ),
+        Command::CephObjectStores => ("GET", "/api/atlas/v1/ceph/object-stores".to_string(), None),
+        Command::CreateCephObjectStore {
+            name,
+            namespace,
+            storage_class,
+            replicated_size,
+            gateway_port,
+            gateway_instances,
+        } => (
+            "POST",
+            "/api/atlas/v1/ceph/object-stores".to_string(),
+            Some(serde_json::json!({
+                "name": name, "namespace": namespace, "storage_class": storage_class,
+                "replicated_size": replicated_size, "gateway_port": gateway_port,
+                "gateway_instances": gateway_instances
+            })),
+        ),
+        Command::DeleteCephObjectStore { name, force } => (
+            "DELETE",
+            format!("/api/atlas/v1/ceph/object-stores/{name}?force={force}"),
+            None,
         ),
         Command::BackupVolume {
             volume_id,

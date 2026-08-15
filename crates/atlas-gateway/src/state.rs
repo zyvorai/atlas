@@ -231,4 +231,22 @@ impl AppState {
             }
         }
     }
+
+    /// Build the pool-name → precise-kind map from live Rook CRs (`config.rook_namespace`), so
+    /// discovery can classify pools exactly instead of guessing from the name. `None` when no
+    /// cluster is attached or the CR list fails (discovery then just keeps the name heuristic).
+    pub async fn rook_pool_kinds(&self) -> Option<atlas_discovery::RookPoolKinds> {
+        let k8s = self.k8s.as_ref()?;
+        match k8s.known_rook_pool_kinds(&self.config.rook_namespace).await {
+            Ok(m) => Some(
+                m.into_iter()
+                    .map(|(pool, kind)| (pool, kind.as_str().to_string()))
+                    .collect(),
+            ),
+            Err(e) => {
+                tracing::warn!("known_rook_pool_kinds failed: {e}");
+                None
+            }
+        }
+    }
 }

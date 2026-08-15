@@ -30,6 +30,20 @@ pub struct HealthRollup {
     pub pgs_total: i64,
     pub pgs_not_clean: i64,
     pub recovering: bool,
+    /// Which health sources contributed to this rollup: `["cli"]` from the `ceph`/`rbd` CLI path
+    /// alone, or `["cli", "rook-crd"]` once `merge_rook_health` has cross-checked it against a
+    /// live `CephCluster.status.ceph.health` from the Kubernetes API.
+    #[serde(default = "default_sources")]
+    pub sources: Vec<String>,
+    /// Set only when the CLI-derived state and the Rook CRD's own health disagree — surfaced
+    /// rather than silently picking one, since a real disagreement (e.g. the CLI can't reach the
+    /// cluster but Rook reports it healthy, or vice versa) is itself diagnostic.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rook_disagreement: Option<String>,
+}
+
+fn default_sources() -> Vec<String> {
+    vec!["cli".to_string()]
 }
 
 /// Fetch `ceph_status`/`ceph_osd_tree`/`ceph_osd_df` concurrently and classify them.
@@ -210,6 +224,56 @@ fn finish(
         pgs_total,
         pgs_not_clean,
         recovering,
+        sources: default_sources(),
+        rook_disagreement: None,
+    }
+}
+
+/// Cross-check a CLI-derived rollup against `CephCluster.status.ceph.health` read straight from
+/// the Kubernetes API (Rook's own view — reachable even when the `ceph` CLI/keyring isn't). Called
+/// by the gateway, which owns the k8s driver; `atlas-driver-ceph` itself never talks to Kubernetes,
+/// so this only *merges* an already-fetched value rather than fetching one.
+///
+/// `rook_health` is `CephCluster.status.ceph.health` (`"HEALTH_OK"`/`"HEALTH_WARN"`/
+/// `"HEALTH_ERR"`), when the CR and its status are present. A mismatch doesn't change `state` —
+/// the CLI-derived classification is left as the primary signal — it's recorded in
+/// `rook_disagreement` so callers can surface it rather than silently trusting one source.
+pub fn merge_rook_health(rollup: &mut HealthRollup, rook_health: Option<&str>) {
+    let Some(rook_health) = rook_health else { return };
+    rollup.sources.push("rook-crd".to_string());
+    if rook_health != rollup.raw_status {
+        rollup.rook_disagreement = Some(format!(
+            "cli reports {} but Rook's CephCluster status reports {rook_health}",
+            rollup.raw_status
+        ));
+    }
+}
+
+/// A coarse rollup built from `CephCluster.status.ceph.health` alone, for when the `ceph` CLI is
+/// unreachable (no keyring/socket on the gateway pod) but the Rook CR is — since Rook always has
+/// API-server access to the cluster it manages. Coarser than [`classify`] (no PG/OSD-utilization
+/// detail, since only the top-level health string is available), but keeps `/ceph/health-rollup`
+/// answering instead of 502ing outright.
+pub fn from_rook_only(rook_health: &str) -> HealthRollup {
+    let state = match rook_health {
+        "HEALTH_OK" => ClusterHealthState::Healthy,
+        "HEALTH_WARN" => ClusterHealthState::Degraded,
+        "HEALTH_ERR" => ClusterHealthState::Critical,
+        _ => ClusterHealthState::AtRisk,
+    };
+    HealthRollup {
+        state,
+        summary: format!("Rook CephCluster reports {rook_health} (ceph CLI unreachable)"),
+        reasons: vec![format!("Rook CephCluster status: {rook_health}")],
+        raw_status: rook_health.to_string(),
+        osds_up: 0,
+        osds_in: 0,
+        osds_total: 0,
+        pgs_total: 0,
+        pgs_not_clean: 0,
+        recovering: false,
+        sources: vec!["rook-crd".to_string()],
+        rook_disagreement: None,
     }
 }
 
@@ -315,5 +379,48 @@ mod tests {
         );
         let r = classify(&s, &empty_tree(), &osd_df(&[90.0, 44.8, 39.5, 41.0, 47.1, 43.3]));
         assert_eq!(r.state, ClusterHealthState::AtRisk, "reasons: {:?}", r.reasons);
+    }
+
+    #[test]
+    fn merge_rook_health_agrees_silently() {
+        let s = status(
+            "HEALTH_OK",
+            json!({}),
+            json!({ "num_osds": 6, "num_up_osds": 6, "num_in_osds": 6 }),
+            json!({ "num_pgs": 100, "pgs_by_state": [{"state_name": "active+clean", "count": 100}], "recovering_bytes_per_sec": 0 }),
+        );
+        let mut r = classify(&s, &empty_tree(), &osd_df(&[10.0]));
+        merge_rook_health(&mut r, Some("HEALTH_OK"));
+        assert_eq!(r.sources, vec!["cli", "rook-crd"]);
+        assert!(r.rook_disagreement.is_none());
+    }
+
+    #[test]
+    fn merge_rook_health_flags_disagreement() {
+        let s = status(
+            "HEALTH_OK",
+            json!({}),
+            json!({ "num_osds": 6, "num_up_osds": 6, "num_in_osds": 6 }),
+            json!({ "num_pgs": 100, "pgs_by_state": [{"state_name": "active+clean", "count": 100}], "recovering_bytes_per_sec": 0 }),
+        );
+        let mut r = classify(&s, &empty_tree(), &osd_df(&[10.0]));
+        merge_rook_health(&mut r, Some("HEALTH_ERR"));
+        assert!(r.rook_disagreement.is_some());
+    }
+
+    #[test]
+    fn merge_rook_health_noop_when_absent() {
+        let s = status("HEALTH_OK", json!({}), json!({}), json!({}));
+        let mut r = classify(&s, &empty_tree(), &osd_df(&[]));
+        merge_rook_health(&mut r, None);
+        assert_eq!(r.sources, vec!["cli"]);
+    }
+
+    #[test]
+    fn from_rook_only_maps_health_strings() {
+        assert_eq!(from_rook_only("HEALTH_OK").state, ClusterHealthState::Healthy);
+        assert_eq!(from_rook_only("HEALTH_WARN").state, ClusterHealthState::Degraded);
+        assert_eq!(from_rook_only("HEALTH_ERR").state, ClusterHealthState::Critical);
+        assert_eq!(from_rook_only("HEALTH_OK").sources, vec!["rook-crd"]);
     }
 }

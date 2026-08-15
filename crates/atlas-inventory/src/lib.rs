@@ -914,6 +914,18 @@ pub async fn list_volumes(pool: &SqlitePool) -> Result<Vec<StorageVolume>> {
     Ok(rows.into_iter().map(row_to_volume).collect())
 }
 
+/// Count volumes still provisioned against a StorageClass — the dependent-guard behind Rook pool/
+/// filesystem/object-store delete (`DELETE /ceph/{pools,filesystems,object-stores}/{name}`),
+/// mirroring `backups::count_for_bucket`'s guard on bucket delete.
+pub async fn count_volumes_by_storage_class(pool: &SqlitePool, storage_class: &str) -> Result<i64> {
+    Ok(
+        sqlx::query_scalar("SELECT COUNT(*) FROM storage_volumes WHERE storage_class_name = ?")
+            .bind(storage_class)
+            .fetch_one(pool)
+            .await?,
+    )
+}
+
 /// Merge `labels` (a JSON object) into a volume's `metadata.labels`. Returns the merged label map.
 pub async fn set_volume_labels(
     pool: &SqlitePool,

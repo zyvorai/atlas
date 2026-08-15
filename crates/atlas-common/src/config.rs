@@ -144,6 +144,12 @@ pub struct Config {
     pub zfs_pools: Vec<String>,
     /// OIDC/SSO login (`None` = feature disabled — no unauthenticated OIDC routes are mounted).
     pub oidc: Option<OidcConfig>,
+    /// Kubernetes namespace the Rook operator/CephCluster runs in — used when reading Rook's own
+    /// `ceph.rook.io/v1` CRs (CephCluster/CephBlockPool/CephFilesystem/CephObjectStore) as a
+    /// second, precise source of truth alongside the `ceph`/`rbd` CLI path.
+    pub rook_namespace: String,
+    /// Name of the `CephCluster` CR within `rook_namespace` (the lab always names it `rook-ceph`).
+    pub rook_cluster_name: String,
 }
 
 fn oidc_from_env() -> Option<OidcConfig> {
@@ -326,6 +332,14 @@ impl Config {
                 })
                 .unwrap_or_default(),
             oidc: oidc_from_env(),
+            rook_namespace: std::env::var("ATLAS_ROOK_NAMESPACE")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| "rook-ceph".into()),
+            rook_cluster_name: std::env::var("ATLAS_ROOK_CLUSTER_NAME")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| "rook-ceph".into()),
         }
     }
 
@@ -403,6 +417,8 @@ impl Default for Config {
             zfs_host: None,
             zfs_pools: Vec::new(),
             oidc: None,
+            rook_namespace: "rook-ceph".into(),
+            rook_cluster_name: "rook-ceph".into(),
         }
     }
 }

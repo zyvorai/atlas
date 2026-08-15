@@ -50,6 +50,8 @@ async fn grpc_edge_health_create_and_list() {
         zfs_host: None,
         zfs_pools: Vec::new(),
         oidc: None,
+        rook_namespace: "rook-ceph".into(),
+        rook_cluster_name: "rook-ceph".into(),
     };
     let state = build_state(
         config,
@@ -166,6 +168,8 @@ async fn grpc_enforces_jwt_when_auth_required() {
         zfs_host: None,
         zfs_pools: Vec::new(),
         oidc: None,
+        rook_namespace: "rook-ceph".into(),
+        rook_cluster_name: "rook-ceph".into(),
     };
     let state = build_state(
         config,

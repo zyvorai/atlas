@@ -107,17 +107,97 @@ pub(crate) async fn get_ceph_osd_df(State(s): State<AppState>) -> AppResult<Json
     ))
 }
 
+/// `CephCluster.status.ceph.health` (`"HEALTH_OK"`/`_WARN`/`_ERR`), when a k8s driver is attached
+/// and the CR exists — `None` on any absence/failure (non-Rook Ceph, no cluster attached, CR not
+/// yet reconciled), never an error, since this is only ever a cross-check/fallback input.
+async fn rook_cluster_health(s: &AppState) -> Option<String> {
+    let k8s = s.k8s.as_ref()?;
+    match k8s
+        .get_ceph_cluster_status(&s.config.rook_namespace, &s.config.rook_cluster_name)
+        .await
+    {
+        Ok(Some(status)) => status
+            .pointer("/ceph/health")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        Ok(None) => None,
+        Err(e) => {
+            tracing::debug!("get_ceph_cluster_status failed: {e}");
+            None
+        }
+    }
+}
+
 /// `GET /ceph/health-rollup` — Atlas's own Healthy/Degraded/Rebuilding/At-Risk/Critical severity,
 /// synthesized from status/osd-tree/osd-df so a caller doesn't have to parse Ceph's own health
 /// vocabulary. See `atlas_driver_ceph::health_rollup` for the classification rules.
+///
+/// Cross-checked against `CephCluster.status.ceph.health` (Rook's own view) when a k8s driver is
+/// attached — a disagreement is surfaced via `rook_disagreement` rather than silently picked. When
+/// the `ceph` CLI path itself fails (no keyring/socket) but the Rook CR is reachable, this falls
+/// back to a coarser Rook-CRD-only rollup instead of erroring out.
 pub(crate) async fn get_ceph_health_rollup(State(s): State<AppState>) -> AppResult<Json<Value>> {
-    let d = s
-        .driver_for(CEPH_BACKEND_ID)
-        .ok_or_else(|| AppError::Driver("no ceph driver".into()))?;
-    let rollup = atlas_driver_ceph::health_rollup::compute(d.as_ref())
+    let rook_health = rook_cluster_health(&s).await;
+    let rollup = match s.driver_for(CEPH_BACKEND_ID) {
+        Some(d) => match atlas_driver_ceph::health_rollup::compute(d.as_ref()).await {
+            Ok(mut r) => {
+                atlas_driver_ceph::health_rollup::merge_rook_health(&mut r, rook_health.as_deref());
+                r
+            }
+            Err(e) => match &rook_health {
+                Some(h) => {
+                    tracing::warn!(
+                        "ceph CLI health-rollup failed ({e}); falling back to Rook CRD-only health"
+                    );
+                    atlas_driver_ceph::health_rollup::from_rook_only(h)
+                }
+                None => return Err(AppError::Driver(e.to_string())),
+            },
+        },
+        None => match &rook_health {
+            Some(h) => atlas_driver_ceph::health_rollup::from_rook_only(h),
+            None => return Err(AppError::Driver("no ceph driver".into())),
+        },
+    };
+    Ok(Json(json!(rollup)))
+}
+
+/// `GET /ceph/rook-status` — the raw Rook CR view, additive alongside `/ceph/status` (the CLI
+/// path): `CephCluster` phase/health plus every `CephBlockPool`/`CephFilesystem`/`CephObjectStore`
+/// CR's name and phase. `404` when no k8s driver is attached (non-Kubernetes deployments).
+pub(crate) async fn get_rook_status(State(s): State<AppState>) -> AppResult<Json<Value>> {
+    let k8s = s
+        .k8s
+        .as_ref()
+        .ok_or_else(|| AppError::NotFound("no kubernetes driver attached".into()))?;
+    let ns = &s.config.rook_namespace;
+    let cluster = k8s
+        .get_ceph_cluster_status(ns, &s.config.rook_cluster_name)
         .await
         .map_err(|e| AppError::Driver(e.to_string()))?;
-    Ok(Json(json!(rollup)))
+    let block_pools = k8s
+        .list_ceph_block_pools(ns)
+        .await
+        .map_err(|e| AppError::Driver(e.to_string()))?;
+    let filesystems = k8s
+        .list_ceph_filesystems(ns)
+        .await
+        .map_err(|e| AppError::Driver(e.to_string()))?;
+    let object_stores = k8s
+        .list_ceph_object_stores(ns)
+        .await
+        .map_err(|e| AppError::Driver(e.to_string()))?;
+    Ok(Json(json!({
+        "namespace": ns,
+        "cluster": {
+            "name": s.config.rook_cluster_name,
+            "phase": cluster.as_ref().and_then(|c| c.get("phase")).and_then(|v| v.as_str()),
+            "health": cluster.as_ref().and_then(|c| c.pointer("/ceph/health")).and_then(|v| v.as_str()),
+        },
+        "block_pools": block_pools,
+        "filesystems": filesystems,
+        "object_stores": object_stores,
+    })))
 }
 
 #[derive(Debug, Deserialize)]

@@ -57,6 +57,8 @@ async fn spawn_auth(secret: &str) -> (SocketAddr, sqlx::SqlitePool) {
         zfs_host: None,
         zfs_pools: Vec::new(),
         oidc: None,
+        rook_namespace: "rook-ceph".into(),
+        rook_cluster_name: "rook-ceph".into(),
     };
     let state = build_state(
         config,
@@ -100,7 +102,7 @@ async fn seed_volume(pool: &sqlx::SqlitePool, id: &str, tenant_id: &str, name: &
 }
 
 async fn seed_bucket(pool: &sqlx::SqlitePool, id: &str, tenant_id: &str, name: &str) {
-    atlas_inventory::buckets::insert_bucket(pool, id, tenant_id, name, "rook-ceph", name)
+    atlas_inventory::buckets::insert_bucket(pool, id, tenant_id, name, "rook-ceph", name, "zyvor-rgw-bucket")
         .await
         .unwrap();
 }

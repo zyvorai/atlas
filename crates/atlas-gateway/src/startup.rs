@@ -211,19 +211,26 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
 
     if opts.initial_discovery {
         let rbd_owners = state.rbd_owners().await;
-        match atlas_discovery::run_discovery(&state.pool, driver.clone(), rbd_owners.as_ref()).await
+        let rook_pool_kinds = state.rook_pool_kinds().await;
+        match atlas_discovery::run_discovery(
+            &state.pool,
+            driver.clone(),
+            rbd_owners.as_ref(),
+            rook_pool_kinds.as_ref(),
+        )
+        .await
         {
             Ok(sum) => tracing::info!(?sum, "initial discovery complete"),
             Err(e) => tracing::warn!("initial discovery failed: {e:#}"),
         }
         if let Some(nfs) = &nfs_driver {
-            match atlas_discovery::run_discovery(&state.pool, nfs.clone(), None).await {
+            match atlas_discovery::run_discovery(&state.pool, nfs.clone(), None, None).await {
                 Ok(sum) => tracing::info!(?sum, "initial nfs discovery complete"),
                 Err(e) => tracing::warn!("initial nfs discovery failed: {e:#}"),
             }
         }
         if let Some(zfs) = &zfs_driver {
-            match atlas_discovery::run_discovery(&state.pool, zfs.clone(), None).await {
+            match atlas_discovery::run_discovery(&state.pool, zfs.clone(), None, None).await {
                 Ok(sum) => tracing::info!(?sum, "initial zfs discovery complete"),
                 Err(e) => tracing::warn!("initial zfs discovery failed: {e:#}"),
             }
@@ -247,6 +254,7 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
             state.config.alert_webhook_url.clone(),
             is_leader.clone(),
             state.k8s.clone(),
+            state.config.rook_namespace.clone(),
         );
         // Protection-schedule worker: periodic snapshots + retention (shares the job engine).
         atlas_jobs::spawn_scheduler(

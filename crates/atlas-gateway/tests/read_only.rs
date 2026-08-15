@@ -53,6 +53,8 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
         zfs_host: None,
         zfs_pools: Vec::new(),
         oidc: None,
+        rook_namespace: "rook-ceph".into(),
+        rook_cluster_name: "rook-ceph".into(),
     };
 
     let state = build_state(
@@ -223,6 +225,8 @@ async fn spawn_auth(secret: &str) -> String {
         zfs_host: None,
         zfs_pools: Vec::new(),
         oidc: None,
+        rook_namespace: "rook-ceph".into(),
+        rook_cluster_name: "rook-ceph".into(),
     };
     let state = build_state(
         config,
@@ -924,7 +928,7 @@ async fn backup_requires_known_volume_and_bound_bucket() {
 
     // Seed a volume + a *pending* bucket → backup rejected (400) until the bucket binds.
     seed_volume(&pool, "vol_b", "vol-b").await;
-    atlas_inventory::buckets::insert_bucket(&pool, "bkt_1", "t1", "b1", "rook-ceph", "b1")
+    atlas_inventory::buckets::insert_bucket(&pool, "bkt_1", "t1", "b1", "rook-ceph", "b1", "zyvor-rgw-bucket")
         .await
         .unwrap();
     let r400 = client()
@@ -988,7 +992,7 @@ async fn restore_from_backup_enqueues() {
     )
     .await
     .unwrap();
-    atlas_inventory::buckets::insert_bucket(&pool, "bkt_r", "t1", "b", "rook-ceph", "b")
+    atlas_inventory::buckets::insert_bucket(&pool, "bkt_r", "t1", "b", "rook-ceph", "b", "zyvor-rgw-bucket")
         .await
         .unwrap();
     atlas_inventory::buckets::set_bound(&pool, "bkt_r", "b-1", "http://rgw:80", "us-east-1", "b")
@@ -1035,7 +1039,7 @@ async fn backup_delete_enqueues() {
 
     // Seed volume + bound bucket + backup, then DELETE → 202.
     seed_volume(&pool, "vol_bd", "vol-bd").await;
-    atlas_inventory::buckets::insert_bucket(&pool, "bkt_bd", "t1", "b", "rook-ceph", "b")
+    atlas_inventory::buckets::insert_bucket(&pool, "bkt_bd", "t1", "b", "rook-ceph", "b", "zyvor-rgw-bucket")
         .await
         .unwrap();
     atlas_inventory::buckets::set_bound(&pool, "bkt_bd", "b-1", "http://rgw:80", "us-east-1", "b")
@@ -1079,7 +1083,7 @@ async fn bucket_delete_guarded_by_backups() {
     assert_eq!(r.status(), reqwest::StatusCode::NOT_FOUND);
 
     // Empty bucket → 202.
-    atlas_inventory::buckets::insert_bucket(&pool, "bkt_empty", "t1", "e", "rook-ceph", "e")
+    atlas_inventory::buckets::insert_bucket(&pool, "bkt_empty", "t1", "e", "rook-ceph", "e", "zyvor-rgw-bucket")
         .await
         .unwrap();
     let r = client()
@@ -1091,7 +1095,7 @@ async fn bucket_delete_guarded_by_backups() {
 
     // Bucket with a backup → 409, force → 202.
     seed_volume(&pool, "vol_bk", "vol-bk").await;
-    atlas_inventory::buckets::insert_bucket(&pool, "bkt_used", "t1", "u", "rook-ceph", "u")
+    atlas_inventory::buckets::insert_bucket(&pool, "bkt_used", "t1", "u", "rook-ceph", "u", "zyvor-rgw-bucket")
         .await
         .unwrap();
     atlas_inventory::backups::insert_backup(
@@ -1126,7 +1130,7 @@ async fn backup_retention_prunes_old() {
     let (addr, pool) = spawn().await;
     let base = format!("http://{addr}");
     seed_volume(&pool, "vol_ret", "vol-ret").await;
-    atlas_inventory::buckets::insert_bucket(&pool, "bkt_ret", "t1", "b", "rook-ceph", "b")
+    atlas_inventory::buckets::insert_bucket(&pool, "bkt_ret", "t1", "b", "rook-ceph", "b", "zyvor-rgw-bucket")
         .await
         .unwrap();
     atlas_inventory::buckets::set_bound(&pool, "bkt_ret", "b-1", "http://rgw:80", "us-east-1", "b")

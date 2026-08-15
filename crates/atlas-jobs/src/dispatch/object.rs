@@ -312,7 +312,7 @@ pub(crate) async fn dispatch_object(
             // (or a prior attempt already had) — inserting this earlier, from the HTTP handler
             // before the job even ran, left a permanent orphan row whenever OBC creation failed.
             atlas_inventory::buckets::insert_bucket(
-                pool, &bucket_id, "global", &obc_name, &namespace, &obc_name,
+                pool, &bucket_id, "global", &obc_name, &namespace, &obc_name, &storage_class,
             )
             .await?;
 

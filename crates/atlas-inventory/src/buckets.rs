@@ -9,6 +9,7 @@ use sqlx::{Row, SqlitePool};
 /// necessarily bound). `OR IGNORE` makes this safe to call again on a job retry that re-enters
 /// the same `BucketCreate` dispatch arm with the same `id` — the row from the first attempt is
 /// left alone rather than erroring on the primary-key conflict.
+#[allow(clippy::too_many_arguments)]
 pub async fn insert_bucket(
     pool: &SqlitePool,
     id: &str,
@@ -16,19 +17,33 @@ pub async fn insert_bucket(
     name: &str,
     namespace: &str,
     obc_name: &str,
+    storage_class: &str,
 ) -> Result<()> {
     sqlx::query(
-        "INSERT OR IGNORE INTO storage_buckets (id, tenant_id, name, namespace, obc_name, state)
-         VALUES (?, ?, ?, ?, ?, 'pending')",
+        "INSERT OR IGNORE INTO storage_buckets (id, tenant_id, name, namespace, obc_name, storage_class, state)
+         VALUES (?, ?, ?, ?, ?, ?, 'pending')",
     )
     .bind(id)
     .bind(tenant_id)
     .bind(name)
     .bind(namespace)
     .bind(obc_name)
+    .bind(storage_class)
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// Count buckets still provisioned against a StorageClass — the dependent-guard behind a Rook
+/// `CephObjectStore` delete (`DELETE /ceph/object-stores/{name}`), mirroring
+/// `count_volumes_by_storage_class`'s role in the pool/filesystem delete guards.
+pub async fn count_by_storage_class(pool: &SqlitePool, storage_class: &str) -> Result<i64> {
+    Ok(
+        sqlx::query_scalar("SELECT COUNT(*) FROM storage_buckets WHERE storage_class = ?")
+            .bind(storage_class)
+            .fetch_one(pool)
+            .await?,
+    )
 }
 
 /// Fill in the bucket details once the OBC is bound.

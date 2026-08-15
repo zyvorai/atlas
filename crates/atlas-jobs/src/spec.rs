@@ -291,6 +291,57 @@ pub enum JobSpec {
         bucket_name: String,
         bucket_region: String,
     },
+    /// Create a Rook `CephBlockPool` CR + a matching StorageClass (replicated pools only in this
+    /// MVP — erasure-coded pools need k/m data-chunk config not modeled here).
+    #[serde(rename = "ceph.pool.create")]
+    CephPoolCreate {
+        name: String,
+        namespace: String,
+        storage_class: String,
+        replicated_size: i64,
+        failure_domain: String,
+        device_class: Option<String>,
+    },
+    /// Delete a `CephBlockPool` CR + its StorageClass.
+    #[serde(rename = "ceph.pool.delete")]
+    CephPoolDelete {
+        name: String,
+        namespace: String,
+        storage_class: String,
+    },
+    /// Create a Rook `CephFilesystem` CR (one data pool) + the RWX CephFS StorageClass.
+    #[serde(rename = "ceph.filesystem.create")]
+    CephFilesystemCreate {
+        name: String,
+        namespace: String,
+        storage_class: String,
+        data_pool_name: String,
+        replicated_size: i64,
+    },
+    /// Delete a `CephFilesystem` CR + its StorageClass.
+    #[serde(rename = "ceph.filesystem.delete")]
+    CephFilesystemDelete {
+        name: String,
+        namespace: String,
+        storage_class: String,
+    },
+    /// Create a Rook `CephObjectStore` CR + the RGW bucket StorageClass.
+    #[serde(rename = "ceph.object_store.create")]
+    CephObjectStoreCreate {
+        name: String,
+        namespace: String,
+        storage_class: String,
+        replicated_size: i64,
+        gateway_port: i64,
+        gateway_instances: i64,
+    },
+    /// Delete a `CephObjectStore` CR + its StorageClass.
+    #[serde(rename = "ceph.object_store.delete")]
+    CephObjectStoreDelete {
+        name: String,
+        namespace: String,
+        storage_class: String,
+    },
 }
 
 impl JobSpec {
@@ -331,6 +382,12 @@ impl JobSpec {
             JobSpec::Cutover { .. } => "databridge.cutover",
             JobSpec::Rollback { .. } => "databridge.rollback",
             JobSpec::ObjectMigrate { .. } => "databridge.object.migrate",
+            JobSpec::CephPoolCreate { .. } => "ceph.pool.create",
+            JobSpec::CephPoolDelete { .. } => "ceph.pool.delete",
+            JobSpec::CephFilesystemCreate { .. } => "ceph.filesystem.create",
+            JobSpec::CephFilesystemDelete { .. } => "ceph.filesystem.delete",
+            JobSpec::CephObjectStoreCreate { .. } => "ceph.object_store.create",
+            JobSpec::CephObjectStoreDelete { .. } => "ceph.object_store.delete",
         }
     }
 }

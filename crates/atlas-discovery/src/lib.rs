@@ -23,13 +23,22 @@ pub struct DiscoverySummary {
 /// passed in so `atlas-discovery` stays decoupled from the Kubernetes driver.
 pub type RbdOwners = std::collections::HashMap<String, (String, String, Option<String>)>;
 
+/// Maps a Ceph **pool name** → its precise kind (`"rbd"`/`"cephfs_data"`/`"cephfs_metadata"`/
+/// `"rgw"`), as read from live Rook CRs. Built by the gateway (see
+/// `K8sDriver::known_rook_pool_kinds`) and passed in so `atlas-discovery` stays decoupled from
+/// the Kubernetes driver — mirrors the `RbdOwners` enrichment below.
+pub type RookPoolKinds = std::collections::HashMap<String, String>;
+
 /// Run discovery for one driver and persist the result. When `rbd_owners` is provided, block
 /// volumes that the driver couldn't attribute to Kubernetes are enriched with their owning PVC —
 /// this is what lets raw `rbd ls` images show up as real VM disks (namespace/PVC) in inventory.
+/// When `rook_pool_kinds` is provided, pools whose name matches a live Rook CR are reclassified
+/// with the precise kind instead of the driver's own name-heuristic guess.
 pub async fn run_discovery(
     pool: &SqlitePool,
     driver: Arc<dyn StorageDriver>,
     rbd_owners: Option<&RbdOwners>,
+    rook_pool_kinds: Option<&RookPoolKinds>,
 ) -> Result<DiscoverySummary> {
     let backend_id = driver.backend_id().to_string();
     let mut discovery = driver
@@ -54,6 +63,21 @@ pub async fn run_discovery(
         }
         if enriched > 0 {
             tracing::info!(backend = %backend_id, enriched, "discovery.rbd_pvc_correlated");
+        }
+    }
+
+    if let Some(kinds) = rook_pool_kinds {
+        let mut reclassified = 0usize;
+        for p in discovery.pools.iter_mut() {
+            if let Some(kind) = kinds.get(&p.name) {
+                if &p.kind != kind {
+                    p.kind = kind.clone();
+                    reclassified += 1;
+                }
+            }
+        }
+        if reclassified > 0 {
+            tracing::info!(backend = %backend_id, reclassified, "discovery.pool_kind_via_rook");
         }
     }
 

@@ -300,8 +300,12 @@ fn osd_host_map(nodes: &[serde_json::Value]) -> std::collections::HashMap<i64, S
     host_of
 }
 
-/// Heuristic pool classification from its name. A precise mapping would read
-/// `ceph osd pool application` metadata; the name hint is sufficient for the MVP inventory view.
+/// Heuristic pool classification from its name — the fallback used when no more precise source is
+/// available (non-Rook Ceph, or no k8s driver attached). On a Rook-managed cluster,
+/// `atlas-discovery::run_discovery`'s `rook_pool_kinds` enrichment overrides this with an exact
+/// classification read from live `CephBlockPool`/`CephFilesystem`/`CephObjectStore` CRs
+/// (`atlas_driver_k8s::rook::known_rook_pool_kinds`) after this heuristic runs, since this crate
+/// has no Kubernetes API access of its own (see `crates/atlas-driver-k8s/src/rook.rs`).
 fn pool_kind_from_name(name: &str) -> String {
     let n = name.to_lowercase();
     if n.contains("cephfs") && n.contains("meta") {

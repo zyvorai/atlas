@@ -138,7 +138,7 @@ pub(crate) async fn create_backend(
     if let Some(driver) = live {
         s.drivers.register(driver.clone());
         // Discover immediately so the new backend's pools/volumes appear.
-        if let Err(e) = atlas_discovery::run_discovery(&s.pool, driver, None).await {
+        if let Err(e) = atlas_discovery::run_discovery(&s.pool, driver, None, None).await {
             tracing::warn!("discovery for new backend {id} failed: {e:#}");
         }
     }
@@ -169,7 +169,14 @@ pub(crate) async fn discover_backend(
         .ok_or_else(|| AppError::NotFound(format!("no driver registered for backend {id}")))?;
 
     let rbd_owners = s.rbd_owners().await;
-    let result = atlas_discovery::run_discovery(&s.pool, driver, rbd_owners.as_ref()).await;
+    let rook_pool_kinds = s.rook_pool_kinds().await;
+    let result = atlas_discovery::run_discovery(
+        &s.pool,
+        driver,
+        rbd_owners.as_ref(),
+        rook_pool_kinds.as_ref(),
+    )
+    .await;
     // Discovery only ever touches clusters/pools/osds/volumes — snapshots stuck in "creating"
     // need their own reconcile pass so a manual resync can actually resolve one instead of being
     // a no-op (see atlas_monitor::reconcile_snapshots doc comment).

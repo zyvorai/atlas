@@ -38,6 +38,7 @@ pub fn spawn(
     webhook_url: Option<String>,
     is_leader: Arc<std::sync::atomic::AtomicBool>,
     k8s: Option<Arc<atlas_driver_k8s::K8sDriver>>,
+    rook_namespace: String,
 ) {
     if interval_secs == 0 {
         tracing::info!("monitor disabled (interval = 0)");
@@ -67,8 +68,27 @@ pub fn spawn(
                 },
                 None => None,
             };
-            if let Err(e) =
-                atlas_discovery::run_discovery(&pool, driver.clone(), rbd_owners.as_ref()).await
+            let rook_pool_kinds = match &k8s {
+                Some(k8s) => match k8s.known_rook_pool_kinds(&rook_namespace).await {
+                    Ok(m) => Some(
+                        m.into_iter()
+                            .map(|(pool, kind)| (pool, kind.as_str().to_string()))
+                            .collect(),
+                    ),
+                    Err(e) => {
+                        tracing::warn!("monitor known_rook_pool_kinds failed: {e:#}");
+                        None
+                    }
+                },
+                None => None,
+            };
+            if let Err(e) = atlas_discovery::run_discovery(
+                &pool,
+                driver.clone(),
+                rbd_owners.as_ref(),
+                rook_pool_kinds.as_ref(),
+            )
+            .await
             {
                 tracing::warn!("monitor discovery failed: {e:#}");
             }

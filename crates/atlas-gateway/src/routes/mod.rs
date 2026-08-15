@@ -14,6 +14,7 @@ mod observability;
 mod oidc;
 mod protection;
 mod rbd;
+mod rook;
 mod util;
 mod volumes;
 
@@ -38,6 +39,7 @@ use observability::*;
 use oidc::*;
 use protection::*;
 use rbd::*;
+use rook::*;
 use volumes::*;
 
 pub fn router(state: AppState) -> Router {
@@ -86,6 +88,22 @@ pub fn router(state: AppState) -> Router {
         .route("/ceph/osd-df", get(get_ceph_osd_df))
         .route("/ceph/df", get(get_ceph_df))
         .route("/ceph/health-rollup", get(get_ceph_health_rollup))
+        .route("/ceph/rook-status", get(get_rook_status))
+        .route("/ceph/pools", get(list_ceph_pools).post(create_ceph_pool))
+        .route("/ceph/pools/{name}", delete(delete_ceph_pool))
+        .route(
+            "/ceph/filesystems",
+            get(list_ceph_filesystems).post(create_ceph_filesystem),
+        )
+        .route("/ceph/filesystems/{name}", delete(delete_ceph_filesystem))
+        .route(
+            "/ceph/object-stores",
+            get(list_ceph_object_stores).post(create_ceph_object_store),
+        )
+        .route(
+            "/ceph/object-stores/{name}",
+            delete(delete_ceph_object_store),
+        )
         .route("/storage-classes", get(list_storage_classes))
         .route("/kubernetes/pvcs", get(list_pvcs))
         .route("/kubernetes/pvs", get(list_pvs))

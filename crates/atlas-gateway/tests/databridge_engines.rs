@@ -59,6 +59,8 @@ async fn spawn() -> SocketAddr {
         zfs_host: None,
         zfs_pools: Vec::new(),
         oidc: None,
+        rook_namespace: "rook-ceph".into(),
+        rook_cluster_name: "rook-ceph".into(),
     };
     let state = build_state(
         config,
