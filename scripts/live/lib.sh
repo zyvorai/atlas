@@ -262,6 +262,7 @@ live_cleanup() {
       db-plan)  live_req DELETE "/databridge/plans/${id}" || true ;;
       db-source) live_req DELETE "/databridge/sources/${id}" || true ;;
       dr-peer)  live_req DELETE "/dr/peers/${id}" || true ;;
+      rook-pool) live_req DELETE "/ceph/pools/${id}?force=true" || true; sleep 2 ;;
       token)
         live_req POST "/auth/tokens/${id}/revoke" '{}' || true
         ;;

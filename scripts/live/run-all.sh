@@ -54,6 +54,7 @@ SECTIONS=(
   09-databridge.sh
   10-dr.sh
   11-databridge-mysql.sh
+  12-rook.sh
 )
 
 for s in "${SECTIONS[@]}"; do

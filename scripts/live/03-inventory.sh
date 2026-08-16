@@ -37,6 +37,11 @@ PATHS=(
   /ceph/osd-tree
   /ceph/osd-df
   /ceph/df
+  /ceph/health-rollup
+  /ceph/rook-status
+  /ceph/pools
+  /ceph/filesystems
+  /ceph/object-stores
   /alerts
   /jobs
   /audit

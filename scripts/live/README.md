@@ -45,6 +45,7 @@ SSH defaults: `ATLAS_SSH_USER=sus`, `ATLAS_SSH_HOST=212.8.248.187`,
 | `09-databridge` | fake Postgres source → discover → plan → assess…validate → **delete plan → delete source** |
 | `10-dr` | DR peer create → preflight → direct-RBD mirror attempt (soft) → **delete image → delete peer** |
 | `11-databridge-mysql` | fake MySQL source → plan stages → **delete plan → delete source** |
+| `12-rook` | `/ceph/{rook-status,health-rollup,pools}` reads → pool **create → (soft) verify Ready → delete**. Pool size/failure-domain are env-overridable (`ATLAS_ROOK_POOL_SIZE`, `ATLAS_ROOK_FAILURE_DOMAIN`, default `1`/`osd` for a single-OSD lab) — the create/delete calls always run, but "Ready" is a WARN not a FAIL since it depends on real cluster capacity, not just the code path |
 
 Writes use prefix `live-<pid>-<ts>-*` and register a `trap` cleanup so leftovers
 are deleted even on failure.
