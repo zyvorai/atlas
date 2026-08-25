@@ -227,6 +227,7 @@ name = "atlas-common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "atlas-license",
  "axum 0.8.9",
  "chrono",
  "dotenvy",

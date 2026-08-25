@@ -29,6 +29,7 @@ async fn main() -> anyhow::Result<()> {
             "ATLAS_BOOTSTRAP_ADMIN_TOKEN is set — use it once to mint service-account JWTs, then remove it from the Secret"
         );
     }
+    config.warn_if_license_misconfigured();
 
     let bind_addr = config.bind_addr.clone();
     let grpc_addr = config.grpc_addr.clone();

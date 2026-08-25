@@ -393,6 +393,28 @@ impl Config {
         }
         Ok(())
     }
+
+    /// Non-fatal: warns (doesn't refuse to boot) when `license_enforce` is on but no
+    /// trial/license token is locatable anywhere `atlas_license::locate_token_from_env` checks.
+    /// A hard refuse-to-boot would be wrong here — an operator may legitimately deploy before
+    /// receiving their token from sales — but booting silently into "every protected route
+    /// 402s" with no signal at all is a real misconfiguration trap this at least surfaces
+    /// loudly at startup instead of only being discovered via a customer's first support ticket.
+    pub fn warn_if_license_misconfigured(&self) {
+        if license_misconfigured(self.license_enforce, atlas_license::locate_token_from_env().is_some()) {
+            tracing::warn!(
+                "ATLAS_LICENSE_ENFORCE is on but no trial/license token was found via \
+                 ATLAS_LICENSE_KEY, ATLAS_TRIAL_TOKEN, ATLAS_TRIAL_TOKEN_FILE, or ./trial.token — \
+                 every protected REST route will return 402 until one is set. See docs/LICENSING.md."
+            );
+        }
+    }
+}
+
+/// Pure decision extracted from [`Config::warn_if_license_misconfigured`] so it's unit-testable
+/// without mutating process-global environment state (which `locate_token_from_env` reads).
+fn license_misconfigured(license_enforce: bool, token_present: bool) -> bool {
+    license_enforce && !token_present
 }
 
 impl Default for Config {
@@ -518,5 +540,13 @@ mod tests {
         c.tls_cert_path = Some("/etc/atlas-tls/tls.crt".into());
         c.tls_key_path = Some("/etc/atlas-tls/tls.key".into());
         assert!(c.validate_for_start().is_ok());
+    }
+
+    #[test]
+    fn license_misconfigured_only_when_enforced_with_no_token() {
+        assert!(license_misconfigured(true, false));
+        assert!(!license_misconfigured(true, true));
+        assert!(!license_misconfigured(false, false));
+        assert!(!license_misconfigured(false, true));
     }
 }

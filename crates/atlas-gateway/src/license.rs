@@ -1,7 +1,8 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-//! Trial/license enforcement. Verification and the wire status shape live in `atlas-license`;
-//! this module owns the two things that are genuinely server-specific: locating *where* the
-//! token is (env var vs file) and gating requests with it.
+//! Trial/license enforcement. Verification, the wire status shape, and token *location*
+//! (`atlas_license::locate_token_from_env` — shared with `Config::validate_for_start`'s startup
+//! warning) live in `atlas-license`; this module owns the one thing that's genuinely
+//! server-specific: gating requests with it.
 //!
 //! Mirrors `auth_middleware`'s shape (`crate::auth`) — same `State<AppState>` signature, same
 //! "config toggle decides whether this even runs" pattern (`auth_required` / `license_enforce`).
@@ -18,39 +19,12 @@ use serde_json::json;
 
 use crate::state::AppState;
 
-/// Checked in order: explicit env value, then an env-pointed file, then a default file path next
-/// to the binary. Re-resolved on every call (not cached in `AppState`) so replacing the token
-/// file takes effect without a restart — the check itself is one cheap Ed25519 verify.
-fn locate_token() -> Option<String> {
-    for var in ["ATLAS_LICENSE_KEY", "ATLAS_TRIAL_TOKEN"] {
-        if let Ok(t) = std::env::var(var) {
-            let t = t.trim().to_string();
-            if !t.is_empty() {
-                return Some(t);
-            }
-        }
-    }
-    if let Ok(path) = std::env::var("ATLAS_TRIAL_TOKEN_FILE") {
-        if let Ok(s) = std::fs::read_to_string(&path) {
-            let s = s.trim().to_string();
-            if !s.is_empty() {
-                return Some(s);
-            }
-        }
-    }
-    if let Ok(s) = std::fs::read_to_string("trial.token") {
-        let s = s.trim().to_string();
-        if !s.is_empty() {
-            return Some(s);
-        }
-    }
-    None
-}
-
 /// `GET /license/status` — always reachable, trial-expired or not (see `routes/mod.rs`'s
 /// `public_api`).
 pub async fn license_status() -> Json<atlas_license::LicenseStatus> {
-    Json(atlas_license::status(locate_token().as_deref()))
+    Json(atlas_license::status(
+        atlas_license::locate_token_from_env().as_deref(),
+    ))
 }
 
 fn license_required(msg: &str) -> Response {
@@ -78,7 +52,7 @@ pub async fn license_middleware(
     if !state.config.license_enforce {
         return next.run(req).await;
     }
-    let token = locate_token();
+    let token = atlas_license::locate_token_from_env();
     if !atlas_license::is_active(token.as_deref()) {
         return license_required(
             "no active Atlas trial or license found — see GET /license/status",

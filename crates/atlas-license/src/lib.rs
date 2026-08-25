@@ -132,6 +132,38 @@ pub fn is_active(token: Option<&str>) -> bool {
     status(token).licensed
 }
 
+/// Locates a raw token string from the environment/filesystem — checked in order: explicit env
+/// value, then an env-pointed file, then a default file path next to the process's working
+/// directory. Shared by the gateway's request-time gating (`atlas-gateway::license`) and
+/// `Config::validate_for_start`'s startup warning, so both agree on exactly where a token can
+/// come from. Re-resolved on every call (never cached) so replacing the token file takes effect
+/// without a restart.
+pub fn locate_token_from_env() -> Option<String> {
+    for var in ["ATLAS_LICENSE_KEY", "ATLAS_TRIAL_TOKEN"] {
+        if let Ok(t) = std::env::var(var) {
+            let t = t.trim().to_string();
+            if !t.is_empty() {
+                return Some(t);
+            }
+        }
+    }
+    if let Ok(path) = std::env::var("ATLAS_TRIAL_TOKEN_FILE") {
+        if let Ok(s) = std::fs::read_to_string(&path) {
+            let s = s.trim().to_string();
+            if !s.is_empty() {
+                return Some(s);
+            }
+        }
+    }
+    if let Ok(s) = std::fs::read_to_string("trial.token") {
+        let s = s.trim().to_string();
+        if !s.is_empty() {
+            return Some(s);
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
