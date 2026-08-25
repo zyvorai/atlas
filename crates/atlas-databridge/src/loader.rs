@@ -107,9 +107,18 @@ pub fn mysql_job_spec(
     // `--column-statistics=0`: the MySQL-8 mysqldump client defaults to dumping column histograms
     // from information_schema.COLUMN_STATISTICS, which MariaDB has no such table for — without this
     // flag a MariaDB source fails with "Unknown table 'COLUMN_STATISTICS'" (1109). Harmless for MySQL.
+    // `--skip-add-locks`: the edge target is Percona XtraDB Cluster, whose default
+    // pxc_strict_mode=ENFORCING rejects explicit LOCK TABLES/FLUSH TABLES statements (error 1105)
+    // — mysqldump wraps each table's INSERTs in LOCK/UNLOCK TABLES by default, so loading a dump
+    // as-is into a fresh PXC edge always fails partway through without this flag.
+    // `--set-gtid-purged=OFF`: a GTID-enabled source's dump includes `SET @@GLOBAL.GTID_PURGED=...`,
+    // which fails (error 3546) against the edge's own already-nonempty GTID_EXECUTED set — full-load
+    // is a one-shot copy, not a GTID-based replication resume, so the edge's own GTID history is
+    // irrelevant here; CDC picks up independently via Debezium/binlog position afterward.
     let script = r#"set -euo pipefail
 echo "full-load: mysqldump ${SRC_HOST}:${SRC_PORT}/${SRC_DB} -> ${EDGE_HOST}/${EDGE_DB}"
-mysqldump --column-statistics=0 --single-transaction --routines --triggers \
+mysql -h "$EDGE_HOST" -u root -p"$EDGE_PASS" -e "CREATE DATABASE IF NOT EXISTS \`$EDGE_DB\`"
+mysqldump --column-statistics=0 --no-tablespaces --skip-add-locks --set-gtid-purged=OFF --single-transaction --routines --triggers \
   -h "$SRC_HOST" -P "$SRC_PORT" -u "$SRC_USER" -p"$SRC_PASS" "$SRC_DB" \
   | mysql -h "$EDGE_HOST" -u root -p"$EDGE_PASS" "$EDGE_DB"
 echo "full-load complete"

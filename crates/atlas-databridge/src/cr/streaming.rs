@@ -59,6 +59,13 @@ pub fn connect_spec(bootstrap_servers: &str, replicas: i64, image: Option<&str>)
         "configStorageTopic": "zyvor-connect-configs",
         "offsetStorageTopic": "zyvor-connect-offsets",
         "statusStorageTopic": "zyvor-connect-status",
+        // Strimzi's default (initialDelaySeconds=60, periodSeconds=10, failureThreshold=3 -> ~90s
+        // to first kill) is too tight for a Connect image bundling Debezium + JDBC-sink plugins: JVM
+        // boot + Kafka group-rebalance routinely takes 90-120s+ even on an idle host, and CI/lab hosts
+        // under load push that further — Strimzi then repeatedly kills the pod mid-startup before it
+        // ever reports healthy, so it can never actually come up.
+        "livenessProbe": { "initialDelaySeconds": 180, "timeoutSeconds": 10, "periodSeconds": 15, "failureThreshold": 6 },
+        "readinessProbe": { "initialDelaySeconds": 180, "timeoutSeconds": 10, "periodSeconds": 15, "failureThreshold": 6 },
         "config": {
             "config.providers": "secrets",
             "config.providers.secrets.class": "io.strimzi.kafka.KubernetesSecretConfigProvider",
@@ -116,6 +123,13 @@ pub fn debezium_source_spec(
         // bind. Snapshot mode depends on the engine (see doc comment).
         "decimal.handling.mode": "double",
         "snapshot.mode": snapshot_mode,
+        // Debezium's default temporal encoding (adaptive_time_microseconds) emits DATE/TIME/TIMESTAMP
+        // columns as ISO-8601 strings (e.g. "2026-08-25T14:59:41Z") in the Kafka message — the Aiven
+        // JDBC sink binds a column's value with the JDBC driver's native setTimestamp/setDate, which
+        // rejects that string format outright (MysqlDataTruncation: "Incorrect datetime value"),
+        // failing every row with a temporal column. `connect` mode instead emits Kafka Connect's
+        // logical Date/Time/Timestamp types, which the JDBC sink binds correctly.
+        "time.precision.mode": "connect",
     });
     match kind {
         SourceKind::Postgres => {

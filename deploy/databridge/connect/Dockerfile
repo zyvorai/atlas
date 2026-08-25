@@ -8,11 +8,16 @@
 # Build + import into k3s (on a cluster node):
 #   podman build -t databridge-connect:dev -f deploy/databridge/connect/Dockerfile deploy/databridge/connect
 #   podman save databridge-connect:dev -o /tmp/c.tar && sudo k3s ctr images import /tmp/c.tar
-# Base must match the Strimzi operator's Kafka version (4.x: log4j2 layout). Debezium 3.x targets Kafka 4.
+# Base must match the Strimzi operator's Kafka version (4.x: log4j2 layout).
+# Debezium 3.0.8.Final is NOT compatible with a Kafka 4.x client: its KafkaSchemaHistory recovery
+# path calls the deprecated KafkaConsumer.poll(long) overload, which Kafka 4.0 removed outright —
+# every MySQL/MariaDB/Oracle/SQL Server source connector (any engine using schema history) fails at
+# task startup with `NoSuchMethodError: KafkaConsumer.poll(long)`. 3.3.0.Final is the first line on
+# this base image's Kafka 4.3 that's actually built/tested against Kafka Connect 4.x.
 FROM quay.io/strimzi/kafka:latest-kafka-4.3.0
 USER root
 
-ARG DEBEZIUM_VERSION=3.0.8.Final
+ARG DEBEZIUM_VERSION=3.3.0.Final
 ARG AIVEN_JDBC_VERSION=6.10.0
 ARG PG_JDBC_VERSION=42.7.3
 ARG MYSQL_JDBC_VERSION=8.4.0

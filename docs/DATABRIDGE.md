@@ -307,7 +307,34 @@ stream reports caught-up (0).
   URIs in the loader + validation Jobs omitted `authSource=admin`, so authenticated Mongo sources failed
   SCRAM auth (the mongo tools default the auth db to the app db, not `admin`). The **full-load copied the
   data** (3 customers + 1 order) and **validate confirmed exact document-count parity** (plan → `validated`).
-### Engine verification matrix (live)
+- **MySQL real CDC — connectors verified running against real infra, edge-write confirmation
+  blocked by a host fault** (2026-08-25, `212.8.248.187`): full-load re-verified end-to-end
+  against a real Percona edge (3 customer rows landed, confirmed via the API-driven job), then
+  `cdc/start` applied a real `KafkaConnect` cluster + Debezium MySQL source connector + Aiven
+  JDBC sink connector against a real MySQL 8.4 source. Surfaced and fixed **six real bugs**
+  along the way: (1) `mysql_operator.rs`'s PXC CR builder never set
+  `allowUnsafeConfigurations`, so Percona's operator never reports a single-node edge `ready`;
+  (2)-(4) `loader.rs`'s `mysqldump` pipeline needed `CREATE DATABASE` first, `--no-tablespaces`
+  (the source creds lack `PROCESS`), and `--skip-add-locks` (PXC's `pxc_strict_mode` rejects
+  `LOCK TABLES`); (5) `loader.rs` also needed `--set-gtid-purged=OFF` (the edge's own non-empty
+  `GTID_EXECUTED` conflicts with the source's); (6) `streaming.rs`'s `connect_spec()` used
+  Strimzi's default liveness/readiness probe (~90s to first kill), too tight for a Connect image
+  bundling Debezium + JDBC plugins — extended to 180s/6 retries; (7) `streaming.rs`'s Debezium
+  source config was missing `time.precision.mode: connect` — the default ISO-8601 timestamp
+  encoding is rejected outright by the JDBC sink's MySQL binding; (8)
+  `deploy/databridge/connect/Dockerfile` pinned Debezium 3.0.8.Final against a Kafka 4.3.0 base
+  image, but 3.0.8's schema-history recovery calls a Kafka client method Kafka 4.0 removed
+  (`NoSuchMethodError`) — bumped to 3.3.0.Final. After all eight fixes, both connectors were
+  confirmed **RUNNING with their tasks RUNNING** via Kafka Connect's own REST status API (source
+  connector version `3.3.0.Final`, no schema-history error). The final row-lands-on-edge
+  confirmation could not be completed in this session: right as the last row was inserted, the
+  lab node's container runtime (containerd/CRI) went into a degraded state — `haproxy` and
+  `pxc-0` pods both started failing readiness checks with `container is in CONTAINER_EXITED
+  state` / `no running task found`, and `kubectl exec` into `pxc-0` failed the same way despite
+  the pod API still reporting `Running` — a host-level fault unrelated to DataBridge, not
+  something to fix by restarting shared node daemons without authorization. **Not marked live**
+  in the matrix below pending a follow-up session that re-confirms a row physically landing on
+  the edge once the host recovers; treat CDC as "connector-level proven, data-path unconfirmed."
 
 | Engine | Discover | Full-load | Validate | CDC | Cutover |
 |---|---|---|---|---|---|

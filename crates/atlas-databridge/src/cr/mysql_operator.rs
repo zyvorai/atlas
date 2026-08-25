@@ -8,10 +8,16 @@ pub const KIND: &str = "PerconaXtraDBCluster";
 
 /// Build the `spec` for a PerconaXtraDBCluster with the PXC data volume on `storage_class`.
 pub fn cluster_spec(instances: i64, storage_class: &str, size_gib: i64) -> serde_json::Value {
+    let size = instances.max(1);
     serde_json::json!({
         "crVersion": "1.14.0",
+        // Galera quorum normally wants >=3 members; the operator refuses to ever report
+        // status.state == "ready" for a smaller cluster unless this is set. Atlas provisions
+        // single-node (size=1) edge targets today, so without this every real-mode MySQL edge
+        // cluster would sit at "initializing" forever and full-load/CDC could never start.
+        "allowUnsafeConfigurations": size < 3,
         "pxc": {
-            "size": instances.max(1),
+            "size": size,
             "image": "percona/percona-xtradb-cluster:8.0",
             "volumeSpec": {
                 "persistentVolumeClaim": {
