@@ -68,6 +68,14 @@ jobs:
           cache-dependency-path: crates/atlas-gateway/ui/package-lock.json
       - name: Install
         run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm run test
+      # UI-side equivalent of the Rust cargo-deny gate above. High severity only — same bar as a
+      # blocking gate; lower-severity advisories are visible in the job log without failing CI.
+      - name: Supply-chain audit (npm audit)
+        run: npm audit --audit-level=high
       - name: Typecheck + production build
         run: npm run build
       - name: Upload dist artifact

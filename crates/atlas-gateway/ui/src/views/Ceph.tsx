@@ -87,7 +87,8 @@ export default function Ceph() {
   const toggleNode = (id: number) =>
     setCollapsed((s) => {
       const n = new Set(s);
-      n.has(id) ? n.delete(id) : n.add(id);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
 

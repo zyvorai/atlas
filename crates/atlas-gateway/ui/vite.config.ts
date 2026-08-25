@@ -19,7 +19,10 @@ export default defineConfig({
     },
   },
   test: {
-    environment: "node",
-    include: ["src/**/*.test.ts"],
+    // jsdom (not "node") so component tests (`*.test.tsx`) can render — a small, safe overhead
+    // for the existing plain-logic `*.test.ts` files, and avoids maintaining two environments.
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
   },
 });

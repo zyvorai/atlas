@@ -12,7 +12,7 @@ import type {
 
 const g = async <T,>(path: string): Promise<T> => (await http.get<T>(path)).data;
 
-function q<T>(key: unknown[], path: string, refetch = 8000, enabled = true) {
+function useApiQuery<T>(key: unknown[], path: string, refetch = 8000, enabled = true) {
   // Pause auto-refresh globally when the user toggles it (menu bar).
   return useQuery<T>({
     queryKey: key,
@@ -22,15 +22,15 @@ function q<T>(key: unknown[], path: string, refetch = 8000, enabled = true) {
   });
 }
 
-export const useSummary = () => q<MetricsSummary>(["summary"], "/metrics/summary", 6000);
+export const useSummary = () => useApiQuery<MetricsSummary>(["summary"], "/metrics/summary", 6000);
 export const useHistory = () =>
-  q<MetricHistoryPoint[]>(["history"], "/metrics/history?minutes=60", 30000);
+  useApiQuery<MetricHistoryPoint[]>(["history"], "/metrics/history?minutes=60", 30000);
 export const useForecast = () =>
-  q<MetricForecast>(["forecast"], "/metrics/forecast?minutes=1440", 30000);
-export const useClusters = () => q<StorageCluster[]>(["clusters"], "/clusters", 10000);
-export const usePools = () => q<StoragePool[]>(["pools"], "/pools", 10000);
-export const useOsds = () => q<Osd[]>(["osds"], "/osds", 10000);
-export const useNodes = () => q<{ host: string }[]>(["nodes"], "/nodes", 15000);
+  useApiQuery<MetricForecast>(["forecast"], "/metrics/forecast?minutes=1440", 30000);
+export const useClusters = () => useApiQuery<StorageCluster[]>(["clusters"], "/clusters", 10000);
+export const usePools = () => useApiQuery<StoragePool[]>(["pools"], "/pools", 10000);
+export const useOsds = () => useApiQuery<Osd[]>(["osds"], "/osds", 10000);
+export const useNodes = () => useApiQuery<{ host: string }[]>(["nodes"], "/nodes", 15000);
 export const useVolumes = (state?: string, tenant?: string, backend?: string, kind?: string) => {
   const qs = new URLSearchParams();
   if (state) qs.set("state", state);
@@ -38,37 +38,37 @@ export const useVolumes = (state?: string, tenant?: string, backend?: string, ki
   if (backend) qs.set("backend", backend);
   if (kind) qs.set("kind", kind);
   const s = qs.toString();
-  return q<StorageVolume[]>(["volumes", state, tenant, backend, kind], `/volumes${s ? "?" + s : ""}`, 6000);
+  return useApiQuery<StorageVolume[]>(["volumes", state, tenant, backend, kind], `/volumes${s ? "?" + s : ""}`, 6000);
 };
-export const useSnapshots = () => q<StorageSnapshot[]>(["snapshots"], "/snapshots", 6000);
+export const useSnapshots = () => useApiQuery<StorageSnapshot[]>(["snapshots"], "/snapshots", 6000);
 export const useSchedules = (volumeId?: string) =>
-  q<SnapshotSchedule[]>(["schedules", volumeId], `/schedules${volumeId ? "?volume_id=" + volumeId : ""}`, 8000);
+  useApiQuery<SnapshotSchedule[]>(["schedules", volumeId], `/schedules${volumeId ? "?volume_id=" + volumeId : ""}`, 8000);
 export const useBackups = (volumeId?: string) =>
-  q<BackupRecord[]>(["backups", volumeId], `/backups${volumeId ? "?volume_id=" + volumeId : ""}`, 6000);
-export const useBuckets = () => q<StorageBucket[]>(["buckets"], "/buckets", 8000);
+  useApiQuery<BackupRecord[]>(["backups", volumeId], `/backups${volumeId ? "?volume_id=" + volumeId : ""}`, 6000);
+export const useBuckets = () => useApiQuery<StorageBucket[]>(["buckets"], "/buckets", 8000);
 export const useAlerts = (state?: string) =>
-  q<AlertRecord[]>(["alerts", state], `/alerts${state ? "?state=" + state : ""}`, 6000);
-export const useJobs = () => q<JobRecord[]>(["jobs"], "/jobs", 4000);
-export const useAudit = (params: string) => q<AuditRow[]>(["audit", params], `/audit${params}`, 10000);
+  useApiQuery<AlertRecord[]>(["alerts", state], `/alerts${state ? "?state=" + state : ""}`, 6000);
+export const useJobs = () => useApiQuery<JobRecord[]>(["jobs"], "/jobs", 4000);
+export const useAudit = (params: string) => useApiQuery<AuditRow[]>(["audit", params], `/audit${params}`, 10000);
 export const useEvents = (limit = 100) =>
-  q<ActivityEvent[]>(["events", limit], `/events?limit=${limit}`, 8000);
-export const useTenants = () => q<TenantQuota[]>(["tenants"], "/tenants", 10000);
+  useApiQuery<ActivityEvent[]>(["events", limit], `/events?limit=${limit}`, 8000);
+export const useTenants = () => useApiQuery<TenantQuota[]>(["tenants"], "/tenants", 10000);
 export const useTenantPolicies = (id: string) =>
-  q<TenantPolicy[]>(["tenantPolicies", id], `/tenants/${id}/policies`, 15000, !!id);
+  useApiQuery<TenantPolicy[]>(["tenantPolicies", id], `/tenants/${id}/policies`, 15000, !!id);
 export const useCephMetrics = (prefix?: string) =>
-  q<MetricSample[]>(["cephMetrics", prefix], `/metrics/ceph${prefix ? "?prefix=" + prefix : ""}`, 8000);
-export const usePolicies = () => q<any[]>(["policies"], "/policies", 60000);
-export const useBackends = () => q<any[]>(["backends"], "/backends", 20000);
-export const useBackendsSummary = () => q<any[]>(["backends-summary"], "/backends/summary", 15000);
+  useApiQuery<MetricSample[]>(["cephMetrics", prefix], `/metrics/ceph${prefix ? "?prefix=" + prefix : ""}`, 8000);
+export const usePolicies = () => useApiQuery<any[]>(["policies"], "/policies", 60000);
+export const useBackends = () => useApiQuery<any[]>(["backends"], "/backends", 20000);
+export const useBackendsSummary = () => useApiQuery<any[]>(["backends-summary"], "/backends/summary", 15000);
 
 // Day-2 operations.
-export const useMaintenance = () => q<{ paused: boolean }>(["maintenance"], "/maintenance", 8000);
+export const useMaintenance = () => useApiQuery<{ paused: boolean }>(["maintenance"], "/maintenance", 8000);
 export const usePreflight = () =>
-  q<{ ready: boolean; checks: { check: string; ok: boolean; detail: string }[]; blockers: string[] }>(
+  useApiQuery<{ ready: boolean; checks: { check: string; ok: boolean; detail: string }[]; blockers: string[] }>(
     ["preflight"], "/upgrade/preflight", 10000);
-export const useOrphans = () => q<{ orphan_backups: any[]; count: number }>(["orphans"], "/maintenance/orphans", 20000);
+export const useOrphans = () => useApiQuery<{ orphan_backups: any[]; count: number }>(["orphans"], "/maintenance/orphans", 20000);
 export const useDrStatus = () =>
-  q<{
+  useApiQuery<{
     peers: number;
     mirrors: number;
     primary: number;
@@ -79,10 +79,10 @@ export const useDrStatus = () =>
     verified?: boolean;
     note?: string;
   }>(["dr-status"], "/dr/status", 10000);
-export const useDrPeers = () => q<any[]>(["dr-peers"], "/dr/peers", 15000);
-export const useDrMirrors = () => q<any[]>(["dr-mirrors"], "/dr/mirrors", 10000);
+export const useDrPeers = () => useApiQuery<any[]>(["dr-peers"], "/dr/peers", 15000);
+export const useDrMirrors = () => useApiQuery<any[]>(["dr-mirrors"], "/dr/mirrors", 10000);
 export const useDrPreflight = () =>
-  q<{
+  useApiQuery<{
     ready: boolean;
     control_plane_ready?: boolean;
     dataplane_verified?: boolean;
@@ -95,13 +95,13 @@ export const useProtectionStatus = (params?: { tenant?: string; verdict?: string
   if (params?.tenant) qs.set("tenant", params.tenant);
   if (params?.verdict) qs.set("verdict", params.verdict);
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
-  return q<VolumeProtectionStatus[]>(["protection-status", params?.tenant, params?.verdict], `/protection-status${suffix}`, 15000);
+  return useApiQuery<VolumeProtectionStatus[]>(["protection-status", params?.tenant, params?.verdict], `/protection-status${suffix}`, 15000);
 };
 export const useVolumeProtection = (id: string) =>
-  q<VolumeProtectionStatus>(["volume-protection", id], `/volumes/${id}/protection`, 15000, !!id);
-export const useCephStatus = () => q<any>(["ceph-status"], "/ceph/status", 8000);
+  useApiQuery<VolumeProtectionStatus>(["volume-protection", id], `/volumes/${id}/protection`, 15000, !!id);
+export const useCephStatus = () => useApiQuery<any>(["ceph-status"], "/ceph/status", 8000);
 export const useCephHealthRollup = () =>
-  q<{
+  useApiQuery<{
     state: ClusterHealthState;
     summary: string;
     reasons: string[];
@@ -113,22 +113,22 @@ export const useCephHealthRollup = () =>
     pgs_not_clean: number;
     recovering: boolean;
   }>(["ceph-health-rollup"], "/ceph/health-rollup", 8000);
-export const useCephOsdTree = () => q<any>(["ceph-osd-tree"], "/ceph/osd-tree", 15000);
-export const useCephOsdDf = () => q<any>(["ceph-osd-df"], "/ceph/osd-df", 12000);
-export const useCephDf = () => q<any>(["ceph-df"], "/ceph/df", 12000);
-export const useStorageClasses = () => q<any[]>(["scs"], "/storage-classes", 20000);
+export const useCephOsdTree = () => useApiQuery<any>(["ceph-osd-tree"], "/ceph/osd-tree", 15000);
+export const useCephOsdDf = () => useApiQuery<any>(["ceph-osd-df"], "/ceph/osd-df", 12000);
+export const useCephDf = () => useApiQuery<any>(["ceph-df"], "/ceph/df", 12000);
+export const useStorageClasses = () => useApiQuery<any[]>(["scs"], "/storage-classes", 20000);
 export const useRbdImages = (pool: string) =>
-  q<{ pool: string; images: string[] }>(["rbd", pool], `/rbd-images?pool=${pool}`, 8000);
+  useApiQuery<{ pool: string; images: string[] }>(["rbd", pool], `/rbd-images?pool=${pool}`, 8000);
 
 // ---- DataBridge ----
-export const useSources = () => q<MigrationSource[]>(["db-sources"], "/databridge/sources", 6000);
-export const useSource = (id: string) => q<MigrationSource>(["db-source", id], `/databridge/sources/${id}`, 4000, !!id);
-export const usePlans = () => q<MigrationPlan[]>(["db-plans"], "/databridge/plans", 6000);
-export const usePlan = (id: string) => q<MigrationPlan>(["db-plan", id], `/databridge/plans/${id}`, 4000);
-export const useEdgeClusters = () => q<EdgeDbCluster[]>(["db-edge"], "/databridge/edge-clusters", 8000);
-export const useCdcStreams = () => q<CdcStream[]>(["db-cdc"], "/databridge/cdc-streams", 4000);
+export const useSources = () => useApiQuery<MigrationSource[]>(["db-sources"], "/databridge/sources", 6000);
+export const useSource = (id: string) => useApiQuery<MigrationSource>(["db-source", id], `/databridge/sources/${id}`, 4000, !!id);
+export const usePlans = () => useApiQuery<MigrationPlan[]>(["db-plans"], "/databridge/plans", 6000);
+export const usePlan = (id: string) => useApiQuery<MigrationPlan>(["db-plan", id], `/databridge/plans/${id}`, 4000);
+export const useEdgeClusters = () => useApiQuery<EdgeDbCluster[]>(["db-edge"], "/databridge/edge-clusters", 8000);
+export const useCdcStreams = () => useApiQuery<CdcStream[]>(["db-cdc"], "/databridge/cdc-streams", 4000);
 export const useValidations = (planId?: string) =>
-  q<ValidationRun[]>(["db-val", planId], `/databridge/validations${planId ? "?plan_id=" + planId : ""}`, 6000);
+  useApiQuery<ValidationRun[]>(["db-val", planId], `/databridge/validations${planId ? "?plan_id=" + planId : ""}`, 6000);
 
 export function useInvalidate() {
   const qc = useQueryClient();

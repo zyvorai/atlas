@@ -189,10 +189,10 @@ function Orbital({ data }: { data: any }) {
 }
 
 function Treemap({ data }: { data: any }) {
-  const pools = data.pools || [];
   const box = useRef<HTMLDivElement>(null);
   const cv = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
+    const pools = data.pools || [];
     const c = cv.current!,
       b = box.current!,
       ctx = c.getContext("2d")!;
@@ -250,7 +250,7 @@ function Treemap({ data }: { data: any }) {
     const ro = new ResizeObserver(fit);
     ro.observe(b);
     return () => ro.disconnect();
-  }, [pools]);
+  }, [data.pools]);
   return (
     <div ref={box} className="absolute inset-0">
       <canvas ref={cv} className="w-full h-full block" />

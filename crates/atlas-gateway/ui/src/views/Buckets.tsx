@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Plus, Upload } from "lucide-react";
 import { apiError, http, submitJob, toast } from "../api/client";
 import { useBuckets, useInvalidate } from "../api/hooks";
@@ -108,10 +108,13 @@ function ObjectBrowser({ bucket, onClose }: { bucket: StorageBucket | null; onCl
   const [busy, setBusy] = useState(false);
   const [keep, setKeep] = useState(0); // 0 = overwrite in place; >0 = keep N timestamped versions
   const fileRef = useRef<HTMLInputElement>(null);
-  const load = (p = "") => bucket && http.get(`/buckets/${bucket.id}/objects${p ? "?prefix=" + encodeURIComponent(p) : ""}`)
-    .then((r) => { setObjs(r.data.objects || []); setListError(false); })
-    .catch((e) => { setObjs([]); setListError(true); toast(`list objects: ${apiError(e)}`, "err"); });
-  useEffect(() => { if (bucket) load(); }, [bucket]);
+  const load = useCallback(
+    (p = "") => bucket && http.get(`/buckets/${bucket.id}/objects${p ? "?prefix=" + encodeURIComponent(p) : ""}`)
+      .then((r) => { setObjs(r.data.objects || []); setListError(false); })
+      .catch((e) => { setObjs([]); setListError(true); toast(`list objects: ${apiError(e)}`, "err"); }),
+    [bucket],
+  );
+  useEffect(() => { if (bucket) load(); }, [bucket, load]);
   const close = () => { setObjs(null); setListError(false); setPrefix(""); onClose(); };
   if (!bucket) return null;
 

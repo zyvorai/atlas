@@ -52,7 +52,8 @@ export default function Volumes() {
   const toggle = (k: string) =>
     setPicked((s) => {
       const n = new Set(s);
-      n.has(k) ? n.delete(k) : n.add(k);
+      if (n.has(k)) n.delete(k);
+      else n.add(k);
       return n;
     });
   const toggleAll = (keys: string[]) => setPicked((s) => (keys.every((k) => s.has(k)) ? new Set() : new Set(keys)));

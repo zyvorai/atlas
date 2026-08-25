@@ -3,7 +3,7 @@ import { useState } from "react";
 import { submit } from "../api/client";
 import { useInvalidate, useTenantPolicies, useTenants } from "../api/hooks";
 import type { TenantQuota } from "../api/types";
-import { Badge, Button, FormModal, SlideOver } from "../ui/kit";
+import { Button, FormModal, SlideOver } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
 import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
