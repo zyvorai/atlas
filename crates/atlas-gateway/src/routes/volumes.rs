@@ -30,6 +30,17 @@ pub(crate) async fn create_volume(
     Json(body): Json<CreateVolumeRequest>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    // A tenant-scoped operator must not create a volume attributed to (and billed against the
+    // quota of) a DIFFERENT tenant by simply naming it in the request body — `tenant_id` here is
+    // caller-supplied, unlike the read/single-resource paths where it's looked up from inventory.
+    if let Some(scope) = crate::auth::tenant_scope(s.config.auth_required, &actor) {
+        if body.tenant_id != scope {
+            return Err(AppError::Forbidden(format!(
+                "actor '{}' may only create volumes for tenant '{scope}'",
+                actor.id
+            )));
+        }
+    }
     if body.name.trim().is_empty() {
         return Err(AppError::Validation("name is required".into()));
     }
@@ -251,6 +262,8 @@ pub(crate) async fn expand_volume(
     let vol = atlas_inventory::get_volume(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("volume {id}")))?;
+    let resource_tenant = atlas_inventory::volume_tenant(&s.pool, &id).await?;
+    crate::auth::require_tenant(s.config.auth_required, &actor, &resource_tenant, format!("volume {id}"))?;
     if body.new_size_bytes <= vol.size_bytes {
         return Err(AppError::Validation(
             "new_size_bytes must be larger than the current size".into(),
@@ -298,6 +311,8 @@ pub(crate) async fn create_snapshot(
     let vol = atlas_inventory::get_volume(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("volume {id}")))?;
+    let resource_tenant = atlas_inventory::volume_tenant(&s.pool, &id).await?;
+    crate::auth::require_tenant(s.config.auth_required, &actor, &resource_tenant, format!("volume {id}"))?;
     let namespace = vol
         .kubernetes_namespace
         .ok_or_else(|| AppError::Validation("volume has no kubernetes namespace".into()))?;
@@ -389,6 +404,7 @@ pub(crate) async fn delete_snapshot(
     let snap = atlas_inventory::snapshots::get_snapshot(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("snapshot {id}")))?;
+    crate::auth::require_tenant(s.config.auth_required, &actor, &snap.tenant_id, format!("snapshot {id}"))?;
 
     // Safe-by-default: refuse to delete a snapshot that still has clones/restores derived from it.
     let deps = atlas_inventory::count_snapshot_dependents(&s.pool, &id).await?;
@@ -477,6 +493,7 @@ pub(crate) async fn enqueue_clone(
     let snap = atlas_inventory::snapshots::get_snapshot(&s.pool, snapshot_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("snapshot {snapshot_id}")))?;
+    crate::auth::require_tenant(s.config.auth_required, actor, &snap.tenant_id, format!("snapshot {snapshot_id}"))?;
     // Defaults come from the source volume.
     let src = atlas_inventory::get_volume(&s.pool, &snap.volume_id).await?;
     let namespace = body

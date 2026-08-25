@@ -112,8 +112,12 @@ async fn issued_tokens_enforce_rbac() {
         .unwrap()
         .to_string();
 
+    // Tenant must match the operator token's own tenant ("global", since `issue("operator")`
+    // above doesn't specify one — see `issue_token`'s default) now that `POST /volumes` rejects
+    // a tenant-scoped actor creating a volume for a tenant other than its own (see volumes.rs).
+    // This test is about role enforcement, not tenant enforcement (that's tenant_isolation.rs).
     let create = serde_json::json!({
-        "tenant_id": "t", "name": "veyron-disk", "size_bytes": 1_073_741_824i64,
+        "tenant_id": "global", "name": "veyron-disk", "size_bytes": 1_073_741_824i64,
         "policy": "database", "kubernetes": { "namespace": "default" }
     });
 
@@ -275,8 +279,11 @@ fn mint(secret: &str, role: &str) -> String {
 async fn rbac_enforced_on_writes() {
     let secret = "rbac-test-secret";
     let base = spawn_auth(secret).await;
+    // Tenant must match `mint()`'s hardcoded "global" tenant now that `POST /volumes` rejects a
+    // tenant-scoped actor creating a volume for a different tenant (see volumes.rs). This test is
+    // about role enforcement, not tenant enforcement (that's tenant_isolation.rs).
     let body = serde_json::json!({
-        "tenant_id": "t", "name": "rbac-vol", "size_bytes": 1073741824_i64,
+        "tenant_id": "global", "name": "rbac-vol", "size_bytes": 1073741824_i64,
         "kind": "block", "policy": "database"
     });
 

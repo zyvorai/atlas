@@ -50,12 +50,17 @@ pub(crate) async fn get_bucket(
 /// Fake mode: no `radosgw-admin` binary in the image — there's no persisted usage/quota to read
 /// back either (unlike RBD images/snapshots, buckets don't cache stats in inventory), so report a
 /// zeroed-but-available stub instead of shelling out and failing.
-pub(crate) async fn bucket_stats(State(s): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
+pub(crate) async fn bucket_stats(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
     use atlas_common::config::CephDriverMode;
 
     let b = atlas_inventory::buckets::get_bucket(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("bucket {id}")))?;
+    crate::auth::require_tenant(s.config.auth_required, &actor, &b.tenant_id, format!("bucket {id}"))?;
     let name = b
         .bucket_name
         .ok_or_else(|| AppError::Validation("bucket has no bucket_name".into()))?;
@@ -113,14 +118,18 @@ pub(crate) struct ObjectKeyQuery {
 
 /// Build an `S3Target` for a bound bucket, reading the OBC credentials from its in-cluster
 /// Secret. The endpoint prefers `rgw_public_endpoint` (the browser-reachable URL) so presigned
-/// upload/download URLs it mints are usable from outside the cluster. Shared by every object op.
+/// upload/download URLs it mints are usable from outside the cluster. Shared by every object op —
+/// enforcing tenant scoping here, once, covers every caller (list/upload-url/download-url/
+/// delete/prune) instead of repeating the check at each route handler.
 pub(crate) async fn bucket_s3_target(
     s: &AppState,
+    actor: &Actor,
     id: &str,
 ) -> AppResult<atlas_driver_rgw::S3Target> {
     let b = atlas_inventory::buckets::get_bucket(&s.pool, id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("bucket {id}")))?;
+    crate::auth::require_tenant(s.config.auth_required, actor, &b.tenant_id, format!("bucket {id}"))?;
     if b.state != "bound" {
         return Err(AppError::Validation("bucket is not bound".into()));
     }
@@ -163,10 +172,11 @@ pub(crate) async fn bucket_s3_target(
 /// `GET /buckets/{id}/objects[?prefix=]` — list objects in the bucket over S3 (creds in-cluster).
 pub(crate) async fn bucket_objects(
     State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
     Path(id): Path<String>,
     Query(q): Query<PrefixQuery>,
 ) -> AppResult<Json<Value>> {
-    let s3 = bucket_s3_target(&s, &id).await?;
+    let s3 = bucket_s3_target(&s, &actor, &id).await?;
     let objects = s3
         .list_objects(q.prefix.as_deref())
         .await
@@ -216,7 +226,7 @@ pub(crate) async fn bucket_object_upload_url(
     } else {
         key.clone()
     };
-    let s3 = bucket_s3_target(&s, &id).await?;
+    let s3 = bucket_s3_target(&s, &actor, &id).await?;
     let url = s3.presigned_put(&stored_key, ttl);
     let _ = atlas_inventory::audit::record(
         &s.pool,
@@ -245,6 +255,7 @@ pub(crate) async fn bucket_object_upload_url(
 /// browser downloads an object straight from RGW.
 pub(crate) async fn bucket_object_download_url(
     State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
     Path(id): Path<String>,
     Query(q): Query<ObjectKeyQuery>,
 ) -> AppResult<Json<Value>> {
@@ -255,7 +266,7 @@ pub(crate) async fn bucket_object_download_url(
         .filter(|k| !k.is_empty())
         .ok_or_else(|| AppError::Validation("object key is required".into()))?;
     let ttl = q.ttl_secs.unwrap_or(OBJECT_URL_TTL_SECS);
-    let s3 = bucket_s3_target(&s, &id).await?;
+    let s3 = bucket_s3_target(&s, &actor, &id).await?;
     let url = s3.presigned_get(key, ttl);
     Ok(Json(
         json!({ "bucket_id": id, "key": key, "method": "GET", "url": url, "expires_in": ttl }),
@@ -277,7 +288,7 @@ pub(crate) async fn bucket_object_delete(
         .map(str::trim)
         .filter(|k| !k.is_empty())
         .ok_or_else(|| AppError::Validation("object key is required".into()))?;
-    let s3 = bucket_s3_target(&s, &id).await?;
+    let s3 = bucket_s3_target(&s, &actor, &id).await?;
     s3.delete_object(key)
         .await
         .map_err(|e| AppError::Driver(e.to_string()))?;
@@ -315,7 +326,7 @@ pub(crate) async fn bucket_objects_prune(
         .ok_or_else(|| AppError::Validation("prefix is required".into()))?
         .to_string();
     let keep = body.get("keep").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
-    let s3 = bucket_s3_target(&s, &id).await?;
+    let s3 = bucket_s3_target(&s, &actor, &id).await?;
     let mut objs = s3
         .list_objects(Some(&prefix))
         .await
@@ -357,6 +368,7 @@ pub(crate) async fn delete_bucket(
     let bucket = atlas_inventory::buckets::get_bucket(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("bucket {id}")))?;
+    crate::auth::require_tenant(s.config.auth_required, &actor, &bucket.tenant_id, format!("bucket {id}"))?;
 
     let deps = atlas_inventory::backups::count_for_bucket(&s.pool, &id).await?;
     if deps > 0 && !q.force {
@@ -482,17 +494,25 @@ pub(crate) struct ListBackupsQuery {
 
 pub(crate) async fn list_backups(
     State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
     Query(q): Query<ListBackupsQuery>,
 ) -> AppResult<Json<Value>> {
-    Ok(Json(json!(
-        atlas_inventory::backups::list_backups(&s.pool, q.volume_id.as_deref()).await?
-    )))
+    let mut items = atlas_inventory::backups::list_backups(&s.pool, q.volume_id.as_deref()).await?;
+    if let Some(t) = crate::auth::tenant_scope(s.config.auth_required, &actor) {
+        items.retain(|b| b.tenant_id == t);
+    }
+    Ok(Json(json!(items)))
 }
 
-pub(crate) async fn get_backup(State(s): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
+pub(crate) async fn get_backup(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
     let b = atlas_inventory::backups::get_backup(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("backup {id}")))?;
+    crate::auth::require_tenant(s.config.auth_required, &actor, &b.tenant_id, format!("backup {id}"))?;
     Ok(Json(json!(b)))
 }
 
@@ -506,6 +526,7 @@ pub(crate) async fn delete_backup(
     let backup = atlas_inventory::backups::get_backup(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("backup {id}")))?;
+    crate::auth::require_tenant(s.config.auth_required, &actor, &backup.tenant_id, format!("backup {id}"))?;
     let bucket = atlas_inventory::buckets::get_bucket(&s.pool, &backup.bucket_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("bucket {}", backup.bucket_id)))?;
@@ -550,12 +571,14 @@ pub(crate) struct DownloadQuery {
 /// backup object, so a client downloads it straight from RGW (no proxy, no credentials).
 pub(crate) async fn download_backup(
     State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
     Path(id): Path<String>,
     Query(q): Query<DownloadQuery>,
 ) -> AppResult<Json<Value>> {
     let backup = atlas_inventory::backups::get_backup(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("backup {id}")))?;
+    crate::auth::require_tenant(s.config.auth_required, &actor, &backup.tenant_id, format!("backup {id}"))?;
     let bucket = atlas_inventory::buckets::get_bucket(&s.pool, &backup.bucket_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("bucket {}", backup.bucket_id)))?;
@@ -719,6 +742,13 @@ pub(crate) async fn create_backup(
     let vol = atlas_inventory::get_volume(&s.pool, &body.volume_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("volume {}", body.volume_id)))?;
+    let volume_tenant = atlas_inventory::volume_tenant(&s.pool, &body.volume_id).await?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        &actor,
+        &volume_tenant,
+        format!("volume {}", body.volume_id),
+    )?;
     let volume_namespace = vol
         .kubernetes_namespace
         .clone()
@@ -731,6 +761,12 @@ pub(crate) async fn create_backup(
     let bucket = atlas_inventory::buckets::get_bucket(&s.pool, &body.bucket_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("bucket {}", body.bucket_id)))?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        &actor,
+        &bucket.tenant_id,
+        format!("bucket {}", body.bucket_id),
+    )?;
     if bucket.state != "bound" {
         return Err(AppError::Validation(format!(
             "bucket {} is not bound yet (state: {})",
@@ -858,6 +894,12 @@ pub(crate) async fn create_restore(
     let backup = atlas_inventory::backups::get_backup(&s.pool, &body.backup_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("backup {}", body.backup_id)))?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        &actor,
+        &backup.tenant_id,
+        format!("backup {}", body.backup_id),
+    )?;
     let snapshot_id = backup
         .snapshot_id
         .clone()

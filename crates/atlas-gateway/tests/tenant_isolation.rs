@@ -260,3 +260,97 @@ async fn viewer_is_scoped_to_own_tenant() {
         .unwrap();
     assert_eq!(bkts_admin.len(), 2, "admin should see both tenants' buckets");
 }
+
+/// Regression guard for the cross-tenant *write* gap found while adding this file's coverage:
+/// `expand_volume`/`create_snapshot`/etc. loaded a resource by id and mutated it with no tenant
+/// check at all (unlike the read handlers above), and `create_volume` never checked that a
+/// caller-supplied `tenant_id` in the request body matched the caller's own tenant. A
+/// tenant-scoped operator must be rejected on both fronts; same-tenant operations must still work.
+#[tokio::test]
+async fn operator_cannot_write_across_tenants() {
+    let secret = "tenant-iso-write-test-secret-32b!!";
+    let (addr, pool) = spawn_auth(secret).await;
+    let base = format!("http://{addr}/api/atlas/v1");
+    let c = client();
+
+    seed_volume(&pool, "vol_tenant_a_w", "tenant-a", "a-vol-w").await;
+    seed_volume(&pool, "vol_tenant_b_w", "tenant-b", "b-vol-w").await;
+    seed_bucket(&pool, "bkt_tenant_a_w", "tenant-a", "a-bucket-w").await;
+    seed_bucket(&pool, "bkt_tenant_b_w", "tenant-b", "b-bucket-w").await;
+
+    let (operator_a, _, _) =
+        atlas_gateway::auth::mint_token(secret, "alice-op", "operator", "tenant-a", 3600).unwrap();
+
+    // --- create_volume: caller-supplied tenant_id must match the actor's own tenant ---
+    let spoofed_create = c
+        .post(format!("{base}/volumes"))
+        .bearer_auth(&operator_a)
+        .json(&serde_json::json!({
+            "tenant_id": "tenant-b", "name": "spoofed-vol", "size_bytes": 1073741824i64,
+            "policy": "database", "kubernetes": { "namespace": "default" }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        spoofed_create.status(),
+        403,
+        "tenant A operator must not create a volume attributed to tenant B"
+    );
+
+    let own_create = c
+        .post(format!("{base}/volumes"))
+        .bearer_auth(&operator_a)
+        .json(&serde_json::json!({
+            "tenant_id": "tenant-a", "name": "own-vol", "size_bytes": 1073741824i64,
+            "policy": "database", "kubernetes": { "namespace": "default" }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        own_create.status(),
+        202,
+        "tenant A operator must still be able to create a volume for their own tenant"
+    );
+
+    // --- expand_volume: an existing cross-tenant resource must not be mutable ---
+    let cross_expand = c
+        .post(format!("{base}/volumes/vol_tenant_b_w/expand"))
+        .bearer_auth(&operator_a)
+        .json(&serde_json::json!({ "new_size_bytes": 2147483648i64 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        cross_expand.status(),
+        404,
+        "tenant A operator must not expand tenant B's volume"
+    );
+
+    let own_expand = c
+        .post(format!("{base}/volumes/vol_tenant_a_w/expand"))
+        .bearer_auth(&operator_a)
+        .json(&serde_json::json!({ "new_size_bytes": 2147483648i64 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        own_expand.status(),
+        202,
+        "tenant A operator must still be able to expand their own tenant's volume"
+    );
+
+    // --- delete_bucket: same shape, different resource type + gateway module ---
+    let cross_delete = c
+        .delete(format!("{base}/buckets/bkt_tenant_b_w"))
+        .bearer_auth(&operator_a)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        cross_delete.status(),
+        404,
+        "tenant A operator must not delete tenant B's bucket"
+    );
+}

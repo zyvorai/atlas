@@ -96,6 +96,16 @@ pub(crate) async fn create_rbd_image(
 
     let pool_name = body.pool.unwrap_or_else(|| DEFAULT_RBD_POOL.into());
     let tenant_id = body.tenant_id.unwrap_or_else(|| "global".into());
+    // A tenant-scoped operator must not create an RBD image attributed to a DIFFERENT tenant by
+    // naming it in the request body — same class of gap as `POST /volumes` (see there for detail).
+    if let Some(scope) = crate::auth::tenant_scope(s.config.auth_required, &actor) {
+        if tenant_id != scope {
+            return Err(AppError::Forbidden(format!(
+                "actor '{}' may only create RBD images for tenant '{scope}'",
+                actor.id
+            )));
+        }
+    }
 
     // Reject a name collision up front: nothing else in the create path checks this (job dispatch
     // always upserts under a fresh volume_id), so without this guard two create calls for the same
@@ -243,6 +253,15 @@ pub(crate) async fn clone_rbd_image(
 
     let snap = body.snap.unwrap_or_else(|| format!("{}-base", body.name));
     let tenant_id = body.tenant_id.unwrap_or_else(|| "global".into());
+    // Same tenant-spoof guard as create_rbd_image / POST /volumes.
+    if let Some(scope) = crate::auth::tenant_scope(s.config.auth_required, &actor) {
+        if tenant_id != scope {
+            return Err(AppError::Forbidden(format!(
+                "actor '{}' may only create RBD images for tenant '{scope}'",
+                actor.id
+            )));
+        }
+    }
 
     // Reject a clone-target name collision up front — same reasoning as create_rbd_image: nothing
     // downstream checks this, so cloning onto an existing name would silently produce two catalog
@@ -263,11 +282,21 @@ pub(crate) async fn clone_rbd_image(
     // from the catalog (populated by discovery/create in both real and fake mode) so quotas apply
     // here the same as they do to `POST /volumes`.
     let parent_native = format!("rbd:{pool_name}/{image}");
-    let parent_size = existing
+    let parent = existing
         .into_iter()
-        .find(|v| v.backend_native_id.as_deref() == Some(parent_native.as_str()))
-        .map(|v| v.size_bytes)
-        .unwrap_or(0);
+        .find(|v| v.backend_native_id.as_deref() == Some(parent_native.as_str()));
+    // A tenant-scoped operator must not clone a parent image they don't own, regardless of which
+    // tenant they attribute the new clone to.
+    if let Some(p) = &parent {
+        let parent_tenant = atlas_inventory::volume_tenant(&s.pool, &p.id).await?;
+        crate::auth::require_tenant(
+            s.config.auth_required,
+            &actor,
+            &parent_tenant,
+            format!("rbd image {pool_name}/{image}"),
+        )?;
+    }
+    let parent_size = parent.map(|v| v.size_bytes).unwrap_or(0);
     match atlas_inventory::tenants::check_admission(&s.pool, &tenant_id, parent_size).await? {
         atlas_inventory::tenants::QuotaCheck::Ok => {}
         atlas_inventory::tenants::QuotaCheck::Bytes { limit, would_be } => {
@@ -347,6 +376,13 @@ pub(crate) async fn resize_rbd_image(
         .find(|v| v.backend_native_id.as_deref() == Some(native.as_str()))
         .map(|v| v.id)
         .unwrap_or_default();
+    let resource_tenant = atlas_inventory::volume_tenant(&s.pool, &volume_id).await?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        &actor,
+        &resource_tenant,
+        format!("rbd image {pool_name}/{image}"),
+    )?;
     let job_id = ids::job_id();
     let spec = JobSpec::RbdResize {
         volume_id,
@@ -402,6 +438,13 @@ pub(crate) async fn migrate_rbd_image(
         .find(|v| v.backend_native_id.as_deref() == Some(native.as_str()))
         .map(|v| v.id)
         .unwrap_or_default();
+    let resource_tenant = atlas_inventory::volume_tenant(&s.pool, &volume_id).await?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        &actor,
+        &resource_tenant,
+        format!("rbd image {pool_name}/{image}"),
+    )?;
     let job_id = ids::job_id();
     let spec = JobSpec::RbdMigrate {
         volume_id,
@@ -432,6 +475,20 @@ pub(crate) async fn flatten_rbd_image(
     Path((pool_name, image)): Path<(String, String)>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let native = format!("rbd:{pool_name}/{image}");
+    let volume_id = atlas_inventory::list_volumes(&s.pool)
+        .await?
+        .into_iter()
+        .find(|v| v.backend_native_id.as_deref() == Some(native.as_str()))
+        .map(|v| v.id)
+        .unwrap_or_default();
+    let resource_tenant = atlas_inventory::volume_tenant(&s.pool, &volume_id).await?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        &actor,
+        &resource_tenant,
+        format!("rbd image {pool_name}/{image}"),
+    )?;
     let job_id = ids::job_id();
     let spec = JobSpec::RbdFlatten {
         pool: pool_name.clone(),
@@ -498,6 +555,20 @@ pub(crate) async fn create_rbd_snap(
     if body.name.trim().is_empty() {
         return Err(AppError::Validation("name is required".into()));
     }
+    let native = format!("rbd:{pool_name}/{image}");
+    let volume_id = atlas_inventory::list_volumes(&s.pool)
+        .await?
+        .into_iter()
+        .find(|v| v.backend_native_id.as_deref() == Some(native.as_str()))
+        .map(|v| v.id)
+        .unwrap_or_default();
+    let resource_tenant = atlas_inventory::volume_tenant(&s.pool, &volume_id).await?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        &actor,
+        &resource_tenant,
+        format!("rbd image {pool_name}/{image}"),
+    )?;
     let job_id = ids::job_id();
     let spec = JobSpec::RbdSnapshot {
         pool: pool_name.clone(),
