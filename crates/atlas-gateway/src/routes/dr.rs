@@ -89,9 +89,13 @@ pub(crate) async fn dr_status(
         "primary": primaries, "secondary": secondaries,
         "error": errored, "worst_rpo_seconds": worst_rpo,
         "control_plane_ready": control_plane_ready,
-        "dataplane_verified": false,
-        "verified": false,
-        "note": "control-plane catalog ready; live rbd mirror needs a second Ceph cluster — see docs/DR.md",
+        "dataplane_verified": s.config.dr_dataplane_verified,
+        "verified": s.config.dr_dataplane_verified,
+        "note": if s.config.dr_dataplane_verified {
+            "control-plane catalog ready; this deployment has completed the live two-site rbd mirror drill — see docs/DR.md"
+        } else {
+            "control-plane catalog ready; live rbd mirror needs a second Ceph cluster — see docs/DR.md"
+        },
     })))
 }
 
@@ -101,7 +105,9 @@ pub(crate) async fn dr_preflight(
     Extension(actor): Extension<Actor>,
 ) -> AppResult<Json<Value>> {
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
-    Ok(Json(atlas_inventory::dr::preflight(&s.pool).await?))
+    Ok(Json(
+        atlas_inventory::dr::preflight(&s.pool, s.config.dr_dataplane_verified).await?,
+    ))
 }
 
 /// Resolve a volume id to its `(pool, image)` (direct-RBD `rbd:<pool>/<image>` native id).
@@ -309,7 +315,7 @@ pub(crate) async fn dr_failover(
             "confirm=true is required for failover (destructive)".into(),
         ));
     }
-    let pre = atlas_inventory::dr::preflight(&s.pool).await?;
+    let pre = atlas_inventory::dr::preflight(&s.pool, s.config.dr_dataplane_verified).await?;
     if pre["ready"] == false && !body.force {
         return Err(AppError::Conflict(format!(
             "DR preflight not ready: {}; pass force=true to override",

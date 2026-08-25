@@ -150,6 +150,14 @@ pub struct Config {
     pub rook_namespace: String,
     /// Name of the `CephCluster` CR within `rook_namespace` (the lab always names it `rook-ceph`).
     pub rook_cluster_name: String,
+    /// True only once an operator has personally run the live two-site `rbd mirror` drill
+    /// documented in `docs/DR.md`'s "Live two-site checklist" against THIS deployment's real
+    /// Ceph cluster and a real peer — never set generically. Mirrors `license_enforce`'s
+    /// pattern: a hard-coded blanket claim here would be dishonest for any deployment that
+    /// hasn't actually done the drill, so it's a per-deployment config toggle instead. Read by
+    /// `GET /dr/status`'s `dataplane_verified` field; defaults to `false` (control-plane-only,
+    /// matching every deployment until proven otherwise).
+    pub dr_dataplane_verified: bool,
     /// When true (the default), an expired/missing/invalid trial or license token causes
     /// protected REST routes to return 402 (see `atlas-gateway::license`). Token *location*
     /// (env var, file) is resolved per-request, not cached here, so swapping a license file
@@ -354,6 +362,14 @@ impl Config {
                     .as_str(),
                 "0" | "false" | "no"
             ),
+            dr_dataplane_verified: matches!(
+                std::env::var("ATLAS_DR_DATAPLANE_VERIFIED")
+                    .unwrap_or_default()
+                    .trim()
+                    .to_lowercase()
+                    .as_str(),
+                "1" | "true" | "yes"
+            ),
         }
     }
 
@@ -456,6 +472,7 @@ impl Default for Config {
             rook_namespace: "rook-ceph".into(),
             rook_cluster_name: "rook-ceph".into(),
             license_enforce: true,
+            dr_dataplane_verified: false,
         }
     }
 }

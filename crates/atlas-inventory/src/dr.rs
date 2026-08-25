@@ -234,10 +234,11 @@ pub async fn set_rpo(pool: &SqlitePool, id: &str, rpo_seconds: Option<i64>) -> R
 
 /// Preflight checklist for a DR failover drill (control-plane view; does not talk to Ceph).
 ///
-/// `ready` means the **catalog** is coherent enough to run a failover *job*. It does **not** mean
-/// live `rbd mirror` dataplane has been verified — that stays `dataplane_verified: false` until a
-/// two-site drill lands (see `docs/DR.md`).
-pub async fn preflight(pool: &SqlitePool) -> Result<serde_json::Value> {
+/// `ready` means the **catalog** is coherent enough to run a failover *job*. `dataplane_verified`
+/// is passed in from `Config::dr_dataplane_verified` (see its doc comment) — `false` unless this
+/// specific deployment's operator has personally completed the live two-site drill in
+/// `docs/DR.md`; never inferred from catalog state alone.
+pub async fn preflight(pool: &SqlitePool, dataplane_verified: bool) -> Result<serde_json::Value> {
     let peers = list_peers(pool).await?;
     let mirrors = list_mirrors(pool).await?;
     let mut checks = Vec::new();
@@ -319,17 +320,22 @@ pub async fn preflight(pool: &SqlitePool) -> Result<serde_json::Value> {
         warnings.push("record observed RPO via POST /dr/mirrors/{id}/rpo after a live sync sample");
     }
 
-    // Honest: control-plane catalog only. Live rbd mirror needs a second Ceph cluster.
     checks.push(serde_json::json!({
-        "id": "dataplane_verified", "ok": false,
-        "detail": "live two-site rbd mirror verification pending — see docs/DR.md"
+        "id": "dataplane_verified", "ok": dataplane_verified,
+        "detail": if dataplane_verified {
+            "this deployment has completed the live two-site rbd mirror drill — see docs/DR.md"
+        } else {
+            "live two-site rbd mirror verification pending — see docs/DR.md"
+        }
     }));
-    warnings.push("dataplane unverified: treat failover as a control-plane drill until a peer cluster exists");
+    if !dataplane_verified {
+        warnings.push("dataplane unverified: treat failover as a control-plane drill until a peer cluster exists");
+    }
 
     Ok(serde_json::json!({
         "ready": blockers.is_empty(),
         "control_plane_ready": blockers.is_empty(),
-        "dataplane_verified": false,
+        "dataplane_verified": dataplane_verified,
         "checks": checks,
         "blockers": blockers,
         "warnings": warnings,
@@ -375,19 +381,35 @@ mod tests {
     #[tokio::test]
     async fn preflight_blocks_without_peers_and_stays_dataplane_unverified() {
         let pool = mem_pool().await;
-        let pre = preflight(&pool).await.unwrap();
+        let pre = preflight(&pool, false).await.unwrap();
         assert_eq!(pre["ready"], false);
         assert_eq!(pre["dataplane_verified"], false);
         assert!(pre["blockers"].as_array().unwrap().iter().any(|b| b.as_str().unwrap().contains("peer")));
 
         register_peer(&pool, "p1", "dc2", Some("fsid"), "bidirectional", Some("sec")).await.unwrap();
-        let pre2 = preflight(&pool).await.unwrap();
+        let pre2 = preflight(&pool, false).await.unwrap();
         assert_eq!(pre2["ready"], true);
         assert_eq!(pre2["control_plane_ready"], true);
         assert_eq!(pre2["dataplane_verified"], false);
         assert!(pre2["warnings"].as_array().unwrap().iter().any(|w| {
             w.as_str().unwrap().contains("dataplane unverified")
         }));
+    }
+
+    #[tokio::test]
+    async fn preflight_reports_dataplane_verified_when_configured() {
+        // Mirrors Config::dr_dataplane_verified's contract: this flag comes from the caller
+        // (an operator who has personally completed the live two-site drill), never inferred
+        // from catalog state — so passing true must propagate even with an empty catalog.
+        let pool = mem_pool().await;
+        let pre = preflight(&pool, true).await.unwrap();
+        assert_eq!(pre["dataplane_verified"], true);
+        assert!(
+            !pre["warnings"].as_array().unwrap().iter().any(|w| {
+                w.as_str().unwrap().contains("dataplane unverified")
+            }),
+            "the unverified-dataplane warning must not fire once verified"
+        );
     }
 }
 

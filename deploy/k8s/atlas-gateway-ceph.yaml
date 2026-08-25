@@ -150,6 +150,14 @@ spec:
             # deploy/k8s/atlas-gateway.yaml for the exact pattern), remove this override.
             - name: ATLAS_LICENSE_ENFORCE
               value: "false"
+            # GET /dr/status and /dr/preflight's `dataplane_verified` field — see docs/DR.md's
+            # "Live two-site checklist". Defaults to false (Config::dr_dataplane_verified) —
+            # only set to "true" once *this specific deployment's* operator has personally
+            # completed steps 1-6 of that checklist against a real peer cluster. Never copy a
+            # "true" value between deployments; it is not a claim about the Atlas product, only
+            # about whether this cluster has actually been drilled.
+            # - name: ATLAS_DR_DATAPLANE_VERIFIED
+            #   value: "true"
             # Public RGW endpoint so presigned backup-download URLs are reachable off-cluster.
             # Bound to this node's hostIP (not a hard-coded lab address).
             - name: NODE_IP
