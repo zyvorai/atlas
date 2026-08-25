@@ -204,7 +204,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-api-types"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "serde",
@@ -213,7 +213,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -224,7 +224,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-common"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "atlas-license",
@@ -241,7 +241,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-databridge"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -273,7 +273,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-discovery"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "atlas-api-types",
@@ -286,7 +286,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-driver-ceph"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "atlas-api-types",
@@ -299,7 +299,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-driver-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "atlas-api-types",
@@ -310,7 +310,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-driver-k8s"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "atlas-api-types",
@@ -325,7 +325,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-driver-nfs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "atlas-api-types",
@@ -338,7 +338,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-driver-rgw"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -354,7 +354,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-driver-zfs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "atlas-api-types",
@@ -367,7 +367,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-gateway"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "argon2",
@@ -418,7 +418,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-inventory"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "atlas-api-types",
@@ -432,7 +432,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-jobs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "atlas-api-types",
@@ -454,7 +454,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-license"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -466,7 +466,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-license-tool"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "atlas-license",
@@ -479,7 +479,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-monitor"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "atlas-api-types",
@@ -497,7 +497,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-policy"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "atlas-api-types",
  "serde",
