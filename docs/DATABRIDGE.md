@@ -307,39 +307,64 @@ stream reports caught-up (0).
   URIs in the loader + validation Jobs omitted `authSource=admin`, so authenticated Mongo sources failed
   SCRAM auth (the mongo tools default the auth db to the app db, not `admin`). The **full-load copied the
   data** (3 customers + 1 order) and **validate confirmed exact document-count parity** (plan → `validated`).
-- **MySQL real CDC — connectors verified running against real infra, edge-write confirmation
-  blocked by a host fault** (2026-08-25, `212.8.248.187`): full-load re-verified end-to-end
-  against a real Percona edge (3 customer rows landed, confirmed via the API-driven job), then
-  `cdc/start` applied a real `KafkaConnect` cluster + Debezium MySQL source connector + Aiven
-  JDBC sink connector against a real MySQL 8.4 source. Surfaced and fixed **six real bugs**
-  along the way: (1) `mysql_operator.rs`'s PXC CR builder never set
-  `allowUnsafeConfigurations`, so Percona's operator never reports a single-node edge `ready`;
-  (2)-(4) `loader.rs`'s `mysqldump` pipeline needed `CREATE DATABASE` first, `--no-tablespaces`
-  (the source creds lack `PROCESS`), and `--skip-add-locks` (PXC's `pxc_strict_mode` rejects
-  `LOCK TABLES`); (5) `loader.rs` also needed `--set-gtid-purged=OFF` (the edge's own non-empty
-  `GTID_EXECUTED` conflicts with the source's); (6) `streaming.rs`'s `connect_spec()` used
-  Strimzi's default liveness/readiness probe (~90s to first kill), too tight for a Connect image
-  bundling Debezium + JDBC plugins — extended to 180s/6 retries; (7) `streaming.rs`'s Debezium
-  source config was missing `time.precision.mode: connect` — the default ISO-8601 timestamp
-  encoding is rejected outright by the JDBC sink's MySQL binding; (8)
+- **MySQL real CDC — verified live end-to-end for DATETIME columns** (2026-08-25/26,
+  `212.8.248.187`): full-load re-verified end-to-end against a real Percona edge (3 customer
+  rows landed, confirmed via the API-driven job), then `cdc/start` applied a real `KafkaConnect`
+  cluster + Debezium MySQL source connector + Aiven JDBC sink connector against a real MySQL 8.4
+  source. Surfaced and fixed **eight real bugs** in the code: (1) `mysql_operator.rs`'s PXC CR
+  builder never set `allowUnsafeConfigurations`, so Percona's operator never reports a
+  single-node edge `ready`; (2)-(4) `loader.rs`'s `mysqldump` pipeline needed `CREATE DATABASE`
+  first, `--no-tablespaces` (the source creds lack `PROCESS`), and `--skip-add-locks` (PXC's
+  `pxc_strict_mode` rejects `LOCK TABLES`); (5) `loader.rs` also needed `--set-gtid-purged=OFF`
+  (the edge's own non-empty `GTID_EXECUTED` conflicts with the source's); (6) `streaming.rs`'s
+  `connect_spec()` used Strimzi's default liveness/readiness probe (~90s to first kill), too
+  tight for a Connect image bundling Debezium + JDBC plugins — extended to 180s/6 retries; (7)
+  `streaming.rs`'s Debezium source config was missing `time.precision.mode: connect` (needed for
+  `DATETIME`/`TIME`/`DATE` columns — see the TIMESTAMP caveat below); (8)
   `deploy/databridge/connect/Dockerfile` pinned Debezium 3.0.8.Final against a Kafka 4.3.0 base
   image, but 3.0.8's schema-history recovery calls a Kafka client method Kafka 4.0 removed
-  (`NoSuchMethodError`) — bumped to 3.3.0.Final. After all eight fixes, both connectors were
-  confirmed **RUNNING with their tasks RUNNING** via Kafka Connect's own REST status API (source
-  connector version `3.3.0.Final`, no schema-history error). The final row-lands-on-edge
-  confirmation could not be completed in this session: right as the last row was inserted, the
-  lab node's container runtime (containerd/CRI) went into a degraded state — `haproxy` and
-  `pxc-0` pods both started failing readiness checks with `container is in CONTAINER_EXITED
-  state` / `no running task found`, and `kubectl exec` into `pxc-0` failed the same way despite
-  the pod API still reporting `Running` — a host-level fault unrelated to DataBridge, not
-  something to fix by restarting shared node daemons without authorization. **Not marked live**
-  in the matrix below pending a follow-up session that re-confirms a row physically landing on
-  the edge once the host recovers; treat CDC as "connector-level proven, data-path unconfirmed."
+  (`NoSuchMethodError`) — bumped to 3.3.0.Final.
+
+  Two further operational lessons surfaced getting a row to actually land on the edge, neither
+  of which is a code bug:
+  - **A sink task's Kafka consumer offset gets permanently poisoned by any failed message.**
+    Kafka consumers process a partition strictly in order — once a message fails and the task
+    dies, restarting the task (`strimzi.io/restart-task`) resumes from the *same* committed
+    offset and re-fails on the *same* message forever, silently blocking every later row too
+    (the connector/task status can report `RUNNING` the whole time, which is misleading — check
+    `kafka-consumer-groups.sh --describe` for `LAG` to see the truth). The fix is to explicitly
+    advance the consumer group's offset past the poisoned message:
+    `kafka-consumer-groups.sh --bootstrap-server <broker> --group connect-<sink-name> --topic
+    <topic> --reset-offsets --to-offset <N>|--to-latest --execute`.
+  - **MySQL `TIMESTAMP` columns are not `DATETIME` columns, and Debezium treats them very
+    differently.** Debezium's MySQL connector always encodes a `TIMESTAMP` column as an
+    ISO-8601 string via its own `io.debezium.time.ZonedTimestamp` logical type — this is
+    unconditional, unaffected by `time.precision.mode` (which only governs `DATETIME`/`TIME`/
+    `DATE`). The Aiven JDBC sink doesn't understand that Debezium-specific logical type and
+    fails trying to bind the raw ISO string into a MySQL column
+    (`MysqlDataTruncation: Incorrect datetime value: '2026-08-25T19:12:56Z'`), permanently
+    killing the sink task on every row that carries a `TIMESTAMP` value. This is a genuine,
+    **still-open product gap**: `created_at`/`updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
+    is an extremely common MySQL pattern, so real customer tables will hit this. Verification
+    here altered the throwaway test table's column from `TIMESTAMP` to `DATETIME` to get a
+    clean signal — that is **not** a fix, just a workaround for this session. A real fix needs
+    either a Kafka Connect SMT that converts `io.debezium.time.ZonedTimestamp` fields to a
+    JDBC-bindable type before the sink writes them, or documented customer guidance to avoid
+    `TIMESTAMP` columns (prefer `DATETIME`) on tables enrolled in CDC until that SMT exists.
+
+  With the column altered to `DATETIME` and the poisoned offset advanced, a fresh row
+  (`'Jack CDC Datetime Fixed'`) was confirmed **physically present on the edge PXC**, proving
+  the full pipeline (Debezium source → Kafka → JDBC sink → edge write) genuinely works. `validate`
+  was then run for real and correctly reported a row-count **mismatch** (source 11 rows, edge 4) —
+  this is expected and correct, not a bug: several rows inserted during this session's iterative
+  debugging (`Dave`/`Erin`/`Frank`/`Grace`/`Henry`/`Ivy`) were deliberately left behind poisoned
+  offsets and never propagated. The mismatch being detected accurately is itself proof `validate`'s
+  row-count-compare logic works correctly against real data.
 
 | Engine | Discover | Full-load | Validate | CDC | Cutover |
 |---|---|---|---|---|---|
 | Postgres | **live** | **live** | **live** | **live** | **live** |
-| MySQL | **live** | **live** | **live** | pending (real source) / **fake on lab** | pending |
+| MySQL | **live** | **live** | **live** | **live** (DATETIME columns only — TIMESTAMP columns unsupported, see note) | pending |
 | MariaDB | **live** | **live** | **live** | pending | pending |
 | MongoDB | **live** | **live** | **live** | pending | pending |
 | SQL Server | **live** | via Debezium `initial` | advisory | pending | pending |
