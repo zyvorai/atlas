@@ -46,14 +46,16 @@ docker-smoke:
 # Local equivalent of the CI static gate (no Docker, no containers).
 ci: lint test audit features ui
 
-# Run the gateway with the fake Ceph driver (no cluster required).
+# Run the gateway with the fake Ceph driver (no cluster required). License enforcement defaults
+# to on (see docs/LICENSING.md); local dev has no token yet, so disable it here rather than
+# make every contributor discover and set ATLAS_LICENSE_ENFORCE themselves.
 run:
-	ATLAS_CEPH_DRIVER_MODE=fake cargo run -p atlas-gateway
+	ATLAS_CEPH_DRIVER_MODE=fake ATLAS_LICENSE_ENFORCE=false cargo run -p atlas-gateway
 
 # Run the gateway for a DataBridge demo: fake Ceph + the reconciler ticking every 5s so fake CDC
 # lag drains and the migration pipeline runs end-to-end with no cloud/k8s. See docs/DATABRIDGE.md.
 run-databridge:
-	ATLAS_CEPH_DRIVER_MODE=fake ATLAS_DATABRIDGE_RECONCILE_SECS=5 cargo run -p atlas-gateway
+	ATLAS_CEPH_DRIVER_MODE=fake ATLAS_DATABRIDGE_RECONCILE_SECS=5 ATLAS_LICENSE_ENFORCE=false cargo run -p atlas-gateway
 
 # Build the React Storage Center UI into crates/atlas-gateway/ui/dist (embedded by the gateway).
 ui:

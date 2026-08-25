@@ -57,6 +57,7 @@ async fn spawn() -> SocketAddr {
         oidc: None,
         rook_namespace: "rook-ceph".into(),
         rook_cluster_name: "rook-ceph".into(),
+        license_enforce: false,
     };
     let state = build_state(
         config,

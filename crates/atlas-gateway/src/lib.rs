@@ -3,6 +3,7 @@
 
 pub mod auth;
 pub mod grpc;
+pub mod license;
 pub mod routes;
 pub mod startup;
 pub mod state;

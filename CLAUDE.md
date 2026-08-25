@@ -45,6 +45,18 @@ QoS), DataBridge CDC self-heal,
 upgrade pre-flight + rollback, and cross-cluster DR **scaffolding** (RBD-mirroring
 peers/mirrors/failover API + jobs).
 
+**Trial/licensing** (Ed25519-signed JWT, same design as `veyron::trial` + Aurora's
+`gtm_api.middleware.license`): `crates/atlas-license` (verify + status, product tag
+`atlas-trial`), `crates/atlas-license-tool` (sales-only `keygen`/`issue` CLI, never shipped to
+customers), gateway wiring in `crates/atlas-gateway/src/license.rs` (`license_middleware` gates
+the bearer-protected `api` router with 402 when expired; `GET /license/status` stays reachable
+in `public_api` alongside `/auth/login` and `/auth/oidc/*`). `Config::license_enforce` defaults
+to **true** (matching Aurora) — `make run`/`make run-databridge` explicitly set
+`ATLAS_LICENSE_ENFORCE=false` so local fake-Ceph dev keeps working with zero setup, and
+`deploy/k8s/atlas-gateway.yaml` currently does the same (no `atlas-license` Secret exists yet
+for that manifest — flip to `true`, or remove the override, once a real customer token is
+issued). See `docs/LICENSING.md`.
+
 Deferred: **real** RBD-mirroring/DR verification (needs a 2nd cluster; the API/jobs are scaffolded but
 the `rbd mirror` paths are unverified), per-product integrations beyond the gRPC surface.
 

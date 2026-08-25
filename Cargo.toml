@@ -17,6 +17,8 @@ members = [
     "crates/atlas-jobs",
     "crates/atlas-gateway",
     "crates/atlas-cli",
+    "crates/atlas-license",
+    "crates/atlas-license-tool",
 ]
 resolver = "2"
 
@@ -42,6 +44,7 @@ atlas-inventory = { path = "crates/atlas-inventory" }
 atlas-discovery = { path = "crates/atlas-discovery" }
 atlas-monitor = { path = "crates/atlas-monitor" }
 atlas-jobs = { path = "crates/atlas-jobs" }
+atlas-license = { path = "crates/atlas-license" }
 
 # Async / runtime
 tokio = { version = "1", features = ["full"] }
@@ -80,6 +83,7 @@ argon2 = "0.5"
 # existing rustls-based reqwest instead of pulling openidconnect's own bundled HTTP stack.
 openidconnect = { version = "4", default-features = false, features = ["reqwest"] }
 base64 = "0.22"
+ring = "0.17"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive", "env"] }
 uuid = { version = "1", features = ["v4", "serde"] }

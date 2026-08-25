@@ -60,6 +60,7 @@ fn base_config(db: &str, o: Opts) -> Config {
         oidc: None,
         rook_namespace: "rook-ceph".into(),
         rook_cluster_name: "rook-ceph".into(),
+        license_enforce: false,
     }
 }
 

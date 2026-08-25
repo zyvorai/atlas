@@ -150,6 +150,12 @@ pub struct Config {
     pub rook_namespace: String,
     /// Name of the `CephCluster` CR within `rook_namespace` (the lab always names it `rook-ceph`).
     pub rook_cluster_name: String,
+    /// When true (the default), an expired/missing/invalid trial or license token causes
+    /// protected REST routes to return 402 (see `atlas-gateway::license`). Token *location*
+    /// (env var, file) is resolved per-request, not cached here, so swapping a license file
+    /// takes effect without a restart. Set `ATLAS_LICENSE_ENFORCE=false` for local dev/tests —
+    /// mirrors Aurora's `AURORA_LICENSE_ENFORCE` default-true toggle.
+    pub license_enforce: bool,
 }
 
 fn oidc_from_env() -> Option<OidcConfig> {
@@ -340,6 +346,14 @@ impl Config {
                 .ok()
                 .filter(|s| !s.trim().is_empty())
                 .unwrap_or_else(|| "rook-ceph".into()),
+            license_enforce: !matches!(
+                std::env::var("ATLAS_LICENSE_ENFORCE")
+                    .unwrap_or_default()
+                    .trim()
+                    .to_lowercase()
+                    .as_str(),
+                "0" | "false" | "no"
+            ),
         }
     }
 
@@ -419,6 +433,7 @@ impl Default for Config {
             oidc: None,
             rook_namespace: "rook-ceph".into(),
             rook_cluster_name: "rook-ceph".into(),
+            license_enforce: true,
         }
     }
 }

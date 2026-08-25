@@ -33,6 +33,7 @@ import { onSendPrompt } from "../lib/prompts";
 import { Button, Field, Modal } from "../ui/kit";
 import { ChartFloor } from "../ui/ChartFloor";
 import { MenubarLiveMetrics } from "./MenubarLiveMetrics";
+import LicenseBanner from "../components/LicenseBanner";
 
 function Clock() {
   const [t, setT] = useState(new Date());
@@ -1051,6 +1052,7 @@ export function Shell() {
     <div className="at-app h-full flex flex-col overflow-hidden">
       <ChartFloor />
       <MenuBar onSpotlight={() => setSpot(true)} onOpenNav={() => setNavOpen(true)} />
+      <LicenseBanner />
       <div className="at-main flex-1 min-h-0">
         <div key={loc.pathname} className="at-main-scroll">
           <Outlet />

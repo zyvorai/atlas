@@ -209,6 +209,26 @@ spec:
               value: "admin"
             - name: ATLAS_OIDC_OPERATOR_GROUP
               value: "operator"
+            # Trial/license enforcement — see docs/LICENSING.md. `Config::license_enforce`
+            # defaults to true (enforced) when ATLAS_LICENSE_ENFORCE is unset — so explicitly
+            # set it to "false" here: this manifest has no `atlas-license` Secret created yet
+            # (the ATLAS_TRIAL_TOKEN block below is `optional: true` precisely so it's fine for
+            # that Secret not to exist), and defaulting to enforced with no token would 402 every
+            # protected route on the next rollout. Once a real token is issued for this specific
+            # deployment (create the Secret with:
+            #   kubectl create secret generic atlas-license -n zyvor-system \
+            #     --from-file=trial-token=trial.token
+            # — see `cargo run -p atlas-license-tool -- issue` to produce that file), remove this
+            # override (or set it to "true") so enforcement actually takes effect and a future
+            # accidental Secret deletion fails closed instead of silently unlocking.
+            - name: ATLAS_LICENSE_ENFORCE
+              value: "false"
+            - name: ATLAS_TRIAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-license
+                  key: trial-token
+                  optional: true
             # Per-actor rate limit (0 = off, the shipped default). 600/min is generous headroom
             # for a busy multi-widget console dashboard's background polling (each panel refetches
             # every ~8s) while still bounding a runaway/malicious client — tune based on real

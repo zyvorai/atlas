@@ -55,6 +55,7 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
         oidc: None,
         rook_namespace: "rook-ceph".into(),
         rook_cluster_name: "rook-ceph".into(),
+        license_enforce: false,
     };
 
     let state = build_state(
@@ -227,6 +228,7 @@ async fn spawn_auth(secret: &str) -> String {
         oidc: None,
         rook_namespace: "rook-ceph".into(),
         rook_cluster_name: "rook-ceph".into(),
+        license_enforce: false,
     };
     let state = build_state(
         config,
