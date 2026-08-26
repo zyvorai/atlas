@@ -57,3 +57,23 @@ built-in `validate_exp` rejected the token before its claims could be inspected.
 the "your trial has ended" message from ever appearing. Fixed by deferring expiry checking to
 `atlas-license::status()` (which has the real `exp` claim to work from) instead of
 `jsonwebtoken`'s decode-time rejection; regression-tested on both the Rust and TypeScript sides.
+
+### Fixed — Real MySQL DataBridge CDC, unrunnable end-to-end before this pass
+
+Live-verified `discover → full-load → cdc/start → validate` against a real Percona edge and a
+real Kafka/Strimzi/Debezium stack for the first time; the code path had never been run against
+live infra. Found and fixed 8 real bugs: `mysql_operator.rs`'s PXC CR builder never set
+`allowUnsafeConfigurations` (blocks a single-node edge from ever reporting `ready`); `loader.rs`'s
+`mysqldump` pipeline was missing `CREATE DATABASE` (target db doesn't exist yet), `--no-tablespaces`
+(source creds lack `PROCESS`), `--skip-add-locks` (PXC's `pxc_strict_mode` rejects `LOCK TABLES`),
+and `--set-gtid-purged=OFF` (conflicts with the edge's own GTID set); `streaming.rs`'s
+`connect_spec()` used Strimzi's ~90s-to-kill default probe, too tight for a Debezium+JDBC Connect
+image to boot; `streaming.rs`'s Debezium source config was missing `time.precision.mode: connect`;
+`deploy/databridge/connect/Dockerfile` pinned Debezium 3.0.8.Final against a Kafka 4.3.0 base
+image whose client library removed a method 3.0.8's schema-history recovery depends on
+(`NoSuchMethodError`) — bumped to 3.3.0.Final. See `docs/DATABRIDGE.md` for two further
+non-code operational findings surfaced getting a row to actually land on the edge: a failed
+sink message permanently poisons its Kafka consumer offset (a task restart alone never skips
+past it), and Debezium unconditionally encodes MySQL `TIMESTAMP` columns (not `DATETIME`) as
+ISO-8601 strings the JDBC sink can't bind — a genuine open gap for any real schema using
+`TIMESTAMP`, not yet fixed.

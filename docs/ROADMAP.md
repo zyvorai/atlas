@@ -516,11 +516,15 @@ runbook; summary:
   against real (lab) infra (`deploy/siem-lab/`, `deploy/vault-lab/` — see below); a real deployment
   still needs the bank's actual SIEM/Vault swapped in for the lab ones. None of these block a
   non-production pilot; all are gates before a production go-live.
-- **Non-Postgres DataBridge streaming CDC + cutover**: MySQL, MariaDB, and MongoDB are verified
-  through provision → real full-load → validate (row/document-count parity); their streaming-CDC
-  and cutover stages need the Kafka/Debezium stack, which isn't installed on the shared lab. SQL
-  Server and Oracle are verified through discovery only. Postgres is the only engine verified
-  end-to-end including real CDC.
+- **Non-Postgres DataBridge streaming CDC + cutover**: MySQL is now verified end-to-end
+  including real streaming CDC (provision → full-load → CDC → validate, against a real
+  Kafka/Strimzi/Debezium stack) — but only for `DATETIME` columns; Debezium encodes MySQL
+  `TIMESTAMP` columns as ISO-8601 strings the JDBC sink can't bind, an open gap needing a
+  follow-up SMT fix (see `docs/DATABRIDGE.md`). MariaDB and MongoDB are verified through
+  provision → real full-load → validate (row/document-count parity) only; their streaming-CDC
+  and cutover stages haven't been run against the Kafka/Debezium stack yet. SQL Server and
+  Oracle are verified through discovery only. Cutover itself (for any engine except Postgres)
+  hasn't been driven live yet.
 - **NFS/ZFS drivers are fixture-only**: `POST /backends {backend_type: "nfs"|"zfs", server, ...}`
   does instantiate a live driver instance and run it through discovery immediately (verified
   live) — but `atlas-driver-nfs`/`atlas-driver-zfs` are explicitly MVP/architecture-proof drivers
