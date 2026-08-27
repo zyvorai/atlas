@@ -10,10 +10,10 @@ Atlas is the shared storage control plane. Products call **REST** and/or **gRPC*
 
 | Field | Example | Meaning |
 |---|---|---|
-| `product` | `veyron`, `hyper2kvm`, `guestkit`, `packetwolf`, `aether`, `ragnarok`, `machina`, `hypersdk`, `zeus` | Product id recorded in `product_bindings` |
-| `resource_type` | `vm`, `datastore`, `volume`, `fleet` | Product-side resource class |
+| `product` | `veyron`, `hyper2kvm`, `guestkit`, `packetwolf`, `aether`, `ragnarok`, `machina`, `hypersdk`, `zeus`, `relay` | Product id recorded in `product_bindings` |
+| `resource_type` | `vm`, `datastore`, `volume`, `fleet`, `database` | Product-side resource class |
 | `resource_id` | product UUID / name | Product-side id |
-| `role` | `owner` (default), `consumer` | Binding role |
+| `role` | `owner` (default), `consumer`, `data_disk` | Binding role |
 
 Enumerate owned volumes with `ListVolumesByOwner(product, resource_id?)`.
 
@@ -42,6 +42,24 @@ Same JWT hierarchy as REST: `viewer < operator < admin`. Product service account
 
 Not yet on gRPC (REST-only): DR/mirroring, DataBridge, schedules, quotas admin, OSD ops, CephFS/NFS/ZFS
 specifics.
+
+## Relay (reliability control plane)
+
+Zyvor Relay keeps the **event/job ledger in Postgres**. Atlas owns the **data disk PVC** (and
+optional RGW backups), not the application rows.
+
+| Field | Relay convention |
+|---|---|
+| `product` | `relay` |
+| `resource_type` | `database` |
+| `resource_id` | `postgres-primary` |
+| `role` | `data_disk` |
+| Intent | `policy: "database"` → RBD PVC (e.g. claim `postgres-data` in `zyvor-relay`) |
+
+Integration lives in the Relay repo: `docs/ATLAS_STORAGE.md`,
+`scripts/atlas-provision-relay-storage.sh`, `k8s/postgres-atlas.example.yaml`.
+
+Service account: mint JWT subject `product.service.relay` (operator).
 
 ## Follow-ups (product repos)
 

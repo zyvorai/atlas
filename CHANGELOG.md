@@ -5,6 +5,15 @@ All notable changes to Atlas will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). Versions
 before `0.2.0` were not tracked here — see `git log` for that history.
 
+## [Unreleased]
+
+### Added — Relay product ownership
+
+- Document `relay` as an Atlas product consumer in `docs/PRODUCTS.md` (`owner.product=relay`,
+  `resource_type=database`, `role=data_disk`). Relay keeps its Postgres ledger; Atlas provisions
+  the data PVC and optional RGW backups. Implementation lives in the Relay repo
+  (`docs/ATLAS_STORAGE.md`, `scripts/atlas-provision-relay-storage.sh`).
+
 ## [0.2.0] — 2026-08-25
 
 ### Added — Trial/licensing (Ed25519-signed JWT)
