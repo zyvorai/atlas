@@ -8,7 +8,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 section "02-auth"
 
 : "${ATLAS_ADMIN_USERNAME:=admin}"
-: "${ATLAS_ADMIN_PASSWORD:=Admin@321}"
+ensure_admin_password
 
 # ---- bearer gate ------------------------------------------------------------
 _saved="${ATLAS_TOKEN:-}"

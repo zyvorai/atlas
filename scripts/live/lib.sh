@@ -289,6 +289,29 @@ fetch_bootstrap_token() {
     -o jsonpath='{.data.bootstrap-admin-token}'" | base64 -d
 }
 
+fetch_admin_password() {
+  _ssh "sudo k3s kubectl -n ${ATLAS_AUTH_NS} get secret ${ATLAS_AUTH_SECRET} \
+    -o jsonpath='{.data.admin-password}'" | base64 -d
+}
+
+# Every deployment mints its own admin-password secret — there is no fixed
+# default that works everywhere. Mirrors ensure_token's ATLAS_BOOTSTRAP_TOKEN
+# fallback: use an explicit override if given, else read it straight from the
+# same auth Secret over SSH.
+ensure_admin_password() {
+  if [[ -n "${ATLAS_ADMIN_PASSWORD:-}" ]]; then
+    info "using ATLAS_ADMIN_PASSWORD (explicit)"
+    return 0
+  fi
+  info "fetching admin password via ssh ${ATLAS_SSH_USER}@${ATLAS_SSH_HOST}"
+  ATLAS_ADMIN_PASSWORD="$(fetch_admin_password)"
+  export ATLAS_ADMIN_PASSWORD
+  if [[ -z "${ATLAS_ADMIN_PASSWORD}" ]]; then
+    echo "could not obtain admin password; set ATLAS_ADMIN_PASSWORD" >&2
+    return 1
+  fi
+}
+
 mint_admin_token() {
   local boot="$1"
   local prev="${ATLAS_TOKEN:-}"

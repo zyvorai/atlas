@@ -25,6 +25,7 @@ Without `ATLAS_LIVE=1`, `run-all.sh` exits 2 and does nothing.
 | `ATLAS_TOKEN` | Prefer a minted admin JWT |
 | `ATLAS_BOOTSTRAP_TOKEN` | Bootstrap admin token; suite mints a JWT |
 | *(neither)* | SSH to the lab host and read `atlas-gateway-auth` / `bootstrap-admin-token`, then mint |
+| `ATLAS_ADMIN_PASSWORD` | Password for `02-auth`'s password-login check. Every deployment mints its own — if unset, the suite reads it straight from the same `atlas-gateway-auth` Secret (key `admin-password`) over SSH, same mechanism as the bootstrap token above. There is no fixed default that works across deployments. |
 
 SSH defaults: `ATLAS_SSH_USER=sus`, `ATLAS_SSH_HOST=212.8.248.187`,
 `ATLAS_SSH_IDENTITY=$HOME/.ssh/id_ed25519_hyper2kvm`, secret in
@@ -73,4 +74,4 @@ are deleted even on failure.
 | `ATLAS_LIVE_DISCOVER_ALL` | `0` |
 | `ATLAS_LIVE_LOG` | temp file path |
 | `ATLAS_ADMIN_USERNAME` | `admin` (password-login check) |
-| `ATLAS_ADMIN_PASSWORD` | `Admin@321` (password-login check) |
+| `ATLAS_ADMIN_PASSWORD` | *(fetched from `atlas-gateway-auth` Secret if unset — see Auth above)* |
