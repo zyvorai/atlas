@@ -27,8 +27,8 @@ real hardware, never a blanket product claim. Preflight `ready` means you can en
 
 ### 2026-08-25 real two-cluster attempt — what was reached, what blocked it
 
-Using the two real Rook Ceph clusters already in this lab (`212.8.248.187`, fsid
-`18675a0d-6bd6-455a-aca6-3a045d79a46f`, and `80.79.5.173`, fsid
+Using the two real Rook Ceph clusters already in this lab (`<ephemeral-ip>`, fsid
+`18675a0d-6bd6-455a-aca6-3a045d79a46f`, and `<ephemeral-ip>`, fsid
 `e51cf24f-f89f-4061-8635-6e07caa8a3f9` — confirmed distinct), not a synthetic second cluster:
 
 - Created a dedicated `atlas-dr-mirror-test` CephBlockPool (image mirroring mode) on both clusters

@@ -5,7 +5,7 @@ Two things get deployed:
 1. the **Atlas gateway** (a container on Kubernetes), and
 2. optionally, the **Rook Ceph** storage fabric it manages.
 
-This guide covers a k3s node end-to-end, exactly as verified on `212.8.248.187`.
+This guide covers a k3s node end-to-end, exactly as verified on `<ephemeral-ip>`.
 
 **Prefer the scripts.** Hand-editing CRs (image tags, mon count, finalizers) is how labs get stuck.
 The paths below are the supported ones.
@@ -39,7 +39,7 @@ Override only together: `ROOK_VERSION=… CEPH_IMAGE=… ./up.sh …`.
 
 ```bash
 ./scripts/deploy-remote.sh <host> <user>
-# e.g. ./scripts/deploy-remote.sh 212.8.248.187 sus
+# e.g. ./scripts/deploy-remote.sh <ephemeral-ip> operator
 ```
 
 NodePort **30510**. Verifies `/health` + `/storage-classes`. Gates automatically on
@@ -125,7 +125,7 @@ kubectl -n default get pvc atlas-rbd-smoke      # → Bound
 
 ```bash
 ./scripts/deploy-ceph-gateway-remote.sh <host> <user>
-# e.g. ./scripts/deploy-ceph-gateway-remote.sh 212.8.248.187 sus
+# e.g. ./scripts/deploy-ceph-gateway-remote.sh <ephemeral-ip> operator
 ```
 
 What the script does (idempotent):

@@ -206,7 +206,7 @@ cdc_streaming → validating → validated → cutover_pending → cutover_in_pr
 → completed | rolled_back | failed`.
 
 ## Live verification (real infra)
-**Verified end-to-end on two independent live Rook Ceph clusters** (`175.110.122.71`, `80.79.5.173`).
+**Verified end-to-end on two independent live Rook Ceph clusters** (`<ephemeral-ip>`, `<ephemeral-ip>`).
 A full real migration was driven through the deployed gateway (k3s + Rook Ceph), Postgres →
 Ceph-backed edge Postgres:
 
@@ -308,7 +308,7 @@ stream reports caught-up (0).
   SCRAM auth (the mongo tools default the auth db to the app db, not `admin`). The **full-load copied the
   data** (3 customers + 1 order) and **validate confirmed exact document-count parity** (plan → `validated`).
 - **MySQL real CDC — verified live end-to-end for DATETIME columns** (2026-08-25/26,
-  `212.8.248.187`): full-load re-verified end-to-end against a real Percona edge (3 customer
+  `<ephemeral-ip>`): full-load re-verified end-to-end against a real Percona edge (3 customer
   rows landed, confirmed via the API-driven job), then `cdc/start` applied a real `KafkaConnect`
   cluster + Debezium MySQL source connector + Aiven JDBC sink connector against a real MySQL 8.4
   source. Surfaced and fixed **eight real bugs** in the code: (1) `mysql_operator.rs`'s PXC CR
@@ -372,7 +372,7 @@ stream reports caught-up (0).
 
 Fake path covers **all six** engines discover→cutover in CI (`tests/databridge_engines.rs`).
 
-- **Lab `212.8.248.187` (2026-07-28):** Strimzi + `zyvor-kafka` **Ready** (Kafka **4.3.0**; CR was
+- **Lab `<ephemeral-ip>` (2026-07-28):** Strimzi + `zyvor-kafka` **Ready** (Kafka **4.3.0**; CR was
   bumped from unsupported 4.0.0), multi-engine Connect image imported, gateway
   `ATLAS_DATABRIDGE_CONNECT_IMAGE=localhost/databridge-connect:dev`. Fake MySQL plan walked
   assess→provision→full-load→**cdc_streaming**. Real non-Postgres CDC still needs a live source

@@ -227,8 +227,8 @@ to open engines at the edge on Ceph-backed storage.
 - `migrations/0011_databridge.sql`; `/api/atlas/v1/databridge/*`; **DataBridge** console section;
   `deploy/databridge/` operator bundle + Connect image. Gateway image bundles the OCI Instant Client
   and builds the `oracle` feature.
-- **Postgres verified end-to-end** on two independent live Rook Ceph clusters (`175.110.122.71`,
-  `80.79.5.173`) including real CDC replication, driven through the deployed gateway.
+- **Postgres verified end-to-end** on two independent live Rook Ceph clusters (`<ephemeral-ip>`,
+  `<ephemeral-ip>`) including real CDC replication, driven through the deployed gateway.
 - **All six engines' real-connector discovery verified live** — MySQL 8.4, MariaDB 11.x, MongoDB 7.0
   (replica set), SQL Server 2022, Postgres, Oracle 23ai/26ai Free — through the deployed k3s gateway
   (binlog ROW / replica-set change streams / `is_cdc_enabled` / supplemental-log-min → `cdc_capable`,
@@ -308,7 +308,7 @@ runbook; summary:
   rollup if the `ceph` CLI path itself fails but Rook is reachable. New additive `GET
   /ceph/rook-status` exposes the raw CephCluster/CephBlockPool/CephFilesystem/CephObjectStore CR
   view. `ATLAS_ROOK_NAMESPACE`/`ATLAS_ROOK_CLUSTER_NAME` (both default `rook-ceph`) configure it.
-  **Verified live** against the real single-node Rook lab (`212.8.248.187`, redeployed via
+  **Verified live** against the real single-node Rook lab (`<ephemeral-ip>`, redeployed via
   `scripts/deploy-remote.sh`): `GET /ceph/rook-status` returned the real `CephCluster` (`phase:
   Ready, health: HEALTH_WARN`) plus the real `rbd-nvme-prod`/`zyvorfs`/`zyvor-rgw` CRs all
   `Ready`; `GET /ceph/health-rollup` showed `sources: ["cli","rook-crd"]` with no
@@ -332,7 +332,7 @@ runbook; summary:
   {ceph-pools,create-ceph-pool,delete-ceph-pool}` (and the filesystem/object-store equivalents).
   CephCluster-level changes (OSD/mon topology) are explicitly out of scope — left as a documented
   follow-up, not built.
-  **Verified live** against the real single-node Rook lab (`212.8.248.187`): `POST /ceph/pools`
+  **Verified live** against the real single-node Rook lab (`<ephemeral-ip>`): `POST /ceph/pools`
   created a real `CephBlockPool` (`replicated_size: 1, failure_domain: "osd"`, matching this
   cluster's actual 1-OSD capacity) that reached `phase: Ready`; a real PVC (`storageClassName:
   zyvor-atlas-test-pool-3`) bound against the StorageClass the job created
