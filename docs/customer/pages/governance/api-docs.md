@@ -1,34 +1,33 @@
-# Maintenance
+# API Docs
 
 ## Purpose
 
-Pause the job engine, cordon backends, and clean orphan backups.
+Curated REST + gRPC map for operators and integrators.
 
 ## When to use it
 
-- Operate **Maintenance** when your job matches this page
+- Operate **API Docs** when your job matches this page
 - Prefer **Command Deck** (`/`) if you are unsure where to start
 - Confirm gateway auth and that a storage driver is registered if inventories look empty
 
 ## How to get there
 
-- Route: `/maintenance`
-- Nav: **INFRASTRUCTURE → Maintenance**
+- Route: `/api-docs`
+- Nav: **GOVERNANCE → API Docs**
 
 ## Operate from the console (UX)
 
-1. Open `/maintenance`.
-2. Pause job engine only when you intend to quiesce (new jobs queue).
-3. Cordon a backend to reject new provisioning.
-4. Delete orphan backups carefully.
-5. **Empty / fail:** Pause stuck → check API auth; cordon blocked → role.
-6. **Success:** Desired pause/cordon state reflected; resume when done.
+1. Open `/api-docs`.
+2. Scan Meta, Auth, Inventory, Write path (async jobs), Observability, DR, DataBridge.
+3. Prefer `atlasctl` or REST with JWT; mutations return jobs.
+4. **Empty / fail:** N/A — static reference; deep examples in product API docs.
+5. **Success:** You can name the endpoint for the console action you just took.
 
 Use `http://<host>:5110/` for Storage Center (cluster NodePort often `:30511`, HTTPS `:30543`). Health: `GET /health`. Mutations return durable jobs — watch **Jobs**. Never publish lab IPs in customer docs.
 
 ## Related pages
 
-- [Backends](backends.md)
 - [Jobs](../observability/jobs.md)
+- [Access](access.md)
 - [Getting Started](../../getting-started.md)
 - [Page index](../../PAGE_INDEX.md)

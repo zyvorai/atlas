@@ -24,7 +24,7 @@ function discoverGuides(dir) {
 }
 
 function slug(path) {
-  return path.replace(/^\//, '').replace(/\//g, '-').replace(/\?.*/, '') || 'home'
+  return path.replace(/^\//, '').replace(/\//g, '-').replace(/:/g, '').replace(/\?.*/, '') || 'home'
 }
 
 const guides = discoverGuides(GUIDES)

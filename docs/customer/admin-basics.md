@@ -10,11 +10,14 @@
 | **30512** | Common gRPC NodePort |
 | **30543** | Optional HTTPS NodePort |
 
+Always document hosts as `<host>` — never paste lab IPs into customer runbooks.
+
 ## Auth
 
 - Lab: `ATLAS_AUTH_REQUIRED=0` (open).
 - Production: `ATLAS_AUTH_REQUIRED=1` + JWT secret (`atlas-gateway-auth`); weak defaults rejected at start.
-- Mint tokens: `POST /api/atlas/v1/auth/tokens`.
+- Mint tokens: `POST /api/atlas/v1/auth/tokens`, or paste into the rail **key** icon.
+- Local users: **GOVERNANCE → Access → Create user**.
 - CLI: `--token` / `ATLAS_TOKEN`; API base `/api/atlas/v1/...`.
 - Unauthenticated: `/health`, `/metrics`.
 
@@ -26,8 +29,17 @@ atlasctl health
 atlasctl discover
 ```
 
-Cluster: follow `docs/DEPLOYMENT.md` / Ceph gateway manifests. Mutations return `202` + job id — watch via UI **Jobs** or gRPC `WatchJob`.
+Open `http://<host>:5110/`. Cluster: follow product deployment docs / Ceph gateway manifests.
+
+## Operate from the console (admin)
+
+1. Confirm `/health` and Command Deck health chip.
+2. **Backends** registered → **Volumes** can provision.
+3. Pause / cordon only from **Maintenance** when you mean to quiesce.
+4. Mutations return `202` + job id — watch **Jobs** (UI or gRPC `WatchJob`).
 
 ## Related
 
 - [Getting Started](getting-started.md)
+- [Using the Dashboard](using-the-dashboard.md)
+- [Disaster Recovery](pages/infrastructure/dr.md)

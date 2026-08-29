@@ -18,3 +18,4 @@ trial.token
 crates/atlas-gateway/ui/node_modules/
 crates/atlas-gateway/ui/dist/
 crates/atlas-gateway/ui/.screenshots/
+.docs-tools/

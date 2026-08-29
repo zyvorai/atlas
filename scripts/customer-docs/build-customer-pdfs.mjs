@@ -5,9 +5,18 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+try {
+  const envText = readFileSync(resolve(ROOT, 'scripts/customer-docs/product.env'), 'utf8')
+  for (const line of envText.split('\n')) {
+    const m = line.match(/^([A-Z0-9_]+)=(.*)$/)
+    if (m) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, '')
+  }
+} catch {}
 const CUSTOMER = resolve(ROOT, 'docs/customer')
 const PDF_DIR = resolve(CUSTOMER, 'pdf')
 const PRODUCT = process.env.CUSTOMER_DOCS_PRODUCT || 'Atlas'
+const SLUG = (process.env.CUSTOMER_DOCS_SLUG || PRODUCT).toLowerCase().replace(/\s+/g, '-')
+const PDF_PREFIX = process.env.CUSTOMER_DOCS_PDF_PREFIX || PRODUCT.replace(/\s+/g, '-')
 const MARKED_CANDIDATES = [
   resolve(ROOT, '.docs-tools/node_modules/.bin/marked'),
   resolve(ROOT, 'web/dashboard/node_modules/.bin/marked'),

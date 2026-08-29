@@ -2,31 +2,35 @@
 
 ## Purpose
 
-Storage Center home — capacity, job health, backend status, and shortcuts into volumes and protection.
+Estate overview — capacity sounding, pool tiles, protection gaps, and quick jumps into volumes, snapshots, and backups.
 
 ## When to use it
 
-- Open this page when the job matches the purpose above
-- Prefer **Command Deck** (`/`) first if you are unsure where to start
-- Confirm gateway auth and backend connectivity if inventories look empty
+- Operate **Command Deck** when your job matches this page
+- Prefer **Command Deck** (`/`) if you are unsure where to start
+- Confirm gateway auth and that a storage driver is registered if inventories look empty
 
 ## How to get there
 
 - Route: `/`
-- Nav: **STORAGE → Command Deck** (sidebar, dock, or spotlight)
+- Nav: **STORAGE → Command Deck (or menubar Deck / H)**
 
-## What you can do
+## Operate from the console (UX)
 
-1. Open `/` and wait for live data from the Atlas gateway (default **:5110**).
-2. Use filters (backend, tenant, kind, status) when the page provides them.
-3. Drill into a volume, job, or plan for detail — mutations return durable jobs (`202` + job id).
-4. For mutating actions (provision, backup, migrate, DR): review tenant quotas and job status in **Jobs**.
+1. Open `/` (Command Deck) after the gateway is reachable.
+2. Read the health chip on the rail (HEALTH_OK / DEGRADED / …) and live job/alert counts.
+3. Use **New volume** to provision, or follow empty-state links (Create a volume →, Schedule nightly snapshots →, Create first bucket →).
+4. Open a pool tile to drill into `/pools/:id`, or jump via Spotlight (⌘K / Ctrl+K).
+5. Pause auto-refresh from the rail if you need a stable readout.
+6. **Empty / fail:** No capacity → register a backend (INFRASTRUCTURE → Backends) and run discover; auth failures → paste JWT from the key icon.
+7. **Success:** Sounding orb + pool/OSD lattice populate; jobs appear when you provision.
 
-If the page stays empty, check `/health`, auth (`ATLAS_AUTH_REQUIRED` / JWT), that a storage driver is registered, and run `atlasctl discover` if inventory is cold.
+Use `http://<host>:5110/` for Storage Center (cluster NodePort often `:30511`, HTTPS `:30543`). Health: `GET /health`. Mutations return durable jobs — watch **Jobs**. Never publish lab IPs in customer docs.
 
 ## Related pages
 
+- [Volumes](volumes.md)
+- [Jobs](../observability/jobs.md)
+- [Ceph](../infrastructure/ceph.md)
 - [Getting Started](../../getting-started.md)
-- [Command Deck](../storage/home.md)
-- [Volumes](../storage/volumes.md)
 - [Page index](../../PAGE_INDEX.md)

@@ -2,31 +2,32 @@
 
 ## Purpose
 
-Durable async jobs from every mutating Atlas API call.
+Durable async jobs for every mutation — progress, SSE live updates, failure detail.
 
 ## When to use it
 
-- Open this page when the job matches the purpose above
-- Prefer **Command Deck** (`/`) first if you are unsure where to start
-- Confirm gateway auth and backend connectivity if inventories look empty
+- Operate **Jobs** when your job matches this page
+- Prefer **Command Deck** (`/`) if you are unsure where to start
+- Confirm gateway auth and that a storage driver is registered if inventories look empty
 
 ## How to get there
 
 - Route: `/jobs`
-- Nav: **OBSERVABILITY → Jobs** (sidebar, dock, or spotlight)
+- Nav: **OBSERVABILITY → Jobs (menubar Jobs)**
 
-## What you can do
+## Operate from the console (UX)
 
-1. Open `/jobs` and wait for live data from the Atlas gateway (default **:5110**).
-2. Use filters (backend, tenant, kind, status) when the page provides them.
-3. Drill into a volume, job, or plan for detail — mutations return durable jobs (`202` + job id).
-4. For mutating actions (provision, backup, migrate, DR): review tenant quotas and job status in **Jobs**.
+1. Open `/jobs` after any create/backup/migrate/DR action.
+2. Select a job for created time, state, and error detail.
+3. Use rail Jobs chip for running count without leaving the page.
+4. **Empty / fail:** No jobs → you have not mutated yet; failed jobs → fix cause and retry from source page.
+5. **Success:** Job reaches succeeded; inventory refreshes.
 
-If the page stays empty, check `/health`, auth (`ATLAS_AUTH_REQUIRED` / JWT), that a storage driver is registered, and run `atlasctl discover` if inventory is cold.
+Use `http://<host>:5110/` for Storage Center (cluster NodePort often `:30511`, HTTPS `:30543`). Health: `GET /health`. Mutations return durable jobs — watch **Jobs**. Never publish lab IPs in customer docs.
 
 ## Related pages
 
-- [Getting Started](../../getting-started.md)
-- [Command Deck](../storage/home.md)
 - [Volumes](../storage/volumes.md)
+- [Activity](activity.md)
+- [Getting Started](../../getting-started.md)
 - [Page index](../../PAGE_INDEX.md)

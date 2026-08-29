@@ -43,6 +43,12 @@
       "legacy": false
     },
     {
+      "label": "Protection Status",
+      "path": "/protection",
+      "category": "DATA PROTECTION",
+      "legacy": false
+    },
+    {
       "label": "Observatory",
       "path": "/observatory",
       "category": "OBSERVABILITY",
@@ -93,6 +99,18 @@
     {
       "label": "Policies",
       "path": "/policies",
+      "category": "GOVERNANCE",
+      "legacy": false
+    },
+    {
+      "label": "Settings",
+      "path": "/settings",
+      "category": "GOVERNANCE",
+      "legacy": false
+    },
+    {
+      "label": "API Docs",
+      "path": "/api-docs",
       "category": "GOVERNANCE",
       "legacy": false
     },
@@ -153,6 +171,12 @@
     {
       "label": "Ceph",
       "path": "/ceph",
+      "category": "INFRASTRUCTURE",
+      "legacy": false
+    },
+    {
+      "label": "Pool Detail",
+      "path": "/pools/:id",
       "category": "INFRASTRUCTURE",
       "legacy": false
     },

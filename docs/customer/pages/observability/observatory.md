@@ -2,31 +2,33 @@
 
 ## Purpose
 
-Cross-cutting health and capacity observatory for the storage plane.
+Estate telemetry canvas — capacity lenses and jump to Deck or Alerts.
 
 ## When to use it
 
-- Open this page when the job matches the purpose above
-- Prefer **Command Deck** (`/`) first if you are unsure where to start
-- Confirm gateway auth and backend connectivity if inventories look empty
+- Operate **Observatory** when your job matches this page
+- Prefer **Command Deck** (`/`) if you are unsure where to start
+- Confirm gateway auth and that a storage driver is registered if inventories look empty
 
 ## How to get there
 
 - Route: `/observatory`
-- Nav: **OBSERVABILITY → Observatory** (sidebar, dock, or spotlight)
+- Nav: **OBSERVABILITY → Observatory (menubar Observatory)**
 
-## What you can do
+## Operate from the console (UX)
 
-1. Open `/observatory` and wait for live data from the Atlas gateway (default **:5110**).
-2. Use filters (backend, tenant, kind, status) when the page provides them.
-3. Drill into a volume, job, or plan for detail — mutations return durable jobs (`202` + job id).
-4. For mutating actions (provision, backup, migrate, DR): review tenant quotas and job status in **Jobs**.
+1. Open `/observatory` and wait for estate samples.
+2. Use lenses / panels for pool and OSD pressure.
+3. Jump **Command Deck** or **Alerts** from PageHead actions.
+4. **Empty / fail:** No samples → Ceph metrics path cold; check `/metrics-dashboard` and gateway.
+5. **Success:** Live estate picture matches Deck health.
 
-If the page stays empty, check `/health`, auth (`ATLAS_AUTH_REQUIRED` / JWT), that a storage driver is registered, and run `atlasctl discover` if inventory is cold.
+Use `http://<host>:5110/` for Storage Center (cluster NodePort often `:30511`, HTTPS `:30543`). Health: `GET /health`. Mutations return durable jobs — watch **Jobs**. Never publish lab IPs in customer docs.
 
 ## Related pages
 
-- [Getting Started](../../getting-started.md)
 - [Command Deck](../storage/home.md)
-- [Volumes](../storage/volumes.md)
+- [Alerts](alerts.md)
+- [Metrics](metrics-dashboard.md)
+- [Getting Started](../../getting-started.md)
 - [Page index](../../PAGE_INDEX.md)

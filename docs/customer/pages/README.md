@@ -1,6 +1,6 @@
 # Page-by-page guides
 
-Each guide follows: Purpose → When to use it → How to get there → What you can do → Related pages.
+Each guide follows: Purpose → When to use it → How to get there → Operate from the console (UX) → Related pages.
 
 Every route is also listed in the [complete page index](../PAGE_INDEX.md).
 
@@ -8,60 +8,64 @@ Every route is also listed in the [complete page index](../PAGE_INDEX.md).
 
 | Page | What it covers |
 |------|----------------|
-| [Backups](data-protection/backups.md) | Backup jobs and restore entry points for protected volumes. |
-| [Buckets](data-protection/buckets.md) | Object / RGW bucket inventory and lifecycle. |
+| [Backups](data-protection/backups.md) | Volume backups into object buckets — create, restore, and retire copies. |
+| [Buckets](data-protection/buckets.md) | Object gateway buckets for exports and backup destinations. |
+| [Protection Status](data-protection/protection.md) | Per-volume protection verdict — healthy / degraded / unprotected rollup. |
 
 ## Databridge
 
 | Page | What it covers |
 |------|----------------|
-| [Edge DB Clusters](databridge/databridge-edge-clusters.md) | Edge database clusters managed through DataBridge. |
-| [Plan Detail](databridge/databridge-plans-:id.md) | Single migration plan detail — stages, validation, and cutover. |
-| [Migration Plans](databridge/databridge-plans.md) | Database and object migration plans. |
-| [Replication](databridge/databridge-replication.md) | Ongoing replication links for DataBridge workloads. |
-| [Cloud Databases](databridge/databridge-sources.md) | Cloud / external database sources for DataBridge migrations. |
-| [Validation](databridge/databridge-validation.md) | Pre/post migration validation results. |
+| [Edge DB Clusters](databridge/databridge-edge-clusters.md) | Edge database clusters provisioned as migration targets. |
+| [Plan Detail](databridge/databridge-plans-id.md) | Single migration plan — stages, CDC controls, cutover, and validation hooks. |
+| [Migration Plans](databridge/databridge-plans.md) | Create and list DataBridge migration plans from registered sources. |
+| [Replication](databridge/databridge-replication.md) | CDC replication streams for active migration plans. |
+| [Cloud Databases](databridge/databridge-sources.md) | Register external / cloud database sources for DataBridge migrations. |
+| [Validation](databridge/databridge-validation.md) | Validation runs and per-table results for migrated data. |
 
 ## Governance
 
 | Page | What it covers |
 |------|----------------|
-| [Access](governance/access.md) | Tokens, roles, and API access for Storage Center and clients. |
-| [Policies](governance/policies.md) | Storage intent policies (production, database, development, shared, ai). |
-| [Tenants](governance/tenants.md) | Multi-tenant isolation and quota boundaries. |
+| [Access](governance/access.md) | Local users for Storage Center sign-in — create and delete accounts. |
+| [API Docs](governance/api-docs.md) | Curated REST + gRPC map for operators and integrators. |
+| [Policies](governance/policies.md) | Built-in intent → placement catalog (atlas-policy) used when creating volumes. |
+| [Settings](governance/settings.md) | Console settings — theme and session preferences for Storage Center. |
+| [Tenants](governance/tenants.md) | Tenant index — quotas and policy overrides. |
 
 ## Infrastructure
 
 | Page | What it covers |
 |------|----------------|
-| [Backends](infrastructure/backends.md) | Registered StorageDriver backends (Ceph first; NFS/ZFS/etc. as added). |
-| [Ceph](infrastructure/ceph.md) | Ceph-specific day-2 operations (OSD, pool, RGW health). |
-| [Cluster](infrastructure/cluster.md) | Atlas gateway cluster / HA membership view. |
-| [Disaster Recovery](infrastructure/dr.md) | Disaster recovery plans and failover for Atlas-managed data. |
-| [Kubernetes](infrastructure/kubernetes.md) | Kubernetes StorageClass / CSI integration status for Atlas. |
-| [Maintenance](infrastructure/maintenance.md) | Maintenance windows and safe ops against storage backends. |
+| [Backends](infrastructure/backends.md) | Registered storage backends — discovery and capacity summary. |
+| [Ceph](infrastructure/ceph.md) | Day-2 Ceph signals — health rollup, df pools, OSD tree. |
+| [Cluster](infrastructure/cluster.md) | Primary cluster inventory — health, pools, OSDs. |
+| [Disaster Recovery](infrastructure/dr.md) | Cross-cluster RBD mirroring — peers, mirrors, promote/demote/failover. |
+| [Kubernetes](infrastructure/kubernetes.md) | Discovered StorageClasses from the attached cluster. |
+| [Maintenance](infrastructure/maintenance.md) | Pause the job engine, cordon backends, and clean orphan backups. |
+| [Pool Detail](infrastructure/pools-id.md) | Single pool sounding — volumes and OSD cells for one pool. |
 
 ## Observability
 
 | Page | What it covers |
 |------|----------------|
-| [Activity](observability/activity.md) | Recent storage activity feed (provisions, deletes, migrations). |
-| [Alerts](observability/alerts.md) | Storage and backend alerts requiring operator attention. |
-| [Audit](observability/audit.md) | Audit log of storage control-plane actions (exportable). |
-| [Jobs](observability/jobs.md) | Durable async jobs from every mutating Atlas API call. |
-| [Metrics](observability/metrics-dashboard.md) | Metrics dashboards for pools, devices, and gateway latency. |
-| [Observatory](observability/observatory.md) | Cross-cutting health and capacity observatory for the storage plane. |
+| [Activity](observability/activity.md) | Recent operator and system activity stream. |
+| [Alerts](observability/alerts.md) | Open alert ledger — silence or resolve before capacity work. |
+| [Audit](observability/audit.md) | Compliance trail of state-changing and sensitive actions. |
+| [Jobs](observability/jobs.md) | Durable async jobs for every mutation — progress, SSE live updates, failure detail. |
+| [Metrics](observability/metrics-dashboard.md) | Ceph-native metric samples and OSD utilization averages. |
+| [Observatory](observability/observatory.md) | Estate telemetry canvas — capacity lenses and jump to Deck or Alerts. |
 
 ## Storage
 
 | Page | What it covers |
 |------|----------------|
-| [Command Deck](storage/home.md) | Storage Center home — capacity, job health, backend status, and shortcuts into volumes and protection. |
-| [RBD Images](storage/rbd.md) | Ceph RBD image inventory when the Ceph driver is active. |
-| [Schedules](storage/schedules.md) | Snapshot / backup schedule policies. |
-| [Snapshots](storage/snapshots.md) | Volume and image snapshots for point-in-time recovery. |
-| [Volumes](storage/volumes.md) | Intent-backed volume inventory across registered storage backends. |
+| [Command Deck](storage/home.md) | Estate overview — capacity sounding, pool tiles, protection gaps, and quick jumps into volumes, snapshots, and backups. |
+| [RBD Images](storage/rbd.md) | Raw Ceph RBD images for machina/libvirt and bare VMs (bypassing CSI). |
+| [Schedules](storage/schedules.md) | Automate periodic snapshots or backups for a volume. |
+| [Snapshots](storage/snapshots.md) | Point-in-time volume snapshots — clone or restore into new volumes. |
+| [Volumes](storage/volumes.md) | Intent-backed volume inventory — create, expand, snapshot, schedule, and delete across backends. |
 
 ---
 
-28 guides. Regenerate: `node scripts/customer-docs/generate-guide-index.mjs`.
+32 guides. Regenerate: `node scripts/customer-docs/generate-guide-index.mjs`.

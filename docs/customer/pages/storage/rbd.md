@@ -2,31 +2,34 @@
 
 ## Purpose
 
-Ceph RBD image inventory when the Ceph driver is active.
+Raw Ceph RBD images for machina/libvirt and bare VMs (bypassing CSI).
 
 ## When to use it
 
-- Open this page when the job matches the purpose above
-- Prefer **Command Deck** (`/`) first if you are unsure where to start
-- Confirm gateway auth and backend connectivity if inventories look empty
+- Operate **RBD Images** when your job matches this page
+- Prefer **Command Deck** (`/`) if you are unsure where to start
+- Confirm gateway auth and that a storage driver is registered if inventories look empty
 
 ## How to get there
 
 - Route: `/rbd`
-- Nav: **STORAGE → RBD Images** (sidebar, dock, or spotlight)
+- Nav: **STORAGE → RBD Images**
 
-## What you can do
+## Operate from the console (UX)
 
-1. Open `/rbd` and wait for live data from the Atlas gateway (default **:5110**).
-2. Use filters (backend, tenant, kind, status) when the page provides them.
-3. Drill into a volume, job, or plan for detail — mutations return durable jobs (`202` + job id).
-4. For mutating actions (provision, backup, migrate, DR): review tenant quotas and job status in **Jobs**.
+1. Open `/rbd` and select the target pool (default often `rbd-nvme-prod`).
+2. **Create image** with name + size; or Flatten / Clone / Resize / Snapshot from row actions.
+3. Clone needs an existing snapshot — create under Snaps first if the hint says so.
+4. Rollback is destructive — confirm before reverting to a snap.
+5. **Empty / fail:** Wrong pool → switch pool; Ceph not ready → INFRASTRUCTURE → Ceph.
+6. **Success:** Image listed in pool; jobs complete for flatten/clone/resize.
 
-If the page stays empty, check `/health`, auth (`ATLAS_AUTH_REQUIRED` / JWT), that a storage driver is registered, and run `atlasctl discover` if inventory is cold.
+Use `http://<host>:5110/` for Storage Center (cluster NodePort often `:30511`, HTTPS `:30543`). Health: `GET /health`. Mutations return durable jobs — watch **Jobs**. Never publish lab IPs in customer docs.
 
 ## Related pages
 
+- [Ceph](../infrastructure/ceph.md)
+- [Snapshots](snapshots.md)
+- [Jobs](../observability/jobs.md)
 - [Getting Started](../../getting-started.md)
-- [Command Deck](../storage/home.md)
-- [Volumes](../storage/volumes.md)
 - [Page index](../../PAGE_INDEX.md)

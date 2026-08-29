@@ -2,31 +2,32 @@
 
 ## Purpose
 
-Recent storage activity feed (provisions, deletes, migrations).
+Recent operator and system activity stream.
 
 ## When to use it
 
-- Open this page when the job matches the purpose above
-- Prefer **Command Deck** (`/`) first if you are unsure where to start
-- Confirm gateway auth and backend connectivity if inventories look empty
+- Operate **Activity** when your job matches this page
+- Prefer **Command Deck** (`/`) if you are unsure where to start
+- Confirm gateway auth and that a storage driver is registered if inventories look empty
 
 ## How to get there
 
 - Route: `/activity`
-- Nav: **OBSERVABILITY → Activity** (sidebar, dock, or spotlight)
+- Nav: **OBSERVABILITY → Activity**
 
-## What you can do
+## Operate from the console (UX)
 
-1. Open `/activity` and wait for live data from the Atlas gateway (default **:5110**).
-2. Use filters (backend, tenant, kind, status) when the page provides them.
-3. Drill into a volume, job, or plan for detail — mutations return durable jobs (`202` + job id).
-4. For mutating actions (provision, backup, migrate, DR): review tenant quotas and job status in **Jobs**.
+1. Open `/activity`.
+2. Scan recent events after provision/protect/migrate actions.
+3. Correlate failures with Jobs and Audit.
+4. **Empty / fail:** Quiet estate → trigger a volume op and refresh.
+5. **Success:** Activity lines match your last mutations.
 
-If the page stays empty, check `/health`, auth (`ATLAS_AUTH_REQUIRED` / JWT), that a storage driver is registered, and run `atlasctl discover` if inventory is cold.
+Use `http://<host>:5110/` for Storage Center (cluster NodePort often `:30511`, HTTPS `:30543`). Health: `GET /health`. Mutations return durable jobs — watch **Jobs**. Never publish lab IPs in customer docs.
 
 ## Related pages
 
+- [Jobs](jobs.md)
+- [Audit](audit.md)
 - [Getting Started](../../getting-started.md)
-- [Command Deck](../storage/home.md)
-- [Volumes](../storage/volumes.md)
 - [Page index](../../PAGE_INDEX.md)

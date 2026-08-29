@@ -2,31 +2,32 @@
 
 ## Purpose
 
-Cloud / external database sources for DataBridge migrations.
+Register external / cloud database sources for DataBridge migrations.
 
 ## When to use it
 
-- Open this page when the job matches the purpose above
-- Prefer **Command Deck** (`/`) first if you are unsure where to start
-- Confirm gateway auth and backend connectivity if inventories look empty
+- Operate **Cloud Databases** when your job matches this page
+- Prefer **Command Deck** (`/`) if you are unsure where to start
+- Confirm gateway auth and that a storage driver is registered if inventories look empty
 
 ## How to get there
 
 - Route: `/databridge/sources`
-- Nav: **DATABRIDGE → Cloud Databases** (sidebar, dock, or spotlight)
+- Nav: **DATABRIDGE → Cloud Databases**
 
-## What you can do
+## Operate from the console (UX)
 
-1. Open `/databridge/sources` and wait for live data from the Atlas gateway (default **:5110**).
-2. Use filters (backend, tenant, kind, status) when the page provides them.
-3. Drill into a volume, job, or plan for detail — mutations return durable jobs (`202` + job id).
-4. For mutating actions (provision, backup, migrate, DR): review tenant quotas and job status in **Jobs**.
+1. Open `/databridge/sources`.
+2. **Register** a source database (connection + engine).
+3. Open a source → schema SlideOver (tables).
+4. Then create a Migration Plan.
+5. **Empty / fail:** Connection refused → network/creds; schema empty → privileges.
+6. **Success:** Source listed with reachable schema.
 
-If the page stays empty, check `/health`, auth (`ATLAS_AUTH_REQUIRED` / JWT), that a storage driver is registered, and run `atlasctl discover` if inventory is cold.
+Use `http://<host>:5110/` for Storage Center (cluster NodePort often `:30511`, HTTPS `:30543`). Health: `GET /health`. Mutations return durable jobs — watch **Jobs**. Never publish lab IPs in customer docs.
 
 ## Related pages
 
+- [Migration Plans](databridge-plans.md)
 - [Getting Started](../../getting-started.md)
-- [Command Deck](../storage/home.md)
-- [Volumes](../storage/volumes.md)
 - [Page index](../../PAGE_INDEX.md)

@@ -2,31 +2,32 @@
 
 ## Purpose
 
-Database and object migration plans.
+Create and list DataBridge migration plans from registered sources.
 
 ## When to use it
 
-- Open this page when the job matches the purpose above
-- Prefer **Command Deck** (`/`) first if you are unsure where to start
-- Confirm gateway auth and backend connectivity if inventories look empty
+- Operate **Migration Plans** when your job matches this page
+- Prefer **Command Deck** (`/`) if you are unsure where to start
+- Confirm gateway auth and that a storage driver is registered if inventories look empty
 
 ## How to get there
 
 - Route: `/databridge/plans`
-- Nav: **DATABRIDGE → Migration Plans** (sidebar, dock, or spotlight)
+- Nav: **DATABRIDGE → Migration Plans**
 
-## What you can do
+## Operate from the console (UX)
 
-1. Open `/databridge/plans` and wait for live data from the Atlas gateway (default **:5110**).
-2. Use filters (backend, tenant, kind, status) when the page provides them.
-3. Drill into a volume, job, or plan for detail — mutations return durable jobs (`202` + job id).
-4. For mutating actions (provision, backup, migrate, DR): review tenant quotas and job status in **Jobs**.
+1. Open `/databridge/plans` after registering a source.
+2. **Create** New migration plan → open Plan Detail.
+3. Track stages and CDC from the detail page.
+4. **Empty / fail:** No plans → register a Cloud Database first.
+5. **Success:** Plan row links to `/databridge/plans/:id`.
 
-If the page stays empty, check `/health`, auth (`ATLAS_AUTH_REQUIRED` / JWT), that a storage driver is registered, and run `atlasctl discover` if inventory is cold.
+Use `http://<host>:5110/` for Storage Center (cluster NodePort often `:30511`, HTTPS `:30543`). Health: `GET /health`. Mutations return durable jobs — watch **Jobs**. Never publish lab IPs in customer docs.
 
 ## Related pages
 
+- [Cloud Databases](databridge-sources.md)
+- [Plan Detail](databridge-plans-id.md)
 - [Getting Started](../../getting-started.md)
-- [Command Deck](../storage/home.md)
-- [Volumes](../storage/volumes.md)
 - [Page index](../../PAGE_INDEX.md)

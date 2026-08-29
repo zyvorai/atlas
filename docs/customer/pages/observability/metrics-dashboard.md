@@ -2,31 +2,32 @@
 
 ## Purpose
 
-Metrics dashboards for pools, devices, and gateway latency.
+Ceph-native metric samples and OSD utilization averages.
 
 ## When to use it
 
-- Open this page when the job matches the purpose above
-- Prefer **Command Deck** (`/`) first if you are unsure where to start
-- Confirm gateway auth and backend connectivity if inventories look empty
+- Operate **Metrics** when your job matches this page
+- Prefer **Command Deck** (`/`) if you are unsure where to start
+- Confirm gateway auth and that a storage driver is registered if inventories look empty
 
 ## How to get there
 
 - Route: `/metrics-dashboard`
-- Nav: **OBSERVABILITY → Metrics** (sidebar, dock, or spotlight)
+- Nav: **OBSERVABILITY → Metrics**
 
-## What you can do
+## Operate from the console (UX)
 
-1. Open `/metrics-dashboard` and wait for live data from the Atlas gateway (default **:5110**).
-2. Use filters (backend, tenant, kind, status) when the page provides them.
-3. Drill into a volume, job, or plan for detail — mutations return durable jobs (`202` + job id).
-4. For mutating actions (provision, backup, migrate, DR): review tenant quotas and job status in **Jobs**.
+1. Open `/metrics-dashboard`.
+2. Confirm samples arrive; note OSD average % when shown.
+3. Cross-check spikes with Observatory and Ceph.
+4. **Empty / fail:** Waiting on samples → backend/Ceph metrics not streaming.
+5. **Success:** Sample count > 0 and averages look sane.
 
-If the page stays empty, check `/health`, auth (`ATLAS_AUTH_REQUIRED` / JWT), that a storage driver is registered, and run `atlasctl discover` if inventory is cold.
+Use `http://<host>:5110/` for Storage Center (cluster NodePort often `:30511`, HTTPS `:30543`). Health: `GET /health`. Mutations return durable jobs — watch **Jobs**. Never publish lab IPs in customer docs.
 
 ## Related pages
 
+- [Observatory](observatory.md)
+- [Ceph](../infrastructure/ceph.md)
 - [Getting Started](../../getting-started.md)
-- [Command Deck](../storage/home.md)
-- [Volumes](../storage/volumes.md)
 - [Page index](../../PAGE_INDEX.md)

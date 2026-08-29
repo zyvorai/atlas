@@ -2,31 +2,33 @@
 
 ## Purpose
 
-Tokens, roles, and API access for Storage Center and clients.
+Local users for Storage Center sign-in — create and delete accounts.
 
 ## When to use it
 
-- Open this page when the job matches the purpose above
-- Prefer **Command Deck** (`/`) first if you are unsure where to start
-- Confirm gateway auth and backend connectivity if inventories look empty
+- Operate **Access** when your job matches this page
+- Prefer **Command Deck** (`/`) if you are unsure where to start
+- Confirm gateway auth and that a storage driver is registered if inventories look empty
 
 ## How to get there
 
 - Route: `/access`
-- Nav: **GOVERNANCE → Access** (sidebar, dock, or spotlight)
+- Nav: **GOVERNANCE → Access**
 
-## What you can do
+## Operate from the console (UX)
 
-1. Open `/access` and wait for live data from the Atlas gateway (default **:5110**).
-2. Use filters (backend, tenant, kind, status) when the page provides them.
-3. Drill into a volume, job, or plan for detail — mutations return durable jobs (`202` + job id).
-4. For mutating actions (provision, backup, migrate, DR): review tenant quotas and job status in **Jobs**.
+1. Open `/access`.
+2. **Create user** with username/password; they sign in on the login page.
+3. Delete users from the table when retiring access.
+4. Paste service JWT via rail key icon for API automation.
+5. **Empty / fail:** No users → create one; login fails → check ATLAS_AUTH_REQUIRED and token.
+6. **Success:** New user can sign in; table lists accounts.
 
-If the page stays empty, check `/health`, auth (`ATLAS_AUTH_REQUIRED` / JWT), that a storage driver is registered, and run `atlasctl discover` if inventory is cold.
+Use `http://<host>:5110/` for Storage Center (cluster NodePort often `:30511`, HTTPS `:30543`). Health: `GET /health`. Mutations return durable jobs — watch **Jobs**. Never publish lab IPs in customer docs.
 
 ## Related pages
 
+- [Settings](settings.md)
+- [API Docs](api-docs.md)
 - [Getting Started](../../getting-started.md)
-- [Command Deck](../storage/home.md)
-- [Volumes](../storage/volumes.md)
 - [Page index](../../PAGE_INDEX.md)

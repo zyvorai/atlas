@@ -24,9 +24,9 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:1.2em 0}
 <section class="cover"><div class="kicker">ZyvorAI Labs · Customer Documentation</div>
 <h1>At<span>las</span></h1>
 <div class="sub">Customer Documentation Overview</div>
-<div class="badge">2026-07-26</div>
+<div class="badge">2026-08-29</div>
 <div class="foot">zyvor.dev · Confidential — for licensed customers</div></section>
-<main><p><strong>Atlas</strong> is the Zyvor <strong>storage control plane</strong> — products request storage intent; Atlas maps intent to backends (Ceph first), owns inventory/ownership/audit, and exposes Storage Center plus <code>atlasctl</code> / REST / gRPC.</p>
+<main><p><strong>Atlas</strong> is the storage control plane — Ceph/RBD volumes, protection, DataBridge migrations, and day-2 ops from Storage Center.</p>
 <table>
 <thead>
 <tr>
@@ -35,7 +35,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:1.2em 0}
 </tr>
 </thead>
 <tbody><tr>
-<td>Install and log in</td>
+<td>Install and open the console</td>
 <td><a href="getting-started.md">Getting Started</a></td>
 </tr>
 <tr>
@@ -58,82 +58,17 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:1.2em 0}
 <td>Multi-page jobs</td>
 <td><a href="workflows.md">Common workflows</a></td>
 </tr>
-<tr>
-<td>Capability map</td>
-<td><a href="../atlas-customer-feature-guide.md">Feature Guide</a></td>
-</tr>
 </tbody></table>
 <h2>Printable PDFs</h2>
-<pre><code class="language-bash">node scripts/customer-docs/build-customer-pdfs.mjs
+<pre><code class="language-bash">set -a; source scripts/customer-docs/product.env; set +a
+node scripts/customer-docs/build-customer-pdfs.mjs
 </code></pre>
-<p>Output lands in <a href="pdf/"><code>pdf/</code></a>:</p>
-<table>
-<thead>
-<tr>
-<th>PDF</th>
-<th>Contents</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>Atlas-Customer-README.pdf</code></td>
-<td>This overview</td>
-</tr>
-<tr>
-<td><code>Atlas-Getting-Started.pdf</code></td>
-<td>Access, login, dashboard basics, workflows</td>
-</tr>
-<tr>
-<td><code>Atlas-Page-by-Page.pdf</code></td>
-<td>Complete page manual</td>
-</tr>
-<tr>
-<td><code>Atlas-Admin-Basics.pdf</code></td>
-<td>Deploy, auth, ports</td>
-</tr>
-</tbody></table>
+<p>Output lands in <a href="pdf/"><code>pdf/</code></a>.</p>
 <h2>Product at a glance</h2>
-<pre><code class="language-text">  Storage Center  →  :5110  (UI + REST)
-  gRPC            →  :5111
-  CLI             →  atlasctl
-  Drivers         →  Ceph (RBD / CephFS / RGW) first
+<pre><code class="language-text">  Storage Center  →  http://&lt;host&gt;:5110/     (NodePort often :30511 / HTTPS :30543)
+  Health          →  GET /health
+  Optional gRPC   →  :5111
+  CLI             →  atlasctl …
 </code></pre>
-<h2>Support surfaces (quick map)</h2>
-<table>
-<thead>
-<tr>
-<th>Need</th>
-<th>Typical path</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Command Deck</td>
-<td><code>/</code></td>
-</tr>
-<tr>
-<td>Volumes</td>
-<td><code>/volumes</code></td>
-</tr>
-<tr>
-<td>Jobs</td>
-<td><code>/jobs</code></td>
-</tr>
-<tr>
-<td>Backups / buckets</td>
-<td><code>/backups</code>, <code>/buckets</code></td>
-</tr>
-<tr>
-<td>DataBridge</td>
-<td><code>/databridge/plans</code></td>
-</tr>
-<tr>
-<td>Backends / Ceph</td>
-<td><code>/backends</code>, <code>/ceph</code></td>
-</tr>
-<tr>
-<td>Access / tenants</td>
-<td><code>/access</code>, <code>/tenants</code></td>
-</tr>
-</tbody></table>
-<hr>
-<p><em>ZyvorAI Labs · <a href="https://zyvor.dev">zyvor.dev</a> · Atlas</em></p>
+<p>Never publish lab IPs in customer docs — use <code>&lt;host&gt;</code>.</p>
 </main></body></html>

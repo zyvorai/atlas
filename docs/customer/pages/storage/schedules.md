@@ -2,31 +2,32 @@
 
 ## Purpose
 
-Snapshot / backup schedule policies.
+Automate periodic snapshots or backups for a volume.
 
 ## When to use it
 
-- Open this page when the job matches the purpose above
-- Prefer **Command Deck** (`/`) first if you are unsure where to start
-- Confirm gateway auth and backend connectivity if inventories look empty
+- Operate **Schedules** when your job matches this page
+- Prefer **Command Deck** (`/`) if you are unsure where to start
+- Confirm gateway auth and that a storage driver is registered if inventories look empty
 
 ## How to get there
 
 - Route: `/schedules`
-- Nav: **STORAGE → Schedules** (sidebar, dock, or spotlight)
+- Nav: **STORAGE → Schedules**
 
-## What you can do
+## Operate from the console (UX)
 
-1. Open `/schedules` and wait for live data from the Atlas gateway (default **:5110**).
-2. Use filters (backend, tenant, kind, status) when the page provides them.
-3. Drill into a volume, job, or plan for detail — mutations return durable jobs (`202` + job id).
-4. For mutating actions (provision, backup, migrate, DR): review tenant quotas and job status in **Jobs**.
+1. Open `/schedules`.
+2. Click **Schedule** — choose volume, cadence, retention, snapshot vs backup.
+3. Confirm the schedule row appears; verify later runs under Snapshots / Backups / Jobs.
+4. **Empty / fail:** Need at least one volume and (for backups) a bucket.
+5. **Success:** Schedule listed; first fire shows as a job.
 
-If the page stays empty, check `/health`, auth (`ATLAS_AUTH_REQUIRED` / JWT), that a storage driver is registered, and run `atlasctl discover` if inventory is cold.
+Use `http://<host>:5110/` for Storage Center (cluster NodePort often `:30511`, HTTPS `:30543`). Health: `GET /health`. Mutations return durable jobs — watch **Jobs**. Never publish lab IPs in customer docs.
 
 ## Related pages
 
+- [Volumes](volumes.md)
+- [Backups](../data-protection/backups.md)
 - [Getting Started](../../getting-started.md)
-- [Command Deck](../storage/home.md)
-- [Volumes](../storage/volumes.md)
 - [Page index](../../PAGE_INDEX.md)

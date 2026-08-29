@@ -16,7 +16,7 @@ function catDir(category) {
 }
 
 function slug(path) {
-  return path.replace(/^\//, '').replace(/\//g, '-') || 'home'
+  return path.replace(/^\//, '').replace(/\//g, '-').replace(/:/g, '') || 'home'
 }
 
 function guideTemplate({ title, path, category, purpose }) {
