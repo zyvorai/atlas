@@ -11,6 +11,7 @@ pub mod state;
 pub use state::AppState;
 
 /// Generated gRPC types + service stubs (package `atlas.v1`).
+#[allow(clippy::result_large_err)] // tonic::Status (176B) in generated method signatures, not our code
 pub mod proto {
     tonic::include_proto!("atlas.v1");
 
