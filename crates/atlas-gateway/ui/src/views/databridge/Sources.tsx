@@ -1,6 +1,6 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import { useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Check, Plus, Search } from "lucide-react";
 import { submitJob, submit } from "../../api/client";
 import { useSources, useInvalidate } from "../../api/hooks";
 import type { MigrationSource } from "../../api/types";
@@ -10,6 +10,15 @@ import { del } from "../../ui/confirm";
 import { Table } from "../../ui/Table";
 import { fmtBytes } from "../../lib/format";
 import { ENGINE_VERIFICATION } from "../../lib/engineVerification";
+
+const STAGES = ["discover", "full-load", "validate", "cdc", "cutover"] as const;
+const STAGE_LABEL: Record<(typeof STAGES)[number], string> = {
+  discover: "Discover",
+  "full-load": "Full-load",
+  validate: "Validate",
+  cdc: "CDC",
+  cutover: "Cutover",
+};
 
 const stateKind = (s: string) =>
   s === "discovered" ? "success" : s === "error" ? "danger" : s === "discovering" ? "warning" : "neutral";
@@ -72,17 +81,30 @@ export default function Sources() {
           <span className="grow" />
           <span className="at-sub" style={{ margin: 0 }}>fake path covers all engines end-to-end · docs/DATABRIDGE.md</span>
         </div>
-        {ENGINE_VERIFICATION.map((e) => (
-          <div key={e.engine} className="at-list-row" style={{ alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <Badge kind="info">{e.engine}</Badge>
-            {(["discover", "full-load", "validate", "cdc", "cutover"] as const).map((s) => (
-              <Badge key={s} kind={e.live.includes(s) ? "success" : "neutral"}>
-                {s}{e.live.includes(s) ? "" : " · pending"}
-              </Badge>
+        <div className="at-verify-table">
+          <div className="at-verify-row at-verify-head">
+            <span>Engine</span>
+            {STAGES.map((s) => (
+              <span key={s}>{STAGE_LABEL[s]}</span>
             ))}
-            <span className="at-sub" style={{ margin: 0, flex: 1 }}>{e.note}</span>
+            <span>Notes</span>
           </div>
-        ))}
+          {ENGINE_VERIFICATION.map((e) => (
+            <div key={e.engine} className="at-verify-row">
+              <span className="mono">{e.engine}</span>
+              {STAGES.map((s) => (
+                <span key={s} className="at-verify-cell" title={e.live.includes(s) ? "Verified live" : "Not yet verified live"}>
+                  {e.live.includes(s) ? (
+                    <Check size={13} style={{ color: "var(--at-ok)" }} />
+                  ) : (
+                    <span style={{ color: "var(--at-ink-4)" }}>—</span>
+                  )}
+                </span>
+              ))}
+              <span className="at-sub" style={{ margin: 0 }}>{e.note}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       <FormModal open={create} onClose={() => setCreate(false)} title="Register source database" submitLabel="Register"
