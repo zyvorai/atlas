@@ -77,13 +77,23 @@ const SECTIONS: { title: string; items: Endpoint[] }[] = [
   },
 ];
 
-const GRPC = [
-  "Health",
-  "ListClusters / ListPools / ListVolumes / GetVolume",
-  "CreateVolume (Owner → product_bindings) / DeleteVolume / ExpandVolume",
-  "CreateSnapshot / ListSnapshots / ListVolumesByOwner",
-  "GetJob / WatchJob (stream) / ListAlerts",
-  "GetMetricsSummary / ListBuckets",
+const GRPC: Endpoint[] = [
+  { method: "RPC", path: "Health", note: "Liveness for the gRPC service" },
+  { method: "RPC", path: "ListClusters", note: "Storage clusters" },
+  { method: "RPC", path: "ListPools", note: "Pools" },
+  { method: "RPC", path: "ListVolumes", note: "Volumes" },
+  { method: "RPC", path: "GetVolume", note: "Volume detail" },
+  { method: "RPC", path: "CreateVolume", note: "Create → job; Owner sets product_bindings" },
+  { method: "RPC", path: "DeleteVolume", note: "Delete → job" },
+  { method: "RPC", path: "ExpandVolume", note: "Expand → job" },
+  { method: "RPC", path: "CreateSnapshot", note: "Create snapshot → job" },
+  { method: "RPC", path: "ListSnapshots", note: "Snapshots" },
+  { method: "RPC", path: "ListVolumesByOwner", note: "Volumes scoped to an owner" },
+  { method: "RPC", path: "GetJob", note: "Job status" },
+  { method: "RPC", path: "WatchJob", note: "Job status (stream)" },
+  { method: "RPC", path: "ListAlerts", note: "Alerts" },
+  { method: "RPC", path: "GetMetricsSummary", note: "Capacity + I/O + recovery rollup" },
+  { method: "RPC", path: "ListBuckets", note: "RGW / object buckets" },
 ];
 
 export default function ApiDocs() {
@@ -119,13 +129,15 @@ export default function ApiDocs() {
         <div className="at-panel-bar">
           <span className="at-caption">gRPC · AtlasStorage</span>
         </div>
-        <ul className="at-docs-list">
-          {GRPC.map((line) => (
-            <li key={line} className="mono">
-              {line}
-            </li>
+        <div className="at-docs-table">
+          {GRPC.map((rpc) => (
+            <div key={rpc.path} className="at-docs-row">
+              <span className="at-docs-method">{rpc.method}</span>
+              <code className="at-docs-path mono">{rpc.path}</code>
+              <span className="at-docs-note">{rpc.note}</span>
+            </div>
           ))}
-        </ul>
+        </div>
       </div>
 
       {SECTIONS.map((sec) => (
