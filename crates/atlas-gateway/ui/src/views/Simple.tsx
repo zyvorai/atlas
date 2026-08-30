@@ -207,25 +207,25 @@ export function Cluster() {
         }
       />
 
-      <div className="at-instr-grid">
-        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+      <div className="at-instrs">
+        <div className="at-instr">
           <div className="at-caption">Health</div>
           <div className="at-val md" style={{ textTransform: "uppercase" }}>
             {primary?.health || "—"}
           </div>
           <div className="at-delta mono">{primary?.name || "—"}</div>
         </div>
-        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+        <div className="at-instr">
           <div className="at-caption">Raw</div>
           <div className="at-val md">{fmtBytesOpt(primary?.raw_capacity_bytes)}</div>
           <div className="at-delta">used {fmtBytesOpt(primary?.used_capacity_bytes)}</div>
         </div>
-        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+        <div className="at-instr">
           <div className="at-caption">Pools</div>
           <div className="at-val md">{pools?.length ?? "—"}</div>
           <div className="at-delta">inventory</div>
         </div>
-        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+        <div className="at-instr">
           <div className="at-caption">OSDs</div>
           <div className="at-val md">{osds?.length ?? "—"}</div>
           <div className="at-delta">{nodes?.length || 0} node(s)</div>

@@ -1,6 +1,7 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 // Protection Status: per-volume synthesis of replication, last snapshot/backup, DR mirror state,
 // and RPO target-vs-actual into one verdict — GET /protection-status, GET /volumes/{id}/protection.
+import type { CSSProperties } from "react";
 import type { ClusterHealthState, VolumeProtectionStatus } from "../api/types";
 import { useProtectionStatus } from "../api/hooks";
 import { Badge } from "../ui/kit";
@@ -61,9 +62,9 @@ export default function ProtectionStatus() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5" style={{ marginBottom: 0 }}>
+      <div className="at-instrs" style={{ "--instr-cols": 5 } as CSSProperties}>
         {worstFirst.map((v) => (
-          <div key={v} className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+          <div key={v} className="at-instr">
             <div className="at-caption">{VERDICT_LABEL[v]}</div>
             <div className="at-val md">
               <Badge kind={verdictKind(v)} dot>

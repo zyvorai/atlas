@@ -2069,7 +2069,10 @@ a.at-mark:focus-visible {
 
 .at-instrs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* Default 4 columns; pages with a different tile count pass --instr-cols inline. Kept as a
+     custom property (not an inline grid-template-columns override) so the narrow-viewport
+     media query below — a plain, equal-specificity class rule — still wins over it. */
+  grid-template-columns: repeat(var(--instr-cols, 4), 1fr);
   border: none;
   border-top: 1px solid var(--at-line);
   border-bottom: 1px solid var(--at-line);
@@ -2385,20 +2388,4 @@ a.at-mark:focus-visible {
   border: 1px solid var(--at-line);
   color: var(--at-ink-2);
   background: var(--at-ridge);
-}
-.at-instr-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--s3);
-  margin-bottom: var(--s5);
-}
-@media (max-width: 1100px) {
-  .at-instr-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-@media (max-width: 640px) {
-  .at-instr-grid {
-    grid-template-columns: 1fr;
-  }
 }

@@ -1,6 +1,6 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 // Day-2 cross-cluster DR: mirroring peers, mirrored images, and failover (promote/demote).
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { submit, submitJob } from "../api/client";
 import { useDrMirrors, useDrPeers, useDrPreflight, useDrStatus, useInvalidate, useVolumes } from "../api/hooks";
 import { Badge, Button, Field, Label, Select } from "../ui/kit";
@@ -38,30 +38,30 @@ export default function DR() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-6" style={{ marginBottom: 0 }}>
-        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+      <div className="at-instrs" style={{ "--instr-cols": 6 } as CSSProperties}>
+        <div className="at-instr">
           <div className="at-caption">Peers</div>
           <div className="at-val md">{status?.peers ?? "—"}</div>
         </div>
-        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+        <div className="at-instr">
           <div className="at-caption">Mirrors</div>
           <div className="at-val md">{status?.mirrors ?? "—"}</div>
         </div>
-        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+        <div className="at-instr">
           <div className="at-caption">Primary</div>
           <div className="at-val md">{status?.primary ?? "—"}</div>
         </div>
-        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+        <div className="at-instr">
           <div className="at-caption">Secondary</div>
           <div className="at-val md">{status?.secondary ?? "—"}</div>
         </div>
-        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+        <div className="at-instr">
           <div className="at-caption">Worst RPO</div>
           <div className="at-val md mono">
             {status?.worst_rpo_seconds != null ? `${status.worst_rpo_seconds}s` : "—"}
           </div>
         </div>
-        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+        <div className="at-instr">
           <div className="at-caption">Dataplane</div>
           <div className="at-val md" style={{ fontSize: 14 }}>
             <Badge kind={status?.dataplane_verified || status?.verified ? "success" : "warning"}>

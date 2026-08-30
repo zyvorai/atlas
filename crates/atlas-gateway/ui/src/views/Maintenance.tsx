@@ -33,29 +33,29 @@ export default function Maintenance() {
         }
       />
 
-      <div className="at-instr-grid">
-        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+      <div className="at-instrs">
+        <div className="at-instr">
           <div className="at-caption">Pre-flight</div>
           <div className="at-val md" style={{ textTransform: "uppercase" }}>
             {pre ? (pre.ready ? "ready" : "blocked") : "—"}
           </div>
           <div className="at-delta mono">{pre?.checks?.length ?? 0} checks</div>
         </div>
-        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+        <div className="at-instr">
           <div className="at-caption">Job engine</div>
           <div className="at-val md" style={{ textTransform: "uppercase" }}>
             {maint ? (paused ? "paused" : "running") : "—"}
           </div>
           <div className="at-delta">{paused ? "new jobs queue" : "dispatching"}</div>
         </div>
-        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+        <div className="at-instr">
           <div className="at-caption">Backends</div>
           <div className="at-val md">{backends?.length ?? "—"}</div>
           <div className="at-delta mono">
             {(backends || []).filter((b) => b.cordoned).length} cordoned
           </div>
         </div>
-        <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+        <div className="at-instr">
           <div className="at-caption">Orphans</div>
           <div className="at-val md">{orphans?.count ?? "—"}</div>
           <div className="at-delta">backup GC</div>
