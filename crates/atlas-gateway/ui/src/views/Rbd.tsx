@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { Plus, RefreshCw } from "lucide-react";
 import { apiError, http, submit, submitJob } from "../api/client";
-import { useInvalidate, useRbdImages, useVolumes } from "../api/hooks";
+import { useInvalidate, usePools, useRbdImages, useVolumes } from "../api/hooks";
 import { Button, FormModal, SlideOver } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
 import { confirmThen, del } from "../ui/confirm";
@@ -13,6 +13,8 @@ export default function Rbd() {
   const [pool, setPool] = useState("rbd-nvme-prod");
   const { data, isError, error, refetch: refetchImages } = useRbdImages(pool);
   const { data: vols } = useVolumes();
+  const { data: pools } = usePools();
+  const rbdPools = (pools || []).filter((p) => p.kind?.toLowerCase() === "rbd");
   const inv = useInvalidate();
   const refetch = () => inv("rbd");
   const [create, setCreate] = useState(false);
@@ -42,7 +44,17 @@ export default function Rbd() {
         }
         actions={
           <>
-            <input className="field w-44" value={pool} onChange={(e) => setPool(e.target.value)} />
+            <select className="field w-44" value={pool} onChange={(e) => setPool(e.target.value)}>
+              {rbdPools.length ? (
+                rbdPools.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}
+                  </option>
+                ))
+              ) : (
+                <option value={pool}>{pool}</option>
+              )}
+            </select>
             <button
               type="button"
               className="at-btn"
@@ -70,7 +82,16 @@ export default function Rbd() {
             <Plus size={14} /> Create image
           </button>
         }
-        cols={[{ h: "Image", f: (i) => i, mono: true }]}
+        cols={[
+          { h: "Image", f: (i) => i, mono: true },
+          {
+            h: "Size",
+            f: (i) => {
+              const sz = sizeOf(i);
+              return sz != null ? fmtBytes(sz) : <span style={{ color: "var(--at-ink-4)" }}>—</span>;
+            },
+          },
+        ]}
         actions={(img) => (
           <>
             <Button size="sm" onClick={() => setSnapImg(img)}>Snaps</Button>
