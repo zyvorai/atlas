@@ -1,7 +1,7 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Download, Plus, RefreshCw } from "lucide-react";
+import { Download, Plus, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { apiError, http, isUnauthorized, submit, submitJob, toast } from "../api/client";
 import { useBackends, useBuckets, useInvalidate, useVolumes } from "../api/hooks";
 import type { StorageVolume } from "../api/types";
@@ -20,6 +20,8 @@ export default function Volumes() {
   const [tenant, setTenant] = useState("");
   const [backend, setBackend] = useState("");
   const [kind, setKind] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const secondaryCount = [kind, backend, tenant].filter(Boolean).length;
   const { data: vols } = useVolumes(state || undefined, tenant || undefined, backend || undefined, kind || undefined);
   const { data: backends } = useBackends();
   const inv = useInvalidate();
@@ -160,7 +162,7 @@ export default function Volumes() {
       />
 
       <div className="at-chips">
-        <button type="button" className={`at-chip${!state && !kind ? " on" : ""}`} onClick={() => { setState(""); setKind(""); }}>
+        <button type="button" className={`at-chip${!state ? " on" : ""}`} onClick={() => setState("")}>
           All <span className="n">{counts.total || "—"}</span>
         </button>
         {STATES.map((s) => (
@@ -173,36 +175,95 @@ export default function Volumes() {
             {s}
           </button>
         ))}
-        <span style={{ width: 1, height: 22, background: "var(--at-line)", margin: "0 4px" }} />
-        {KINDS.map((k) => (
+        <span className="grow" />
+        <div className="relative">
           <button
-            key={k}
             type="button"
-            className={`at-chip${kind === k ? " on" : ""}`}
-            onClick={() => setKind(kind === k ? "" : k)}
+            className="at-btn"
+            style={{ height: 28 }}
+            aria-expanded={filtersOpen}
+            aria-haspopup="menu"
+            onClick={() => setFiltersOpen((v) => !v)}
           >
-            {k}
+            <SlidersHorizontal size={13} />
+            Filters
+            {secondaryCount > 0 && (
+              <span
+                style={{
+                  fontFamily: "var(--at-mono)",
+                  fontSize: 11,
+                  color: "var(--at-cyan)",
+                  opacity: 0.9,
+                }}
+              >
+                {secondaryCount}
+              </span>
+            )}
           </button>
-        ))}
-        <select
-          className="at-chip-field"
-          value={backend}
-          onChange={(e) => setBackend(e.target.value)}
-          aria-label="Backend filter"
-        >
-          <option value="">All backends</option>
-          {(backends || []).map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name} ({b.backend_type})
-            </option>
-          ))}
-        </select>
-        <input
-          className="at-chip-field"
-          placeholder="Filter tenant…"
-          value={tenant}
-          onChange={(e) => setTenant(e.target.value)}
-        />
+          {filtersOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setFiltersOpen(false)} />
+              <div className="at-theme-menu" style={{ minWidth: 260, padding: "6px 6px 10px" }}>
+                <div className="at-theme-menu-label">Filters</div>
+                <div style={{ padding: "2px 12px 10px" }}>
+                  <div style={{ fontSize: 11, color: "var(--at-ink-4)", marginBottom: 6 }}>Kind</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {KINDS.map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        className={`at-chip${kind === k ? " on" : ""}`}
+                        onClick={() => setKind(kind === k ? "" : k)}
+                      >
+                        {k}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ padding: "2px 12px 10px" }}>
+                  <div style={{ fontSize: 11, color: "var(--at-ink-4)", marginBottom: 6 }}>Backend</div>
+                  <select
+                    className="at-chip-field"
+                    style={{ width: "100%" }}
+                    value={backend}
+                    onChange={(e) => setBackend(e.target.value)}
+                    aria-label="Backend filter"
+                  >
+                    <option value="">All backends</option>
+                    {(backends || []).map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({b.backend_type})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ padding: "2px 12px 10px" }}>
+                  <div style={{ fontSize: 11, color: "var(--at-ink-4)", marginBottom: 6 }}>Tenant</div>
+                  <input
+                    className="at-chip-field"
+                    style={{ width: "100%" }}
+                    placeholder="Filter tenant…"
+                    value={tenant}
+                    onChange={(e) => setTenant(e.target.value)}
+                  />
+                </div>
+                {secondaryCount > 0 && (
+                  <button
+                    type="button"
+                    className="at-theme-item"
+                    onClick={() => {
+                      setKind("");
+                      setBackend("");
+                      setTenant("");
+                    }}
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="at-panel">

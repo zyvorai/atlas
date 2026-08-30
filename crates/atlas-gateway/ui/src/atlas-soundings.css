@@ -1855,30 +1855,24 @@ a.at-mark:focus-visible {
   height: 28px;
   padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.01) 100%),
-    transparent;
+  border: 1px solid var(--at-line);
+  background: transparent;
   color: var(--at-ink-3);
   font-family: var(--at-face);
   font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
   transition: 0.15s;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 .at-chip:hover {
   color: var(--at-ink);
-  border-color: rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--at-line-2);
+  background: var(--at-line);
 }
 .at-chip.on {
   color: var(--at-ink);
-  border-color: color-mix(in srgb, var(--at-cyan) 40%, rgba(255, 255, 255, 0.12));
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 60%),
-    color-mix(in srgb, var(--at-cyan) 12%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  border-color: color-mix(in srgb, var(--at-cyan) 40%, var(--at-line-2));
+  background: var(--at-cyan-wash);
 }
 .at-chip .n {
   font-family: var(--at-mono);
@@ -1889,24 +1883,17 @@ a.at-mark:focus-visible {
   height: 28px;
   padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
-    rgba(14, 20, 28, 0.35);
+  border: 1px solid var(--at-line);
+  background: var(--at-abyss);
   color: var(--at-ink-2);
   font-family: var(--at-face);
   font-size: 12.5px;
   min-width: 140px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
 }
 .at-chip-field:focus {
   outline: none;
-  border-color: color-mix(in srgb, var(--at-cyan) 55%, transparent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 0 0 3px color-mix(in srgb, var(--at-cyan) 18%, transparent);
+  border-color: color-mix(in srgb, var(--at-cyan) 55%, var(--at-line-2));
+  box-shadow: 0 0 0 3px var(--at-cyan-wash);
 }
 
 /* Detail slide-over — glass sheet (Tahoe), content stays ruled inside */
