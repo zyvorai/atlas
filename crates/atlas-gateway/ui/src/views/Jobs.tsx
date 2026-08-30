@@ -10,7 +10,7 @@ import { stateKind, timeAgo } from "../lib/format";
 function Bar({ pct, kind }: { pct: number; kind: string }) {
   const c = kind === "failed" ? "#E23B3B" : kind === "succeeded" ? "#30D69E" : "#38BDF8";
   return (
-    <div className="w-28 h-1.5 rounded-full bg-white/5 overflow-hidden">
+    <div className="w-28 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--at-line)" }}>
       <div className="h-full rounded-full" style={{ width: `${Math.min(100, pct || 0)}%`, background: c }} />
     </div>
   );
@@ -26,7 +26,7 @@ export default function Jobs() {
   return (
     <div>
       <PageHead
-        eyebrow="STORAGE · INDEX"
+        eyebrow="OBSERVABILITY · INDEX"
         title="Jobs"
         state={
           live.length

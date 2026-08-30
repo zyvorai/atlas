@@ -148,7 +148,7 @@ export function Backends() {
 }
 
 export function Kubernetes() {
-  const { data: scs } = useStorageClasses();
+  const { data: scs, isError } = useStorageClasses();
   const n = scs?.length || 0;
   return (
     <div>
@@ -164,6 +164,7 @@ export function Kubernetes() {
       <Table
         soundings
         panelTitle="StorageClasses"
+        error={isError}
         rows={scs}
         rowKey={(s) => s.name}
         empty="No StorageClasses."

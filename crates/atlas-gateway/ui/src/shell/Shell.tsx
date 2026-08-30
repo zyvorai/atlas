@@ -732,7 +732,7 @@ export function Shell() {
           {SHORTCUTS.map(([k, d]) => (
             <div key={k} className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">{d}</span>
-              <kbd className="px-2 py-0.5 rounded bg-white/10 text-xs mono">{k}</kbd>
+              <kbd className="at-kbd mono" style={{ marginLeft: 0 }}>{k}</kbd>
             </div>
           ))}
         </div>
