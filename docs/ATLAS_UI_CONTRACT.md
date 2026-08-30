@@ -11,7 +11,12 @@ If they disagree: reference wins on pixels; this file wins on rules.
 |---|---|---|---|---|
 | PacketWolf | warm pelt-black | amber | JetBrains Mono | predator |
 | Zeus OS | deep space navy | plasma violet | IBM Plex Mono | instrument deck |
-| **Atlas** | **mineral void `#04070A`** | **survey cyan `#3FD0E8`** | **DM Mono** | **bathymetric chart** |
+| **Atlas — Carbon** | **graphite `#0B0C0E`** | **Cosmic Orange `#F97316`** | **DM Mono** | **bathymetric chart** |
+| **Atlas — Apple Lite** | **mist paper `#EDEFF3`** | **Mist Blue `#2A82B4`** | **DM Mono** | **bathymetric chart** |
+
+Atlas ships exactly two shells, both ported 1:1 from Zeus OS (v9s): **Carbon** (Zeus's
+`zyvor-carbon` — graphite + Cosmic Orange, default) and **Apple Lite** (Zeus's `tahoe-light` —
+iPhone 17 Magichromatic: Mist Blue, Sage, Lavender, Cosmic Orange).
 
 Tokens live in `crates/atlas-gateway/ui/src/atlas-soundings.css` (`--at-*`, `--d*`).
 
@@ -30,7 +35,9 @@ Tokens live in `crates/atlas-gateway/ui/src/atlas-soundings.css` (`--at-*`, `--d
 
 - Never put a depth colour on a button/link/nav.
 - Amber/red (`--at-warn` / `--at-fail`) = cluster health verdicts, not capacity.
-- Hairlines = cyan-tinted alpha (`--at-line*`), not white alpha.
+- Hairlines (`--at-line*`) are tinted by the shell's own ink colour, never a flat white or black
+  alpha — Carbon's hairlines are neutral-light-tinted on graphite, Apple Lite's are ink-tinted on
+  paper.
 
 ## Type law
 
@@ -75,36 +82,44 @@ Chart floor · The Sounding (no capacity donut) · Echogram · Basins · Seabed.
 | **D** Telemetry | one wide echogram + breakdowns | `/observatory` |
 | **E** Ops | `at-instrs` / `at-stack` / Soundings kit remap | Ceph, Access, Maintenance, DR, Cluster |
 
-Kit surfaces (`GlassSection`, `StatCard`, `SlideOver`, buttons, fields, badges) render in Soundings tokens under `.at-app`. Default shell theme is **Carbon** (flat IBM-style gray + blue).
+Kit surfaces (`GlassSection`, `StatCard`, `SlideOver`, buttons, fields, badges) render in Soundings tokens under `.at-app`. Default shell theme is **Carbon** (graphite + Cosmic Orange).
 
-## Shell chrome (Zeus metal patterns)
+## Shell chrome (apple.com topbar + Zeus OS sidebar)
 
-Single metal **topbar** (brand · centered icon section menus · quick links · action cluster)
-follows Zeus OS ~Apr 2026 EnhancedLayout / `dark-steel` / `zinc-metal` (`f0360bae3`): square
-`barIcon` triggers, hover/click flyouts, Look & feel menu (`LayoutTemplate`), icon search (⌘K),
-`TOP_BAR_QUICK_LINKS` (Settings / Observatory / API Docs), menubar capacity sparkline + I/O + recovery
-chips + cluster pulse, and a hamburger drawer below ~960px. Brand / nav / actions use a 3-column
-grid so the subtitle never paints under icon menus.
+Navigation lives in exactly one place — a **persistent left sidebar** (`Sidebar` in `Shell.tsx`,
+Zeus OS's sidebar pattern): the six section groups (Storage, Data Protection, DataBridge,
+Observability, Governance, Infrastructure) always visible as icon+label links, collapsible to a
+64px icon-only rail (toggle at the bottom of the sidebar; state persisted as
+`atlas.sidebar-collapsed`). Below ~900px the sidebar hides entirely and a hamburger button opens
+`MobileNavDrawer` (the same grouped sections + shortcuts, as a slide-in panel) instead — the two
+never show at once.
+
+The **topbar** above it is deliberately sparse, apple.com-style — a bare 44px-tall (`--rail-h`)
+translucent strip with just the brand mark (icon only, no wordmark) on the left and a slim
+single-glyph icon cluster on the right: search (⌘K), Look & feel (`LayoutTemplate`), a running-jobs
+spinner (conditional), alerts bell, pause/resume, a compact health dot+label, and one Account icon
+(auth token / local time / sign-out combined). It carries no navigation and no live-metrics chips —
+those either live in the sidebar or are one click away on the Command Deck.
 
 | Atlas theme (`data-ui-shell`) | Look |
 |---|---|
-| **carbon** (default) | Flat Carbon gray (`#161616` / `#262626`) + `#78a9ff` |
-| **nebula** | Metal chrome + **survey cyan** (Soundings identity) |
-| **dark** | **Zeus dark-steel** (brushed metal + `#5d90f7` / `#8ec5ff`) |
-| **zinc** | **Zeus zinc-metal** (brushed zinc + amber) |
-| **aurora** | Neon cyan/violet/pink canvas |
+| **carbon** (default) | Zeus's `zyvor-carbon` — graphite (`#0B0C0E` / `#15171B`) + Cosmic Orange `#F97316` |
+| **apple-lite** | Zeus's `tahoe-light` — mist paper (`#EDEFF3` / `#FFFFFF`) + Mist Blue `#2A82B4`, iPhone 17 Magichromatic |
 
-Change Look & feel from the top-rail template icon after login, or **Settings → Appearance**
-(theme + density). Density is stored as `data-density` (`comfortable` | `compact`).
+Change Look & feel from the topbar icon after login, or **Settings → Appearance** (theme +
+density). Density is stored as `data-density` (`comfortable` | `compact`). The sidebar's own
+colors (`.at-sidebar*`) are built entirely from `--at-*` tokens — never literal white/black alpha —
+so both shells render correctly with no per-shell CSS overrides needed for it.
 
-**Not ported (by design):** Zeus light/dark *within* a shell — Atlas Soundings is dark-mineral
-shells only (no light canvas). Also skipped: Dock, Finder, Dynamic Island, VM theatre, Tahoe sidebar.
+**Not ported (by design):** Dock, Finder, Dynamic Island, VM theatre, and Zeus's fuller sidebar
+features (auto-hide/peek, nav tiers, the "all apps" picker) — Atlas's sidebar is a simplified,
+always-icon-plus-label-or-collapsed version scoped to the six section groups above.
 
-Nebula must not use steel-blue/amber as the default interaction colour; dark/zinc remap `--at-cyan*`.
-Metal shells add light steel-panel treatment on `.at-panel`; Nebula keeps flat Soundings panels.
+Both shells keep flat Soundings panels (`.at-panel` is transparent + a top hairline, not a metal
+card) — content panels are ruled, not card soup, per the Structure law below.
 
 ## Ship checklist
 
 Three-line header; health before inventory; no white-alpha hairlines; cluster strings in mono;
 SI/binary compaction; no nested panels; zeros have fill hints; `depth(pct)` for fills;
-⌘K / Esc / `:focus-visible`; responsive top nav at narrow widths (section menus).
+⌘K / Esc / `:focus-visible`; sidebar collapses to a drawer at narrow widths.

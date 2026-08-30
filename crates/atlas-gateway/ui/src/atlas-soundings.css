@@ -4,28 +4,31 @@
  */
 
 :root {
-  --at-void: #04070a;
-  --at-abyss: #070c11;
-  --at-shelf: #0b131a;
-  --at-ridge: #101c25;
-  --at-crest: #16252f;
+  /* Fallback defaults — always overridden by the active :root[data-ui-shell="..."] block
+   * (Carbon or Apple Lite, see index.css). Mirrors Carbon so nothing depends on a shell
+   * never being applied. */
+  --at-void: #0b0c0e;
+  --at-abyss: #0e1013;
+  --at-shelf: #15171b;
+  --at-ridge: #1c1f24;
+  --at-crest: #262a30;
 
-  --at-line: rgba(120, 180, 200, 0.11);
-  --at-line-2: rgba(120, 180, 200, 0.2);
-  --at-line-3: rgba(120, 180, 200, 0.34);
+  --at-line: rgba(226, 229, 233, 0.08);
+  --at-line-2: rgba(226, 229, 233, 0.14);
+  --at-line-3: rgba(226, 229, 233, 0.24);
 
-  --at-ink: #e4f0f4;
-  --at-ink-2: #9bb3bf;
-  --at-ink-3: #607a87;
-  --at-ink-4: #3a4e59;
+  --at-ink: #eef1f3;
+  --at-ink-2: #c7ccd1;
+  --at-ink-3: #9aa0a8;
+  --at-ink-4: #63676d;
 
-  /* Interaction accent — Zeus sky blue (not survey cyan) */
-  --at-cyan: #60a5fa;
-  --at-cyan-2: #93c5fd;
-  --at-cyan-wash: rgba(96, 165, 250, 0.12);
-  --at-cyan-glow: rgba(96, 165, 250, 0.36);
+  /* Interaction accent — Cosmic Orange (Zeus's zyvor-carbon) */
+  --at-cyan: #f97316;
+  --at-cyan-2: #fb923c;
+  --at-cyan-wash: rgba(249, 115, 22, 0.14);
+  --at-cyan-glow: rgba(249, 115, 22, 0.36);
 
-  /* Chart / depth series — Zeus telemetry: emerald · sky · amber · violet · coral */
+  /* Chart / depth series — Atlas's own capacity ramp: emerald · sky · amber · violet · coral */
   --d1: #34d399;
   --d2: #60a5fa;
   --d3: #fbbf24;
@@ -50,7 +53,7 @@
   --s6: 32px;
   --s7: 48px;
   --s8: 64px;
-  --rail-h: 56px;
+  --rail-h: 44px;
   --page-max: 1520px;
   --page-gutter: 0px;
   --page-inset: 16px;
@@ -144,7 +147,7 @@
   height: var(--rail-h);
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: auto minmax(140px, 1fr) minmax(0, auto);
+  grid-template-columns: auto 1fr;
   align-items: center;
   column-gap: 12px;
   padding: 0 var(--page-inset);
@@ -167,12 +170,6 @@
   min-width: 0;
   flex-shrink: 0;
   z-index: 3;
-  isolation: isolate;
-  /* Keep wordmark readable when Safari backdrop-filter kids bleed past overflow. */
-  background: linear-gradient(90deg, rgba(12, 18, 24, 0.92) 70%, rgba(12, 18, 24, 0));
-  margin-left: calc(var(--page-inset) * -0.15);
-  padding-left: calc(var(--page-inset) * 0.15);
-  padding-right: 8px;
 }
 /* Must beat .at-iconbtn { display:grid } — otherwise the burger leaks onto every width. */
 .at-iconbtn.at-menu-burger {
@@ -215,116 +212,8 @@ a.at-mark:focus-visible {
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
 }
-.at-wordmark {
-  font-weight: 700;
-  font-size: 14px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-.at-mark-sub {
-  color: var(--at-ink-3);
-  font-size: 12px;
-  letter-spacing: 0.04em;
-  padding-left: 12px;
-  margin-left: 2px;
-  border-left: 1px solid var(--at-line-2);
-  white-space: nowrap;
-}
-.at-rail-center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 0;
-  overflow: hidden;
-  container-type: inline-size;
-  container-name: rail-center;
-}
-.at-rail-nav {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  min-width: 0;
-  width: 100%;
-  max-width: 100%;
-  overflow: hidden;
-}
 .at-quick-links {
   display: none;
-}
-.at-controls {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  flex: 1 1 auto;
-  min-width: 36px;
-  max-width: min(100%, 320px);
-  padding: 2px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
-    rgba(12, 18, 24, 0.28);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  container-type: inline-size;
-  container-name: rail-controls;
-  overflow: hidden;
-}
-.at-control {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: 26px;
-  width: 28px;
-  min-width: 28px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  color: var(--at-ink-3);
-  text-decoration: none;
-  position: relative;
-  flex-shrink: 0;
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-  transition: color 0.14s, background 0.14s, border-color 0.14s, box-shadow 0.14s;
-}
-.at-control-ico {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  opacity: 0.92;
-}
-.at-control-label,
-.at-control-kbd {
-  display: none;
-}
-.at-controls-more {
-  position: relative;
-  flex-shrink: 0;
-}
-.at-controls-menu,
-.at-nav-more-menu {
-  right: 0;
-  left: auto;
-  min-width: 200px;
-  z-index: 80;
-}
-.at-nav-more-menu {
-  left: 0;
-  right: auto;
-  max-height: min(70vh, 480px);
-  overflow: auto;
-}
-.at-nav-more-group + .at-nav-more-group {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 .at-controls-menu-row {
   display: inline-flex;
@@ -332,27 +221,17 @@ a.at-mark:focus-visible {
   gap: 8px;
   min-width: 0;
 }
-.at-control:hover,
-.at-control.open {
-  color: var(--at-ink);
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-}
-.at-control.on {
-  color: var(--at-ink);
-  background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
-}
-@media (max-width: 900px) {
-  .at-controls {
-    display: none;
-  }
-}
-.at-drawer-item .at-control-kbd {
-  display: inline;
+/* Shortcut-key badge — used inside the mobile nav drawer only. */
+.at-control-kbd {
   margin-left: auto;
+  font-family: var(--at-mono);
+  font-size: 10.5px;
+  color: var(--at-ink-4);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--at-line-2);
+  border-radius: 5px;
+  padding: 2px 6px;
+  flex-shrink: 0;
 }
 .at-quick-sep {
   margin-right: 4px;
@@ -548,39 +427,29 @@ a.at-mark:focus-visible {
   border-radius: 5px;
   padding: 2px 6px;
 }
+/* Borderless at rest — apple.com's icon glyphs carry no button chrome until touched. */
 .at-iconbtn {
-  width: 32px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   display: grid;
   place-items: center;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 100%),
-    rgba(16, 22, 30, 0.35);
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--at-ink-3);
   cursor: pointer;
   position: relative;
   transition: 0.16s;
   flex-shrink: 0;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
 }
 .at-iconbtn:hover {
   color: var(--at-ink);
-  border-color: rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.1);
 }
 .at-iconbtn.is-on {
   color: var(--at-warn);
   border-color: rgba(255, 194, 75, 0.35);
   background: rgba(255, 194, 75, 0.12);
-}
-.at-look-btn {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 0 0 1px color-mix(in srgb, var(--at-cyan) 35%, transparent);
 }
 .at-theme-menu {
   position: absolute;
@@ -606,15 +475,6 @@ a.at-mark:focus-visible {
   min-width: 280px;
   max-height: 70vh;
   overflow: auto;
-}
-/* Portaled to document.body (createPortal) so ancestors with `overflow: hidden`
-   (.at-rail-nav, .at-controls) can't clip the panel; top/left set inline from
-   getBoundingClientRect(), same pattern as .at-topnav-flyout. */
-.at-theme-menu-fixed {
-  position: fixed;
-  right: auto;
-  top: 0;
-  left: 0;
 }
 .at-theme-menu-label {
   padding: 8px 12px 6px;
@@ -681,7 +541,7 @@ a.at-mark:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 28px;
+  height: 24px;
   padding: 0 10px;
   border-radius: 999px;
   font-family: var(--at-mono);
@@ -735,20 +595,6 @@ a.at-mark:focus-visible {
     box-shadow: 0 0 0 0 transparent;
     opacity: 1;
   }
-}
-.at-health .sep {
-  width: 1px;
-  height: 12px;
-  background: currentColor;
-  opacity: 0.28;
-}
-.at-health .msg {
-  color: var(--at-ink-2);
-  font-family: var(--at-face);
-  font-size: 12.5px;
-  max-width: 16rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* ── Shell layout ── */
@@ -836,120 +682,55 @@ a.at-mark:focus-visible {
   background: color-mix(in srgb, var(--at-cyan) 80%, white);
   opacity: 0.9;
 }
-.at-topnav-dd {
-  position: relative;
+/* ── Sidebar (Zeus OS pattern) — persistent primary nav, collapsible to an icon rail.
+ * Built entirely from --at-* tokens (no literal white/black alpha) so it's theme-safe by
+ * construction across both shells without needing per-shell overrides. */
+.at-shell-body {
+  display: flex;
+  min-height: 0;
+}
+.at-sidebar {
+  display: flex;
+  flex-direction: column;
   flex-shrink: 0;
+  width: 216px;
+  border-right: 1px solid var(--at-line);
+  background: var(--at-abyss);
+  overflow: hidden;
+  transition: width 0.16s ease;
 }
-.at-topnav-ddbtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: auto;
-  min-width: 32px;
-  height: 28px;
-  margin: 2px 1px;
-  padding: 0 10px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--at-ink-3);
-  cursor: pointer;
-  position: relative;
-  font: inherit;
-  transition: color 0.16s, background 0.16s, border-color 0.16s, box-shadow 0.16s;
+.at-sidebar.collapsed {
+  width: 64px;
 }
-.at-topnav-dd-title {
-  display: none;
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 1;
-  white-space: nowrap;
+.at-sidebar-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
-/* Always label the Command Deck home control — it is the primary “go home” affordance. */
-.at-topnav-home .at-topnav-dd-title {
-  display: inline;
+.at-sidebar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
-/* Titles only when the center column actually has room (not viewport width). */
-@container rail-center (min-width: 560px) {
-  .at-topnav-dd-title {
-    display: inline;
-  }
-}
-.at-topnav-ddbtn:hover,
-.at-topnav-dd.open .at-topnav-ddbtn {
-  color: var(--at-ink);
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-}
-.at-topnav-dd.on .at-topnav-ddbtn {
-  color: var(--at-ink);
-  background: rgba(255, 255, 255, 0.14);
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
-}
-.at-topnav-dd.on .at-topnav-ddbtn::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 2px;
-  width: 40%;
-  height: 2px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--at-cyan) 80%, white);
-  opacity: 0.9;
-}
-.at-topnav-dd.open .at-topnav-ddbtn {
-  color: var(--at-ink);
-  background: rgba(255, 255, 255, 0.16);
-}
-.at-topnav-secico {
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
-  opacity: 0.92;
-}
-.at-topnav-flyout {
-  /* pt bridge so hover doesn’t drop in the button→panel gap (Zeus EnhancedLayout) */
-  position: fixed;
-  z-index: 90;
-  min-width: 248px;
-  padding-top: 6px;
-}
-.at-topnav-menu {
-  padding: 6px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 32%, transparent 58%),
-    rgba(18, 24, 32, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 16px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    0 22px 56px rgba(0, 0, 0, 0.48),
-    0 0 0 0.5px rgba(0, 0, 0, 0.4);
-  -webkit-backdrop-filter: saturate(1.45) blur(30px);
-  backdrop-filter: saturate(1.45) blur(30px);
-  animation: at-glass-in 0.18s cubic-bezier(0.2, 0.9, 0.3, 1);
-}
-.at-topnav-menu-label {
-  padding: 8px 12px 6px;
-  font-size: 11px;
+.at-sidebar-label {
+  padding: 0 10px 6px;
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: none;
-  color: var(--at-ink-3);
-  opacity: 0.85;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--at-ink-4);
 }
-.at-topnav-item {
+.at-sidebar-link {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 32px;
-  padding: 7px 12px;
-  border-radius: 10px;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
   color: var(--at-ink-2);
   font-family: var(--at-face);
   font-size: 13px;
@@ -957,28 +738,51 @@ a.at-mark:focus-visible {
   letter-spacing: -0.01em;
   text-decoration: none;
   white-space: nowrap;
-  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
+  transition: background 0.12s, color 0.12s;
 }
-.at-topnav-item svg {
-  width: 15px;
-  height: 15px;
+.at-sidebar.collapsed .at-sidebar-link {
+  justify-content: center;
+  padding: 0;
+}
+.at-sidebar-link svg {
+  width: 16px;
+  height: 16px;
   opacity: 0.8;
   flex-shrink: 0;
 }
-.at-topnav-item:hover {
-  background: rgba(255, 255, 255, 0.12);
+.at-sidebar-link:hover {
+  background: var(--at-line);
   color: var(--at-ink);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
-.at-topnav-item:hover svg,
-.at-topnav-item.on svg {
+.at-sidebar-link:hover svg,
+.at-sidebar-link.on svg {
   opacity: 1;
   color: var(--at-cyan);
 }
-.at-topnav-item.on {
+.at-sidebar-link.on {
   color: var(--at-ink);
-  background: rgba(255, 255, 255, 0.14);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  background: var(--at-cyan-wash);
+}
+.at-sidebar-toggle {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  height: 34px;
+  border: none;
+  border-top: 1px solid var(--at-line);
+  background: transparent;
+  color: var(--at-ink-4);
+  cursor: pointer;
+  transition: color 0.14s, background 0.14s;
+}
+.at-sidebar-toggle:hover {
+  color: var(--at-ink);
+  background: var(--at-line);
+}
+@media (max-width: 900px) {
+  .at-sidebar {
+    display: none;
+  }
 }
 .at-topnav-ver {
   display: none;
@@ -1100,28 +904,11 @@ a.at-mark:focus-visible {
   flex-shrink: 0;
 }
 
-@media (max-width: 1180px) {
-  .at-mark-sub {
-    display: none;
-  }
-}
-@media (max-width: 1100px) {
+/* Matches the .at-sidebar hide breakpoint — the burger (opens MobileNavDrawer) is the
+ * narrow-viewport stand-in for the persistent sidebar, so the two never show at once. */
+@media (max-width: 900px) {
   .at-iconbtn.at-menu-burger {
     display: grid;
-  }
-  .at-rail-center {
-    display: none;
-  }
-  .at-rail {
-    grid-template-columns: auto minmax(0, 1fr);
-    column-gap: 6px;
-  }
-  .at-rail-actions {
-    justify-self: end;
-  }
-  .at-health .msg,
-  .at-health .sep {
-    display: none;
   }
 }
 
@@ -2047,10 +1834,6 @@ a.at-mark:focus-visible {
   }
   .at-title {
     font-size: 25px;
-  }
-  .at-mark-sub,
-  .at-health .msg {
-    display: none;
   }
 }
 /* —— Index / Detail / Telemetry archetypes —— */

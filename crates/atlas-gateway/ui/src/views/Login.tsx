@@ -12,10 +12,7 @@ const DEFAULT_USER = "admin";
 
 const THEME_OPTIONS: { id: Theme; label: string }[] = [
   { id: "carbon", label: "Carbon" },
-  { id: "nebula", label: "Nebula" },
-  { id: "dark", label: "Dark steel" },
-  { id: "zinc", label: "Zinc metal" },
-  { id: "aurora", label: "Aurora" },
+  { id: "apple-lite", label: "Apple Lite" },
 ];
 
 function LoginThemeSwitcher() {

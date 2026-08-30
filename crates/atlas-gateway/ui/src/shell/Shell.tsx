@@ -1,29 +1,24 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-// Soundings shell: chart floor + rail + top nav + canvas.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+// Soundings shell: chart floor + slim topbar (branding/search/status) + collapsible sidebar + canvas.
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  Archive,
   Bell,
-  CloudCog,
-  Gauge,
+  ChevronLeft,
+  ChevronRight,
   HardDrive as HardDriveIcon,
   KeyRound,
   LayoutTemplate,
   Loader2,
   LogOut,
   Menu,
-  MoreHorizontal,
   Pause,
   Play,
   Search,
-  Server,
-  Shield,
   X,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { MODULES, SECTIONS, MENUBAR_CONTROLS, type Module } from "../nav/modules";
+import { MODULES, SECTIONS, MENUBAR_CONTROLS } from "../nav/modules";
 import { http, isUnauthorized } from "../api/client";
 import { useAlerts, useCephHealthRollup, useClusters, useJobs } from "../api/hooks";
 import { useUi } from "../store/ui";
@@ -32,7 +27,6 @@ import { cx } from "../lib/format";
 import { onSendPrompt } from "../lib/prompts";
 import { Button, Field, Modal } from "../ui/kit";
 import { ChartFloor } from "../ui/ChartFloor";
-import { MenubarLiveMetrics } from "./MenubarLiveMetrics";
 import LicenseBanner from "../components/LicenseBanner";
 
 function Clock() {
@@ -124,6 +118,7 @@ function MenuBar({
   const [jobsOpen, setJobsOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
+  const [acctOpen, setAcctOpen] = useState(false);
   const token = useUi((s) => s.token);
   const setToken = useUi((s) => s.setToken);
   const theme = useUi((s) => s.theme);
@@ -149,7 +144,7 @@ function MenuBar({
           <Menu size={16} strokeWidth={2} />
         </button>
 
-        <NavLink to="/" end className="at-mark" title="Command Deck" aria-label="Atlas — Command Deck">
+        <NavLink to="/" end className="at-mark" title="Atlas — Command Deck" aria-label="Atlas — Command Deck">
           <span className="at-brand-logo" aria-hidden>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="3" fill="currentColor" />
@@ -157,20 +152,11 @@ function MenuBar({
               <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.1" opacity=".3" />
             </svg>
           </span>
-          <span className="at-wordmark">Atlas</span>
-          <span className="at-mark-sub">Storage Center</span>
         </NavLink>
       </div>
 
-      <div className="at-rail-center">
-        <PrimaryNav />
-      </div>
-
       <div className="at-rail-actions">
-        <MenubarControls />
         <div className="at-rail-tray">
-          <MenubarLiveMetrics />
-
           <button
             type="button"
             className="at-iconbtn"
@@ -186,7 +172,7 @@ function MenuBar({
               type="button"
               className="at-iconbtn at-look-btn"
               title={`Look & feel: ${themeTitle(theme)}`}
-              aria-label={`Look & feel — ${themeTitle(theme)}. Choose Carbon, Nebula, Dark steel, Zinc metal, or Aurora.`}
+              aria-label={`Look & feel — ${themeTitle(theme)}. Choose Carbon or Apple Lite.`}
               aria-expanded={themeOpen}
               aria-haspopup="menu"
               onClick={() => setThemeOpen((v) => !v)}
@@ -303,29 +289,57 @@ function MenuBar({
           <div className={cx("at-health", healthClass)} title={healthWhy}>
             <span className="dot" />
             <span>{healthLabel}</span>
-            {healthWhy && (
-              <>
-                <span className="sep" />
-                <span className="msg">{healthWhy}</span>
-              </>
-            )}
           </div>
 
           <span className="at-rail-sep" aria-hidden />
 
-          <button
-            type="button"
-            className="at-iconbtn"
-            title="Auth token"
-            onClick={() => setTokenOpen(true)}
-            style={token ? { color: "var(--at-ok)" } : undefined}
-          >
-            <KeyRound size={15} />
-          </button>
-          <Clock />
-          <button type="button" className="at-iconbtn" title="Sign out" onClick={() => useUi.getState().signOut()}>
-            <LogOut size={15} />
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              className="at-iconbtn"
+              title="Account"
+              aria-label="Account"
+              aria-expanded={acctOpen}
+              aria-haspopup="menu"
+              onClick={() => setAcctOpen((v) => !v)}
+              style={token ? { color: "var(--at-ok)" } : undefined}
+            >
+              <KeyRound size={15} />
+            </button>
+            {acctOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setAcctOpen(false)} />
+                <div className="at-theme-menu" role="menu" aria-label="Account">
+                  <div className="at-theme-menu-label">Account</div>
+                  <div className="at-theme-item" style={{ cursor: "default" }}>
+                    <span className="hint">Local time</span>
+                    <Clock />
+                  </div>
+                  <button
+                    type="button"
+                    className="at-theme-item"
+                    onClick={() => {
+                      setAcctOpen(false);
+                      setTokenOpen(true);
+                    }}
+                  >
+                    <span>Auth token</span>
+                    <span className="hint">{token ? "Set" : "Not set"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="at-theme-item"
+                    onClick={() => useUi.getState().signOut()}
+                  >
+                    <span className="at-controls-menu-row">
+                      <LogOut size={13} strokeWidth={2} aria-hidden />
+                      <span>Sign out</span>
+                    </span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -380,408 +394,55 @@ const SECTION_SHORT: Record<string, string> = {
   INFRASTRUCTURE: "Infra",
 };
 
-/** Section bar icons — same pattern as Zeus metal top nav (`barIcon` on NAV_GROUPS). */
-const SECTION_ICON: Record<string, LucideIcon> = {
-  STORAGE: HardDriveIcon,
-  "DATA PROTECTION": Archive,
-  DATABRIDGE: CloudCog,
-  OBSERVABILITY: Gauge,
-  GOVERNANCE: Shield,
-  INFRASTRUCTURE: Server,
-};
-
 /**
- * macOS 26–inspired section menu: capsule title + liquid-glass flyout.
- * Portaled + fixed so the nav strip never clips the panel.
+ * Persistent left navigation — Zeus OS's sidebar pattern: the six section groups stay always
+ * visible, collapsible down to an icon-only rail. The topbar above carries only branding,
+ * search, and status, so navigation lives in exactly one place instead of duplicating a
+ * top-bar mega-menu and a sidebar.
  */
-function SectionDropdown({
-  short,
-  icon: Icon,
-  items,
-  active,
-  open,
-  onOpen,
-  onClose,
-}: {
-  short: string;
-  icon: LucideIcon;
-  items: Module[];
-  active: boolean;
-  open: boolean;
-  onOpen: () => void;
-  onClose: () => void;
-}) {
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const flyoutRef = useRef<HTMLDivElement>(null);
-  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-
-  const clearLeave = () => {
-    if (leaveTimer.current) {
-      clearTimeout(leaveTimer.current);
-      leaveTimer.current = null;
-    }
-  };
-  const scheduleClose = () => {
-    clearLeave();
-    leaveTimer.current = setTimeout(onClose, 160);
-  };
-
-  useLayoutEffect(() => {
-    if (!open || !btnRef.current) {
-      setPos(null);
-      return;
-    }
-    const place = () => {
-      const r = btnRef.current!.getBoundingClientRect();
-      const menuW = 248;
-      const left = Math.min(Math.max(8, r.left), window.innerWidth - menuW - 8);
-      setPos({ top: r.bottom, left });
-    };
-    place();
-    window.addEventListener("resize", place);
-    window.addEventListener("scroll", place, true);
-    return () => {
-      window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", place, true);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (btnRef.current?.contains(t) || flyoutRef.current?.contains(t)) return;
-      onClose();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("mousedown", onDoc);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open, onClose]);
-
-  useEffect(() => () => clearLeave(), []);
-
-  return (
-    <div
-      className={cx("at-topnav-dd", active && "on", open && "open")}
-      onMouseEnter={() => {
-        clearLeave();
-        onOpen();
-      }}
-      onMouseLeave={scheduleClose}
-    >
-      <button
-        ref={btnRef}
-        type="button"
-        className="at-topnav-ddbtn"
-        title={short}
-        aria-label={short}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        onClick={() => (open ? onClose() : onOpen())}
-      >
-        <Icon className="at-topnav-secico" strokeWidth={2} aria-hidden />
-        <span className="at-topnav-dd-title">{short}</span>
-      </button>
-      {open &&
-        pos &&
-        createPortal(
-          <div
-            ref={flyoutRef}
-            className="at-topnav-flyout"
-            style={{ top: pos.top, left: pos.left }}
-            onMouseEnter={clearLeave}
-            onMouseLeave={scheduleClose}
-          >
-            <div className="at-topnav-menu" role="menu" aria-label={short}>
-              <div className="at-topnav-menu-label">{short}</div>
-              {items.map((m) => (
-                <NavLink
-                  key={m.id}
-                  to={m.path}
-                  end={m.path === "/"}
-                  role="menuitem"
-                  className={({ isActive }) => cx("at-topnav-item", isActive && "on")}
-                  onClick={onClose}
-                >
-                  <m.icon strokeWidth={2} aria-hidden />
-                  <span>{m.label}</span>
-                </NavLink>
-              ))}
-            </div>
-          </div>,
-          document.body,
-        )}
-    </div>
-  );
-}
-
-function pathActive(pathname: string, path: string) {
-  return path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(`${path}/`);
-}
-
-function useRailBudget(ref: RefObject<HTMLElement | null>) {
-  const [budget, setBudget] = useState(0);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const update = () => setBudget(el.clientWidth);
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [ref]);
-  return budget;
-}
-
-function fitCount(budget: number, total: number, item: number, gap: number, more: number) {
-  if (total <= 0) return 0;
-  if (budget <= 0) return total;
-  const all = total * item + Math.max(0, total - 1) * gap;
-  if (all <= budget) return total;
-  const room = budget - more - gap;
-  if (room < item) return 0;
-  return Math.max(0, Math.min(total - 1, Math.floor((room + gap) / (item + gap))));
-}
-
-function MenubarControls() {
-  const loc = useLocation();
-  const wrapRef = useRef<HTMLElement>(null);
-  const budget = useRailBudget(wrapRef);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const moreBtnRef = useRef<HTMLButtonElement>(null);
-  const [morePos, setMorePos] = useState<{ top: number; left: number } | null>(null);
-
-  // Icon-only Control Center pills (~28px) + chrome; labels live in the fold menu.
-  const visible = fitCount(budget, MENUBAR_CONTROLS.length, 30, 3, 30);
-  const shown = MENUBAR_CONTROLS.slice(0, visible);
-  const folded = MENUBAR_CONTROLS.slice(visible);
-  const foldedOn = folded.some((m) => pathActive(loc.pathname, m.path));
-
-  useEffect(() => {
-    setMoreOpen(false);
-  }, [loc.pathname]);
-
-  useLayoutEffect(() => {
-    if (!moreOpen || !moreBtnRef.current) {
-      setMorePos(null);
-      return;
-    }
-    const place = () => {
-      const r = moreBtnRef.current!.getBoundingClientRect();
-      const menuW = 220;
-      const left = Math.min(Math.max(8, r.right - menuW), window.innerWidth - menuW - 8);
-      setMorePos({ top: r.bottom + 8, left });
-    };
-    place();
-    window.addEventListener("resize", place);
-    window.addEventListener("scroll", place, true);
-    return () => {
-      window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", place, true);
-    };
-  }, [moreOpen]);
-
-  return (
-    <nav ref={wrapRef} className="at-controls" aria-label="Shortcuts">
-      {shown.map((m) => (
-        <NavLink
-          key={m.id}
-          to={m.path}
-          end={m.path === "/"}
-          title={m.shortcut ? `${m.label} (${m.shortcut})` : m.label}
-          aria-label={m.shortcut ? `${m.label}, shortcut ${m.shortcut}` : m.label}
-          className={({ isActive }) => cx("at-control", isActive && "on")}
-        >
-          <m.icon className="at-control-ico" strokeWidth={2} aria-hidden />
-          <span className="at-control-label">{m.label}</span>
-          {m.shortcut ? <kbd className="at-control-kbd">{m.shortcut}</kbd> : null}
-        </NavLink>
-      ))}
-      {folded.length > 0 && (
-        <div className="at-controls-more">
-          <button
-            ref={moreBtnRef}
-            type="button"
-            className={cx("at-control", foldedOn && "on", moreOpen && "open")}
-            title="More shortcuts"
-            aria-label="More shortcuts"
-            aria-expanded={moreOpen}
-            aria-haspopup="menu"
-            onClick={() => setMoreOpen((v) => !v)}
-          >
-            <MoreHorizontal className="at-control-ico" strokeWidth={2} aria-hidden />
-          </button>
-          {moreOpen &&
-            morePos &&
-            createPortal(
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
-                <div
-                  className="at-theme-menu at-theme-menu-fixed at-controls-menu"
-                  role="menu"
-                  aria-label="More shortcuts"
-                  style={{ top: morePos.top, left: morePos.left }}
-                >
-                  <div className="at-theme-menu-label">Shortcuts</div>
-                  {folded.map((m) => (
-                    <NavLink
-                      key={m.id}
-                      to={m.path}
-                      end={m.path === "/"}
-                      role="menuitem"
-                      className={({ isActive }) => cx("at-theme-item", isActive && "on")}
-                      onClick={() => setMoreOpen(false)}
-                    >
-                      <span className="at-controls-menu-row">
-                        <m.icon size={14} strokeWidth={2} aria-hidden />
-                        <span>{m.label}</span>
-                      </span>
-                      {m.shortcut ? <span className="hint">{m.shortcut}</span> : null}
-                    </NavLink>
-                  ))}
-                </div>
-              </>,
-              document.body,
-            )}
-        </div>
-      )}
-    </nav>
-  );
-}
-
-function PrimaryNav() {
-  const loc = useLocation();
-  const wrapRef = useRef<HTMLElement>(null);
-  const budget = useRailBudget(wrapRef);
-  const [openSec, setOpenSec] = useState<string | null>(null);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const moreBtnRef = useRef<HTMLButtonElement>(null);
-  const [morePos, setMorePos] = useState<{ top: number; left: number } | null>(null);
-  useEffect(() => {
-    setOpenSec(null);
-    setMoreOpen(false);
-  }, [loc.pathname]);
-  useLayoutEffect(() => {
-    if (!moreOpen || !moreBtnRef.current) {
-      setMorePos(null);
-      return;
-    }
-    const place = () => {
-      const r = moreBtnRef.current!.getBoundingClientRect();
-      const menuW = 240;
-      const left = Math.min(Math.max(8, r.left), window.innerWidth - menuW - 8);
-      setMorePos({ top: r.bottom + 8, left });
-    };
-    place();
-    window.addEventListener("resize", place);
-    window.addEventListener("scroll", place, true);
-    return () => {
-      window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", place, true);
-    };
-  }, [moreOpen]);
+function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const grouped = useMemo(
     () =>
       SECTIONS.map((sec) => ({
         sec,
         short: SECTION_SHORT[sec] || sec,
-        icon: SECTION_ICON[sec] || Server,
         items: MODULES.filter((m) => m.section === sec),
       })).filter((g) => g.items.length),
     [],
   );
-  const activeSec = useMemo(() => {
-    const m = MODULES.find((x) => pathActive(loc.pathname, x.path));
-    return m?.section ?? null;
-  }, [loc.pathname]);
-
-  // Prefer icon capsules; titles appear via container query when center is wide enough.
-  const itemW = budget >= 560 ? 90 : 36;
-  const visible = fitCount(budget, grouped.length, itemW, 2, itemW);
-  const shown = grouped.slice(0, visible);
-  const folded = grouped.slice(visible);
-  const foldedOn = folded.some((g) => g.sec === activeSec);
 
   return (
-    <nav ref={wrapRef} className="at-rail-nav" aria-label="Primary">
-      {shown.map((g) => (
-        <SectionDropdown
-          key={g.sec}
-          short={g.short}
-          icon={g.icon}
-          items={g.items}
-          active={activeSec === g.sec}
-          open={openSec === g.sec}
-          onOpen={() => {
-            setMoreOpen(false);
-            setOpenSec(g.sec);
-          }}
-          onClose={() => setOpenSec((cur) => (cur === g.sec ? null : cur))}
-        />
-      ))}
-      {folded.length > 0 && (
-        <div className={cx("at-topnav-dd", foldedOn && "on", moreOpen && "open")}>
-          <button
-            ref={moreBtnRef}
-            type="button"
-            className="at-topnav-ddbtn"
-            title="More"
-            aria-label="More sections"
-            aria-expanded={moreOpen}
-            aria-haspopup="menu"
-            onClick={() => {
-              setOpenSec(null);
-              setMoreOpen((v) => !v);
-            }}
-          >
-            <MoreHorizontal className="at-topnav-secico" strokeWidth={2} aria-hidden />
-            <span className="at-topnav-dd-title">More</span>
-          </button>
-          {moreOpen &&
-            morePos &&
-            createPortal(
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
-                <div
-                  className="at-theme-menu at-theme-menu-fixed at-nav-more-menu"
-                  role="menu"
-                  aria-label="More sections"
-                  style={{ top: morePos.top, left: morePos.left }}
-                >
-                  {folded.map((g) => (
-                    <div key={g.sec} className="at-nav-more-group">
-                      <div className="at-theme-menu-label">{g.short}</div>
-                      {g.items.map((m) => (
-                        <NavLink
-                          key={m.id}
-                          to={m.path}
-                          end={m.path === "/"}
-                          role="menuitem"
-                          className={({ isActive }) => cx("at-theme-item", isActive && "on")}
-                          onClick={() => setMoreOpen(false)}
-                        >
-                          <span className="at-controls-menu-row">
-                            <m.icon size={14} strokeWidth={2} aria-hidden />
-                            <span>{m.label}</span>
-                          </span>
-                        </NavLink>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </>,
-              document.body,
-            )}
-        </div>
-      )}
-    </nav>
+    <aside className={cx("at-sidebar", collapsed && "collapsed")} aria-label="Primary">
+      <nav className="at-sidebar-body">
+        {grouped.map((g) => (
+          <div key={g.sec} className="at-sidebar-group">
+            {!collapsed && <div className="at-sidebar-label">{g.short}</div>}
+            {g.items.map((m) => (
+              <NavLink
+                key={m.id}
+                to={m.path}
+                end={m.path === "/"}
+                title={collapsed ? m.label : undefined}
+                aria-label={m.label}
+                className={({ isActive }) => cx("at-sidebar-link", isActive && "on")}
+              >
+                <m.icon strokeWidth={2} aria-hidden />
+                {!collapsed && <span>{m.label}</span>}
+              </NavLink>
+            ))}
+          </div>
+        ))}
+      </nav>
+      <button
+        type="button"
+        className="at-sidebar-toggle"
+        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        onClick={onToggle}
+      >
+        {collapsed ? <ChevronRight size={14} strokeWidth={2} /> : <ChevronLeft size={14} strokeWidth={2} />}
+      </button>
+    </aside>
   );
 }
 
@@ -1015,6 +676,8 @@ const SHORTCUTS: [string, string][] = [
 export function Shell() {
   const spotOpen = useUi((s) => s.spotlightOpen);
   const setSpot = useUi((s) => s.setSpotlight);
+  const sidebarCollapsed = useUi((s) => s.sidebarCollapsed);
+  const toggleSidebar = useUi((s) => s.toggleSidebar);
   const [helpOpen, setHelpOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const loc = useLocation();
@@ -1053,9 +716,12 @@ export function Shell() {
       <ChartFloor />
       <MenuBar onSpotlight={() => setSpot(true)} onOpenNav={() => setNavOpen(true)} />
       <LicenseBanner />
-      <div className="at-main flex-1 min-h-0">
-        <div key={loc.pathname} className="at-main-scroll">
-          <Outlet />
+      <div className="at-shell-body flex-1 min-h-0">
+        <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
+        <div className="at-main flex-1 min-h-0">
+          <div key={loc.pathname} className="at-main-scroll">
+            <Outlet />
+          </div>
         </div>
       </div>
       <Spotlight open={spotOpen} onClose={() => setSpot(false)} />

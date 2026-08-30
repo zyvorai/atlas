@@ -11,7 +11,7 @@ interface TrackedJob {
   error?: string | null;
 }
 
-export type Theme = "carbon" | "nebula" | "dark" | "zinc" | "aurora";
+export type Theme = "carbon" | "apple-lite";
 export type Density = "comfortable" | "compact";
 
 interface UiState {
@@ -27,6 +27,8 @@ interface UiState {
   setTheme: (t: Theme) => void;
   density: Density;
   setDensity: (d: Density) => void;
+  sidebarCollapsed: boolean;
+  toggleSidebar: () => void;
   paused: boolean;
   togglePaused: () => void;
   spotlightOpen: boolean;
@@ -46,10 +48,11 @@ const ss = typeof sessionStorage !== "undefined" ? sessionStorage : null;
 // tab session must never see a token/entered flag neither of us asked to persist.
 const savedToken = ls?.getItem("atlas.token") || ss?.getItem("atlas.token") || "";
 const savedEntered = ls?.getItem("atlas.entered") === "1" || ss?.getItem("atlas.entered") === "1";
-const THEMES = new Set<Theme>(["carbon", "nebula", "dark", "zinc", "aurora"]);
+const THEMES = new Set<Theme>(["carbon", "apple-lite"]);
 const rawTheme = ls?.getItem("atlas.theme") || "";
 const savedTheme: Theme = THEMES.has(rawTheme as Theme) ? (rawTheme as Theme) : "carbon";
 const savedDensity = (ls?.getItem("atlas.density") as Density) || "comfortable";
+const savedSidebarCollapsed = ls?.getItem("atlas.sidebar-collapsed") === "1";
 
 function applyTheme(t: Theme) {
   if (typeof document !== "undefined") document.documentElement.dataset.uiShell = t;
@@ -94,6 +97,13 @@ export const useUi = create<UiState>((set) => ({
     applyDensity(d);
     set({ density: d });
   },
+  sidebarCollapsed: savedSidebarCollapsed,
+  toggleSidebar: () =>
+    set((s) => {
+      const next = !s.sidebarCollapsed;
+      ls?.setItem("atlas.sidebar-collapsed", next ? "1" : "0");
+      return { sidebarCollapsed: next };
+    }),
   paused: false,
   togglePaused: () => set((s) => ({ paused: !s.paused })),
   spotlightOpen: false,

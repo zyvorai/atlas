@@ -20,7 +20,7 @@ export default function Settings() {
       <PageHead
         eyebrow="CONSOLE · APPEARANCE"
         title="Settings"
-        state="Look & feel and density for this browser. Carbon is the flat default; charts use Zeus emerald/sky/amber."
+        state="Look & feel and density for this browser. Carbon is the dark default; Apple Lite is the iPhone 17 light shell."
       />
 
       <div className="at-panel">
@@ -31,7 +31,8 @@ export default function Settings() {
           <div className="at-settings-block">
             <div className="at-settings-label">Shell theme</div>
             <p className="at-settings-hint">
-              Carbon is the Atlas default. Charts follow Zeus OS telemetry colors (emerald · sky · amber · violet) — no survey cyan.
+              Carbon (graphite + Cosmic Orange) is the Atlas default. Apple Lite is the iPhone 17
+              Magichromatic light shell — Mist Blue, Sage, Lavender, Cosmic Orange.
             </p>
             <div className="at-choice-grid" role="radiogroup" aria-label="Shell theme">
               {THEME_OPTIONS.map((opt) => (
