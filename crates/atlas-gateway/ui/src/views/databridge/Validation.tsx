@@ -1,5 +1,6 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useValidations } from "../../api/hooks";
 import type { ValidationRun } from "../../api/types";
 import { Badge, Button, SlideOver } from "../../ui/kit";
@@ -7,6 +8,7 @@ import { PageHead } from "../../ui/PageHead";
 import { Table } from "../../ui/Table";
 
 export default function Validation() {
+  const nav = useNavigate();
   const { data } = useValidations();
   const [detail, setDetail] = useState<ValidationRun | null>(null);
   const n = data?.length || 0;
@@ -30,6 +32,11 @@ export default function Validation() {
         rows={data}
         rowKey={(r) => r.id}
         empty="No validation runs yet."
+        emptyCta={
+          <button type="button" className="at-btn primary" onClick={() => nav("/databridge/plans")}>
+            Open Migration Plans
+          </button>
+        }
         cols={[
           { h: "Kind", f: (r) => r.kind },
           { h: "Tables", f: (r) => `${r.tables_total - r.tables_mismatched}/${r.tables_total} match` },

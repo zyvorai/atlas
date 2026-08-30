@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useEdgeClusters } from "../../api/hooks";
 import { Badge } from "../../ui/kit";
 import { PageHead } from "../../ui/PageHead";
@@ -9,6 +9,7 @@ import { fmtBytes, num } from "../../lib/format";
 const kind = (s: string) => (s === "ready" ? "success" : s === "degraded" ? "danger" : "warning");
 
 export default function EdgeClusters() {
+  const nav = useNavigate();
   const { data } = useEdgeClusters();
   const n = data?.length || 0;
   return (
@@ -28,6 +29,11 @@ export default function EdgeClusters() {
         rows={data}
         rowKey={(r) => r.id}
         empty="No edge clusters yet — provision one from a migration plan."
+        emptyCta={
+          <button type="button" className="at-btn primary" onClick={() => nav("/databridge/plans")}>
+            Open Migration Plans
+          </button>
+        }
         cols={[
           { h: "Name", f: (r) => r.cr_name || r.id, mono: true },
           { h: "Engine", f: (r) => <Badge kind="info">{r.engine}</Badge> },
