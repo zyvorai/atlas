@@ -1,4 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { Check, Circle, Loader2 } from "lucide-react";
 import { submitJob } from "../../api/client";
@@ -31,6 +32,10 @@ export default function PlanDetail() {
   const { data: source } = useSource(plan?.source_id || "");
   const inv = useInvalidate();
   const refresh = () => inv("db-plan", "db-plans", "db-source", "db-sources");
+
+  useEffect(() => {
+    if (plan) document.title = `Atlas · ${plan.name}`;
+  }, [plan]);
 
   if (!plan) return <div className="p-6 text-muted-foreground">Loading plan…</div>;
   const done = COMPLETED_THROUGH[plan.state] ?? -1;

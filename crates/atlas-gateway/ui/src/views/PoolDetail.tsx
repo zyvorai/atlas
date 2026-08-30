@@ -1,6 +1,6 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 // Pool Detail — Soundings archetype C (instruments → cross-section → seabed → ledger).
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAlerts, useClusters, useOsds, usePools, useVolumes } from "../api/hooks";
 import { depth, depthWidth } from "../lib/depth";
@@ -26,6 +26,10 @@ export default function PoolDetail() {
     () => (vols || []).filter((v) => v.pool_id === id || (!v.pool_id && pool && v.name.includes(pool.name))),
     [vols, id, pool],
   );
+
+  useEffect(() => {
+    if (pool) document.title = `Atlas · ${pool.name}`;
+  }, [pool]);
 
   const used = pool?.used_bytes ?? 0;
   const max = pool?.max_bytes ?? 0;

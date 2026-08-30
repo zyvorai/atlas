@@ -701,8 +701,13 @@ export function Shell() {
     return () => window.removeEventListener("keydown", h);
   }, [setSpot, nav]);
   useEffect(() => {
+    // Only set the title for routes with a known static label. Dynamic detail routes
+    // (/pools/:id, PlanDetail, …) aren't in MODULES — leave the title alone for those so the
+    // view's own effect can name the specific entity once its data loads, instead of this
+    // effect re-asserting the generic fallback and racing it (index.html already ships that
+    // fallback as the default, so there's nothing to set here on first paint anyway).
     const m = MODULES.find((x) => (x.path === "/" ? loc.pathname === "/" : loc.pathname.startsWith(x.path)));
-    document.title = m ? `Atlas · ${m.label}` : "Atlas — Storage Center";
+    if (m) document.title = `Atlas · ${m.label}`;
   }, [loc.pathname]);
   useEffect(() => {
     if (!welcomed) {
