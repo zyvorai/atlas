@@ -139,11 +139,30 @@ log "6/7 ensure atlas-gateway-auth Secret (jwt-secret + bootstrap-admin-token)"
 "${SSH[@]}" "cd ~/${REMOTE_DIR} && NAMESPACE=${NS} KUBECTL='sudo kubectl' bash scripts/ensure-atlas-auth-secret.sh"
 
 log "7/7 apply manifest + roll out ${DEPLOY} in ${NS}"
+apply_changed=1
 if [[ "${ATLAS_SKIP_APPLY:-0}" != "1" ]]; then
-  "${SSH[@]}" "cd ~/${REMOTE_DIR} && sudo kubectl apply -f ${MANIFEST}"
+  apply_out="$("${SSH[@]}" "cd ~/${REMOTE_DIR} && sudo kubectl apply -f ${MANIFEST}")"
+  echo "$apply_out"
+  # `kubectl apply` on an already-applied, unchanged manifest reports every
+  # object "unchanged" and is itself a no-op — an unconditional rollout
+  # restart after it, on every single re-run of this script (including the
+  # idempotent re-runs hypercluster's own `storage apply` does), needlessly
+  # bounces a healthy pod every time. That repeated churn is what interrupts
+  # this deployment's in-flight RBD volume mount (see ../zeus-os
+  # docs/deploy-notes-*.md for the Ceph data-loss cascade one such interrupted
+  # mount caused) — restart only when the deployment's own manifest line
+  # actually changed something.
+  if echo "$apply_out" | grep -qE "^deployment\.apps/${DEPLOY} unchanged$"; then
+    apply_changed=0
+  fi
 fi
-"${SSH[@]}" "sudo kubectl -n ${NS} rollout restart deploy/${DEPLOY} \
-  && sudo kubectl -n ${NS} rollout status deploy/${DEPLOY} --timeout=180s"
+if [[ "$apply_changed" == "1" ]]; then
+  "${SSH[@]}" "sudo kubectl -n ${NS} rollout restart deploy/${DEPLOY} \
+    && sudo kubectl -n ${NS} rollout status deploy/${DEPLOY} --timeout=180s"
+else
+  log "manifest unchanged — skipping rollout restart (pod left running)"
+  "${SSH[@]}" "sudo kubectl -n ${NS} rollout status deploy/${DEPLOY} --timeout=180s"
+fi
 
 BOOT="$("${SSH[@]}" "sudo kubectl -n ${NS} get secret atlas-gateway-auth -o jsonpath='{.data.bootstrap-admin-token}' 2>/dev/null | base64 -d || true")"
 log "done — verify: curl -s -H \"Authorization: Bearer <bootstrap-or-jwt>\" http://<node>:30511/api/atlas/v1/volumes?kind=block"

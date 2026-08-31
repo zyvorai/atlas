@@ -91,3 +91,18 @@ make run            # gateway with fake Ceph driver on 127.0.0.1:5110
 cargo run -p atlas-cli -- --base-url http://127.0.0.1:5110 health
 ```
 Live K8s path (needs KUBECONFIG): `atlasctl storage-classes`.
+
+## Deploy script gotchas
+
+- **`scripts/deploy-ceph-gateway-remote.sh` no longer restarts `atlas-gateway-ceph`
+  unconditionally.** It used to run `kubectl rollout restart` after every `kubectl apply`,
+  including no-op re-runs — on Ceph-RBD-backed storage (this Deployment's own PVC) that
+  repeatedly interrupts an in-flight CSI mount and corrupts the volume (found live, 2026-08-31,
+  chasing a stuck Atlas gateway on a second `../hypercluster`-provisioned host: `../hypercluster`'s
+  own `storage apply` calls this script on every re-run, so simply re-running it — even just to
+  validate an unrelated fix — kept bouncing a healthy pod and produced a multi-hour Ceph
+  `HEALTH_ERR`/`recovery_unfound` cascade). Now it only restarts when `kubectl apply`'s output
+  does **not** match `^deployment\.apps/${DEPLOY} unchanged$`. If you touch step 7/7 again, keep
+  that gate — see `../zeus-os/CLAUDE.md`'s "unconditional restart on every re-apply" entry for
+  the full writeup and two sibling-repo instances of the same bug (`../hypercluster`,
+  `../packetwolf`).
