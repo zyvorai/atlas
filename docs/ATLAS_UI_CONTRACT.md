@@ -92,15 +92,24 @@ Kit surfaces (`GlassSection`, `StatCard`, `SwipeRail`, `SelectTile`, `SlideOver`
 ## Shell chrome (shop topbar + sidebar)
 
 Navigation lives in exactly one place — a **persistent left sidebar** (`Sidebar` in `Shell.tsx`):
-the six section groups (Storage, Data Protection, DataBridge, Observability, Governance,
-Infrastructure) always visible as icon+label links, collapsible to a 64px icon-only rail
-(toggle at the bottom; state persisted as `atlas.sidebar-collapsed`). Below ~900px the sidebar
-hides and a hamburger opens `MobileNavDrawer` — the two never show at once.
+six section groups (Storage, Data Protection, DataBridge, Observability, Governance,
+Infrastructure). **Storage** is always expanded; other sections are **collapsible** (chevron
+header, state in `atlas.sidebar-section-<id>`). The section with the active route stays open.
+A **Filter navigation…** field at the top of the sidebar filters items across sections (hidden
+on the icon-only rail). The whole sidebar collapses to a 64px icon rail (toggle at the bottom;
+`atlas.sidebar-collapsed`). Below ~900px the sidebar hides and a hamburger opens
+`MobileNavDrawer` with the same filter + sections — no duplicate shortcut list.
 
-The **topbar** is a bare 44px (`--rail-h`) frosted shop strip: brand mark (icon only) left,
-icon cluster right (⌘K, Look & feel, jobs, alerts, pause, health, account). No nav chips in the
-topbar. Materials: frosted light bar on Apple Lite, dark translucent bar on Carbon; active states
-use Apple Blue.
+**Role-aware nav:** JWT role (`viewer` | `operator` | `admin`) filters sidebar and Spotlight
+entries by `minRole` on each module in `nav/routes.ts`. Gated routes show an access-denied
+panel if opened directly.
+
+The **topbar** is a bare 44px (`--rail-h`) frosted shop strip: Zyvor mark + **Atlas** left,
+icon cluster right (⌘K, Look & feel, jobs, alerts, pause, health, account). No nav chips in
+the topbar. Materials: frosted light bar on Apple Lite, dark translucent bar on Carbon; active
+states use Apple Blue.
+
+**Detail pages** use `PageHead` breadcrumbs (`Storage · Pools · …`, `DataBridge · Migration Plans · …`).
 
 | Atlas theme (`data-ui-shell`) | Look |
 |---|---|

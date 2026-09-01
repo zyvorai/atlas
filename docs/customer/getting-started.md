@@ -27,10 +27,11 @@
 ## 3. Orient yourself (UX)
 
 1. **Command Deck** (`/`) — capacity sounding, pool tiles, protection gaps.
-2. Left sidebar: grouped page links, collapsible to an icon-only rail. Top bar: Spotlight
-   (**⌘K**), Look & feel (Carbon / Apple Lite), running-jobs indicator, Alerts bell, health, and
-   an Account menu (clock, auth token, sign-out).
-3. Sidebar groups: **STORAGE**, **DATA PROTECTION**, **DATABRIDGE**, **OBSERVABILITY**, **GOVERNANCE**, **INFRASTRUCTURE**.
+2. Left sidebar: six section groups with **collapsible headers** (chevron) and a **Filter navigation…**
+   field at the top; collapse the whole rail to icons from the toggle at the bottom. Top bar:
+   Spotlight (**⌘K**), Look & feel (Carbon / Apple Lite), running-jobs indicator, Alerts bell,
+   health, and Account (clock, auth token, sign-out). **H** jumps to Command Deck.
+3. Sidebar groups: **STORAGE** (always open), **DATA PROTECTION**, **DATABRIDGE**, **OBSERVABILITY**, **GOVERNANCE**, **INFRASTRUCTURE**. Admin/operator-only pages hide for lower roles.
 4. Every mutation is a durable job (`202` + id) — watch **Jobs**.
 
 ## 4. First workflows

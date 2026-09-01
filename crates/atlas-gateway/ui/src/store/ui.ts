@@ -2,6 +2,7 @@
 // Client UI state (zustand): auth token, spotlight, and the live job feed.
 import { create } from "zustand";
 import type { JobRecord } from "../api/types";
+import { roleFromToken, roleLevel, type NavRole } from "../lib/auth";
 
 interface TrackedJob {
   id: string;
@@ -17,6 +18,9 @@ export type Density = "comfortable" | "compact";
 interface UiState {
   token: string;
   setToken: (t: string, persist?: boolean) => void;
+  role: NavRole;
+  roleLevel: number;
+  setRole: (r: NavRole, persist?: boolean) => void;
   entered: boolean;
   enter: (persist?: boolean) => void;
   /** Optional soft hint shown on the login page after a forced sign-out (no toast). */
@@ -48,6 +52,12 @@ const ss = typeof sessionStorage !== "undefined" ? sessionStorage : null;
 // tab session must never see a token/entered flag neither of us asked to persist.
 const savedToken = ls?.getItem("atlas.token") || ss?.getItem("atlas.token") || "";
 const savedEntered = ls?.getItem("atlas.entered") === "1" || ss?.getItem("atlas.entered") === "1";
+const savedRoleRaw = ls?.getItem("atlas.role") || ss?.getItem("atlas.role") || "";
+const initialRole: NavRole =
+  savedRoleRaw === "admin" || savedRoleRaw === "operator" || savedRoleRaw === "viewer"
+    ? savedRoleRaw
+    : roleFromToken(savedToken);
+const initialRoleLevel = roleLevel(initialRole);
 const THEMES = new Set<Theme>(["carbon", "apple-lite"]);
 const rawTheme = ls?.getItem("atlas.theme") || "";
 const savedTheme: Theme = THEMES.has(rawTheme as Theme) ? (rawTheme as Theme) : "carbon";
@@ -65,10 +75,20 @@ applyDensity(savedDensity);
 
 export const useUi = create<UiState>((set) => ({
   token: savedToken,
+  role: initialRole,
+  roleLevel: initialRoleLevel,
   setToken: (t, persist = true) => {
+    const r = roleFromToken(t);
     (persist ? ls : ss)?.setItem("atlas.token", t);
     (persist ? ss : ls)?.removeItem("atlas.token");
-    set({ token: t });
+    (persist ? ls : ss)?.setItem("atlas.role", r);
+    (persist ? ss : ls)?.removeItem("atlas.role");
+    set({ token: t, role: r, roleLevel: roleLevel(r) });
+  },
+  setRole: (r, persist = true) => {
+    (persist ? ls : ss)?.setItem("atlas.role", r);
+    (persist ? ss : ls)?.removeItem("atlas.role");
+    set({ role: r, roleLevel: roleLevel(r) });
   },
   entered: savedEntered,
   sessionHint: null as string | null,
@@ -81,9 +101,11 @@ export const useUi = create<UiState>((set) => ({
   signOut: (hint) => {
     ls?.removeItem("atlas.entered");
     ls?.removeItem("atlas.token");
+    ls?.removeItem("atlas.role");
     ss?.removeItem("atlas.entered");
     ss?.removeItem("atlas.token");
-    set({ entered: false, token: "", sessionHint: hint ?? null });
+    ss?.removeItem("atlas.role");
+    set({ entered: false, token: "", role: "viewer", roleLevel: 0, sessionHint: hint ?? null });
   },
   theme: savedTheme,
   setTheme: (t) => {

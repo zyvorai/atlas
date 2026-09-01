@@ -62,6 +62,11 @@ export default function PlanDetail() {
   return (
     <div className="at-stack">
       <PageHead
+        crumbs={[
+          { label: "DataBridge", to: "/databridge/sources" },
+          { label: "Migration Plans", to: "/databridge/plans" },
+          { label: plan.name },
+        ]}
         eyebrow="DATABRIDGE · DETAIL"
         title={plan.name}
         state={`Plan ${plan.id} · source ${source?.name || plan.source_id} · ${planStateLabel(plan.state)}${engVer ? ` · ${engVer.engine}` : ""}`}

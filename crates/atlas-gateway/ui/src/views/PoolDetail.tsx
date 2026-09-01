@@ -96,6 +96,11 @@ export default function PoolDetail() {
     return (
       <div>
         <PageHead
+          crumbs={[
+            { label: "Storage", to: "/" },
+            { label: "Pools", to: "/ceph" },
+            { label: "Not found" },
+          ]}
           eyebrow="POOL · DETAIL"
           title="Pool not found"
           state={stateLine}
@@ -112,6 +117,11 @@ export default function PoolDetail() {
   return (
     <div>
       <PageHead
+        crumbs={[
+          { label: "Storage", to: "/" },
+          { label: "Pools", to: "/ceph" },
+          { label: pool?.name || id },
+        ]}
         eyebrow={
           <>
             POOL · {cluster?.name || pool?.cluster_id || "…"}

@@ -17,8 +17,12 @@ import {
   Play,
   Search,
   X,
+  type LucideIcon,
 } from "lucide-react";
-import { MODULES, SECTIONS, MENUBAR_CONTROLS } from "../nav/modules";
+import { navLabelForPath } from "../nav/routes";
+import { modulesForRole } from "../nav/modules";
+import { useNavGroups } from "../nav/useNavGroups";
+import { NavFilter, NavSectionLinks } from "./NavPanel";
 import { http, isUnauthorized } from "../api/client";
 import { useAlerts, useCephHealthRollup, useClusters, useJobs } from "../api/hooks";
 import { useUi } from "../store/ui";
@@ -382,53 +386,23 @@ function MenuBar({
   );
 }
 
-const SECTION_SHORT: Record<string, string> = {
-  STORAGE: "Storage",
-  "DATA PROTECTION": "Protect",
-  DATABRIDGE: "DataBridge",
-  OBSERVABILITY: "Observe",
-  GOVERNANCE: "Govern",
-  INFRASTRUCTURE: "Infra",
-};
-
-/**
- * Persistent left navigation — Zeus OS's sidebar pattern: the six section groups stay always
- * visible, collapsible down to an icon-only rail. The topbar above carries only branding,
- * search, and status, so navigation lives in exactly one place instead of duplicating a
- * top-bar mega-menu and a sidebar.
- */
 function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
-  const grouped = useMemo(
-    () =>
-      SECTIONS.map((sec) => ({
-        sec,
-        short: SECTION_SHORT[sec] || sec,
-        items: MODULES.filter((m) => m.section === sec),
-      })).filter((g) => g.items.length),
-    [],
-  );
+  const roleLevel = useUi((s) => s.roleLevel);
+  const { grouped, filter, setFilter, isSectionClosed, toggleSection } = useNavGroups(roleLevel);
 
   return (
     <aside className={cx("at-sidebar", collapsed && "collapsed")} aria-label="Primary">
+      {!collapsed && <NavFilter value={filter} onChange={setFilter} />}
       <nav className="at-sidebar-body">
-        {grouped.map((g) => (
-          <div key={g.sec} className="at-sidebar-group">
-            {!collapsed && <div className="at-sidebar-label">{g.short}</div>}
-            {g.items.map((m) => (
-              <NavLink
-                key={m.id}
-                to={m.path}
-                end={m.path === "/"}
-                title={collapsed ? m.label : undefined}
-                aria-label={m.label}
-                className={({ isActive }) => cx("at-sidebar-link", isActive && "on")}
-              >
-                <m.icon strokeWidth={2} aria-hidden />
-                {!collapsed && <span>{m.label}</span>}
-              </NavLink>
-            ))}
-          </div>
-        ))}
+        <NavSectionLinks
+          groups={grouped}
+          isSectionClosed={isSectionClosed}
+          onToggleSection={toggleSection}
+          showSectionHeaders={!collapsed}
+          compact={collapsed}
+          linkClass={(active) => cx("at-sidebar-link", active && "on")}
+          iconSize={16}
+        />
       </nav>
       <button
         type="button"
@@ -445,6 +419,9 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
 
 function MobileNavDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const loc = useLocation();
+  const roleLevel = useUi((s) => s.roleLevel);
+  const { grouped, filter, setFilter, isSectionClosed, toggleSection } = useNavGroups(roleLevel);
+
   useEffect(() => {
     onClose();
   }, [loc.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -458,12 +435,6 @@ function MobileNavDrawer({ open, onClose }: { open: boolean; onClose: () => void
   }, [open, onClose]);
 
   if (!open) return null;
-
-  const grouped = SECTIONS.map((sec) => ({
-    sec,
-    short: SECTION_SHORT[sec] || sec,
-    items: MODULES.filter((m) => m.section === sec),
-  })).filter((g) => g.items.length);
 
   return createPortal(
     <div className="at-drawer-scrim" onMouseDown={onClose}>
@@ -481,37 +452,14 @@ function MobileNavDrawer({ open, onClose }: { open: boolean; onClose: () => void
           </button>
         </div>
         <div className="at-drawer-body">
-          <div className="at-drawer-label">Shortcuts</div>
-          {MENUBAR_CONTROLS.map((m) => (
-            <NavLink
-              key={m.id}
-              to={m.path}
-              end={m.path === "/"}
-              className={({ isActive }) => cx("at-drawer-item", isActive && "on")}
-              onClick={onClose}
-            >
-              <m.icon size={16} strokeWidth={2} aria-hidden />
-              <span className="grow">{m.label}</span>
-              {m.shortcut ? <kbd className="at-control-kbd">{m.shortcut}</kbd> : null}
-            </NavLink>
-          ))}
-          {grouped.map((g) => (
-            <div key={g.sec}>
-              <div className="at-drawer-label">{g.short}</div>
-              {g.items.map((m) => (
-                <NavLink
-                  key={m.id}
-                  to={m.path}
-                  end={m.path === "/"}
-                  className={({ isActive }) => cx("at-drawer-item", isActive && "on")}
-                  onClick={onClose}
-                >
-                  <m.icon size={16} strokeWidth={2} aria-hidden />
-                  <span>{m.label}</span>
-                </NavLink>
-              ))}
-            </div>
-          ))}
+          <NavFilter value={filter} onChange={setFilter} className="at-drawer-filter" />
+          <NavSectionLinks
+            groups={grouped}
+            isSectionClosed={isSectionClosed}
+            onToggleSection={toggleSection}
+            linkClass={(active) => cx("at-drawer-item", active && "on")}
+            onNavigate={onClose}
+          />
         </div>
       </aside>
     </div>,
@@ -523,11 +471,12 @@ interface SpotItem {
   label: string;
   sub: string;
   path: string;
-  icon: (typeof MODULES)[number]["icon"];
+  icon: LucideIcon;
 }
 
 function Spotlight({ open, onClose }: { open: boolean; onClose: () => void }) {
   const nav = useNavigate();
+  const roleLevel = useUi((s) => s.roleLevel);
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
   const [resources, setResources] = useState<SpotItem[]>([]);
@@ -574,7 +523,7 @@ function Spotlight({ open, onClose }: { open: boolean; onClose: () => void }) {
     });
   }, [open]);
 
-  const modItems: SpotItem[] = MODULES.map((m) => ({
+  const modItems: SpotItem[] = modulesForRole(roleLevel).map((m) => ({
     label: m.label,
     sub: m.section.toLowerCase(),
     path: m.path,
@@ -703,8 +652,8 @@ export function Shell() {
     // view's own effect can name the specific entity once its data loads, instead of this
     // effect re-asserting the generic fallback and racing it (index.html already ships that
     // fallback as the default, so there's nothing to set here on first paint anyway).
-    const m = MODULES.find((x) => (x.path === "/" ? loc.pathname === "/" : loc.pathname.startsWith(x.path)));
-    if (m) document.title = `Atlas · ${m.label}`;
+    const label = navLabelForPath(loc.pathname);
+    if (label) document.title = `Atlas · ${label}`;
   }, [loc.pathname]);
   useEffect(() => {
     if (!welcomed) {

@@ -1,13 +1,18 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 
-/** Shop page grammar: eyebrow → large title → muted state. */
+export type PageCrumb = { label: ReactNode; to?: string };
+
+/** Shop page grammar: optional crumbs → eyebrow → large title → muted state. */
 export function PageHead({
+  crumbs,
   eyebrow,
   title,
   state,
   actions,
 }: {
+  crumbs?: PageCrumb[];
   eyebrow: ReactNode;
   title: ReactNode;
   state?: ReactNode;
@@ -16,6 +21,22 @@ export function PageHead({
   return (
     <div className="at-head">
       <div>
+        {crumbs && crumbs.length > 0 ? (
+          <nav className="at-crumbs" aria-label="Breadcrumb">
+            {crumbs.map((c, i) => (
+              <span key={i} className="at-crumb-wrap">
+                {i > 0 ? <span className="at-crumb-sep" aria-hidden>·</span> : null}
+                {c.to ? (
+                  <Link to={c.to} className="at-crumb-link">
+                    {c.label}
+                  </Link>
+                ) : (
+                  <span className="at-crumb-current">{c.label}</span>
+                )}
+              </span>
+            ))}
+          </nav>
+        ) : null}
         <div className="at-eyebrow">
           <span className="tick" />
           {eyebrow}

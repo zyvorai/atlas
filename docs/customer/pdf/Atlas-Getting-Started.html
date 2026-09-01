@@ -24,7 +24,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:1.2em 0}
 <section class="cover"><div class="kicker">ZyvorAI Labs · Customer Documentation</div>
 <h1>At<span>las</span></h1>
 <div class="sub">Getting Started</div>
-<div class="badge">2026-08-30</div>
+<div class="badge">2026-09-01</div>
 <div class="foot">zyvor.dev · Confidential — for licensed customers</div></section>
 <main><h2>What you need</h2>
 <table>
@@ -85,10 +85,11 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:1.2em 0}
 <h2>3. Orient yourself (UX)</h2>
 <ol>
 <li><strong>Command Deck</strong> (<code>/</code>) — capacity sounding, pool tiles, protection gaps.</li>
-<li>Left sidebar: grouped page links, collapsible to an icon-only rail. Top bar: Spotlight
-(<strong>⌘K</strong>), Look &amp; feel (Carbon / Apple Lite), running-jobs indicator, Alerts bell, health, and
-an Account menu (clock, auth token, sign-out).</li>
-<li>Sidebar groups: <strong>STORAGE</strong>, <strong>DATA PROTECTION</strong>, <strong>DATABRIDGE</strong>, <strong>OBSERVABILITY</strong>, <strong>GOVERNANCE</strong>, <strong>INFRASTRUCTURE</strong>.</li>
+<li>Left sidebar: six section groups with <strong>collapsible headers</strong> (chevron) and a <strong>Filter navigation…</strong>
+field at the top; collapse the whole rail to icons from the toggle at the bottom. Top bar:
+Spotlight (<strong>⌘K</strong>), Look &amp; feel (Carbon / Apple Lite), running-jobs indicator, Alerts bell,
+health, and Account (clock, auth token, sign-out). <strong>H</strong> jumps to Command Deck.</li>
+<li>Sidebar groups: <strong>STORAGE</strong> (always open), <strong>DATA PROTECTION</strong>, <strong>DATABRIDGE</strong>, <strong>OBSERVABILITY</strong>, <strong>GOVERNANCE</strong>, <strong>INFRASTRUCTURE</strong>. Admin/operator-only pages hide for lower roles.</li>
 <li>Every mutation is a durable job (<code>202</code> + id) — watch <strong>Jobs</strong>.</li>
 </ol>
 <h2>4. First workflows</h2>
@@ -117,9 +118,15 @@ atlasctl volumes
 <hr>
 <p>Storage Center is the Atlas operator console on the gateway (<code>http://&lt;host&gt;:5110/</code>).</p>
 <h2>Shell chrome</h2>
-<p>Navigation lives in a persistent <strong>left sidebar</strong>, grouped by section; collapse it to an
-icon-only rail from the toggle at its base (state remembered per browser). The top bar carries
-everything else:</p>
+<p>Navigation lives in a persistent <strong>left sidebar</strong>, grouped by six sections. Each section
+(except <strong>Storage</strong>) can be collapsed with the chevron on its header; the section containing
+your current page stays open. Use <strong>Filter navigation…</strong> at the top of the sidebar to narrow
+the list. Collapse the whole sidebar to an icon-only rail from the toggle at its base (state
+remembered per browser). Below ~900px the sidebar hides and the hamburger opens the same
+nav in a drawer — no duplicate shortcut list.</p>
+<p><strong>Role-aware nav:</strong> Viewer, Operator, and Admin sessions see different sidebar entries (governance
+and destructive ops require higher roles). Direct URLs to gated pages show an access message.</p>
+<p>The top bar carries everything else:</p>
 <table>
 <thead>
 <tr>
@@ -129,15 +136,19 @@ everything else:</p>
 </thead>
 <tbody><tr>
 <td>Sidebar</td>
-<td>STORAGE · DATA PROTECTION · DATABRIDGE · OBSERVABILITY · GOVERNANCE · INFRASTRUCTURE — click the brand mark to jump to <strong>Command Deck</strong></td>
+<td>STORAGE · DATA PROTECTION · DATABRIDGE · OBSERVABILITY · GOVERNANCE · INFRASTRUCTURE — filter, section collapse, icon rail</td>
+</tr>
+<tr>
+<td>Brand</td>
+<td>Zyvor mark + <strong>Atlas</strong> — click to jump to <strong>Command Deck</strong></td>
 </tr>
 <tr>
 <td>Spotlight</td>
-<td><strong>⌘K</strong> / <strong>Ctrl+K</strong> — pools, volumes, modules</td>
+<td><strong>⌘K</strong> / <strong>Ctrl+K</strong> — pools, volumes, modules (role-filtered)</td>
 </tr>
 <tr>
 <td>Look &amp; feel</td>
-<td>Carbon (dark, default) or Apple Lite (light)</td>
+<td>Carbon (dark shop, default) or Apple Lite (light shop)</td>
 </tr>
 <tr>
 <td>Jobs spinner</td>
@@ -145,7 +156,7 @@ everything else:</p>
 </tr>
 <tr>
 <td>Alerts bell</td>
-<td>Open alert count → <code>/alerts</code></td>
+<td>Open alert count → <code>/alerts</code> (also under OBSERVABILITY → Alerts)</td>
 </tr>
 <tr>
 <td>Pause</td>
@@ -160,6 +171,8 @@ everything else:</p>
 <td>Clock, paste/clear JWT, sign out</td>
 </tr>
 </tbody></table>
+<p><strong>Keyboard:</strong> <strong>H</strong> jumps to Command Deck. <strong>?</strong> opens shortcut help.</p>
+<p><strong>Detail pages</strong> (pool drill-down, migration plan detail) show breadcrumbs above the page title.</p>
 <h2>Page grammar</h2>
 <p>Most screens share: <strong>PageHead</strong> (eyebrow + title + live state + ≤2 actions) → table/canvas → SlideOver or FormModal for mutations.</p>
 <p>Empty states name the next action (Create volume, Create bucket, Register source, …) — follow those CTAs rather than shrugging.</p>

@@ -13,14 +13,14 @@ Estate overview — capacity sounding, pool tiles, protection gaps, and quick ju
 ## How to get there
 
 - Route: `/`
-- Nav: **STORAGE → Command Deck (sidebar Deck, or the `H` shortcut)**
+- Nav: **STORAGE → Command Deck** (or press **H**)
 
 ## Operate from the console (UX)
 
 1. Open `/` (Command Deck) after the gateway is reachable.
 2. Read the health chip on the rail (HEALTH_OK / DEGRADED / …) and live job/alert counts.
 3. Use **New volume** to provision, or follow empty-state links (Create a volume →, Schedule nightly snapshots →, Create first bucket →).
-4. Open a pool tile to drill into `/pools/:id`, or jump via Spotlight (⌘K / Ctrl+K).
+4. Open a pool tile to drill into `/pools/:id` (breadcrumbs: Storage · Pools · …), or jump via Spotlight (⌘K / Ctrl+K).
 5. Pause auto-refresh from the rail if you need a stable readout.
 6. **Empty / fail:** No capacity → register a backend (INFRASTRUCTURE → Backends) and run discover; auth failures → paste JWT from the key icon.
 7. **Success:** Sounding orb + pool/OSD lattice populate; jobs appear when you provision.

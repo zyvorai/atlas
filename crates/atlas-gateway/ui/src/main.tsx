@@ -6,6 +6,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { Login } from "./views/Login";
 import { useUi } from "./store/ui";
+import type { NavRole } from "./lib/auth";
 import { Toaster } from "./ui/Toaster";
 import { ConfirmHost } from "./ui/confirm";
 import "./index.css";
@@ -20,7 +21,11 @@ function useOidcTokenFromUrl() {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("atlas_token");
     if (!token) return;
+    const roleParam = params.get("atlas_role");
     useUi.getState().setToken(token, true);
+    if (roleParam === "admin" || roleParam === "operator" || roleParam === "viewer") {
+      useUi.getState().setRole(roleParam as NavRole, true);
+    }
     useUi.getState().enter(true);
     params.delete("atlas_token");
     params.delete("atlas_role");

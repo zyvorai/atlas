@@ -13,7 +13,7 @@ Open alert ledger — silence or resolve before capacity work.
 ## How to get there
 
 - Route: `/alerts`
-- Nav: **OBSERVABILITY → Alerts (sidebar Alerts, or the top-bar bell)**
+- Nav: **OBSERVABILITY → Alerts**, or the **top-bar bell** popover (same destination)
 
 ## Operate from the console (UX)
 
