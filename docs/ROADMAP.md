@@ -240,10 +240,11 @@ to open engines at the edge on Ceph-backed storage.
   real db + table/collection names, PKs, counts).
 - **MySQL, MariaDB, MongoDB verified through provision → real full-load (data physically copied
   source→edge) → validate** (row/document-count parity) against a lightweight edge.
+- **MariaDB + MongoDB CDC + cutover verified live** (2026-09-01) on the Rook Ceph lab with
+  Strimzi/Debezium; MySQL CDC live for DATETIME (cutover still pending).
 - Fake-first: the entire pipeline runs with no cloud/k8s (`make run-databridge`), CI-locked by
   `tests/databridge_pipeline.rs`.
-- Follow-ups: streaming CDC + cutover for the non-Postgres engines need the Kafka/Debezium stack
-  (not installed on the shared lab); TLS for cloud SSL sources.
+- Follow-ups: MySQL cutover; Oracle / SQL Server heterogeneous CDC end-to-end; TLS for cloud SSL sources.
 
 See [DATABRIDGE.md](DATABRIDGE.md).
 

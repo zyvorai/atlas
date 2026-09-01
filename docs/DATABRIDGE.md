@@ -298,8 +298,8 @@ stream reports caught-up (0).
   Job and physically copied the data** source→edge, and the **validate row-count-compare Job passed**
   (plan → `validated`). The MariaDB run surfaced + fixed a real loader bug: the MySQL-8 `mysqldump` client
   fails on a MariaDB source (`Unknown table 'COLUMN_STATISTICS'`, 1109) unless `--column-statistics=0` is
-  passed — now added (harmless for MySQL). Streaming CDC + cutover were not run — they need Kafka/Debezium,
-  not installed on the shared lab.
+  passed — now added (harmless for MySQL). (Streaming CDC + cutover for MariaDB landed later —
+  see the 2026-09-01 entry below.)
 - **MongoDB full-load + validate — verified live** (2026-07): drove provision → full-load → validate
   against a lightweight edge PSMDB replica set. Surfaced + fixed **two real bugs**: (1) the gateway
   ClusterRole was missing `psmdb.percona.com/perconaservermongodbs`, so MongoDB edge provisioning was
@@ -307,6 +307,17 @@ stream reports caught-up (0).
   URIs in the loader + validation Jobs omitted `authSource=admin`, so authenticated Mongo sources failed
   SCRAM auth (the mongo tools default the auth db to the app db, not `admin`). The **full-load copied the
   data** (3 customers + 1 order) and **validate confirmed exact document-count parity** (plan → `validated`).
+  (CDC + cutover landed 2026-09-01 — see below.)
+- **MariaDB real CDC + cutover — verified live** (2026-09-01, `212.8.248.187`): Connect image with
+  `debezium-connector-mariadb`, MariaDB 11 lab source (`utf8mb4_unicode_ci` — MariaDB 11's default
+  `utf8mb4_uca1400_ai_ci` is rejected by Percona/MySQL edge restore), plan through full-load → CDC
+  (KafkaConnect + MariaDbConnector + JDBC sink Ready) → validate → cutover_complete
+  (`edge-…-haproxy.zyvor-databridge.svc:3306`).
+- **MongoDB real CDC + cutover — verified live** (2026-09-01, `212.8.248.187`): gateway rebuilt with
+  `atlas-databridge/mongodb` (+ kafka-lag), PSMDB edge, `mongodump|mongorestore` full-load, Debezium
+  Mongo source (`snapshot.mode=no_data` — 3.x rejects `never`) + Mongo Kafka sink (topics.regex must
+  match both Debezium topic and post-RegexRouter collection name), validate → cutover_complete.
+  Also corrected PSMDB users Secret name to `internal-<cluster>-users` (operator 1.16+).
 - **MySQL real CDC — verified live end-to-end for DATETIME columns** (2026-08-25/26,
   `<ephemeral-ip>`): full-load re-verified end-to-end against a real Percona edge (3 customer
   rows landed, confirmed via the API-driven job), then `cdc/start` applied a real `KafkaConnect`
@@ -365,8 +376,8 @@ stream reports caught-up (0).
 |---|---|---|---|---|---|
 | Postgres | **live** | **live** | **live** | **live** | **live** |
 | MySQL | **live** | **live** | **live** | **live** (DATETIME columns only — TIMESTAMP columns unsupported, see note) | pending |
-| MariaDB | **live** | **live** | **live** | pending | pending |
-| MongoDB | **live** | **live** | **live** | pending | pending |
+| MariaDB | **live** | **live** | **live** | **live** | **live** |
+| MongoDB | **live** | **live** | **live** | **live** | **live** |
 | SQL Server | **live** | via Debezium `initial` | advisory | pending | pending |
 | Oracle | **live** | via Debezium `initial` | advisory | pending | pending |
 
@@ -375,13 +386,11 @@ Fake path covers **all six** engines discover→cutover in CI (`tests/databridge
 - **Lab `<ephemeral-ip>` (2026-07-28):** Strimzi + `zyvor-kafka` **Ready** (Kafka **4.3.0**; CR was
   bumped from unsupported 4.0.0), multi-engine Connect image imported, gateway
   `ATLAS_DATABRIDGE_CONNECT_IMAGE=localhost/databridge-connect:dev`. Fake MySQL plan walked
-  assess→provision→full-load→**cdc_streaming**. Real non-Postgres CDC still needs a live source
-  Secret (lab inventory sources remain `driver_mode: fake`).
+  assess→provision→full-load→**cdc_streaming**. Real MariaDB/Mongo CDC+cutover later verified on
+  `212.8.248.187` (2026-09-01).
 - **Follow-ups (verify on live infra)**: **MySQL cutover** (CDC already live for DATETIME;
-  TIMESTAMP columns need an SMT or schema guidance). **MariaDB streaming CDC + cutover** after
-  rebuilding the Connect image with `debezium-connector-mariadb`. **MongoDB CDC + cutover** after
-  `up.sh` installs the PSMDB operator and a real Mongo source Secret is present. Postgres remains
-  the only engine verified through live cutover.
+  TIMESTAMP columns need an SMT or schema guidance). Postgres, MariaDB, and MongoDB are verified
+  through live cutover.
 - **CDC Connect image — multi-engine** (`deploy/databridge/connect/Dockerfile`): one Strimzi-based
   image bundles Debezium PostgreSQL + MySQL + **MariaDB** + MongoDB + Oracle + SQL Server source
   connectors, the Aiven JDBC sink (Postgres/MySQL/SQL Server/Oracle drivers), and the MongoDB Kafka
@@ -392,4 +401,6 @@ Fake path covers **all six** engines discover→cutover in CI (`tests/databridge
 ### Full-load secret assumptions
 The real full-load Job runs in `zyvor-databridge`, so the **source Secret must exist in that
 namespace** with `username`/`password` keys. The edge Secret is operator-generated: CloudNativePG's
-`<cluster>-app` provides a ready-to-use `uri`; Percona's `<cluster>-secrets` provides `root`.
+`<cluster>-app` provides a ready-to-use `uri`; Percona XtraDB's `<cluster>-secrets` provides `root`;
+PSMDB's `internal-<cluster>-users` provides `MONGODB_DATABASE_ADMIN_USER` /
+`MONGODB_DATABASE_ADMIN_PASSWORD`.

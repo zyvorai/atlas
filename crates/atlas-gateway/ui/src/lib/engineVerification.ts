@@ -28,13 +28,13 @@ export const ENGINE_VERIFICATION: EngineVerification[] = [
   },
   {
     engine: "mariadb",
-    live: ["discover", "full-load", "validate"],
-    note: "CDC ready once Connect image includes debezium-connector-mariadb (see deploy/databridge/connect).",
+    live: ["discover", "full-load", "validate", "cdc", "cutover"],
+    note: "End-to-end incl. Debezium MariaDB CDC → PXC on Rook Ceph (utf8mb4_unicode_ci; avoid UCA 14 collations).",
   },
   {
     engine: "mongodb",
-    live: ["discover", "full-load", "validate"],
-    note: "CDC needs PSMDB operator + Connect Mongo source/sink (up.sh -- installs PSMDB).",
+    live: ["discover", "full-load", "validate", "cdc", "cutover"],
+    note: "End-to-end incl. Debezium Mongo CDC → PSMDB (snapshot.mode=no_data; sink topics.regex post-RegexRouter).",
   },
   {
     engine: "sqlserver",

@@ -30,10 +30,11 @@ Implemented:
   SQL Server 2022, Postgres, and Oracle 23ai/26ai Free — on real servers through the deployed k3s gateway
   (binlog ROW / replica-set change streams / `is_cdc_enabled` / supplemental-log-min → `cdc_capable`,
   real db + table/collection names, PKs, counts). The gateway image now bundles the OCI Instant Client
-  and builds the `oracle` feature. **Deeper stages: Postgres is verified through real CDC; MySQL, MariaDB,
-  and MongoDB are verified through provision → real full-load (data physically copied source→edge) →
-  validate (row/document-count parity)** against a lightweight edge. Streaming CDC + cutover for the
-  non-Postgres engines still need the Kafka/Debezium stack (not installed on the shared lab).
+  and builds the `oracle` feature. **Deeper stages: Postgres, MariaDB, and MongoDB are verified through
+  real CDC + cutover** on the Rook Ceph lab (Kafka/Debezium + Connect image); MySQL is verified through
+  CDC for DATETIME columns (cutover still pending). Oracle / SQL Server remain discover-live (heterogeneous
+  CDC path not yet run end-to-end on the shared lab). The Ceph gateway image (`Dockerfile.ceph`) now
+  builds with `mongodb`/`sqlserver`/`oracle`/`kafka-lag` features to match the fake/k8s image.
   See `docs/DATABRIDGE.md` + `deploy/databridge/`.
 
 Day-2 operations added (slices, all fake-first tested): control-plane durability (job recovery, graceful

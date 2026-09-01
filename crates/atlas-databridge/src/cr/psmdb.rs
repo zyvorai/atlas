@@ -45,10 +45,11 @@ pub fn endpoint(cr_name: &str, namespace: &str) -> String {
     format!("{cr_name}-{REPLICA_SET}.{namespace}.svc:27017")
 }
 
-/// PSMDB generates a users Secret named `<cluster>-secrets` (keys `MONGODB_DATABASE_ADMIN_USER` /
-/// `MONGODB_DATABASE_ADMIN_PASSWORD`).
+/// PSMDB generates a users Secret named `internal-<cluster>-users` (keys
+/// `MONGODB_DATABASE_ADMIN_USER` / `MONGODB_DATABASE_ADMIN_PASSWORD`). Older docs called this
+/// `<cluster>-secrets`; current operators (1.16+) use the `internal-…-users` name.
 pub fn secret_ref(cr_name: &str) -> String {
-    format!("{cr_name}-secrets")
+    format!("internal-{cr_name}-users")
 }
 
 #[cfg(test)]
@@ -74,6 +75,6 @@ mod tests {
         assert!(is_ready(&serde_json::json!({ "state": "ready" })));
         assert!(!is_ready(&serde_json::json!({ "state": "initializing" })));
         assert_eq!(endpoint("edge-abc", "zyvor-databridge"), "edge-abc-rs0.zyvor-databridge.svc:27017");
-        assert_eq!(secret_ref("edge-abc"), "edge-abc-secrets");
+        assert_eq!(secret_ref("edge-abc"), "internal-edge-abc-users");
     }
 }

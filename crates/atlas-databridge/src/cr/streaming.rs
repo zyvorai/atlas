@@ -166,8 +166,9 @@ pub fn debezium_source_spec(
 }
 
 /// Debezium **MongoDB** source connector config. Mongo takes a single `mongodb.connection.string`
-/// (not host/port/user fields), reading the source's change streams / oplog. `snapshot.mode=never`
-/// because `mongodump` seeds the edge in full-load. Requires the source to be a replica set.
+/// (not host/port/user fields), reading the source's change streams / oplog. `snapshot.mode=no_data`
+/// because `mongodump` seeds the edge in full-load (Mongo Debezium 3.x rejects `never`). Requires
+/// the source to be a replica set.
 fn mongo_debezium_source_spec(
     short: &str,
     host: &str,
@@ -190,7 +191,9 @@ fn mongo_debezium_source_spec(
         "topic.prefix": prefix,
         "database.include.list": database,
         "capture.mode": "change_streams_update_full",
-        "snapshot.mode": "never",
+        // Debezium Mongo 3.x: `never` is not valid — use `no_data` (skip snapshot; full-load already
+        // seeded the edge via mongodump). Relational connectors still accept `never`.
+        "snapshot.mode": "no_data",
     });
     json!({ "class": config["connector.class"], "tasksMax": 1, "config": config })
 }
@@ -214,18 +217,23 @@ pub fn mongo_sink_spec(
     let pass = format!("${{secrets:{secret_ns}/{edge_secret}:{pass_key}}}");
     // authSource=admin, explicit — see mongo_debezium_source_spec / the loader authSource fix.
     let uri = format!("mongodb://{user}:{pass}@{edge_host}/?replicaSet=rs0&authSource=admin");
+    // RegexRouter rewrites `<prefix>.<db>.<collection>` → `<collection>` before the sink looks up
+    // per-topic config. MongoSinkConfig matches the *post-SMT* topic against `topics.regex`, so the
+    // pattern must accept both the original Debezium topic (consumer subscribe) and the bare
+    // collection name (config lookup after route). See MongoSinkConfig.getMongoSinkTopicConfig.
+    let topics_regex = format!("({prefix}[.][^.]+[.].*|[^.]+)");
     let config = json!({
         "connector.class": "com.mongodb.kafka.connect.MongoSinkConnector",
         "tasks.max": 1,
-        "topics.regex": format!("{prefix}[.][^.]+[.].*"),
+        "topics.regex": topics_regex,
         "connection.uri": uri,
         "database": edge_db,
         // Interpret Debezium MongoDB change events and apply the corresponding insert/update/delete.
         "change.data.capture.handler": "com.mongodb.kafka.connect.sink.cdc.debezium.mongodb.MongoDbHandler",
         "consumer.override.auto.offset.reset": "earliest",
         "consumer.override.metadata.max.age.ms": "10000",
-        // Route `<prefix>.<db>.<collection>` -> `<collection>`; the default namespace mapper then
-        // writes to `<database>.<collection>` using the `database` config above.
+        // Route `<prefix>.<db>.<collection>` -> `<collection>`; DefaultNamespaceMapper then uses
+        // `database` + topic(=collection) as the write namespace.
         "transforms": "route",
         "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
         "transforms.route.regex": format!("{prefix}[.][^.]+[.](.*)"),
@@ -355,6 +363,7 @@ mod tests {
         assert!(conn.contains("replicaSet=rs0"));
         assert!(conn.contains("authSource=admin"));
         assert!(s["config"].get("database.hostname").is_none());
+        assert_eq!(s["config"]["snapshot.mode"], "no_data");
     }
 
     #[test]
@@ -366,6 +375,11 @@ mod tests {
         assert!(s["config"]["connection.uri"].as_str().unwrap().contains("authSource=admin"));
         assert_eq!(s["config"]["change.data.capture.handler"], "com.mongodb.kafka.connect.sink.cdc.debezium.mongodb.MongoDbHandler");
         assert_eq!(s["config"]["transforms.route.replacement"], "$1");
+        assert_eq!(
+            s["config"]["topics.regex"],
+            "(dbabc123[.][^.]+[.].*|[^.]+)",
+            "must match Debezium topic and post-RegexRouter collection name"
+        );
     }
 
     #[test]

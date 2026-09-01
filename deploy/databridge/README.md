@@ -58,11 +58,11 @@ Percona `Cluster` binds its PVCs on `zyvor-rbd-prod`; Atlas's reconciler advance
 |---|---|---|---|---|---|
 | Postgres | live | live | live | live | live |
 | MySQL | live | live | live | live (DATETIME only) | pending |
-| MariaDB | live | live | live | pending (rebuild Connect w/ mariadb plugin) | pending |
-| MongoDB | live | live | live | pending (PSMDB + Connect) | pending |
+| MariaDB | live | live | live | live | live |
+| MongoDB | live | live | live | live | live |
 | Oracle / SQL Server | live | via Debezium `initial` | advisory | pending | pending |
 
-## Unblocking non-Postgres CDC + cutover (lab)
+## Lab CDC stack (`deploy/databridge/up.sh`)
 
 On the **edge** cluster (where CNPG/Percona already run):
 
@@ -75,14 +75,8 @@ kubectl -n rook-ceph set env deploy/atlas-gateway-ceph \
   ATLAS_DATABRIDGE_CONNECT_IMAGE=localhost/databridge-connect:dev
 ```
 
-**Lab `212.8.248.187` (2026-07-28):** Strimzi + CNPG + Percona operators installed;
-`zyvor-kafka` Ready on Kafka **4.3.0** (earlier CR pinned 4.0.0 — unsupported by current Strimzi;
-fixed in `10-kafka.yaml`). Connect image build/import + `ATLAS_DATABRIDGE_CONNECT_IMAGE` wired when
-the gateway roll completes. Registered lab sources are still `driver_mode: fake` — real MySQL/Mongo
-CDC needs a live source Secret; fake pipeline still covers discover→cutover for all engines in CI.
-
-`up.sh` now installs the **PSMDB** operator for Mongo edge replica sets. Rebuild the Connect image
-to pick up the dedicated **MariaDB** Debezium plugin. Prefer MySQL **DATETIME** over TIMESTAMP
-(TIMESTAMP → JDBC sink breakage). Until Connect image + real Secrets are in place, Atlas **refuses**
-real `cdc/start` without `ATLAS_DATABRIDGE_CONNECT_IMAGE`. Fake mode still runs discover→cutover
-for all six engines in CI.
+**Lab `212.8.248.187` (2026-09-01):** Strimzi + CNPG + PXC + PSMDB + `zyvor-kafka` Ready; Connect
+image includes MariaDB + Mongo plugins; gateway Ceph image built with `mongodb`/`kafka-lag` features.
+**MariaDB and MongoDB** verified live through CDC + cutover (alongside Postgres). MySQL cutover still
+pending. Prefer MySQL **DATETIME** over TIMESTAMP. Atlas **refuses** real `cdc/start` without
+`ATLAS_DATABRIDGE_CONNECT_IMAGE`. Fake mode still runs discover→cutover for all six engines in CI.

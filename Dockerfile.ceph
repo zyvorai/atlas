@@ -17,12 +17,16 @@ RUN npm run build
 
 # ---- builder ----
 FROM docker.io/library/rust:1.88-bookworm AS builder
-RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler && rm -rf /var/lib/apt/lists/*
+# protoc for gRPC; cmake for vendored librdkafka (kafka-lag). Match Dockerfile features so real
+# MongoDB discovery/CDC and precise lag work on the Ceph gateway image too.
+RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler cmake \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 COPY . .
 # Embed the freshly built UI (rust-embed reads crates/atlas-gateway/ui/dist at compile time).
 COPY --from=ui /ui/dist crates/atlas-gateway/ui/dist
-RUN cargo build --release -p atlas-gateway -p atlas-cli
+RUN cargo build --release -p atlas-gateway -p atlas-cli \
+    --features atlas-databridge/mongodb,atlas-databridge/sqlserver,atlas-databridge/oracle,atlas-databridge/kafka-lag
 
 # ---- runtime (debian + ceph squid client) ----
 FROM docker.io/library/debian:bookworm-slim AS runtime
