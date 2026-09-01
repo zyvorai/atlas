@@ -57,7 +57,9 @@ Percona `Cluster` binds its PVCs on `zyvor-rbd-prod`; Atlas's reconciler advance
 | Engine | Discover | Full-load | Validate | CDC | Cutover |
 |---|---|---|---|---|---|
 | Postgres | live | live | live | live | live |
-| MySQL / MariaDB / MongoDB | live | live | live | pending (needs Kafka stack) | pending |
+| MySQL | live | live | live | live (DATETIME only) | pending |
+| MariaDB | live | live | live | pending (rebuild Connect w/ mariadb plugin) | pending |
+| MongoDB | live | live | live | pending (PSMDB + Connect) | pending |
 | Oracle / SQL Server | live | via Debezium `initial` | advisory | pending | pending |
 
 ## Unblocking non-Postgres CDC + cutover (lab)
@@ -66,7 +68,7 @@ On the **edge** cluster (where CNPG/Percona already run):
 
 ```bash
 cd deploy/databridge
-./up.sh                         # includes Strimzi + zyvor-kafka (Kafka 4.3.0)
+./up.sh                         # CNPG + PXC + PSMDB + Strimzi + zyvor-kafka
 podman build -t databridge-connect:dev -f connect/Dockerfile connect
 # import image into k3s/containerd, then on atlas-gateway-ceph:
 kubectl -n rook-ceph set env deploy/atlas-gateway-ceph \
@@ -79,6 +81,8 @@ fixed in `10-kafka.yaml`). Connect image build/import + `ATLAS_DATABRIDGE_CONNEC
 the gateway roll completes. Registered lab sources are still `driver_mode: fake` — real MySQL/Mongo
 CDC needs a live source Secret; fake pipeline still covers discover→cutover for all engines in CI.
 
-Until that stack is up, Atlas **refuses** real `cdc/start` without `ATLAS_DATABRIDGE_CONNECT_IMAGE`,
-and the console marks CDC/cutover as **needs Kafka** for non-Postgres engines. Fake mode still
-runs discover→cutover for all six engines in CI.
+`up.sh` now installs the **PSMDB** operator for Mongo edge replica sets. Rebuild the Connect image
+to pick up the dedicated **MariaDB** Debezium plugin. Prefer MySQL **DATETIME** over TIMESTAMP
+(TIMESTAMP → JDBC sink breakage). Until Connect image + real Secrets are in place, Atlas **refuses**
+real `cdc/start` without `ATLAS_DATABRIDGE_CONNECT_IMAGE`. Fake mode still runs discover→cutover
+for all six engines in CI.

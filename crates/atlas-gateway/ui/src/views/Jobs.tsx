@@ -4,6 +4,7 @@ import { useJobs } from "../api/hooks";
 import { useUi } from "../store/ui";
 import { Badge, Copyable, SlideOver } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 import { Table } from "../ui/Table";
 import { stateKind, timeAgo } from "../lib/format";
 
@@ -26,6 +27,7 @@ export default function Jobs() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("jobs")}
         eyebrow="OBSERVABILITY · INDEX"
         title="Jobs"
         state={

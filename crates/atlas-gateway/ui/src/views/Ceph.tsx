@@ -14,6 +14,7 @@ import {
 } from "../api/hooks";
 import { Badge } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 import { SwipeRail } from "../ui/SwipeRail";
 import { Table } from "../ui/Table";
 import { depth, depthWidth } from "../lib/depth";
@@ -98,6 +99,7 @@ export default function Ceph() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("ceph")}
         eyebrow="INFRASTRUCTURE · CEPH"
         title="Ceph"
         state={

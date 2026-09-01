@@ -17,6 +17,7 @@ import {
 } from "../api/hooks";
 import { Badge } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 import { Table } from "../ui/Table";
 import { depth, depthWidth } from "../lib/depth";
 import { fmtBytes, fmtBytesOpt, fmtPct, healthKind } from "../lib/format";
@@ -27,6 +28,7 @@ export function Policies() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("policies")}
         eyebrow="GOVERNANCE · INDEX"
         title="Policies"
         state={
@@ -68,6 +70,7 @@ export function Backends() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("backends")}
         eyebrow="INFRASTRUCTURE · OPS"
         title="Backends"
         state={
@@ -153,6 +156,7 @@ export function Kubernetes() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("kubernetes")}
         eyebrow="INFRASTRUCTURE · OPS"
         title="Kubernetes"
         state={
@@ -193,6 +197,7 @@ export function Cluster() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("cluster")}
         eyebrow="INFRASTRUCTURE · OPS"
         title="Cluster"
         state={
@@ -296,6 +301,7 @@ export function Metrics() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("metrics")}
         eyebrow="OBSERVABILITY · INDEX"
         title="Metrics"
         state={

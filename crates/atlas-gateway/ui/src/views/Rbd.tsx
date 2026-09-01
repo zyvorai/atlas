@@ -5,6 +5,7 @@ import { apiError, http, submit, submitJob } from "../api/client";
 import { useInvalidate, usePools, useRbdImages, useVolumes } from "../api/hooks";
 import { Button, FormModal, SlideOver } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 import { confirmThen, del } from "../ui/confirm";
 import { Table } from "../ui/Table";
 import { fmtBytes, gib } from "../lib/format";
@@ -35,6 +36,7 @@ export default function Rbd() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("rbd")}
         eyebrow="STORAGE · INDEX"
         title="RBD Images"
         state={

@@ -15,4 +15,5 @@ export {
   APP_ROUTES,
   shortcutTargets,
   moduleById,
+  navCrumbs,
 } from "./routes";

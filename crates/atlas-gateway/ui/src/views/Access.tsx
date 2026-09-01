@@ -5,6 +5,7 @@ import { apiError, http, toast } from "../api/client";
 import { Badge, Button, Field, Label, Select } from "../ui/kit";
 import { del } from "../ui/confirm";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 import { Table } from "../ui/Table";
 
 type ConsoleUser = {
@@ -70,6 +71,7 @@ export default function Access() {
   return (
     <div className="at-stack">
       <PageHead
+        crumbs={navCrumbs("access")}
         eyebrow="GOVERNANCE · INDEX"
         title="Access"
         state={

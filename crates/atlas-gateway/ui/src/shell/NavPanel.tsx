@@ -5,6 +5,7 @@ import type { NavGroup } from "../nav/useNavGroups";
 import type { NavRecent } from "../lib/navRecents";
 import type { SuiteLink } from "../nav/suiteLinks";
 import { moduleById } from "../nav/routes";
+import { NavAppIcon } from "../nav/NavAppIcon";
 import { cx } from "../lib/format";
 
 export function NavFilter({
@@ -79,10 +80,11 @@ export function NavSectionLinks({
                   end={m.path === "/"}
                   title={m.label}
                   aria-label={m.label}
-                  className={({ isActive }) => linkClass(isActive)}
+                  data-label={m.label}
+                  className={({ isActive }) => cx(linkClass(isActive), compact && "is-compact")}
                   onClick={onNavigate}
                 >
-                  <m.icon size={iconSize} strokeWidth={2} aria-hidden />
+                  <NavAppIcon icon={m.icon} section={m.section} size={iconSize} />
                   {!compact && <span>{m.label}</span>}
                   {!compact && m.shortcut ? <kbd className="at-control-kbd">{m.shortcut}</kbd> : null}
                 </NavLink>
@@ -122,10 +124,11 @@ export function NavRecents({
             end={mod.path === "/"}
             title={r.label}
             aria-label={r.label}
+            data-label={r.label}
             className={({ isActive }) => linkClass(isActive)}
             onClick={onNavigate}
           >
-            <mod.icon size={16} strokeWidth={2} aria-hidden />
+            <NavAppIcon icon={mod.icon} section={mod.section} size={16} />
             <span>{r.label}</span>
           </NavLink>
         );
@@ -148,6 +151,7 @@ export function NavSuiteRail({ links, compact }: { links: SuiteLink[]; compact?:
           rel="noopener noreferrer"
           className="at-sidebar-link at-sidebar-suite-link"
           title={link.label}
+          data-label={link.label}
         >
           <link.icon size={16} strokeWidth={2} aria-hidden />
           <span>{link.label}</span>

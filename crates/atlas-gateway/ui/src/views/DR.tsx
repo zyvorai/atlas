@@ -5,6 +5,7 @@ import { submit, submitJob } from "../api/client";
 import { useDrMirrors, useDrPeers, useDrPreflight, useDrStatus, useInvalidate, useVolumes } from "../api/hooks";
 import { Badge, Button, Field, Label, Select } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 import { Table } from "../ui/Table";
 import { confirmThen } from "../ui/confirm";
 
@@ -29,6 +30,7 @@ export default function DR() {
   return (
     <div className="at-stack">
       <PageHead
+        crumbs={navCrumbs("dr")}
         eyebrow="INFRASTRUCTURE · OPS"
         title="Disaster Recovery"
         state={

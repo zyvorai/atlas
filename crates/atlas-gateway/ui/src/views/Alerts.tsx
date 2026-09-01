@@ -5,6 +5,7 @@ import { submit } from "../api/client";
 import { useAlerts, useInvalidate } from "../api/hooks";
 import { Badge, Button } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 import { Table } from "../ui/Table";
 import { confirmThen } from "../ui/confirm";
 import { stateKind, timeAgo } from "../lib/format";
@@ -18,6 +19,7 @@ export default function Alerts() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("alerts")}
         eyebrow="OBSERVABILITY · LEDGER"
         title="Alerts"
         state={

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useAudit } from "../api/hooks";
 import { Badge } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 import { Table } from "../ui/Table";
 import { stateKind, timeAgo } from "../lib/format";
 
@@ -17,6 +18,7 @@ export default function Audit() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("audit")}
         eyebrow="GOVERNANCE · INDEX"
         title="Audit"
         state={

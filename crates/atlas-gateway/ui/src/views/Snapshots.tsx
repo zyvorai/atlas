@@ -6,6 +6,7 @@ import { useInvalidate, useSnapshots } from "../api/hooks";
 import type { StorageSnapshot } from "../api/types";
 import { Badge, Button, FormModal } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
 import { stateKind, timeAgo } from "../lib/format";
@@ -35,6 +36,7 @@ export default function Snapshots() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("snapshots")}
         eyebrow="STORAGE · INDEX"
         title="Snapshots"
         state={

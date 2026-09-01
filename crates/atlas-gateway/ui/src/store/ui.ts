@@ -3,6 +3,12 @@
 import { create } from "zustand";
 import type { JobRecord } from "../api/types";
 import { roleFromToken, roleLevel, type NavRole } from "../lib/auth";
+import {
+  loadNavRecents,
+  nextNavRecents,
+  persistNavRecents,
+  type NavRecent,
+} from "../lib/navRecents";
 
 interface TrackedJob {
   id: string;
@@ -37,6 +43,11 @@ interface UiState {
   togglePaused: () => void;
   spotlightOpen: boolean;
   setSpotlight: (v: boolean) => void;
+  launchPadOpen: boolean;
+  setLaunchPad: (v: boolean) => void;
+  /** Live recents shared by sidebar + drawer (persisted). */
+  navRecents: NavRecent[];
+  recordRecent: (id: string, label: string) => void;
   jobs: Record<string, TrackedJob>;
   trackJob: (id: string, label: string) => void;
   updateJob: (id: string, j: Partial<TrackedJob>) => void;
@@ -130,6 +141,15 @@ export const useUi = create<UiState>((set) => ({
   togglePaused: () => set((s) => ({ paused: !s.paused })),
   spotlightOpen: false,
   setSpotlight: (v) => set({ spotlightOpen: v }),
+  launchPadOpen: false,
+  setLaunchPad: (v) => set({ launchPadOpen: v }),
+  navRecents: loadNavRecents(),
+  recordRecent: (id, label) =>
+    set((s) => {
+      const navRecents = nextNavRecents(s.navRecents, id, label);
+      persistNavRecents(navRecents);
+      return { navRecents };
+    }),
   jobs: {},
   trackJob: (id, label) =>
     set((s) => ({ jobs: { ...s.jobs, [id]: { id, label, state: "queued", progress: 0 } } })),

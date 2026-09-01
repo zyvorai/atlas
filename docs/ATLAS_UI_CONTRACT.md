@@ -113,7 +113,11 @@ icon cluster right (⌘K, Look & feel, jobs, alerts, pause, health, account). No
 the topbar. Materials: frosted light bar on Apple Lite, dark translucent bar on Carbon; active
 states use Apple Blue.
 
-**Detail pages** use `PageHead` breadcrumbs (`Storage · Pools · …`, `DataBridge · Migration Plans · …`).
+**Detail pages** use `PageHead` breadcrumbs (`Storage · Volumes`, `DataBridge · Migration Plans · …`).
+List pages get section → page crumbs via `navCrumbs()`.
+
+**Chrome extras:** colored `NavAppIcon` tiles, collapsed-rail hover flyouts, mobile jump `<select>`,
+pinned dock, and Launch pad (⌘⌥L) — Atlas analogs of h2kvm dock / Mission Control, without Mac chrome.
 
 | Atlas theme (`data-ui-shell`) | Look |
 |---|---|

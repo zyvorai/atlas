@@ -6,6 +6,7 @@ import { useBuckets, useInvalidate } from "../api/hooks";
 import type { StorageBucket } from "../api/types";
 import { Badge, Button, FormModal, SlideOver } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
 import { fmtBytes, num } from "../lib/format";
@@ -21,6 +22,7 @@ export default function Buckets() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("buckets")}
         eyebrow="DATA PROTECTION · INDEX"
         title="Buckets"
         state={

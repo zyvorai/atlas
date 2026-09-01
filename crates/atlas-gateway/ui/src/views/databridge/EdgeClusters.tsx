@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useEdgeClusters } from "../../api/hooks";
 import { Badge } from "../../ui/kit";
 import { PageHead } from "../../ui/PageHead";
+import { navCrumbs } from "../../nav/routes";
 import { Table } from "../../ui/Table";
 import { fmtBytes, num } from "../../lib/format";
 
@@ -15,6 +16,7 @@ export default function EdgeClusters() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("edge-clusters")}
         eyebrow="DATABRIDGE · INDEX"
         title="Edge DB Clusters"
         state={

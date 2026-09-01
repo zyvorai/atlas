@@ -26,15 +26,17 @@ ARG ORACLE_JDBC_VERSION=23.5.0.24.07
 ARG MONGO_SINK_VERSION=1.15.0
 
 RUN mkdir -p /opt/kafka/plugins/debezium-postgres /opt/kafka/plugins/debezium-mysql \
-             /opt/kafka/plugins/debezium-mongodb /opt/kafka/plugins/debezium-oracle \
-             /opt/kafka/plugins/debezium-sqlserver /opt/kafka/plugins/jdbc-sink \
-             /opt/kafka/plugins/mongo-sink
+             /opt/kafka/plugins/debezium-mariadb /opt/kafka/plugins/debezium-mongodb \
+             /opt/kafka/plugins/debezium-oracle /opt/kafka/plugins/debezium-sqlserver \
+             /opt/kafka/plugins/jdbc-sink /opt/kafka/plugins/mongo-sink
 
-# Debezium source connectors: PostgreSQL, MySQL/MariaDB, MongoDB, Oracle, SQL Server.
+# Debezium source connectors: PostgreSQL, MySQL, MariaDB, MongoDB, Oracle, SQL Server.
 RUN curl -fsSL "https://repo1.maven.org/maven2/io/debezium/debezium-connector-postgres/${DEBEZIUM_VERSION}/debezium-connector-postgres-${DEBEZIUM_VERSION}-plugin.tar.gz" \
     | tar -xz -C /opt/kafka/plugins/debezium-postgres --strip-components=1
 RUN curl -fsSL "https://repo1.maven.org/maven2/io/debezium/debezium-connector-mysql/${DEBEZIUM_VERSION}/debezium-connector-mysql-${DEBEZIUM_VERSION}-plugin.tar.gz" \
     | tar -xz -C /opt/kafka/plugins/debezium-mysql --strip-components=1
+RUN curl -fsSL "https://repo1.maven.org/maven2/io/debezium/debezium-connector-mariadb/${DEBEZIUM_VERSION}/debezium-connector-mariadb-${DEBEZIUM_VERSION}-plugin.tar.gz" \
+    | tar -xz -C /opt/kafka/plugins/debezium-mariadb --strip-components=1
 RUN curl -fsSL "https://repo1.maven.org/maven2/io/debezium/debezium-connector-mongodb/${DEBEZIUM_VERSION}/debezium-connector-mongodb-${DEBEZIUM_VERSION}-plugin.tar.gz" \
     | tar -xz -C /opt/kafka/plugins/debezium-mongodb --strip-components=1
 RUN curl -fsSL "https://repo1.maven.org/maven2/io/debezium/debezium-connector-oracle/${DEBEZIUM_VERSION}/debezium-connector-oracle-${DEBEZIUM_VERSION}-plugin.tar.gz" \

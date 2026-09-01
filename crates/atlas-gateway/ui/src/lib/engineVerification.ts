@@ -23,18 +23,18 @@ export const ENGINE_VERIFICATION: EngineVerification[] = [
   },
   {
     engine: "mysql",
-    live: ["discover", "full-load", "validate"],
-    note: "CDC + cutover need Kafka/Debezium on the edge cluster.",
+    live: ["discover", "full-load", "validate", "cdc"],
+    note: "CDC live for DATETIME columns; TIMESTAMP breaks JDBC sink. Cutover pending on lab.",
   },
   {
     engine: "mariadb",
     live: ["discover", "full-load", "validate"],
-    note: "CDC + cutover need Kafka/Debezium on the edge cluster.",
+    note: "CDC ready once Connect image includes debezium-connector-mariadb (see deploy/databridge/connect).",
   },
   {
     engine: "mongodb",
     live: ["discover", "full-load", "validate"],
-    note: "CDC + cutover need Kafka/Debezium + Mongo sink image.",
+    note: "CDC needs PSMDB operator + Connect Mongo source/sink (up.sh -- installs PSMDB).",
   },
   {
     engine: "sqlserver",

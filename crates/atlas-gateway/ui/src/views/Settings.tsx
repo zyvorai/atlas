@@ -2,6 +2,7 @@
 import { useUi, type Density } from "../store/ui";
 import { THEME_OPTIONS } from "../lib/themes";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 import { cx } from "../lib/format";
 
 const DENSITY_OPTIONS: { id: Density; title: string; hint: string }[] = [
@@ -18,6 +19,7 @@ export default function Settings() {
   return (
     <div className="at-stack">
       <PageHead
+        crumbs={navCrumbs("settings")}
         eyebrow="CONSOLE · APPEARANCE"
         title="Settings"
         state="Look & feel and density for this browser. Carbon is the dark shop default; Apple Lite is the light shop shell."

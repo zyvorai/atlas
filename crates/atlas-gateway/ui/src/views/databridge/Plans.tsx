@@ -6,6 +6,7 @@ import { submit } from "../../api/client";
 import { usePlans, useSources, useInvalidate } from "../../api/hooks";
 import { Badge, Button, FormModal } from "../../ui/kit";
 import { PageHead } from "../../ui/PageHead";
+import { navCrumbs } from "../../nav/routes";
 import { Table } from "../../ui/Table";
 
 export const planStateKind = (s: string) =>
@@ -30,6 +31,7 @@ export default function Plans() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("migration-plans")}
         eyebrow="DATABRIDGE · INDEX"
         title="Migration Plans"
         state={

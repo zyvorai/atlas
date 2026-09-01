@@ -4,11 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
+  Archive,
   Bell,
+  Camera,
   ChevronLeft,
   ChevronRight,
+  Cloud,
   HardDrive as HardDriveIcon,
   KeyRound,
+  LayoutGrid,
   LayoutTemplate,
   Loader2,
   LogOut,
@@ -22,8 +26,11 @@ import {
 import { navLabelForPath, activeModuleFromPath, modulesForRole, shortcutTargets } from "../nav/routes";
 import { useNavGroups } from "../nav/useNavGroups";
 import { NavFilter, NavSectionLinks, NavRecents, NavSuiteRail } from "./NavPanel";
+import { MobileJumpNav } from "./MobileJumpNav";
+import { LaunchPad } from "./LaunchPad";
+import { PinnedDock } from "./PinnedDock";
 import { SUITE_LINKS } from "../nav/suiteLinks";
-import { filterNavRecents, getNavRecents, recordNavRecent } from "../lib/navRecents";
+import { filterNavRecents } from "../lib/navRecents";
 import { roleLabel, ROLE_OPERATOR } from "../lib/auth";
 import { http, isUnauthorized } from "../api/client";
 import { useAlerts, useCephHealthRollup, useClusters, useJobs } from "../api/hooks";
@@ -51,9 +58,11 @@ function Clock() {
 function MenuBar({
   onSpotlight,
   onOpenNav,
+  onLaunchPad,
 }: {
   onSpotlight: () => void;
   onOpenNav: () => void;
+  onLaunchPad: () => void;
 }) {
   const { data: clusters, isError: clustersErrored, error: clustersError } = useClusters();
   const { data: jobs } = useJobs();
@@ -161,6 +170,16 @@ function MenuBar({
 
       <div className="at-rail-actions">
         <div className="at-rail-tray">
+          <button
+            type="button"
+            className="at-iconbtn"
+            title="Launch pad — ⌘⌥L"
+            aria-label="Open launch pad"
+            onClick={onLaunchPad}
+          >
+            <LayoutGrid size={16} strokeWidth={2} />
+          </button>
+
           <button
             type="button"
             className="at-iconbtn"
@@ -313,8 +332,8 @@ function MenuBar({
             {acctOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setAcctOpen(false)} />
-                <div className="at-theme-menu" role="menu" aria-label="Account">
-                  <div className="at-theme-menu-label">Account</div>
+                <div className="at-theme-menu" role="menu" aria-label="Control Center">
+                  <div className="at-theme-menu-label">Control Center</div>
                   <div className="at-theme-item" style={{ cursor: "default" }}>
                     <span>Role</span>
                     <span className="hint">{roleLabel(role)}</span>
@@ -323,6 +342,17 @@ function MenuBar({
                     <span className="hint">Local time</span>
                     <Clock />
                   </div>
+                  <button
+                    type="button"
+                    className="at-theme-item"
+                    onClick={() => {
+                      setAcctOpen(false);
+                      onLaunchPad();
+                    }}
+                  >
+                    <span>Launch pad</span>
+                    <span className="hint">⌘⌥L</span>
+                  </button>
                   <button
                     type="button"
                     className="at-theme-item"
@@ -395,11 +425,12 @@ function MenuBar({
 
 function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const roleLevel = useUi((s) => s.roleLevel);
+  const navRecents = useUi((s) => s.navRecents);
   const { grouped, filter, setFilter, isSectionClosed, toggleSection } = useNavGroups(roleLevel);
   const recents = useMemo(() => {
     const valid = new Set(modulesForRole(roleLevel).map((m) => m.id));
-    return filterNavRecents(getNavRecents(), valid);
-  }, [roleLevel]);
+    return filterNavRecents(navRecents, valid);
+  }, [roleLevel, navRecents]);
 
   return (
     <aside className={cx("at-sidebar", collapsed && "collapsed")} aria-label="Primary">
@@ -417,7 +448,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
           showSectionHeaders={!collapsed}
           compact={collapsed}
           linkClass={(active) => cx("at-sidebar-link", active && "on")}
-          iconSize={16}
+          iconSize={14}
         />
         <NavSuiteRail links={SUITE_LINKS} compact={collapsed} />
       </nav>
@@ -437,7 +468,12 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
 function MobileNavDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const loc = useLocation();
   const roleLevel = useUi((s) => s.roleLevel);
+  const navRecents = useUi((s) => s.navRecents);
   const { grouped, filter, setFilter, isSectionClosed, toggleSection } = useNavGroups(roleLevel);
+  const recents = useMemo(() => {
+    const valid = new Set(modulesForRole(roleLevel).map((m) => m.id));
+    return filterNavRecents(navRecents, valid);
+  }, [roleLevel, navRecents]);
 
   useEffect(() => {
     onClose();
@@ -471,7 +507,7 @@ function MobileNavDrawer({ open, onClose }: { open: boolean; onClose: () => void
         <div className="at-drawer-body">
           <NavFilter value={filter} onChange={setFilter} className="at-drawer-filter" />
           <NavRecents
-            recents={filterNavRecents(getNavRecents(), new Set(modulesForRole(roleLevel).map((m) => m.id)))}
+            recents={recents}
             linkClass={(active) => cx("at-drawer-item", active && "on")}
             onNavigate={onClose}
           />
@@ -535,16 +571,16 @@ function Spotlight({ open, onClose }: { open: boolean; onClose: () => void }) {
             label: x.bucket_name || x.id,
             sub: "bucket",
             path: "/buckets",
-            icon: HardDriveIcon,
+            icon: Cloud,
           }),
         );
       if (s.status === "fulfilled")
         s.value.data.forEach((x: { name: string }) =>
-          out.push({ label: x.name, sub: "snapshot", path: "/snapshots", icon: HardDriveIcon }),
+          out.push({ label: x.name, sub: "snapshot", path: "/snapshots", icon: Camera }),
         );
       if (bk.status === "fulfilled")
         bk.value.data.forEach((x: { id: string }) =>
-          out.push({ label: x.id, sub: "backup", path: "/backups", icon: HardDriveIcon }),
+          out.push({ label: x.id, sub: "backup", path: "/backups", icon: Archive }),
         );
       setResources(out);
     });
@@ -647,6 +683,7 @@ const SHORTCUTS: [string, string][] = [
   ["C", "Ceph (operator+)"],
   ["G", "Settings (admin)"],
   ["⌘K / Ctrl-K", "Open command palette"],
+  ["⌘⌥L / Ctrl-Alt-L", "Open launch pad"],
   ["⌘⌥S / Ctrl-Alt-S", "Collapse / expand sidebar"],
   ["↑ ↓ / Enter", "Navigate & open in palette"],
   ["?", "Show this help"],
@@ -656,9 +693,12 @@ const SHORTCUTS: [string, string][] = [
 export function Shell() {
   const spotOpen = useUi((s) => s.spotlightOpen);
   const setSpot = useUi((s) => s.setSpotlight);
+  const launchPadOpen = useUi((s) => s.launchPadOpen);
+  const setLaunchPad = useUi((s) => s.setLaunchPad);
   const sidebarCollapsed = useUi((s) => s.sidebarCollapsed);
   const toggleSidebar = useUi((s) => s.toggleSidebar);
   const roleLevel = useUi((s) => s.roleLevel);
+  const recordRecent = useUi((s) => s.recordRecent);
   const [helpOpen, setHelpOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const loc = useLocation();
@@ -666,8 +706,8 @@ export function Shell() {
 
   useEffect(() => {
     const mod = activeModuleFromPath(loc.pathname);
-    if (mod && !mod.hiddenFromNav) recordNavRecent(mod.id, mod.label);
-  }, [loc.pathname]);
+    if (mod && !mod.hiddenFromNav) recordRecent(mod.id, mod.label);
+  }, [loc.pathname, recordRecent]);
 
   useEffect(() => {
     const shortcuts = shortcutTargets(roleLevel);
@@ -677,6 +717,11 @@ export function Shell() {
       if ((e.metaKey || e.ctrlKey) && e.altKey && e.key.toLowerCase() === "s") {
         e.preventDefault();
         toggleSidebar();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.altKey && e.key.toLowerCase() === "l") {
+        e.preventDefault();
+        setLaunchPad(true);
         return;
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -695,13 +740,8 @@ export function Shell() {
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [setSpot, nav, toggleSidebar, roleLevel]);
+  }, [setSpot, setLaunchPad, nav, toggleSidebar, roleLevel]);
   useEffect(() => {
-    // Only set the title for routes with a known static label. Dynamic detail routes
-    // (/pools/:id, PlanDetail, …) aren't in MODULES — leave the title alone for those so the
-    // view's own effect can name the specific entity once its data loads, instead of this
-    // effect re-asserting the generic fallback and racing it (index.html already ships that
-    // fallback as the default, so there's nothing to set here on first paint anyway).
     const label = navLabelForPath(loc.pathname);
     if (label) document.title = `Atlas · ${label}`;
   }, [loc.pathname]);
@@ -715,7 +755,12 @@ export function Shell() {
   return (
     <div className="at-app h-full flex flex-col overflow-hidden">
       <ChartFloor />
-      <MenuBar onSpotlight={() => setSpot(true)} onOpenNav={() => setNavOpen(true)} />
+      <MenuBar
+        onSpotlight={() => setSpot(true)}
+        onOpenNav={() => setNavOpen(true)}
+        onLaunchPad={() => setLaunchPad(true)}
+      />
+      <MobileJumpNav />
       <LicenseBanner />
       <div className="at-shell-body flex-1 min-h-0">
         <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
@@ -725,7 +770,9 @@ export function Shell() {
           </div>
         </div>
       </div>
+      <PinnedDock onSpotlight={() => setSpot(true)} onLaunchPad={() => setLaunchPad(true)} />
       <Spotlight open={spotOpen} onClose={() => setSpot(false)} />
+      <LaunchPad open={launchPadOpen} onClose={() => setLaunchPad(false)} />
       <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
       <AgentToast />
       <Modal open={helpOpen} onClose={() => setHelpOpen(false)} title="Keyboard shortcuts">

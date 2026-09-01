@@ -377,15 +377,17 @@ Fake path covers **all six** engines discover→cutover in CI (`tests/databridge
   `ATLAS_DATABRIDGE_CONNECT_IMAGE=localhost/databridge-connect:dev`. Fake MySQL plan walked
   assess→provision→full-load→**cdc_streaming**. Real non-Postgres CDC still needs a live source
   Secret (lab inventory sources remain `driver_mode: fake`).
-- **Follow-ups (verify on live infra)**: **streaming CDC + cutover** for the non-Postgres engines
-  against real sources (MySQL / MariaDB / MongoDB already verified through full-load+validate;
-  Postgres through live CDC). Cross-engine per-table row-count validation for heterogeneous plans is
-  advisory (parity confirmed by snapshot/stream convergence rather than a source-vs-edge count Job).
+- **Follow-ups (verify on live infra)**: **MySQL cutover** (CDC already live for DATETIME;
+  TIMESTAMP columns need an SMT or schema guidance). **MariaDB streaming CDC + cutover** after
+  rebuilding the Connect image with `debezium-connector-mariadb`. **MongoDB CDC + cutover** after
+  `up.sh` installs the PSMDB operator and a real Mongo source Secret is present. Postgres remains
+  the only engine verified through live cutover.
 - **CDC Connect image — multi-engine** (`deploy/databridge/connect/Dockerfile`): one Strimzi-based
-  image bundles Debezium PostgreSQL + MySQL/MariaDB + MongoDB + Oracle + SQL Server source connectors,
-  the Aiven JDBC sink (Postgres/MySQL/SQL Server/Oracle drivers), and the MongoDB Kafka sink.
-  `start_cdc` in real mode **refuses** without `ATLAS_DATABRIDGE_CONNECT_IMAGE` set. Lab Kafka CR:
-  `deploy/databridge/10-kafka.yaml` (applied by `up.sh`).
+  image bundles Debezium PostgreSQL + MySQL + **MariaDB** + MongoDB + Oracle + SQL Server source
+  connectors, the Aiven JDBC sink (Postgres/MySQL/SQL Server/Oracle drivers), and the MongoDB Kafka
+  sink. `start_cdc` in real mode **refuses** without `ATLAS_DATABRIDGE_CONNECT_IMAGE` set. Lab Kafka
+  CR: `deploy/databridge/10-kafka.yaml` (applied by `up.sh`). `up.sh` also installs the Percona
+  Server for MongoDB operator for document-edge targets.
 
 ### Full-load secret assumptions
 The real full-load Job runs in `zyvor-databridge`, so the **source Secret must exist in that

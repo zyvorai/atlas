@@ -6,6 +6,7 @@ import type { ClusterHealthState, VolumeProtectionStatus } from "../api/types";
 import { useProtectionStatus } from "../api/hooks";
 import { Badge } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 import { Table } from "../ui/Table";
 import { timeAgo } from "../lib/format";
 
@@ -53,6 +54,7 @@ export default function ProtectionStatus() {
   return (
     <div className="at-stack">
       <PageHead
+        crumbs={navCrumbs("protection")}
         eyebrow="DATA PROTECTION"
         title="Protection Status"
         state={

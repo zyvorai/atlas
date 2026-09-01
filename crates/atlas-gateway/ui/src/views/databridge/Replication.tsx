@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useCdcStreams } from "../../api/hooks";
 import { Badge } from "../../ui/kit";
 import { PageHead } from "../../ui/PageHead";
+import { navCrumbs } from "../../nav/routes";
 import { Table } from "../../ui/Table";
 import { fmtBytes, fmtSi } from "../../lib/format";
 
@@ -18,6 +19,7 @@ export default function Replication() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("replication")}
         eyebrow="DATABRIDGE · INDEX"
         title="Replication"
         state={

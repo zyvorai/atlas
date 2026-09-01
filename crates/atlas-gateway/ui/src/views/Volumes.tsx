@@ -10,6 +10,7 @@ import { fmtBytes, gib, stateKind } from "../lib/format";
 import { del } from "../ui/confirm";
 import { Badge, Button, FormModal, SlideOver } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 
 const POLICIES = ["database", "production", "development", "shared", "ai"];
 const STATES = ["bound", "available", "creating", "deleting", "failed"] as const;
@@ -143,6 +144,7 @@ export default function Volumes() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("volumes")}
         eyebrow="STORAGE · INDEX"
         title="Volumes"
         state={stateLine}

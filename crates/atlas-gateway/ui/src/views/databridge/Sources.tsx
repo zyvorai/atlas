@@ -6,6 +6,7 @@ import { useSources, useInvalidate } from "../../api/hooks";
 import type { MigrationSource } from "../../api/types";
 import { Badge, Button, FormModal, SlideOver } from "../../ui/kit";
 import { PageHead } from "../../ui/PageHead";
+import { navCrumbs } from "../../nav/routes";
 import { del } from "../../ui/confirm";
 import { Table } from "../../ui/Table";
 import { fmtBytes } from "../../lib/format";
@@ -34,6 +35,7 @@ export default function Sources() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("cloud-databases")}
         eyebrow="DATABRIDGE · INDEX"
         title="Cloud Databases"
         state={

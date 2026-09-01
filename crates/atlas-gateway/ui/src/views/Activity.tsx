@@ -5,6 +5,7 @@ import { useEvents } from "../api/hooks";
 import type { ActivityEvent } from "../api/types";
 import { Badge } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 import { stateKind, timeAgo } from "../lib/format";
 
 const KIND_ICON = { job: Clock, audit: ClipboardList, alert: Camera } as const;
@@ -23,6 +24,7 @@ export default function Activity() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("activity")}
         eyebrow="OBSERVABILITY · INDEX"
         title="Activity"
         state={

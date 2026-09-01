@@ -16,6 +16,7 @@ import { depth, depthWidth } from "../lib/depth";
 import { fmtBytes, fmtBytesOpt, fmtForecastFill, fmtPct, fmtSi } from "../lib/format";
 import { Echogram } from "../ui/Echogram";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 import { Spinner } from "../ui/kit";
 
 // —— retained canvas lenses (secondary) ————————————————————————————————
@@ -336,6 +337,7 @@ export default function Observatory() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("observatory")}
         eyebrow="TELEMETRY · ESTATE"
         title="Observatory"
         state={stateLine}

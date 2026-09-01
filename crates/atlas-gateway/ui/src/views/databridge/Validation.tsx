@@ -5,6 +5,7 @@ import { useValidations } from "../../api/hooks";
 import type { ValidationRun } from "../../api/types";
 import { Badge, Button, SlideOver } from "../../ui/kit";
 import { PageHead } from "../../ui/PageHead";
+import { navCrumbs } from "../../nav/routes";
 import { Table } from "../../ui/Table";
 
 export default function Validation() {
@@ -16,6 +17,7 @@ export default function Validation() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("validation")}
         eyebrow="DATABRIDGE · INDEX"
         title="Validation"
         state={

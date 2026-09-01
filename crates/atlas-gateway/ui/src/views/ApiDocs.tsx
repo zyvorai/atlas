@@ -2,6 +2,7 @@
 /** In-console API surface map — curated from docs/API.md (not a full OpenAPI host). */
 import { Link } from "react-router-dom";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 
 type Endpoint = { method: string; path: string; note: string };
 
@@ -100,6 +101,7 @@ export default function ApiDocs() {
   return (
     <div className="at-stack">
       <PageHead
+        crumbs={navCrumbs("api-docs")}
         eyebrow="CONSOLE · REFERENCE"
         title="API Docs"
         state="Curated Atlas REST + gRPC map for operators and product integrators. Full examples live in the repo docs/API.md."

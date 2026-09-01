@@ -5,6 +5,7 @@ import { submit } from "../api/client";
 import { useBackends, useInvalidate, useMaintenance, useOrphans, usePreflight } from "../api/hooks";
 import { Badge, Button } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 import { Table } from "../ui/Table";
 import { confirmThen } from "../ui/confirm";
 import { timeAgo } from "../lib/format";
@@ -20,6 +21,7 @@ export default function Maintenance() {
   return (
     <div className="at-stack">
       <PageHead
+        crumbs={navCrumbs("maintenance")}
         eyebrow="INFRASTRUCTURE · OPS"
         title="Maintenance"
         state={

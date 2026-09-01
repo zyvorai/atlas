@@ -5,6 +5,7 @@ import { useInvalidate, useTenantPolicies, useTenants } from "../api/hooks";
 import type { TenantQuota } from "../api/types";
 import { Button, FormModal, SlideOver } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
 import { fmtBytes, num } from "../lib/format";
@@ -18,6 +19,7 @@ export default function Tenants() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("tenants")}
         eyebrow="GOVERNANCE · INDEX"
         title="Tenants"
         state={

@@ -209,6 +209,21 @@ export function moduleById(id: string): NavModule | undefined {
   return MODULES.find((m) => m.id === id);
 }
 
+/** Section → page crumbs for list views (detail pages add a third crumb). */
+export function navCrumbs(moduleId: string): { label: string; to?: string }[] {
+  const m = moduleById(moduleId);
+  if (!m) return [];
+  const sectionHome = MODULES.find((x) => x.section === m.section && !x.hiddenFromNav);
+  const short = SECTION_META[m.section].short;
+  if (!sectionHome || sectionHome.id === m.id) {
+    return [{ label: short }, { label: m.label }];
+  }
+  return [
+    { label: short, to: sectionHome.path },
+    { label: m.label },
+  ];
+}
+
 export function sectionForPath(pathname: string): SectionId | undefined {
   return activeModuleFromPath(pathname)?.section;
 }

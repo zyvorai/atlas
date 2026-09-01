@@ -8,9 +8,12 @@ describe("engineVerification", () => {
       ["mariadb", "mongodb", "mysql", "oracle", "postgres", "sqlserver"].sort(),
     );
   });
-  it("marks only Postgres CDC as live-verified", () => {
+  it("marks Postgres + MySQL CDC live; cutover still Postgres-only", () => {
     expect(stageBadge(verificationFor("postgres"), "cdc")).toBe("live");
-    expect(stageBadge(verificationFor("mysql"), "cdc")).toBe("pending");
+    expect(stageBadge(verificationFor("postgres"), "cutover")).toBe("live");
+    expect(stageBadge(verificationFor("mysql"), "cdc")).toBe("live");
+    expect(stageBadge(verificationFor("mysql"), "cutover")).toBe("pending");
+    expect(stageBadge(verificationFor("mariadb"), "cdc")).toBe("pending");
     expect(stageBadge(verificationFor("oracle"), "full-load")).toBe("pending");
   });
 });

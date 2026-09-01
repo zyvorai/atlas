@@ -5,6 +5,7 @@ import { submit } from "../api/client";
 import { useBuckets, useInvalidate, useSchedules, useVolumes } from "../api/hooks";
 import { Badge, Button, FormModal } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
+import { navCrumbs } from "../nav/routes";
 import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
 import { timeAgo } from "../lib/format";
@@ -19,6 +20,7 @@ export default function Schedules() {
   return (
     <div>
       <PageHead
+        crumbs={navCrumbs("schedules")}
         eyebrow="DATA PROTECTION · INDEX"
         title="Schedules"
         state={
