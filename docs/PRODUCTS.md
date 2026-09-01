@@ -10,7 +10,7 @@ Atlas is the shared storage control plane. Products call **REST** and/or **gRPC*
 
 | Field | Example | Meaning |
 |---|---|---|
-| `product` | `veyron`, `hyper2kvm`, `guestkit`, `packetwolf`, `aether`, `ragnarok`, `machina`, `hypersdk`, `zeus`, `relay` | Product id recorded in `product_bindings` |
+| `product` | `veyron`, `hyper2kvm`, `guestkit`, `packetwolf`, `aether`, `ragnarok`, `machina`, `hypersdk`, `zeus`, `relay`, `kryton` | Product id recorded in `product_bindings` |
 | `resource_type` | `vm`, `datastore`, `volume`, `fleet`, `database` | Product-side resource class |
 | `resource_id` | product UUID / name | Product-side id |
 | `role` | `owner` (default), `consumer`, `data_disk` | Binding role |
@@ -60,6 +60,24 @@ Integration lives in the Relay repo: `docs/ATLAS_STORAGE.md`,
 `scripts/atlas-provision-relay-storage.sh`, `k8s/postgres-atlas.example.yaml`.
 
 Service account: mint JWT subject `product.service.relay` (operator).
+
+## Kryton (Windows virtualization)
+
+[Kryton](../../tt/kryton) runs Windows guests on KubeVirt. It discovers StorageClasses
+(optionally via Atlas) and stamps `disk.storageClass` on VM DataVolumes.
+
+| Field | Kryton convention |
+|---|---|
+| `product` | `kryton` |
+| `resource_type` | `vm` |
+| `resource_id` | Kryton machine UUID |
+| `role` | `data_disk` (boot / data PVC) |
+
+Configure from Kryton **Settings → Integrations → Atlas** (`docs/ATLAS.md` in the Kryton repo).
+Service account: mint JWT subject `product.service.kryton` (operator).
+
+Probe from Kryton: `POST /api/v1/integrations/atlas/test` against Atlas `/readyz` +
+`/api/atlas/v1/storage-classes`.
 
 ## Follow-ups (product repos)
 

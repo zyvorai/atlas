@@ -7,7 +7,8 @@ Start at the top-level [README](../README.md) for the overview and quickstart.
 - **[GETTING_STARTED.md](GETTING_STARTED.md)** — build, run locally (fake driver), `atlasctl`, tests.
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — control-plane design, driver model, data model, request flow, config.
 - **[API.md](API.md)** — REST v1 reference with real request/response examples.
-- **[PRODUCTS.md](PRODUCTS.md)** — product ownership (`Owner`) + gRPC integration conventions.
+- **[PRODUCTS.md](PRODUCTS.md)** — product ownership (`Owner`) + gRPC integration conventions (includes **kryton**).
+- **Kryton Windows VMs** — sibling repo `tt/kryton` (`docs/ATLAS.md`): Settings → Integrations → Atlas; owner product `kryton`.
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** — k3s + Rook (Squid / CSI drivers) + gateway scripts; pitfalls table.
 - **[DAY2.md](DAY2.md)** — day-2 ops (alerts, maintenance, governance, DR).
 - **[DR.md](DR.md)** — cross-cluster RBD mirroring, failover runbook, live two-site checklist.
