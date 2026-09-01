@@ -1,28 +1,28 @@
-# Atlas UI — Soundings design contract
+# Atlas UI — Apple Shop design contract
 
-Paste reference: `atlas-storage-center.html` (pixels). This section is **policy**.
-If they disagree: reference wins on pixels; this file wins on rules.
+Paste reference: Apple buy configurator (e.g. apple.com shop product pages). This section is **policy**.
+If they disagree: this file wins on rules; shop pages win on pixels for boxes / type / swipe.
 
 ## Identity
 
-**Storage is terrain. Capacity is depth. Atlas is the chart.**
+**Storage is a product. Capacity is a choice. Atlas is the shop.**
 
 | Product | Base | Accent | Mono | Metaphor |
 |---|---|---|---|---|
 | PacketWolf | warm pelt-black | amber | JetBrains Mono | predator |
 | Zeus OS | deep space navy | plasma violet | IBM Plex Mono | instrument deck |
-| **Atlas — Carbon** | **graphite `#0B0C0E`** | **Cosmic Orange `#F97316`** | **DM Mono** | **bathymetric chart** |
-| **Atlas — Apple Lite** | **mist paper `#EDEFF3`** | **Mist Blue `#2A82B4`** | **DM Mono** | **bathymetric chart** |
+| **Atlas — Carbon** | **black `#000000`** | **Apple Blue light `#2997FF`** | **SF Mono stack** | **dark shop** |
+| **Atlas — Apple Lite** | **shop gray `#F5F5F7`** | **Apple Blue `#0071E3`** | **SF Mono stack** | **light shop** |
 
-Atlas ships exactly two shells, both ported 1:1 from Zeus OS (v9s): **Carbon** (Zeus's
-`zyvor-carbon` — graphite + Cosmic Orange, default) and **Apple Lite** (Zeus's `tahoe-light` —
-iPhone 17 Magichromatic: Mist Blue, Sage, Lavender, Cosmic Orange).
+Atlas ships exactly two shells: **Carbon** (dark Apple store) and **Apple Lite** (classic light shop).
+Cosmic Orange is reserved for the brand mark only — never for CTAs or selected tiles.
 
 Tokens live in `crates/atlas-gateway/ui/src/atlas-soundings.css` (`--at-*`, `--d*`).
 
 ## Colour law
 
-- **One interaction colour:** `--at-cyan` (buttons, focus, links, active nav).
+- **One interaction colour:** `--at-cyan` (buttons, focus, links, active nav, selected tiles).
+  - Carbon: `#2997FF`. Apple Lite: `#0071E3`.
 - **Depth ramp is state, never interaction** — use `depth(pct)` from `lib/depth.ts`:
 
 | Class | Range | Name |
@@ -35,15 +35,16 @@ Tokens live in `crates/atlas-gateway/ui/src/atlas-soundings.css` (`--at-*`, `--d
 
 - Never put a depth colour on a button/link/nav.
 - Amber/red (`--at-warn` / `--at-fail`) = cluster health verdicts, not capacity.
-- Hairlines (`--at-line*`) are tinted by the shell's own ink colour, never a flat white or black
-  alpha — Carbon's hairlines are neutral-light-tinted on graphite, Apple Lite's are ink-tinted on
-  paper.
+- Borders (`--at-line*`) are soft shop edges on elevated boxes — never harsh ruled hairlines as the primary grouping language.
 
 ## Type law
 
-- **Space Grotesk** — Atlas voice (titles, labels, prose, buttons).
-- **DM Mono** — cluster voice (numbers, pool/volume names, paths, timestamps, health strings).
+- **SF system stack** — Atlas voice (titles, labels, prose, buttons):
+  `-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif`.
+- **SF Mono stack** — cluster voice (numbers, pool/volume names, paths, timestamps, health strings):
+  `ui-monospace, SFMono-Regular, Menlo, monospace`.
 - Number anatomy: value → unit (`0.52em`, dimmer) → caption above.
+- Titles are large shop display weight; subtitles are muted `#6e6e73` / `#a1a1a6`.
 
 ## Number formatting
 
@@ -54,72 +55,64 @@ Tokens live in `crates/atlas-gateway/ui/src/atlas-soundings.css` (`--at-*`, `--d
 
 ## Structure
 
-- Max panel nesting depth **1**. Group with hairlines (`.at-lattice`), not card soup.
-- Measured data is sharp (`--r-data: 0`); controls are round (`--r-ctl`).
+- Max panel nesting depth **1**. Group with **rounded elevated boxes** (`.at-panel`, `.at-card`, `.at-instr`), not hairline lattices.
+- Boxes: radius **18–22px** (`--r-panel`), soft shadow on light shell, elevated fill on dark shell.
+- **Selection tiles** (`.at-select-tile`): rounded box + 1px border; selected = 2px accent border.
+- Measured data can stay sharp inside boxes (`--r-data`); controls are round (`--r-ctl` / pills).
 - Page grammar: **eyebrow → title → state** (state names the real exception).
 - Answer *is it healthy?* before *what is it?* before *what can I do?*
 
 ## Emptiness
 
-- Naked `0` is banned — always a fill hint + action.
+- Naked `0` is banned — always a fill hint + action, preferably inside a large centered shop box.
 
-## Motion (only)
+## Motion
 
-1. Chart floor drift (120s) 2. Echogram sweep (4.6s) 3. Depth fills (900ms) 4. Page surface (420ms).
-Respect `prefers-reduced-motion`.
+1. **Swipe rail** (scroll-snap-x + chevrons + touch/trackpad) for feature / status strips.
+2. Depth fills (900ms).
+3. Page surface (420ms).
+Respect `prefers-reduced-motion` — swipe rails fall back to a static wrap.
 
 ## Signatures (do not dilute)
 
-Chart floor · The Sounding (no capacity donut) · Echogram · Basins · Seabed.
+Shop canvas · Elevated boxes · Selection tiles · SwipeRail · SF type · Apple Blue CTAs.
 
 ## Page archetypes
 
 | Letter | Role | Ship first on |
 |---|---|---|
-| **A** Command Deck | Sounding + Echogram + Lattice + Basins | `/` Overview |
-| **B** Index | chips + single `at-tbl` + hover row actions (+ depth where fill applies) | all inventory indexes |
-| **C** Detail | 4-up instruments + cross-section + seabed + ledger | `/pools/:id`, PlanDetail pipeline |
-| **D** Telemetry | one wide echogram + breakdowns | `/observatory` |
-| **E** Ops | `at-instrs` / `at-stack` / Soundings kit remap | Ceph, Access, Maintenance, DR, Cluster |
+| **A** Shop Deck | Hero + SwipeRail of status tiles + elevated boxes | `/` Overview |
+| **B** Index | shop pills + single table-in-box + empty box | all inventory indexes |
+| **C** Detail | 4-up instrument boxes + swipe stage rail | `/pools/:id`, PlanDetail |
+| **D** Telemetry | charts inside shop boxes (+ optional swipe modes) | `/observatory` |
+| **E** Ops | equal rounded action boxes in a grid | Ceph, Access, Maintenance, DR, Cluster |
 
-Kit surfaces (`GlassSection`, `StatCard`, `SlideOver`, buttons, fields, badges) render in Soundings tokens under `.at-app`. Default shell theme is **Carbon** (graphite + Cosmic Orange).
+Kit surfaces (`GlassSection`, `StatCard`, `SwipeRail`, `SelectTile`, `SlideOver`, buttons, fields, badges) render in shop tokens under `.at-app`. Default shell theme is **Carbon** (dark shop).
 
-## Shell chrome (apple.com topbar + Zeus OS sidebar)
+## Shell chrome (shop topbar + sidebar)
 
-Navigation lives in exactly one place — a **persistent left sidebar** (`Sidebar` in `Shell.tsx`,
-Zeus OS's sidebar pattern): the six section groups (Storage, Data Protection, DataBridge,
-Observability, Governance, Infrastructure) always visible as icon+label links, collapsible to a
-64px icon-only rail (toggle at the bottom of the sidebar; state persisted as
-`atlas.sidebar-collapsed`). Below ~900px the sidebar hides entirely and a hamburger button opens
-`MobileNavDrawer` (the same grouped sections + shortcuts, as a slide-in panel) instead — the two
-never show at once.
+Navigation lives in exactly one place — a **persistent left sidebar** (`Sidebar` in `Shell.tsx`):
+the six section groups (Storage, Data Protection, DataBridge, Observability, Governance,
+Infrastructure) always visible as icon+label links, collapsible to a 64px icon-only rail
+(toggle at the bottom; state persisted as `atlas.sidebar-collapsed`). Below ~900px the sidebar
+hides and a hamburger opens `MobileNavDrawer` — the two never show at once.
 
-The **topbar** above it is deliberately sparse, apple.com-style — a bare 44px-tall (`--rail-h`)
-translucent strip with just the brand mark (icon only, no wordmark) on the left and a slim
-single-glyph icon cluster on the right: search (⌘K), Look & feel (`LayoutTemplate`), a running-jobs
-spinner (conditional), alerts bell, pause/resume, a compact health dot+label, and one Account icon
-(auth token / local time / sign-out combined). It carries no navigation and no live-metrics chips —
-those either live in the sidebar or are one click away on the Command Deck.
+The **topbar** is a bare 44px (`--rail-h`) frosted shop strip: brand mark (icon only) left,
+icon cluster right (⌘K, Look & feel, jobs, alerts, pause, health, account). No nav chips in the
+topbar. Materials: frosted light bar on Apple Lite, dark translucent bar on Carbon; active states
+use Apple Blue.
 
 | Atlas theme (`data-ui-shell`) | Look |
 |---|---|
-| **carbon** (default) | Zeus's `zyvor-carbon` — graphite (`#0B0C0E` / `#15171B`) + Cosmic Orange `#F97316` |
-| **apple-lite** | Zeus's `tahoe-light` — mist paper (`#EDEFF3` / `#FFFFFF`) + Mist Blue `#2A82B4`, iPhone 17 Magichromatic |
+| **carbon** (default) | Dark shop — canvas `#000`, elevated boxes `#1D1D1F`, accent `#2997FF` |
+| **apple-lite** | Light shop — canvas `#F5F5F7`, boxes `#FFF`, accent `#0071E3` |
 
 Change Look & feel from the topbar icon after login, or **Settings → Appearance** (theme +
-density). Density is stored as `data-density` (`comfortable` | `compact`). The sidebar's own
-colors (`.at-sidebar*`) are built entirely from `--at-*` tokens — never literal white/black alpha —
-so both shells render correctly with no per-shell CSS overrides needed for it.
-
-**Not ported (by design):** Dock, Finder, Dynamic Island, VM theatre, and Zeus's fuller sidebar
-features (auto-hide/peek, nav tiers, the "all apps" picker) — Atlas's sidebar is a simplified,
-always-icon-plus-label-or-collapsed version scoped to the six section groups above.
-
-Both shells keep flat Soundings panels (`.at-panel` is transparent + a top hairline, not a metal
-card) — content panels are ruled, not card soup, per the Structure law below.
+density). Density is stored as `data-density` (`comfortable` | `compact`).
 
 ## Ship checklist
 
-Three-line header; health before inventory; no white-alpha hairlines; cluster strings in mono;
-SI/binary compaction; no nested panels; zeros have fill hints; `depth(pct)` for fills;
-⌘K / Esc / `:focus-visible`; sidebar collapses to a drawer at narrow widths.
+Three-line header; health before inventory; elevated rounded boxes; SF type; Apple Blue CTAs;
+selection tiles for config choices; SwipeRail where strips scroll; SI/binary compaction;
+no nested panels; zeros have fill hints; `depth(pct)` for fills; ⌘K / Esc / `:focus-visible`;
+sidebar collapses to a drawer at narrow widths; `prefers-reduced-motion` respected.

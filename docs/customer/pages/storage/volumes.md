@@ -13,7 +13,7 @@ Intent-backed volume inventory — create, expand, snapshot, schedule, and delet
 ## How to get there
 
 - Route: `/volumes`
-- Nav: **STORAGE → Volumes (menubar Volumes)**
+- Nav: **STORAGE → Volumes (sidebar Volumes)**
 
 ## Operate from the console (UX)
 

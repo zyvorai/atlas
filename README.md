@@ -71,9 +71,10 @@ call **stable Atlas APIs**; Atlas talks to storage backends through **pluggable 
 - **Three backends** behind `StorageDriver`: Ceph + **NFS** + **ZFS** (all in `/backends`, filters, gauges).
 - `/backends/summary` + per-backend Prometheus gauges; `?backend=&kind=` filters on `/volumes` + `/pools`;
   `/volumes.csv` export; unified activity feed (`/events`); `/readyz` deep-check.
-- **React/Vite console** (Zeus OS "Tahoe" design, embedded in the gateway): every capability wired,
-  HTTPS, branded login, **Observatory** (6 live canvas visualizations), Ceph page, per-backend cards,
-  and a **Nebula** default theme (+ Midnight, Aurora).
+- **React/Vite console** (Apple shop shells — elevated boxes, SF type, swipe rails — embedded in the
+  gateway): every capability wired, HTTPS, branded login, a persistent collapsible sidebar,
+  **Observatory** (live visualizations), Ceph page, per-backend cards, and two themes —
+  **Carbon** (dark shop, default) and **Apple Lite** (light shop).
 - **Day-2 ops**: `deploy/rook-ceph-lab/{reclaim-space,resize-osd,setup-k3s-disk,teardown}.sh`
   (Ceph capped to 400 GiB on `/dev/sdb1`; the freed tail becomes `/dev/sdb2` for the k3s data-dir).
 
@@ -103,7 +104,7 @@ cargo run -p atlas-cli -- pools
 cargo run -p atlas-cli -- volumes
 ```
 
-Then open the **Storage Center** — a Zeus OS-style React console — at **http://127.0.0.1:5110/** (or
+Then open the **Storage Center** — an Apple shop–styled React console — at **http://127.0.0.1:5110/** (or
 `http://<node>:30511/` on the cluster). It's a React/Vite/Tailwind SPA (`crates/atlas-gateway/ui`)
 embedded in the gateway binary, with live inventory, capacity/health, job progress (SSE), alerts,
 metrics, tenants, and full write actions. Build it with `make ui` (or `make ui-dev` for hot reload).

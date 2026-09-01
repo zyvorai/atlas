@@ -20,15 +20,17 @@
 | Mode | What you do |
 |------|-------------|
 | Open (lab) | No token when `ATLAS_AUTH_REQUIRED=0` |
-| JWT | Paste bearer token from the rail **key** icon, or `POST /api/atlas/v1/auth/tokens` |
+| JWT | Paste bearer token from the top-bar **Account** menu, or `POST /api/atlas/v1/auth/tokens` |
 | Local user | **GOVERNANCE → Access** → Create user, then sign in on the login page |
 | CLI | `atlasctl --token …` or `ATLAS_TOKEN` |
 
 ## 3. Orient yourself (UX)
 
 1. **Command Deck** (`/`) — capacity sounding, pool tiles, protection gaps.
-2. Rail: Spotlight (**⌘K**), Jobs chip, Alerts bell, health, theme, auth token.
-3. Section menus: **STORAGE**, **DATA PROTECTION**, **DATABRIDGE**, **OBSERVABILITY**, **GOVERNANCE**, **INFRASTRUCTURE**.
+2. Left sidebar: grouped page links, collapsible to an icon-only rail. Top bar: Spotlight
+   (**⌘K**), Look & feel (Carbon / Apple Lite), running-jobs indicator, Alerts bell, health, and
+   an Account menu (clock, auth token, sign-out).
+3. Sidebar groups: **STORAGE**, **DATA PROTECTION**, **DATABRIDGE**, **OBSERVABILITY**, **GOVERNANCE**, **INFRASTRUCTURE**.
 4. Every mutation is a durable job (`202` + id) — watch **Jobs**.
 
 ## 4. First workflows

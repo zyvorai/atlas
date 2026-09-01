@@ -91,7 +91,7 @@ export function StatCard({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="at-instr" style={{ border: "1px solid var(--at-line)", borderRadius: "var(--r-panel)" }}>
+    <div className="at-instr">
       <div className="at-caption">{label}</div>
       <div className="at-val md" style={accent ? { color: accent } : undefined}>
         {value}
@@ -151,9 +151,9 @@ export function PageHeader({
 
 export function EmptyState({ msg, cta }: { msg: string; cta?: React.ReactNode }) {
   return (
-    <div className="py-10 text-center text-sm text-muted-foreground">
-      <div>{msg}</div>
-      {cta && <div className="mt-3 flex justify-center">{cta}</div>}
+    <div className="at-empty-box">
+      <div className="at-empty-title">{msg}</div>
+      {cta && <div className="mt-1 flex justify-center">{cta}</div>}
     </div>
   );
 }
@@ -430,6 +430,21 @@ export function FormModal({
               <Select value="" disabled>
                 <option value="">{f.hint || `No ${f.label.toLowerCase()} available`}</option>
               </Select>
+            ) : f.options.length <= 8 ? (
+              <div className="at-select-grid" role="radiogroup" aria-label={f.label}>
+                {f.options.map((o) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={(vals[f.name] ?? "") === o.value}
+                    className={cx("at-select-tile", (vals[f.name] ?? "") === o.value && "on")}
+                    onClick={() => set(f.name, o.value)}
+                  >
+                    <span className="at-select-title">{o.label}</span>
+                  </button>
+                ))}
+              </div>
             ) : (
               <Select value={vals[f.name] ?? ""} onChange={(e) => set(f.name, e.target.value)}>
                 {f.options.map((o) => (

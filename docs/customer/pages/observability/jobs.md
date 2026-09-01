@@ -13,7 +13,7 @@ Durable async jobs for every mutation — progress, SSE live updates, failure de
 ## How to get there
 
 - Route: `/jobs`
-- Nav: **OBSERVABILITY → Jobs (menubar Jobs)**
+- Nav: **OBSERVABILITY → Jobs (sidebar Jobs)**
 
 ## Operate from the console (UX)
 

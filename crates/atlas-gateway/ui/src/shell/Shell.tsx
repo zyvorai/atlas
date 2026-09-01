@@ -144,14 +144,11 @@ function MenuBar({
           <Menu size={16} strokeWidth={2} />
         </button>
 
-        <NavLink to="/" end className="at-mark" title="Atlas — Command Deck" aria-label="Atlas — Command Deck">
+        <NavLink to="/" end className="at-mark" title="Atlas — Storage Center" aria-label="Atlas — Storage Center">
           <span className="at-brand-logo" aria-hidden>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="3" fill="currentColor" />
-              <circle cx="12" cy="12" r="6.5" stroke="currentColor" strokeWidth="1.3" opacity=".62" />
-              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.1" opacity=".3" />
-            </svg>
+            <img src="/zyvor-mark.svg" alt="" width={18} height={18} className="at-zyvor-mark" />
           </span>
+          <span className="at-brand-name">Atlas</span>
         </NavLink>
       </div>
 

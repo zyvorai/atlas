@@ -5,7 +5,7 @@
       "path": "/",
       "label": "Command Deck",
       "category": "STORAGE",
-      "nav": "STORAGE \u2192 Command Deck (or menubar Deck / H)",
+      "nav": "STORAGE \u2192 Command Deck (sidebar Deck, or the H shortcut)",
       "operate": [
         "Open `/` (Command Deck) after the gateway is reachable.",
         "Read the health chip on the rail (HEALTH_OK / DEGRADED / \u2026) and live job/alert counts.",
@@ -20,7 +20,7 @@
       "path": "/volumes",
       "label": "Volumes",
       "category": "STORAGE",
-      "nav": "STORAGE \u2192 Volumes (menubar Volumes)",
+      "nav": "STORAGE \u2192 Volumes (sidebar Volumes)",
       "operate": [
         "Open `/volumes` and wait for the inventory table.",
         "Click **Create volume** \u2014 pick name, size, policy/intent, tenant; submit starts a durable job.",
@@ -116,7 +116,7 @@
       "path": "/observatory",
       "label": "Observatory",
       "category": "OBSERVABILITY",
-      "nav": "OBSERVABILITY \u2192 Observatory (menubar Observatory)",
+      "nav": "OBSERVABILITY \u2192 Observatory (sidebar Observatory)",
       "operate": [
         "Open `/observatory` and wait for estate samples.",
         "Use lenses / panels for pool and OSD pressure.",
@@ -142,7 +142,7 @@
       "path": "/alerts",
       "label": "Alerts",
       "category": "OBSERVABILITY",
-      "nav": "OBSERVABILITY \u2192 Alerts (menubar Alerts / bell)",
+      "nav": "OBSERVABILITY \u2192 Alerts (sidebar Alerts, or the top-bar bell)",
       "operate": [
         "Open `/alerts` (or rail bell \u2192 jump).",
         "Filter by state; read critical vs open counts in PageHead.",
@@ -168,7 +168,7 @@
       "path": "/jobs",
       "label": "Jobs",
       "category": "OBSERVABILITY",
-      "nav": "OBSERVABILITY \u2192 Jobs (menubar Jobs)",
+      "nav": "OBSERVABILITY \u2192 Jobs (sidebar Jobs)",
       "operate": [
         "Open `/jobs` after any create/backup/migrate/DR action.",
         "Select a job for created time, state, and error detail.",
@@ -234,10 +234,10 @@
       "path": "/settings",
       "label": "Settings",
       "category": "GOVERNANCE",
-      "nav": "GOVERNANCE \u2192 Settings (menubar Settings)",
+      "nav": "GOVERNANCE \u2192 Settings (sidebar Settings)",
       "operate": [
         "Open `/settings`.",
-        "Adjust Look & feel from the rail theme menu (Carbon, Nebula, \u2026) if not on this page.",
+        "Adjust Look & feel from the top-bar theme menu (Carbon, Apple Lite) if not on this page.",
         "Confirm token/session via rail key icon.",
         "**Empty / fail:** Changes not sticking \u2192 local storage blocked; re-auth.",
         "**Success:** Theme/session match operator preference."
@@ -378,7 +378,7 @@
       "path": "/ceph",
       "label": "Ceph",
       "category": "INFRASTRUCTURE",
-      "nav": "INFRASTRUCTURE \u2192 Ceph (menubar Ceph)",
+      "nav": "INFRASTRUCTURE \u2192 Ceph (sidebar Ceph)",
       "operate": [
         "Open `/ceph`.",
         "Read rollup + df pools; jump to Cluster if needed.",

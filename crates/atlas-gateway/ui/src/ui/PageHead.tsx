@@ -1,7 +1,7 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 import type { ReactNode } from "react";
 
-/** Soundings page grammar: eyebrow → title → state (state names the real exception). */
+/** Shop page grammar: eyebrow → large title → muted state. */
 export function PageHead({
   eyebrow,
   title,

@@ -13,7 +13,7 @@ Estate overview — capacity sounding, pool tiles, protection gaps, and quick ju
 ## How to get there
 
 - Route: `/`
-- Nav: **STORAGE → Command Deck (or menubar Deck / H)**
+- Nav: **STORAGE → Command Deck (sidebar Deck, or the `H` shortcut)**
 
 ## Operate from the console (UX)
 

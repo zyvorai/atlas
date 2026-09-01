@@ -20,7 +20,7 @@ export default function Settings() {
       <PageHead
         eyebrow="CONSOLE · APPEARANCE"
         title="Settings"
-        state="Look & feel and density for this browser. Carbon is the dark default; Apple Lite is the iPhone 17 light shell."
+        state="Look & feel and density for this browser. Carbon is the dark shop default; Apple Lite is the light shop shell."
       />
 
       <div className="at-panel">
@@ -31,8 +31,8 @@ export default function Settings() {
           <div className="at-settings-block">
             <div className="at-settings-label">Shell theme</div>
             <p className="at-settings-hint">
-              Carbon (graphite + Cosmic Orange) is the Atlas default. Apple Lite is the iPhone 17
-              Magichromatic light shell — Mist Blue, Sage, Lavender, Cosmic Orange.
+              Carbon is the dark Apple shop (black canvas + Apple Blue). Apple Lite is the classic light
+              shop (#F5F5F7 + Apple Blue). Cosmic Orange is reserved for the brand mark only.
             </p>
             <div className="at-choice-grid" role="radiogroup" aria-label="Shell theme">
               {THEME_OPTIONS.map((opt) => (

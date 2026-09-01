@@ -2,8 +2,6 @@
  * Design foundation vendored from Zeus OS (v9s) — tokens + tahoe/zeus component classes.
  */
 @import "./zyvor-premium-login.css";
-@import "./zyvor-secure-login.css";
-@import "./atlas-signin.css";
 @import "./atlas-soundings.css";
 
 @tailwind base;
@@ -12,6 +10,12 @@
 
 @layer base {
   :root {
+    /* Apple Store type — same as h2kvm- Store login */
+    --store-font-text: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --store-font-display: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --font-display: var(--store-font-display);
+    --font-text: var(--store-font-text);
+
     --background: 222 47% 5%;
     --foreground: 210 40% 98%;
     --card: 222 47% 8%;
@@ -42,45 +46,46 @@
     --radius: 0.75rem;
   }
 
-  /* Carbon — Zeus OS's zyvor-carbon shell, ported verbatim: graphite + Cosmic Orange. */
+  /* Carbon — dark Apple shop. */
   :root[data-ui-shell="carbon"] {
-    --background: 220 15% 6%;
-    --foreground: 210 25% 96%;
-    --card: 220 14% 9%;
-    --card-foreground: 210 25% 96%;
-    --popover: 220 14% 9%;
-    --popover-foreground: 210 25% 96%;
-    --primary: 24 95% 53%;
-    --primary-foreground: 220 15% 6%;
-    --secondary: 220 12% 14%;
-    --secondary-foreground: 210 25% 96%;
-    --muted: 220 12% 12%;
-    --muted-foreground: 215 15% 72%;
-    --accent: 220 12% 16%;
-    --accent-foreground: 210 25% 96%;
-    --border: 220 10% 18%;
-    --input: 220 10% 18%;
-    --ring: 24 95% 53%;
-    --info: 24 95% 53%;
-    --accent-info: 24 95% 53%;
+    --background: 0 0% 0%;
+    --foreground: 240 4% 96%;
+    --card: 240 3% 12%;
+    --card-foreground: 240 4% 96%;
+    --popover: 240 3% 12%;
+    --popover-foreground: 240 4% 96%;
+    --primary: 211 100% 58%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 3% 16%;
+    --secondary-foreground: 240 4% 96%;
+    --muted: 240 3% 14%;
+    --muted-foreground: 240 3% 64%;
+    --accent: 240 3% 18%;
+    --accent-foreground: 240 4% 96%;
+    --border: 240 3% 22%;
+    --input: 240 3% 22%;
+    --ring: 211 100% 58%;
+    --info: 211 100% 58%;
+    --accent-info: 211 100% 58%;
 
-    --at-void: #0b0c0e;
-    --at-abyss: #0e1013;
-    --at-shelf: #15171b;
-    --at-ridge: #1c1f24;
-    --at-crest: #262a30;
-    --at-line: rgba(226, 229, 233, 0.08);
-    --at-line-2: rgba(226, 229, 233, 0.14);
-    --at-line-3: rgba(226, 229, 233, 0.24);
-    --at-ink: #eef1f3;
-    --at-ink-2: #c7ccd1;
-    --at-ink-3: #9aa0a8;
-    --at-ink-4: #63676d;
-    --at-cyan: #f97316;
-    --at-cyan-2: #fb923c;
-    --at-cyan-wash: rgba(249, 115, 22, 0.14);
-    --at-cyan-glow: rgba(249, 115, 22, 0.36);
-    /* Depth-chart series is Atlas's own capacity ramp, orthogonal to the shell accent — unchanged. */
+    --at-void: #000000;
+    --at-abyss: #0a0a0a;
+    --at-shelf: #1d1d1f;
+    --at-ridge: #2a2a2c;
+    --at-crest: #3a3a3c;
+    --at-line: rgba(245, 245, 247, 0.12);
+    --at-line-2: rgba(245, 245, 247, 0.18);
+    --at-line-3: rgba(245, 245, 247, 0.28);
+    --at-ink: #f5f5f7;
+    --at-ink-2: #d2d2d7;
+    --at-ink-3: #a1a1a6;
+    --at-ink-4: #6e6e73;
+    --at-cyan: #2997ff;
+    --at-cyan-2: #64b5ff;
+    --at-cyan-wash: rgba(41, 151, 255, 0.14);
+    --at-cyan-glow: rgba(41, 151, 255, 0.36);
+    --at-brand: #f97316;
+    --at-box-shadow: 0 2px 16px rgba(0, 0, 0, 0.45);
     --d1: #42be65;
     --d2: #4589ff;
     --d3: #f1c21b;
@@ -91,24 +96,23 @@
     --at-err: #fa4d56;
   }
 
-  /* Apple Lite — Zeus OS's tahoe-light shell, ported verbatim: iPhone 17 Magichromatic
-   * (Mist Blue · Sage · Lavender · Cosmic Orange). Atlas's first light shell. */
+  /* Apple Lite — classic light Apple shop. */
   :root[data-ui-shell="apple-lite"] {
     color-scheme: light;
-    --background: 210 42% 95%;
+    --background: 240 5% 96%;
     --foreground: 0 0% 11%;
     --card: 0 0% 100%;
     --card-foreground: 0 0% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 11%;
-    --primary: 200 78% 40%;
+    --primary: 211 100% 45%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 270 35% 95%;
+    --secondary: 240 5% 96%;
     --secondary-foreground: 0 0% 11%;
-    --muted: 145 22% 93%;
-    --muted-foreground: 220 12% 38%;
-    --accent: 270 40% 92%;
-    --accent-foreground: 270 40% 28%;
+    --muted: 240 5% 94%;
+    --muted-foreground: 240 3% 45%;
+    --accent: 240 5% 94%;
+    --accent-foreground: 0 0% 11%;
     --destructive: 4 76% 40%;
     --destructive-foreground: 0 0% 100%;
     --success: 145 42% 36%;
@@ -117,42 +121,41 @@
     --warning-foreground: 0 0% 100%;
     --danger: 4 76% 40%;
     --danger-foreground: 0 0% 100%;
-    --border: 205 28% 84%;
-    --input: 205 28% 84%;
-    --ring: 200 78% 40%;
-    --info: 220 70% 38%;
+    --border: 240 5% 88%;
+    --input: 240 5% 88%;
+    --ring: 211 100% 45%;
+    --info: 211 100% 45%;
     --info-foreground: 0 0% 100%;
-    --accent-info: 200 78% 40%;
+    --accent-info: 211 100% 45%;
     --accent-live: 145 48% 40%;
-    --accent-alt: 270 48% 52%;
+    --accent-alt: 211 100% 45%;
 
-    /* Soundings tokens have no Zeus equivalent — surfaces/hairlines follow Zeus's Daylight
-     * Contract elevation scale, tinted with tahoe-light's Mist Blue / Sage / Lavender / Cosmic
-     * Orange hues so the depth-chart series reads as the same iPhone 17 identity. */
-    --at-void: #edeff3;
-    --at-abyss: #f7f8fa;
+    --at-void: #f5f5f7;
+    --at-abyss: #fafafa;
     --at-shelf: #ffffff;
-    --at-ridge: #ffffff;
-    --at-crest: #ffffff;
-    --at-line: rgba(16, 20, 28, 0.07);
-    --at-line-2: rgba(16, 20, 28, 0.12);
-    --at-line-3: rgba(16, 20, 28, 0.2);
-    --at-ink: #14181f;
-    --at-ink-2: #3c444f;
-    --at-ink-3: #5e6674;
-    --at-ink-4: #98a0ac;
-    --at-cyan: #2a82b4;
-    --at-cyan-2: #4fa8d8;
-    --at-cyan-wash: rgba(42, 130, 180, 0.1);
-    --at-cyan-glow: rgba(42, 130, 180, 0.3);
-    --d1: #2f8f57;
-    --d2: #2a82b4;
-    --d3: #f2760b;
-    --d4: #8c5fd6;
-    --d5: #b42318;
-    --at-ok: #2f8f57;
-    --at-warn: #f2760b;
-    --at-err: #b42318;
+    --at-ridge: #f0f0f2;
+    --at-crest: #e8e8ed;
+    --at-line: rgba(0, 0, 0, 0.08);
+    --at-line-2: rgba(0, 0, 0, 0.12);
+    --at-line-3: rgba(0, 0, 0, 0.2);
+    --at-ink: #1d1d1f;
+    --at-ink-2: #424245;
+    --at-ink-3: #6e6e73;
+    --at-ink-4: #86868b;
+    --at-cyan: #0071e3;
+    --at-cyan-2: #2997ff;
+    --at-cyan-wash: rgba(0, 113, 227, 0.1);
+    --at-cyan-glow: rgba(0, 113, 227, 0.28);
+    --at-brand: #f97316;
+    --at-box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+    --d1: #34c759;
+    --d2: #0071e3;
+    --d3: #ff9500;
+    --d4: #af52de;
+    --d5: #ff3b30;
+    --at-ok: #34c759;
+    --at-warn: #ff9500;
+    --at-err: #ff3b30;
   }
 
   * {
@@ -166,7 +169,7 @@
   body {
     background: var(--at-void, hsl(var(--background)));
     color: var(--at-ink, hsl(var(--foreground)));
-    font-family: var(--at-face, "Space Grotesk", system-ui, sans-serif);
+    font-family: var(--at-face, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif);
     font-size: 14px;
     line-height: 1.45;
     -webkit-font-smoothing: antialiased;
@@ -408,110 +411,103 @@
 /* Carbon and Apple Lite shell-chrome overrides — deliberately unlayered (see the note left in
  * their old spot inside `@layer components` above) so they can actually beat the unlayered
  * .at-rail/.at-brand-logo/.at-panel/etc. base rules defined in atlas-soundings.css. */
-/* Carbon shell — graphite layers, Cosmic Orange accent (ported from Zeus's zyvor-carbon). */
+/* Carbon shell — dark Apple shop. */
 :root[data-ui-shell="carbon"] .tahoe-canvas {
-  background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(249, 115, 22, 0.07), transparent 55%),
-    linear-gradient(180deg, #0e1013 0%, #15171b 40%, #0b0c0e 100%);
+  background: #000000;
 }
 :root[data-ui-shell="carbon"] .btn-primary {
-  background: #f97316;
-  color: #1a0f06;
-  border: 1px solid #fb923c;
+  background: #2997ff;
+  color: #ffffff;
+  border: 1px solid #2997ff;
   box-shadow: none;
 }
 :root[data-ui-shell="carbon"] .at-rail {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, transparent 50%),
-    rgba(21, 23, 27, 0.82);
-  border-bottom-color: rgba(226, 229, 233, 0.08);
+    rgba(29, 29, 31, 0.82);
+  border-bottom-color: rgba(245, 245, 247, 0.12);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
     inset 0 -1px 0 rgba(0, 0, 0, 0.35);
   -webkit-backdrop-filter: saturate(1.15) blur(18px);
   backdrop-filter: saturate(1.15) blur(18px);
 }
 :root[data-ui-shell="carbon"] .at-rail-brand {
-  background: linear-gradient(90deg, rgba(21, 23, 27, 0.92) 70%, rgba(21, 23, 27, 0));
+  background: linear-gradient(90deg, rgba(29, 29, 31, 0.92) 70%, rgba(29, 29, 31, 0));
 }
 :root[data-ui-shell="carbon"] .at-brand-logo {
-  color: #f97316;
-  background: rgba(14, 16, 19, 0.65);
-  border-color: rgba(226, 229, 233, 0.1);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: #f97316; /* brand mark only */
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+:root[data-ui-shell="carbon"] .at-brand-name {
+  color: #f5f5f7;
 }
 :root[data-ui-shell="carbon"] .at-iconbtn {
-  color: #c7ccd1;
-  border-color: rgba(226, 229, 233, 0.1);
-  background: rgba(28, 31, 36, 0.55);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: #d2d2d7;
+  border-color: rgba(245, 245, 247, 0.12);
+  background: rgba(42, 42, 44, 0.55);
+  box-shadow: none;
 }
 :root[data-ui-shell="carbon"] .at-iconbtn:hover {
-  color: #eef1f3;
-  border-color: rgba(226, 229, 233, 0.16);
-  background: rgba(255, 255, 255, 0.1);
+  color: #f5f5f7;
+  border-color: rgba(245, 245, 247, 0.2);
+  background: rgba(255, 255, 255, 0.08);
 }
 :root[data-ui-shell="carbon"] .at-topnav-home.on,
 :root[data-ui-shell="carbon"] .at-topnav-dd.on .at-topnav-ddbtn,
 :root[data-ui-shell="carbon"] .at-quick-link.on,
 :root[data-ui-shell="carbon"] .at-control.on {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(249, 115, 22, 0.35);
-  color: #eef1f3;
+  background: rgba(41, 151, 255, 0.14);
+  border-color: rgba(41, 151, 255, 0.4);
+  color: #f5f5f7;
 }
 :root[data-ui-shell="carbon"] .at-topnav-home.on::after,
 :root[data-ui-shell="carbon"] .at-topnav-dd.on .at-topnav-ddbtn::after,
 :root[data-ui-shell="carbon"] .at-quick-link.on::after {
-  background: linear-gradient(90deg, transparent, #f97316, transparent);
+  background: linear-gradient(90deg, transparent, #2997ff, transparent);
 }
 :root[data-ui-shell="carbon"] .at-topnav-megapanel,
 :root[data-ui-shell="carbon"] .at-theme-menu,
 :root[data-ui-shell="carbon"] .at-drawer {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 40%),
-    rgba(21, 23, 27, 0.88);
-  border-color: rgba(226, 229, 233, 0.12);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, transparent 40%),
+    rgba(29, 29, 31, 0.94);
+  border-color: rgba(245, 245, 247, 0.12);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
   -webkit-backdrop-filter: saturate(1.2) blur(24px);
   backdrop-filter: saturate(1.2) blur(24px);
 }
-/* Content panels stay Soundings-ruled (transparent + hairline) — not a metal card. */
 :root[data-ui-shell="carbon"] .at-panel {
-  background: transparent;
-  border: none;
-  border-top: 1px solid var(--at-line, rgba(226, 229, 233, 0.08));
-  border-radius: 0;
-  box-shadow: none;
-  overflow: visible;
+  background: var(--at-shelf);
+  border: 1px solid var(--at-line);
+  border-radius: var(--r-panel);
+  box-shadow: var(--at-box-shadow);
+  overflow: hidden;
 }
 :root[data-ui-shell="carbon"] .at-menubar-metrics {
-  border-color: rgba(226, 229, 233, 0.1);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 100%),
-    rgba(21, 23, 27, 0.45);
+  border-color: rgba(245, 245, 247, 0.12);
+  background: rgba(42, 42, 44, 0.55);
 }
 :root[data-ui-shell="carbon"] .at-choice.on {
-  border-color: rgba(249, 115, 22, 0.45);
-  background: rgba(249, 115, 22, 0.12);
+  border-color: #2997ff;
+  background: rgba(41, 151, 255, 0.14);
 }
 
-/* Apple Lite shell — Mist-tinted paper, Mist Blue accent (ported from Zeus's tahoe-light). */
+/* Apple Lite shell — classic light Apple shop. */
 :root[data-ui-shell="apple-lite"] .tahoe-canvas {
-  background:
-    radial-gradient(ellipse 75% 50% at 8% -5%, hsl(200 85% 55% / 0.2), transparent 58%),
-    radial-gradient(ellipse 60% 45% at 95% 5%, hsl(270 55% 62% / 0.16), transparent 55%),
-    radial-gradient(ellipse 55% 40% at 75% 105%, hsl(145 45% 48% / 0.14), transparent 55%),
-    hsl(var(--background));
+  background: #f5f5f7;
 }
 :root[data-ui-shell="apple-lite"] .btn-primary {
-  background: linear-gradient(180deg, #4fa8d8 0%, #2a82b4 100%);
+  background: #0071e3;
   color: #ffffff;
-  border: 1px solid rgba(42, 130, 180, 0.5);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset, 0 8px 20px -8px rgba(42, 130, 180, 0.45);
+  border: 1px solid #0071e3;
+  box-shadow: none;
 }
 :root[data-ui-shell="apple-lite"] .glass-card.hoverable:hover {
-  box-shadow: 0 0 28px -10px rgba(42, 130, 180, 0.3);
-  border-color: rgba(42, 130, 180, 0.32);
+  box-shadow: var(--at-box-shadow);
+  border-color: rgba(0, 113, 227, 0.32);
 }
 :root[data-ui-shell="apple-lite"] .at-rail {
   background:
@@ -529,9 +525,13 @@
   background: linear-gradient(90deg, rgba(247, 248, 250, 0.92) 70%, rgba(247, 248, 250, 0));
 }
 :root[data-ui-shell="apple-lite"] .at-brand-logo {
-  color: #2a82b4;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(247, 248, 250, 0.6) 100%);
-  border-color: rgba(16, 20, 28, 0.1);
+  color: #f97316; /* brand mark only */
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+:root[data-ui-shell="apple-lite"] .at-brand-name {
+  color: #1d1d1f;
 }
 :root[data-ui-shell="apple-lite"] .at-search {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(247, 248, 250, 0.7));
@@ -567,14 +567,14 @@
 :root[data-ui-shell="apple-lite"] .at-topnav-dd.on .at-topnav-ddbtn,
 :root[data-ui-shell="apple-lite"] .at-quick-link.on,
 :root[data-ui-shell="apple-lite"] .at-control.on {
-  background: rgba(42, 130, 180, 0.1);
-  border-color: rgba(42, 130, 180, 0.28);
-  color: #14181f;
+  background: rgba(0, 113, 227, 0.1);
+  border-color: rgba(0, 113, 227, 0.28);
+  color: #1d1d1f;
 }
 :root[data-ui-shell="apple-lite"] .at-topnav-home.on::after,
 :root[data-ui-shell="apple-lite"] .at-topnav-dd.on .at-topnav-ddbtn::after,
 :root[data-ui-shell="apple-lite"] .at-quick-link.on::after {
-  background: linear-gradient(90deg, transparent, #2a82b4, #4fa8d8, transparent);
+  background: linear-gradient(90deg, transparent, #0071e3, #2997ff, transparent);
 }
 :root[data-ui-shell="apple-lite"] .at-topnav-megapanel,
 :root[data-ui-shell="apple-lite"] .at-theme-menu,
@@ -585,52 +585,52 @@
   -webkit-backdrop-filter: saturate(1.15) blur(24px);
   backdrop-filter: saturate(1.15) blur(24px);
 }
-/* Content panels stay Soundings-ruled (transparent + hairline) — not a metal card. */
+/* Content panels — elevated shop boxes. */
 :root[data-ui-shell="apple-lite"] .at-panel {
-  background: transparent;
-  border: none;
-  border-top: 1px solid var(--at-line, rgba(16, 20, 28, 0.1));
-  border-radius: 0;
-  box-shadow: none;
-  overflow: visible;
+  background: var(--at-shelf);
+  border: 1px solid var(--at-line);
+  border-radius: var(--r-panel);
+  box-shadow: var(--at-box-shadow);
+  overflow: hidden;
 }
 :root[data-ui-shell="apple-lite"] .at-topnav-item {
-  color: #3c444f;
+  color: #424245;
 }
 :root[data-ui-shell="apple-lite"] .at-topnav-item:hover {
-  background: rgba(16, 20, 28, 0.05);
-  color: #14181f;
+  background: rgba(0, 0, 0, 0.04);
+  color: #1d1d1f;
 }
 :root[data-ui-shell="apple-lite"] .at-topnav-item.on {
-  color: #2a82b4;
-  background: rgba(42, 130, 180, 0.1);
+  color: #0071e3;
+  background: rgba(0, 113, 227, 0.1);
 }
 :root[data-ui-shell="apple-lite"] .at-topnav-item.on svg,
 :root[data-ui-shell="apple-lite"] .at-topnav-item:hover svg {
-  color: #2a82b4;
+  color: #0071e3;
 }
 :root[data-ui-shell="apple-lite"] .at-menubar-metrics {
-  border-color: rgba(16, 20, 28, 0.1);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(247, 248, 250, 0.6) 100%);
+  border-color: rgba(0, 0, 0, 0.08);
+  background: #ffffff;
 }
 :root[data-ui-shell="apple-lite"] .at-choice {
-  border-color: rgba(16, 20, 28, 0.1);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(247, 248, 250, 0.7) 100%);
-  color: #3c444f;
-  box-shadow: 0 1px 2px rgba(16, 20, 28, 0.06);
+  border-color: rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+  color: #424245;
+  box-shadow: var(--at-box-shadow);
+  border-radius: var(--r-panel);
 }
 :root[data-ui-shell="apple-lite"] .at-choice:hover {
-  border-color: rgba(16, 20, 28, 0.18);
-  color: #14181f;
-  background: rgba(16, 20, 28, 0.04);
+  border-color: rgba(0, 0, 0, 0.16);
+  color: #1d1d1f;
+  background: #fafafa;
 }
 :root[data-ui-shell="apple-lite"] .at-choice.on {
-  border-color: rgba(42, 130, 180, 0.45);
-  background: rgba(42, 130, 180, 0.1);
-  color: #14181f;
+  border-color: #0071e3;
+  background: rgba(0, 113, 227, 0.08);
+  color: #1d1d1f;
 }
 :root[data-ui-shell="apple-lite"] .at-choice .at-choice-hint {
-  color: #5e6674;
+  color: #6e6e73;
 }
 :root[data-ui-shell="apple-lite"] .at-btn,
 :root[data-ui-shell="apple-lite"] .at-tbl .at-act,
@@ -664,7 +664,7 @@
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(247, 248, 250, 0.7) 100%);
 }
 
-/* Atlas login — secure shell inherits PacketWolf chrome; light sky mark for product */
+/* Login uses h2kvm-/Zeus PremiumLoginShell (zyvor-premium-login.css). */
 
 /* ── Compact density ── */
 :root[data-density="compact"] {

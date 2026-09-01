@@ -13,7 +13,7 @@ Estate telemetry canvas — capacity lenses and jump to Deck or Alerts.
 ## How to get there
 
 - Route: `/observatory`
-- Nav: **OBSERVABILITY → Observatory (menubar Observatory)**
+- Nav: **OBSERVABILITY → Observatory (sidebar Observatory)**
 
 ## Operate from the console (UX)
 

@@ -108,13 +108,21 @@ export default function Access() {
             </div>
             <div>
               <Label>Privilege level</Label>
-              <Select value={newRole} onChange={(e) => setNewRole(e.target.value)}>
+              <div className="at-select-grid" role="radiogroup" aria-label="Privilege level">
                 {ROLES.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.label} (level {r.level}) — {r.hint}
-                  </option>
+                  <button
+                    key={r.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={newRole === r.id}
+                    className={`at-select-tile${newRole === r.id ? " on" : ""}`}
+                    onClick={() => setNewRole(r.id)}
+                  >
+                    <span className="at-select-title">{r.label}</span>
+                    <span className="at-select-hint">Level {r.level} — {r.hint}</span>
+                  </button>
                 ))}
-              </Select>
+              </div>
             </div>
             {createInvalid && newUser.trim() !== "" && (
               <div className="text-xs text-danger">
@@ -284,13 +292,21 @@ export default function Access() {
             </div>
             <div>
               <Label>Role</Label>
-              <Select value={role} onChange={(e) => setRole(e.target.value)}>
+              <div className="at-select-grid" role="radiogroup" aria-label="Token role">
                 {ROLES.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.id}
-                  </option>
+                  <button
+                    key={r.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={role === r.id}
+                    className={`at-select-tile${role === r.id ? " on" : ""}`}
+                    onClick={() => setRole(r.id)}
+                  >
+                    <span className="at-select-title">{r.label}</span>
+                    <span className="at-select-hint">{r.hint}</span>
+                  </button>
                 ))}
-              </Select>
+              </div>
             </div>
             <div>
               <Label>TTL seconds (clamped 60…7776000)</Label>

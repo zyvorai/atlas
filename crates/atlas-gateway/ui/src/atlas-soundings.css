@@ -1,34 +1,34 @@
 /* Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
- * Atlas · "Soundings" — bathymetric design tokens + shell/deck primitives.
- * Storage is terrain. Capacity is depth. The chart is the interface.
+ * Atlas · Apple Shop — elevated boxes, SF type, swipe rails.
+ * Storage is a product. Capacity is a choice. Atlas is the shop.
  */
 
 :root {
-  /* Fallback defaults — always overridden by the active :root[data-ui-shell="..."] block
-   * (Carbon or Apple Lite, see index.css). Mirrors Carbon so nothing depends on a shell
-   * never being applied. */
-  --at-void: #0b0c0e;
-  --at-abyss: #0e1013;
-  --at-shelf: #15171b;
-  --at-ridge: #1c1f24;
-  --at-crest: #262a30;
+  /* Fallback defaults — overridden by :root[data-ui-shell="..."] (Carbon / Apple Lite).
+   * Mirrors Carbon dark shop so nothing depends on a shell never being applied. */
+  --at-void: #000000;
+  --at-abyss: #0a0a0a;
+  --at-shelf: #1d1d1f;
+  --at-ridge: #2a2a2c;
+  --at-crest: #3a3a3c;
 
-  --at-line: rgba(226, 229, 233, 0.08);
-  --at-line-2: rgba(226, 229, 233, 0.14);
-  --at-line-3: rgba(226, 229, 233, 0.24);
+  --at-line: rgba(245, 245, 247, 0.12);
+  --at-line-2: rgba(245, 245, 247, 0.18);
+  --at-line-3: rgba(245, 245, 247, 0.28);
 
-  --at-ink: #eef1f3;
-  --at-ink-2: #c7ccd1;
-  --at-ink-3: #9aa0a8;
-  --at-ink-4: #63676d;
+  --at-ink: #f5f5f7;
+  --at-ink-2: #d2d2d7;
+  --at-ink-3: #a1a1a6;
+  --at-ink-4: #6e6e73;
 
-  /* Interaction accent — Cosmic Orange (Zeus's zyvor-carbon) */
-  --at-cyan: #f97316;
-  --at-cyan-2: #fb923c;
-  --at-cyan-wash: rgba(249, 115, 22, 0.14);
-  --at-cyan-glow: rgba(249, 115, 22, 0.36);
+  /* Interaction accent — Apple Blue light (dark shop) */
+  --at-cyan: #2997ff;
+  --at-cyan-2: #64b5ff;
+  --at-cyan-wash: rgba(41, 151, 255, 0.14);
+  --at-cyan-glow: rgba(41, 151, 255, 0.36);
+  --at-brand: #f97316; /* Cosmic Orange — brand mark only */
 
-  /* Chart / depth series — Atlas's own capacity ramp: emerald · sky · amber · violet · coral */
+  /* Chart / depth series — capacity ramp (state, not interaction) */
   --d1: #34d399;
   --d2: #60a5fa;
   --d3: #fbbf24;
@@ -38,12 +38,11 @@
   --at-warn: #fbbf24;
   --at-fail: #f87171;
   --at-ok: #34d399;
-  /* Between --at-warn and --at-fail: the "At Risk" tier of the 5-value cluster-health rollup. */
   --at-risk: #fb923c;
   --at-risk-wash: rgba(251, 146, 60, 0.1);
 
-  --at-face: "Space Grotesk", system-ui, sans-serif;
-  --at-mono: "DM Mono", ui-monospace, monospace;
+  --at-face: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --at-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   --s1: 4px;
   --s2: 8px;
@@ -56,12 +55,13 @@
   --rail-h: 44px;
   --page-max: 1520px;
   --page-gutter: 0px;
-  --page-inset: 16px;
+  --page-inset: 20px;
 
-  --r-panel: 0px;
-  --r-ctl: 8px;
+  --r-panel: 18px;
+  --r-ctl: 12px;
   --r-pill: 999px;
-  --r-data: 0px;
+  --r-data: 6px;
+  --at-box-shadow: 0 2px 16px rgba(0, 0, 0, 0.28);
 }
 
 /* Authenticated shell uses Soundings as the surface language */
@@ -100,6 +100,7 @@
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
+  opacity: 0.35;
 }
 .at-chart-floor svg {
   position: absolute;
@@ -201,16 +202,25 @@ a.at-mark:focus-visible {
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  color: var(--at-cyan);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 45%, transparent 100%),
-    rgba(14, 20, 28, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    0 6px 14px rgba(0, 0, 0, 0.28);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  color: var(--at-brand);
+  background: transparent;
+  border: none;
+  padding: 0;
+  overflow: hidden;
+}
+.at-brand-logo .at-zyvor-mark {
+  width: 30px;
+  height: 30px;
+  display: block;
+  border-radius: 9px;
+}
+.at-brand-name {
+  font-family: var(--font-display, var(--at-face));
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--at-ink);
+  line-height: 1;
 }
 .at-quick-links {
   display: none;
@@ -941,7 +951,7 @@ a.at-mark:focus-visible {
 .at-choice-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 .at-choice {
   display: flex;
@@ -949,42 +959,38 @@ a.at-mark:focus-visible {
   align-items: flex-start;
   gap: 4px;
   text-align: left;
-  padding: 14px 16px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 45%, transparent 100%),
-    rgba(14, 20, 28, 0.45);
-  color: var(--at-ink-2);
+  padding: 16px 18px;
+  border-radius: var(--r-panel);
+  border: 1px solid var(--at-line-2);
+  background: var(--at-shelf);
+  color: var(--at-ink);
   font-family: var(--at-face);
   cursor: pointer;
-  transition: border-color 0.14s, background 0.14s, color 0.14s, box-shadow 0.14s;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  transition: border-color 0.14s, box-shadow 0.14s;
+  box-shadow: var(--at-box-shadow);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 .at-choice:hover {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--at-line-3);
   color: var(--at-ink);
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--at-shelf);
 }
 .at-choice.on {
-  border-color: color-mix(in srgb, var(--at-cyan) 45%, rgba(255, 255, 255, 0.2));
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, transparent 50%),
-    color-mix(in srgb, var(--at-cyan) 14%, rgba(14, 20, 28, 0.55));
+  border: 2px solid var(--at-cyan);
+  padding: 15px 17px;
+  background: var(--at-shelf);
   color: var(--at-ink);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 0 0 1px color-mix(in srgb, var(--at-cyan) 22%, transparent);
+  box-shadow: 0 0 0 1px var(--at-cyan-wash);
 }
 .at-choice-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 .at-choice-hint {
   font-size: 12px;
-  color: var(--at-ink-4);
+  color: var(--at-ink-3);
 }
 .at-choice.on .at-choice-hint {
   color: var(--at-ink-3);
@@ -1097,18 +1103,19 @@ a.at-mark:focus-visible {
   opacity: 0.7;
 }
 .at-title {
-  font-size: 31px;
+  font-size: 40px;
   font-weight: 600;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.03em;
   line-height: 1.05;
   color: var(--at-ink);
   margin: 0;
 }
 .at-state {
-  margin-top: 9px;
-  color: var(--at-ink-2);
-  font-size: 13.5px;
+  margin-top: 10px;
+  color: var(--at-ink-3);
+  font-size: 17px;
   max-width: 64ch;
+  font-weight: 400;
 }
 .at-state b {
   color: var(--at-ink);
@@ -1151,12 +1158,12 @@ a.at-mark:focus-visible {
 .at-btn.primary {
   background: var(--at-cyan);
   border-color: var(--at-cyan);
-  color: #032027;
+  color: #ffffff;
   font-weight: 600;
 }
 .at-btn.primary:hover {
-  background: #5adcf0;
-  box-shadow: 0 0 22px var(--at-cyan-glow);
+  background: var(--at-cyan-2);
+  box-shadow: none;
 }
 
 .at-mod {
@@ -1188,25 +1195,24 @@ a.at-mark:focus-visible {
   padding-right: var(--page-inset);
 }
 .at-panel {
-  background: transparent;
-  border: none;
-  border-top: 1px solid var(--at-line);
-  border-radius: 0;
-  overflow: visible;
+  background: var(--at-shelf);
+  border: 1px solid var(--at-line);
+  border-radius: var(--r-panel);
+  overflow: hidden;
+  box-shadow: var(--at-box-shadow);
 }
 
-/* Sounding — full-bleed ruled module */
+/* Sounding — elevated shop module */
 .at-sounding {
   display: grid;
   grid-template-columns: 264px 1fr 1.15fr;
   gap: 0;
-  background: transparent;
-  border: none;
-  border-top: 1px solid var(--at-line);
-  border-bottom: 1px solid var(--at-line);
-  border-radius: 0;
-  overflow: visible;
+  background: var(--at-shelf);
+  border: 1px solid var(--at-line);
+  border-radius: var(--r-panel);
+  overflow: hidden;
   position: relative;
+  box-shadow: var(--at-box-shadow);
 }
 .at-sounding::before {
   content: "";
@@ -1360,34 +1366,36 @@ a.at-mark:focus-visible {
   height: 2px;
 }
 
-/* Lattice — ruled grid, no card shell */
+/* Lattice — shop tile grid */
 .at-lattice {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
+  gap: var(--s4);
   border: none;
-  border-top: 1px solid var(--at-line);
-  border-bottom: 1px solid var(--at-line);
   border-radius: 0;
   overflow: visible;
   background: transparent;
 }
 .at-cell {
   padding: var(--s5);
-  border-right: 1px solid var(--at-line);
+  border: 1px solid var(--at-line);
+  border-radius: var(--r-panel);
   position: relative;
   transition: 0.18s;
   cursor: pointer;
   text-align: left;
-  background: transparent;
+  background: var(--at-shelf);
   color: inherit;
   font: inherit;
   width: 100%;
+  box-shadow: var(--at-box-shadow);
 }
 .at-cell:last-child {
-  border-right: none;
+  border-right: 1px solid var(--at-line);
 }
 .at-cell:hover {
   background: var(--at-ridge);
+  border-color: var(--at-line-3);
 }
 .at-cell-go {
   position: absolute;
@@ -1636,17 +1644,12 @@ a.at-mark:focus-visible {
 
 /* Palette / toast / floating glass surfaces (macOS 26 Tahoe) */
 .at-glass {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 30%, transparent 58%),
-    rgba(18, 24, 32, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 18px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    0 24px 64px rgba(0, 0, 0, 0.5),
-    0 0 0 0.5px rgba(0, 0, 0, 0.35);
-  -webkit-backdrop-filter: saturate(1.45) blur(30px);
-  backdrop-filter: saturate(1.45) blur(30px);
+  background: var(--at-shelf);
+  border: 1px solid var(--at-line);
+  border-radius: var(--r-panel);
+  box-shadow: var(--at-box-shadow), 0 24px 64px rgba(0, 0, 0, 0.35);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 .at-modal-footer {
   display: flex;
@@ -1845,27 +1848,26 @@ a.at-mark:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid var(--at-line);
-  background: transparent;
-  color: var(--at-ink-3);
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--at-line-2);
+  background: var(--at-shelf);
+  color: var(--at-ink-2);
   font-family: var(--at-face);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: 0.15s;
 }
 .at-chip:hover {
   color: var(--at-ink);
-  border-color: var(--at-line-2);
-  background: var(--at-line);
+  border-color: var(--at-line-3);
 }
 .at-chip.on {
-  color: var(--at-ink);
-  border-color: color-mix(in srgb, var(--at-cyan) 40%, var(--at-line-2));
-  background: var(--at-cyan-wash);
+  color: #fff;
+  border-color: var(--at-cyan);
+  background: var(--at-cyan);
 }
 .at-chip .n {
   font-family: var(--at-mono);
@@ -1916,19 +1918,19 @@ a.at-mark:focus-visible {
 }
 
 .at-panel {
-  border: none;
-  border-top: 1px solid var(--at-line);
-  border-radius: 0;
-  background: transparent;
-  overflow: visible;
+  border: 1px solid var(--at-line);
+  border-radius: var(--r-panel);
+  background: var(--at-shelf);
+  overflow: hidden;
+  box-shadow: var(--at-box-shadow);
 }
 .at-panel-bar {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px var(--page-inset);
+  padding: 14px var(--page-inset);
   border-bottom: 1px solid var(--at-line);
-  min-height: 40px;
+  min-height: 48px;
   background: transparent;
 }
 .at-panel-bar .at-caption {
@@ -2069,37 +2071,34 @@ a.at-mark:focus-visible {
 
 .at-instrs {
   display: grid;
-  /* Default 4 columns; pages with a different tile count pass --instr-cols inline. Kept as a
-     custom property (not an inline grid-template-columns override) so the narrow-viewport
-     media query below — a plain, equal-specificity class rule — still wins over it. */
   grid-template-columns: repeat(var(--instr-cols, 4), 1fr);
+  gap: var(--s4);
   border: none;
-  border-top: 1px solid var(--at-line);
-  border-bottom: 1px solid var(--at-line);
   border-radius: 0;
-  overflow: hidden;
+  overflow: visible;
   background: transparent;
   margin-bottom: var(--s5);
 }
 .at-instr {
   padding: var(--s5);
-  border-right: 1px solid var(--at-line);
+  border: 1px solid var(--at-line);
+  border-radius: var(--r-panel);
   text-align: left;
-  background: transparent;
+  background: var(--at-shelf);
+  box-shadow: var(--at-box-shadow);
 }
 .at-instr:last-child {
-  border-right: none;
+  border-right: 1px solid var(--at-line);
 }
 .at-cross {
-  border: none;
-  border-top: 1px solid var(--at-line);
-  border-bottom: 1px solid var(--at-line);
-  border-radius: 0;
-  background: transparent;
+  border: 1px solid var(--at-line);
+  border-radius: var(--r-panel);
+  background: var(--at-shelf);
   padding: var(--s5) var(--page-inset);
   margin-bottom: var(--s5);
   position: relative;
   overflow: hidden;
+  box-shadow: var(--at-box-shadow);
 }
 .at-cross-svg {
   width: 100%;
@@ -2124,7 +2123,7 @@ a.at-mark:focus-visible {
     grid-template-columns: repeat(2, 1fr);
   }
   .at-instr:nth-child(2n) {
-    border-right: none;
+    border-right: 1px solid var(--at-line);
   }
   .at-instr:nth-child(n + 3) {
     border-top: 1px solid var(--at-line);
@@ -2149,136 +2148,127 @@ a.at-mark:focus-visible {
   }
 }
 
-/* —— Kit remapped to Soundings (covers every remaining page) —— */
+/* —— Kit remapped to Apple Shop boxes —— */
 .at-card {
-  background: transparent;
-  border: none;
-  border-top: 1px solid var(--at-line);
-  border-radius: 0;
-  transition: border-color 0.16s;
+  background: var(--at-shelf);
+  border: 1px solid var(--at-line);
+  border-radius: var(--r-panel);
+  padding: var(--s5);
+  box-shadow: var(--at-box-shadow);
+  transition: border-color 0.16s, box-shadow 0.16s;
 }
 .at-card.hoverable:hover {
   border-color: var(--at-line-3);
-  box-shadow: none;
+  box-shadow: var(--at-box-shadow), 0 0 0 1px var(--at-cyan-wash);
 }
 .at-app .glass-card {
-  background: transparent;
-  border: none;
-  border-top: 1px solid var(--at-line);
-  border-radius: 0;
-  box-shadow: none;
+  background: var(--at-shelf);
+  border: 1px solid var(--at-line);
+  border-radius: var(--r-panel);
+  box-shadow: var(--at-box-shadow);
 }
 .at-app .glass {
-  background: transparent;
+  background: var(--at-shelf);
   border: 1px solid var(--at-line);
+  border-radius: var(--r-panel);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 .at-app .btn {
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   font-family: var(--at-face);
   font-weight: 500;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow: none;
 }
 .at-app .btn-primary {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--at-cyan) 92%, white) 0%, var(--at-cyan) 100%);
-  color: #032027;
-  border: 1px solid color-mix(in srgb, var(--at-cyan) 70%, white);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    0 6px 18px color-mix(in srgb, var(--at-cyan) 25%, transparent);
+  background: var(--at-cyan);
+  color: #ffffff;
+  border: 1px solid var(--at-cyan);
+  box-shadow: none;
 }
 .at-app .btn-primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--at-cyan) 88%, white);
+  background: var(--at-cyan-2);
+  border-color: var(--at-cyan-2);
   transform: none;
   filter: none;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    0 0 22px var(--at-cyan-glow);
+  box-shadow: none;
 }
 .at-app .btn-secondary,
 .at-app .btn-ghost {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 100%),
-    rgba(16, 22, 30, 0.4);
-  color: var(--at-ink-2);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
+  background: transparent;
+  color: var(--at-cyan);
+  border: 1px solid var(--at-line-2);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 .at-app .btn-secondary:hover:not(:disabled),
 .at-app .btn-ghost:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
-  color: var(--at-ink);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--at-cyan-wash);
+  color: var(--at-cyan);
+  border-color: var(--at-cyan);
   transform: none;
 }
 .at-app .btn-danger {
   background: transparent;
   color: var(--at-fail);
-  border: 1px solid rgba(255, 90, 110, 0.35);
+  border: 1px solid color-mix(in srgb, var(--at-fail) 35%, transparent);
   box-shadow: none;
 }
 .at-app .btn-danger:hover:not(:disabled) {
-  background: rgba(255, 90, 110, 0.1);
+  background: color-mix(in srgb, var(--at-fail) 10%, transparent);
   transform: none;
   filter: none;
 }
 .at-app .badge {
-  border-radius: 999px;
-  font-family: var(--at-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  border-radius: var(--r-pill);
+  font-family: var(--at-face);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  text-transform: none;
   font-weight: 500;
-  padding: 2px 8px;
+  padding: 3px 10px;
 }
 .at-app .badge-info {
   color: var(--at-cyan);
   background: var(--at-cyan-wash);
-  border-color: rgba(63, 208, 232, 0.28);
+  border-color: color-mix(in srgb, var(--at-cyan) 28%, transparent);
 }
 .at-app .badge-success {
   color: var(--at-ok);
-  background: rgba(111, 239, 198, 0.1);
-  border-color: rgba(111, 239, 198, 0.28);
+  background: color-mix(in srgb, var(--at-ok) 12%, transparent);
+  border-color: color-mix(in srgb, var(--at-ok) 28%, transparent);
 }
 .at-app .badge-warning {
   color: var(--at-warn);
-  background: rgba(255, 194, 75, 0.1);
-  border-color: rgba(255, 194, 75, 0.28);
+  background: color-mix(in srgb, var(--at-warn) 12%, transparent);
+  border-color: color-mix(in srgb, var(--at-warn) 28%, transparent);
 }
 .at-app .badge-danger {
   color: var(--at-fail);
-  background: rgba(255, 90, 110, 0.1);
-  border-color: rgba(255, 90, 110, 0.28);
+  background: color-mix(in srgb, var(--at-fail) 12%, transparent);
+  border-color: color-mix(in srgb, var(--at-fail) 28%, transparent);
 }
 .at-app .badge-neutral {
   color: var(--at-ink-3);
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: var(--at-ridge);
+  border-color: var(--at-line);
 }
 .at-app .badge-at-risk {
   color: var(--at-risk);
   background: var(--at-risk-wash);
-  border-color: rgba(251, 146, 60, 0.28);
+  border-color: color-mix(in srgb, var(--at-risk) 28%, transparent);
 }
 .at-app .field {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%),
-    rgba(8, 12, 18, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
+  background: var(--at-abyss);
+  border: 1px solid var(--at-line-2);
+  border-radius: var(--r-ctl);
   color: var(--at-ink);
   font-family: var(--at-face);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: none;
 }
 .at-app .field:focus {
-  border-color: color-mix(in srgb, var(--at-cyan) 55%, transparent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 0 0 3px color-mix(in srgb, var(--at-cyan) 18%, transparent);
+  border-color: var(--at-cyan);
+  box-shadow: 0 0 0 3px var(--at-cyan-wash);
 }
 .at-app .section-label,
 .at-app .at-caption {
@@ -2386,6 +2376,148 @@ a.at-mark:focus-visible {
   font-size: 11px;
   padding: 4px 10px;
   border: 1px solid var(--at-line);
+  border-radius: var(--r-pill);
   color: var(--at-ink-2);
   background: var(--at-ridge);
 }
+
+/* —— SwipeRail (Apple shop horizontal gallery) —— */
+.at-swipe {
+  position: relative;
+  margin: 0 0 var(--s5);
+}
+.at-swipe-track {
+  display: flex;
+  gap: var(--s4);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  padding: 4px 2px 12px;
+  scrollbar-width: none;
+}
+.at-swipe-track::-webkit-scrollbar {
+  display: none;
+}
+.at-swipe-item {
+  flex: 0 0 min(320px, 78vw);
+  scroll-snap-align: start;
+  min-width: 0;
+}
+.at-swipe-item > .at-card,
+.at-swipe-item > .at-instr,
+.at-swipe-item > .at-panel {
+  height: 100%;
+}
+.at-swipe-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--at-line-2);
+  background: var(--at-shelf);
+  color: var(--at-ink);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: var(--at-box-shadow);
+  transition: background 0.15s, border-color 0.15s;
+}
+.at-swipe-nav:hover {
+  border-color: var(--at-cyan);
+  color: var(--at-cyan);
+}
+.at-swipe-nav:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.at-swipe-nav.prev {
+  left: -6px;
+}
+.at-swipe-nav.next {
+  right: -6px;
+}
+
+/* —— Selection tiles (Apple config boxes) —— */
+.at-select-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--s3);
+}
+.at-select-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 16px 18px;
+  border-radius: var(--r-panel);
+  border: 1px solid var(--at-line-2);
+  background: var(--at-shelf);
+  color: var(--at-ink);
+  font-family: var(--at-face);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-shadow: none;
+}
+.at-select-tile:hover {
+  border-color: var(--at-line-3);
+}
+.at-select-tile.on {
+  border: 2px solid var(--at-cyan);
+  padding: 15px 17px;
+  box-shadow: 0 0 0 1px var(--at-cyan-wash);
+}
+.at-select-tile .at-select-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.at-select-tile .at-select-hint {
+  font-size: 12px;
+  color: var(--at-ink-3);
+}
+.at-empty-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+  padding: var(--s7) var(--s5);
+  background: var(--at-shelf);
+  border: 1px solid var(--at-line);
+  border-radius: var(--r-panel);
+  box-shadow: var(--at-box-shadow);
+  color: var(--at-ink-3);
+}
+.at-empty-box .at-empty-title {
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--at-ink);
+  letter-spacing: -0.02em;
+}
+.at-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: var(--s4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .at-swipe-track {
+    scroll-snap-type: none;
+    scroll-behavior: auto;
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+  .at-swipe-item {
+    flex: 1 1 240px;
+  }
+  .at-swipe-nav {
+    display: none;
+  }
+}
+

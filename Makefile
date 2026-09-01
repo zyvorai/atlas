@@ -49,17 +49,19 @@ ci: lint test audit features ui
 # Run the gateway with the fake Ceph driver (no cluster required). License enforcement defaults
 # to on (see docs/LICENSING.md); local dev has no token yet, so disable it here rather than
 # make every contributor discover and set ATLAS_LICENSE_ENFORCE themselves.
-run:
+# Rebuilds the React UI first (same pattern as h2kvm- `web/Makefile`: frontend then backend embed).
+run: ui
 	ATLAS_CEPH_DRIVER_MODE=fake ATLAS_LICENSE_ENFORCE=false cargo run -p atlas-gateway
 
 # Run the gateway for a DataBridge demo: fake Ceph + the reconciler ticking every 5s so fake CDC
 # lag drains and the migration pipeline runs end-to-end with no cloud/k8s. See docs/DATABRIDGE.md.
-run-databridge:
+run-databridge: ui
 	ATLAS_CEPH_DRIVER_MODE=fake ATLAS_DATABRIDGE_RECONCILE_SECS=5 ATLAS_LICENSE_ENFORCE=false cargo run -p atlas-gateway
 
 # Build the React Storage Center UI into crates/atlas-gateway/ui/dist (embedded by the gateway).
+# Matches h2kvm- `web/Makefile` frontend target: npm ci + vite build.
 ui:
-	cd crates/atlas-gateway/ui && npm ci && npm run build
+	cd crates/atlas-gateway/ui && npm ci --silent && npm run build
 
 # Vite dev server (hot reload) proxying /api to a running gateway (make run in another shell).
 ui-dev:

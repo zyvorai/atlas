@@ -24,7 +24,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:1.2em 0}
 <section class="cover"><div class="kicker">ZyvorAI Labs · Customer Documentation</div>
 <h1>At<span>las</span></h1>
 <div class="sub">Getting Started</div>
-<div class="badge">2026-08-29</div>
+<div class="badge">2026-08-30</div>
 <div class="foot">zyvor.dev · Confidential — for licensed customers</div></section>
 <main><h2>What you need</h2>
 <table>
@@ -71,7 +71,7 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:1.2em 0}
 </tr>
 <tr>
 <td>JWT</td>
-<td>Paste bearer token from the rail <strong>key</strong> icon, or <code>POST /api/atlas/v1/auth/tokens</code></td>
+<td>Paste bearer token from the top-bar <strong>Account</strong> menu, or <code>POST /api/atlas/v1/auth/tokens</code></td>
 </tr>
 <tr>
 <td>Local user</td>
@@ -85,8 +85,10 @@ hr{border:none;border-top:1px solid #e5e7eb;margin:1.2em 0}
 <h2>3. Orient yourself (UX)</h2>
 <ol>
 <li><strong>Command Deck</strong> (<code>/</code>) — capacity sounding, pool tiles, protection gaps.</li>
-<li>Rail: Spotlight (<strong>⌘K</strong>), Jobs chip, Alerts bell, health, theme, auth token.</li>
-<li>Section menus: <strong>STORAGE</strong>, <strong>DATA PROTECTION</strong>, <strong>DATABRIDGE</strong>, <strong>OBSERVABILITY</strong>, <strong>GOVERNANCE</strong>, <strong>INFRASTRUCTURE</strong>.</li>
+<li>Left sidebar: grouped page links, collapsible to an icon-only rail. Top bar: Spotlight
+(<strong>⌘K</strong>), Look &amp; feel (Carbon / Apple Lite), running-jobs indicator, Alerts bell, health, and
+an Account menu (clock, auth token, sign-out).</li>
+<li>Sidebar groups: <strong>STORAGE</strong>, <strong>DATA PROTECTION</strong>, <strong>DATABRIDGE</strong>, <strong>OBSERVABILITY</strong>, <strong>GOVERNANCE</strong>, <strong>INFRASTRUCTURE</strong>.</li>
 <li>Every mutation is a durable job (<code>202</code> + id) — watch <strong>Jobs</strong>.</li>
 </ol>
 <h2>4. First workflows</h2>
@@ -115,6 +117,9 @@ atlasctl volumes
 <hr>
 <p>Storage Center is the Atlas operator console on the gateway (<code>http://&lt;host&gt;:5110/</code>).</p>
 <h2>Shell chrome</h2>
+<p>Navigation lives in a persistent <strong>left sidebar</strong>, grouped by section; collapse it to an
+icon-only rail from the toggle at its base (state remembered per browser). The top bar carries
+everything else:</p>
 <table>
 <thead>
 <tr>
@@ -123,40 +128,36 @@ atlasctl volumes
 </tr>
 </thead>
 <tbody><tr>
-<td>Brand / wordmark</td>
-<td>Jump to <strong>Command Deck</strong></td>
-</tr>
-<tr>
-<td>Section menus</td>
-<td>STORAGE · DATA PROTECTION · DATABRIDGE · OBSERVABILITY · GOVERNANCE · INFRASTRUCTURE</td>
-</tr>
-<tr>
-<td>Menubar chips</td>
-<td>Deck, Volumes, Jobs, Alerts, Ceph, Observatory, Settings</td>
+<td>Sidebar</td>
+<td>STORAGE · DATA PROTECTION · DATABRIDGE · OBSERVABILITY · GOVERNANCE · INFRASTRUCTURE — click the brand mark to jump to <strong>Command Deck</strong></td>
 </tr>
 <tr>
 <td>Spotlight</td>
 <td><strong>⌘K</strong> / <strong>Ctrl+K</strong> — pools, volumes, modules</td>
 </tr>
 <tr>
-<td>Jobs / Alerts</td>
-<td>Live chips → <code>/jobs</code> and <code>/alerts</code></td>
+<td>Look &amp; feel</td>
+<td>Carbon (dark, default) or Apple Lite (light)</td>
+</tr>
+<tr>
+<td>Jobs spinner</td>
+<td>Shows while jobs are running → <code>/jobs</code></td>
+</tr>
+<tr>
+<td>Alerts bell</td>
+<td>Open alert count → <code>/alerts</code></td>
 </tr>
 <tr>
 <td>Pause</td>
 <td>Freeze auto-refresh</td>
 </tr>
 <tr>
-<td>Health</td>
+<td>Health pill</td>
 <td>Ceph/Atlas rollup (HEALTH_OK, DEGRADED, …)</td>
 </tr>
 <tr>
-<td>Key / Sign out</td>
-<td>Paste JWT or clear session</td>
-</tr>
-<tr>
-<td>Look &amp; feel</td>
-<td>Carbon, Nebula, Dark steel, Zinc metal, Aurora</td>
+<td>Account menu</td>
+<td>Clock, paste/clear JWT, sign out</td>
 </tr>
 </tbody></table>
 <h2>Page grammar</h2>

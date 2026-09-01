@@ -14,6 +14,7 @@ import {
 } from "../api/hooks";
 import { Badge } from "../ui/kit";
 import { PageHead } from "../ui/PageHead";
+import { SwipeRail } from "../ui/SwipeRail";
 import { Table } from "../ui/Table";
 import { depth, depthWidth } from "../lib/depth";
 import { fmtBytes, fmtPct, fmtSi, num } from "../lib/format";
@@ -111,7 +112,7 @@ export default function Ceph() {
         }
       />
 
-      <div className="at-instrs" style={{ marginBottom: 24 }}>
+      <SwipeRail label="Ceph instruments" className="at-mod">
         <div className="at-instr">
           <div className="at-caption">Atlas rollup</div>
           <div className="at-val md">
@@ -162,7 +163,7 @@ export default function Ceph() {
             {bps(io?.write_bytes_sec)} write · {fmtSi(io?.read_op_per_sec)}/{fmtSi(io?.write_op_per_sec)} ops
           </div>
         </div>
-      </div>
+      </SwipeRail>
 
       {checks.length > 0 && (
         <div className="at-mod">

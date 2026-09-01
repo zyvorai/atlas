@@ -4,17 +4,20 @@ Storage Center is the Atlas operator console on the gateway (`http://<host>:5110
 
 ## Shell chrome
 
+Navigation lives in a persistent **left sidebar**, grouped by section; collapse it to an
+icon-only rail from the toggle at its base (state remembered per browser). The top bar carries
+everything else:
+
 | Control | What it does |
 |---------|----------------|
-| Brand / wordmark | Jump to **Command Deck** |
-| Section menus | STORAGE · DATA PROTECTION · DATABRIDGE · OBSERVABILITY · GOVERNANCE · INFRASTRUCTURE |
-| Menubar chips | Deck, Volumes, Jobs, Alerts, Ceph, Observatory, Settings |
+| Sidebar | STORAGE · DATA PROTECTION · DATABRIDGE · OBSERVABILITY · GOVERNANCE · INFRASTRUCTURE — click the brand mark to jump to **Command Deck** |
 | Spotlight | **⌘K** / **Ctrl+K** — pools, volumes, modules |
-| Jobs / Alerts | Live chips → `/jobs` and `/alerts` |
+| Look & feel | Carbon (dark shop, default) or Apple Lite (light shop) |
+| Jobs spinner | Shows while jobs are running → `/jobs` |
+| Alerts bell | Open alert count → `/alerts` |
 | Pause | Freeze auto-refresh |
-| Health | Ceph/Atlas rollup (HEALTH_OK, DEGRADED, …) |
-| Key / Sign out | Paste JWT or clear session |
-| Look & feel | Carbon, Nebula, Dark steel, Zinc metal, Aurora |
+| Health pill | Ceph/Atlas rollup (HEALTH_OK, DEGRADED, …) |
+| Account menu | Clock, paste/clear JWT, sign out |
 
 ## Page grammar
 

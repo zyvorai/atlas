@@ -262,11 +262,11 @@ _A Zeus OS-style React console embedded in the gateway, wiring every capability 
 - **Embedded React Console** — A React/Vite/Tailwind SPA served from the gateway binary over HTTPS with a branded login. — _Nothing extra to deploy — the UI ships inside Atlas._
   - **How:** Browse to `http://127.0.0.1:5110/` (local) or `http://:30511/` (Ceph-mode NodePort) — the SPA is served from the same gateway binary.
 - **Full-Capability Coverage** — Inventory, capacity/health, job progress via SSE, alerts, metrics, tenants, and every write action are wired into the UI. — _Drive the whole control plane without touching the CLI._
-  - **How:** Storage Center left-nav — Inventory, Capacity, Jobs, Alerts, Tenants, Backends — each backed by the matching `/api/atlas/v1/*` endpoints.
+  - **How:** Storage Center's collapsible sidebar — Inventory, Capacity, Jobs, Alerts, Tenants, Backends — each backed by the matching `/api/atlas/v1/*` endpoints.
 - **Live Job Progress (SSE)** — Async jobs stream progress to the console over server-sent events as they run. — _Watch provisioning, backups, and migrations advance in real time._
   - **How:** Console Jobs view subscribes to `GET /api/atlas/v1/jobs/{id}/watch` (`text/event-stream`); the gRPC parity is `WatchJob`.
-- **Themeable Design** — A Nebula default theme plus Midnight and Aurora variants in the Zeus OS "Tahoe" design language. — _A console that looks like the rest of the Zyvor suite._
-  - **How:** Switch themes (Nebula / Midnight / Aurora) from the Storage Center appearance settings.
+- **Themeable Design** — Two Apple shop shells: **Carbon** (black canvas + Apple Blue, dark, default) and **Apple Lite** (#F5F5F7 + Apple Blue, light). Elevated boxes, SF system type, selection tiles, and swipe rails. — _A console that looks like a product shop, in whichever lighting your ops team prefers._
+  - **How:** Switch themes (Carbon / Apple Lite) from the top-bar Look & feel icon or **Settings → Appearance**.
 - **atlasctl CLI** — A headless REST client covering health, discovery, volumes, snapshots, backups, buckets, RBD, tenants, tokens, and more. — _Script and automate everything the console can do._
   - **How:** `cargo run -p atlas-cli -- ` (e.g. `atlasctl health`, `atlasctl volumes`, `atlasctl create-volume ...`); global flags `--base-url` (`ATLAS_BASE_URL`) and `--token` (`ATLAS_TOKEN`).
 

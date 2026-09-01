@@ -6,6 +6,7 @@ import { submitJob } from "../../api/client";
 import { usePlan, useSource, useInvalidate } from "../../api/hooks";
 import { Badge, Button } from "../../ui/kit";
 import { PageHead } from "../../ui/PageHead";
+import { SwipeRail } from "../../ui/SwipeRail";
 import { confirmThen } from "../../ui/confirm";
 import { planStateKind, planStateLabel } from "./Plans";
 import { stageBadge, verificationFor } from "../../lib/engineVerification";
@@ -98,60 +99,65 @@ export default function PlanDetail() {
           <span className="at-caption">Pipeline</span>
           <span className="grow" />
           <span className="at-sub" style={{ margin: 0 }}>
-            {Math.max(0, done + 1)} / {STAGES.length} stages
+            {Math.max(0, done + 1)} / {STAGES.length} stages · swipe
           </span>
         </div>
-        {STAGES.map((stage, i) => {
-          const status = i <= done ? "done" : i === current ? "current" : "upcoming";
-          const Icon = status === "done" ? Check : status === "current" ? Loader2 : Circle;
-          const actionable = status === "current" && IMPLEMENTED.has(stage);
-          const tickColor =
-            status === "done" ? "var(--at-cyan)" : status === "current" ? "var(--at-cyan-2)" : "var(--at-ink-4)";
-          return (
-            <div key={stage} className="at-list-row" style={{ alignItems: "center" }}>
-              <span style={{ color: tickColor, display: "flex", flexShrink: 0 }}>
-                <Icon size={18} className={status === "current" ? "animate-spin" : undefined} />
-              </span>
-              <span className="mono" style={{ fontSize: 11, color: "var(--at-ink-4)", width: 28 }}>
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <span
-                style={{
-                  flex: 1,
-                  color: status === "upcoming" ? "var(--at-ink-4)" : "var(--at-ink)",
-                  fontWeight: status === "current" ? 500 : 400,
-                }}
-              >
-                {STAGE_LABEL[stage]}
-                {!IMPLEMENTED.has(stage) && (
-                  <span style={{ marginLeft: 8, fontSize: 12, color: "var(--at-ink-4)" }}>(coming soon)</span>
-                )}
-                {(stage === "cdc" || stage === "cutover") && engVer && (
-                  <Badge
-                    kind={stageBadge(engVer, stage) === "live" ? "success" : "warning"}
-                    className="ml-2"
+        <div style={{ padding: "12px 16px 16px" }}>
+          <SwipeRail label="Migration stages">
+            {STAGES.map((stage, i) => {
+              const status = i <= done ? "done" : i === current ? "current" : "upcoming";
+              const Icon = status === "done" ? Check : status === "current" ? Loader2 : Circle;
+              const actionable = status === "current" && IMPLEMENTED.has(stage);
+              const tickColor =
+                status === "done" ? "var(--at-cyan)" : status === "current" ? "var(--at-cyan-2)" : "var(--at-ink-4)";
+              return (
+                <div key={stage} className="at-instr" style={{ minHeight: 140 }}>
+                  <div className="at-caption" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ color: tickColor, display: "flex" }}>
+                      <Icon size={16} className={status === "current" ? "animate-spin" : undefined} />
+                    </span>
+                    <span className="mono">{String(i + 1).padStart(2, "0")}</span>
+                  </div>
+                  <div
+                    className="at-val md"
+                    style={{
+                      fontSize: 18,
+                      color: status === "upcoming" ? "var(--at-ink-4)" : "var(--at-ink)",
+                    }}
                   >
-                    {stageBadge(engVer, stage) === "live" ? "live verified" : "needs Kafka"}
-                  </Badge>
-                )}
-              </span>
-              {actionable && stage === "cutover" && (
-                <Button size="sm" variant="danger" onClick={() => confirmThen({
-                  title: "Run cutover?",
-                  message: (a?.blockers?.length
-                    ? `Assessment still lists ${a.blockers.length} blocker(s) (see below) — cutover will proceed anyway. `
-                    : "") + "Switches live traffic to the edge database. This is the point of no return short of a rollback within the window.",
-                  confirmLabel: "Run cutover",
-                  danger: true,
-                }, () => act(stage)?.catch(() => {}))}>Run</Button>
-              )}
-              {actionable && stage !== "cutover" && (
-                <Button size="sm" variant="primary" onClick={() => act(stage)?.catch(() => {})}>Run</Button>
-              )}
-              {status === "done" && <Badge kind="success">done</Badge>}
-            </div>
-          );
-        })}
+                    {STAGE_LABEL[stage]}
+                  </div>
+                  <div className="at-delta" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+                    {status === "done" && <Badge kind="success">done</Badge>}
+                    {status === "current" && <Badge kind="info">current</Badge>}
+                    {(stage === "cdc" || stage === "cutover") && engVer && (
+                      <Badge kind={stageBadge(engVer, stage) === "live" ? "success" : "warning"}>
+                        {stageBadge(engVer, stage) === "live" ? "live verified" : "needs Kafka"}
+                      </Badge>
+                    )}
+                  </div>
+                  {actionable && stage === "cutover" && (
+                    <div style={{ marginTop: 12 }}>
+                      <Button size="sm" variant="danger" onClick={() => confirmThen({
+                        title: "Run cutover?",
+                        message: (a?.blockers?.length
+                          ? `Assessment still lists ${a.blockers.length} blocker(s) (see below) — cutover will proceed anyway. `
+                          : "") + "Switches live traffic to the edge database. This is the point of no return short of a rollback within the window.",
+                        confirmLabel: "Run cutover",
+                        danger: true,
+                      }, () => act(stage)?.catch(() => {}))}>Run</Button>
+                    </div>
+                  )}
+                  {actionable && stage !== "cutover" && (
+                    <div style={{ marginTop: 12 }}>
+                      <Button size="sm" variant="primary" onClick={() => act(stage)?.catch(() => {})}>Run</Button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </SwipeRail>
+        </div>
       </div>
 
       {a && typeof a === "object" && "score" in a && (

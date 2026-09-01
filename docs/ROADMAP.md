@@ -108,6 +108,11 @@ per-pool utilization bars on the Command Deck; per-page titles, hexagon favicon,
   `position: absolute` inside `.at-rail-nav`/`.at-controls`, both `overflow: hidden`, so the panel was
   clipped before it painted. Fixed by portaling both to `document.body` with `position: fixed` +
   `getBoundingClientRect()`-computed coordinates, matching the pattern the section flyouts already used.
+- ✅ **Two-shell Apple shop redesign** — **Carbon** (dark shop: black canvas + Apple Blue) and
+  **Apple Lite** (light shop: `#F5F5F7` + Apple Blue). Elevated rounded boxes, SF system type,
+  selection tiles, and swipe rails. Cosmic Orange reserved for the brand mark only. See
+  `docs/ATLAS_UI_CONTRACT.md`. Preceded by an earlier Zeus two-shell port and sidebar chrome work;
+  cascade-layer fixes for shell overrides remain in place.
 
 **HTTPS**: an optional TLS listener (`ATLAS_HTTPS_ADDR` + `ATLAS_TLS_CERT`/`ATLAS_TLS_KEY` PEM), served
 alongside HTTP via `axum-server` + rustls (ring provider — no cmake in the build). The ceph deployment

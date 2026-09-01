@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-// Command Deck — Soundings archetype A (healthy? → inventory → actions).
+// Shop Deck — Apple shop archetype A (hero + swipe status tiles + elevated boxes).
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
@@ -10,6 +10,7 @@ import { sendPrompt } from "../lib/prompts";
 import { fmtBytes, fmtBytesOpt, fmtBytesParts, fmtForecastFill, fmtPct, fmtSi } from "../lib/format";
 import { Echogram } from "../ui/Echogram";
 import { PageHead } from "../ui/PageHead";
+import { SwipeRail } from "../ui/SwipeRail";
 
 function SoundingOrb({ pct }: { pct: number }) {
   const p = Math.max(0, Math.min(100, pct));
@@ -64,8 +65,8 @@ function SoundingOrb({ pct }: { pct: number }) {
         x="110"
         y="106"
         textAnchor="middle"
-        fill="#E4F0F4"
-        style={{ fontFamily: "DM Mono, monospace", fontSize: 37, letterSpacing: "-.03em" }}
+        fill="var(--at-ink)"
+        style={{ fontFamily: "var(--at-mono)", fontSize: 37, letterSpacing: "-.03em" }}
       >
         {p}%
       </text>
@@ -73,8 +74,8 @@ function SoundingOrb({ pct }: { pct: number }) {
         x="110"
         y="126"
         textAnchor="middle"
-        fill="#607A87"
-        style={{ fontFamily: "Space Grotesk, sans-serif", fontSize: 10, letterSpacing: ".19em" }}
+        fill="var(--at-ink-3)"
+        style={{ fontFamily: "var(--at-face)", fontSize: 10, letterSpacing: ".19em" }}
       >
         OCCUPIED
       </text>
@@ -217,7 +218,7 @@ export default function Overview() {
             {hostCount ? ` · ${hostCount} host${hostCount === 1 ? "" : "s"}` : ""}
           </>
         }
-        title="Command Deck"
+        title="Storage Center"
         state={<span dangerouslySetInnerHTML={{ __html: stateLine }} />}
         actions={
           <>
@@ -237,7 +238,7 @@ export default function Overview() {
         }
       />
 
-      {/* The Sounding */}
+      {/* Hero capacity module */}
       <div className="at-mod">
         <div className="at-sounding">
           <div className="at-sound-orb">
@@ -311,9 +312,14 @@ export default function Overview() {
         </div>
       </div>
 
-      {/* Lattice */}
+      {/* Swipe status strip */}
       <div className="at-mod">
-        <div className="at-lattice">
+        <div className="at-modhead">
+          <span className="at-modtitle">At a glance</span>
+          <span className="at-modrule" />
+          <span className="at-modnote">swipe</span>
+        </div>
+        <SwipeRail label="Inventory status">
           <button type="button" className="at-cell" onClick={() => nav("/volumes")}>
             <span className="at-cell-go">
               <ArrowUpRight size={14} />
@@ -402,7 +408,7 @@ export default function Overview() {
               {osdRows.filter((o) => o.in_cluster).length} in cluster
             </div>
           </button>
-        </div>
+        </SwipeRail>
       </div>
 
       {/* Pool basins */}
@@ -414,7 +420,9 @@ export default function Overview() {
         </div>
         <div className="at-panel">
           {basinPools.length === 0 && (
-            <div style={{ padding: 24, color: "var(--at-ink-4)", fontSize: 13 }}>No pools discovered yet.</div>
+            <div className="at-empty-box" style={{ boxShadow: "none", border: "none" }}>
+              <div className="at-empty-title">No pools discovered yet</div>
+            </div>
           )}
           {basinPools.map((p) => {
             const d = depth(p.pct);

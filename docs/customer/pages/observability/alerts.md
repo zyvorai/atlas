@@ -13,11 +13,11 @@ Open alert ledger — silence or resolve before capacity work.
 ## How to get there
 
 - Route: `/alerts`
-- Nav: **OBSERVABILITY → Alerts (menubar Alerts / bell)**
+- Nav: **OBSERVABILITY → Alerts (sidebar Alerts, or the top-bar bell)**
 
 ## Operate from the console (UX)
 
-1. Open `/alerts` (or rail bell → jump).
+1. Open `/alerts` (or top-bar bell → jump).
 2. Filter by state; read critical vs open counts in PageHead.
 3. **Silence** (1h) or **Resolve** with confirm.
 4. **Empty / fail:** Filter too tight → clear filter; webhook paging may still need silence.

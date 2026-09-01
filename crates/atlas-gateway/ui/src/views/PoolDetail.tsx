@@ -209,7 +209,7 @@ export default function PoolDetail() {
               strokeWidth="1.6"
               opacity=".95"
             />
-            <text x="16" y="18" fill="#607A87" style={{ fontFamily: "DM Mono, monospace", fontSize: 11 }}>
+            <text x="16" y="18" fill="var(--at-ink-3)" style={{ fontFamily: "var(--at-mono)", fontSize: 11 }}>
               waterline · {fmtBytes(used)} / {fmtBytes(max)}
             </text>
           </svg>

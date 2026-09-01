@@ -1,9 +1,26 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-// Atlas sign-in — open webpage composition (no card / no split panel box).
+// Atlas sign-in — same 2-chapter Store shell as h2kvm-, Atlas copy + auth.
 import { useEffect, useState, type FormEvent } from "react";
-import { ArrowRight, Hexagon, Palette } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronLeft,
+  Eye,
+  EyeOff,
+  Loader2,
+  Lock,
+  Palette,
+  User,
+} from "lucide-react";
 import { useUi, type Theme } from "../store/ui";
 import { API_BASE, clearToasts } from "../api/client";
+import {
+  LoginDivider,
+  LoginError,
+  LoginField,
+  LoginRemember,
+  LoginSubmit,
+  PremiumLoginShell,
+} from "../ui/PremiumLoginShell";
 
 const PRODUCT = "Atlas";
 const REMEMBER_USER_KEY = "atlas.login-remember-user";
@@ -38,19 +55,23 @@ function LoginThemeSwitcher() {
   }, [open]);
 
   return (
-    <div id="atlas-login-theme" className="atlas-signin-theme">
+    <div id="atlas-login-theme" className="fixed top-4 right-4 z-50">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         title="Change theme"
         aria-label="Change theme"
         aria-expanded={open}
-        className="atlas-signin-theme-btn"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 bg-white/90 text-neutral-700 shadow-sm backdrop-blur"
       >
         <Palette className="w-4 h-4" aria-hidden />
       </button>
       {open && (
-        <div className="atlas-signin-theme-menu" role="group" aria-label="Visual theme">
+        <div
+          className="absolute right-0 mt-2 min-w-[9rem] overflow-hidden rounded-xl border border-black/10 bg-white shadow-lg"
+          role="group"
+          aria-label="Visual theme"
+        >
           {THEME_OPTIONS.map(({ id, label }) => (
             <button
               key={id}
@@ -59,7 +80,9 @@ function LoginThemeSwitcher() {
                 setTheme(id);
                 setOpen(false);
               }}
-              className={theme === id ? "is-active" : undefined}
+              className={`block w-full px-3 py-2 text-left text-sm ${
+                theme === id ? "bg-sky-50 text-sky-800 font-medium" : "text-neutral-700 hover:bg-neutral-50"
+              }`}
             >
               {label}
             </button>
@@ -70,14 +93,18 @@ function LoginThemeSwitcher() {
   );
 }
 
+type LoginStep = "identify" | "password";
+
 export function Login() {
   const enter = useUi((s) => s.enter);
   const setToken = useUi((s) => s.setToken);
   const sessionHint = useUi((s) => s.sessionHint);
   const clearSessionHint = useUi((s) => s.clearSessionHint);
+  const [step, setStep] = useState<LoginStep>("identify");
   const [username, setUsername] = useState(DEFAULT_USER);
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ver, setVer] = useState("");
@@ -88,7 +115,6 @@ export function Login() {
   useEffect(() => {
     document.title = `Sign in · ${PRODUCT}`;
     clearToasts();
-    // Drop legacy token-remember keys from the old bearer-only gate.
     localStorage.removeItem("atlas.login-remember-token");
     const remembered = localStorage.getItem(REMEMBER_FLAG_KEY) === "true";
     const savedUser = localStorage.getItem(REMEMBER_USER_KEY);
@@ -112,6 +138,25 @@ export function Login() {
     };
   }, []);
 
+  const scrollToForm = () => {
+    document.getElementById("login-sign-in")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const handleContinue = (e: FormEvent) => {
+    e.preventDefault();
+    if (!username.trim()) return;
+    setError(null);
+    clearSessionHint();
+    setStep("password");
+  };
+
+  const handleBack = () => {
+    setStep("identify");
+    setPassword("");
+    setShowPassword(false);
+    setError(null);
+  };
+
   const go = async (e?: FormEvent) => {
     e?.preventDefault();
     if (busy) return;
@@ -131,7 +176,10 @@ export function Login() {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(body?.error?.message || (res.status === 401 ? "Invalid username or password." : `Sign-in failed (${res.status}).`));
+        setError(
+          body?.error?.message ||
+            (res.status === 401 ? "Invalid username or password." : `Sign-in failed (${res.status}).`),
+        );
         return;
       }
       const jwt = typeof body?.token === "string" ? body.token : "";
@@ -155,143 +203,192 @@ export function Login() {
     }
   };
 
+  const displayError = error || sessionHint;
+
+  const storeCta = (
+    <>
+      <a
+        href="#login-sign-in"
+        className="login-cta-primary"
+        onClick={(e) => {
+          e.preventDefault();
+          scrollToForm();
+        }}
+      >
+        Sign in
+      </a>
+      <a
+        href="#login-sign-in"
+        className="login-cta-secondary"
+        onClick={(e) => {
+          e.preventDefault();
+          scrollToForm();
+        }}
+      >
+        Continue
+      </a>
+    </>
+  );
+
+  const panelSubtitle =
+    step === "password" ? (
+      <>
+        Enter the password for <span className="login-apple-host">{username.trim()}</span>
+      </>
+    ) : (
+      "Sign in"
+    );
+
   return (
-    <div className="atlas-signin">
-      <div className="atlas-signin-atmosphere" aria-hidden>
-        <div className="atlas-signin-wash" />
-        <div className="atlas-signin-mesh" />
-        <div className="atlas-signin-beam" />
-      </div>
+    <PremiumLoginShell
+      themeSwitcher={<LoginThemeSwitcher />}
+      logo={
+        <img
+          src="/zyvor-logo.png"
+          alt="Zyvor"
+          className="login-zyvor-logo"
+          width={220}
+          height={69}
+          decoding="async"
+        />
+      }
+      productName={PRODUCT}
+      productWordmark={PRODUCT}
+      heroTitle={
+        <>
+          Survey the cluster
+          <br />
+          before you steer it
+        </>
+      }
+      heroSubheadline="Capacity, volumes, Ceph, and DataBridge — Atlas Storage Center for operators who chart the fleet, not a wall of widgets."
+      heroCta={storeCta}
+      chapterNote={`Zyvor · Atlas Storage Center · ${hostLabel || "gateway"}${ver ? ` · v${ver}` : ""} · ${health === "…" ? "checking" : health}`}
+      panelSubtitle={panelSubtitle}
+      panelHint={
+        step === "identify" ? (
+          <>
+            Sign in as <span className="font-mono">admin</span> with the gateway password for this
+            deployment.
+          </>
+        ) : null
+      }
+      showSignInChapter
+    >
+      {step === "identify" ? (
+        <form
+          key="identify"
+          onSubmit={handleContinue}
+          autoComplete="on"
+          aria-label="Account"
+          className="login-apple-step text-left"
+        >
+          {displayError ? <LoginError message={displayError} /> : null}
 
-      <LoginThemeSwitcher />
-
-      <header className="atlas-signin-brand">
-        <Hexagon className="atlas-signin-mark" aria-hidden />
-        <div>
-          <p className="atlas-signin-product">{PRODUCT}</p>
-          <p className="atlas-signin-kicker">Storage Center</p>
-        </div>
-      </header>
-
-      <main className="atlas-signin-main">
-        <section className="atlas-signin-copy">
-          <h1 className="atlas-signin-title">
-            Survey the cluster
-            <span className="atlas-signin-title-muted"> before you steer it</span>
-          </h1>
-          <p className="atlas-signin-lede">
-            Capacity, volumes, Ceph, and DataBridge — Atlas Storage Center for operators who chart
-            the fleet, not a wall of widgets.
-          </p>
-        </section>
-
-        <section className="atlas-signin-gate" aria-label="Sign in">
-          <form onSubmit={go} autoComplete="on" className="atlas-signin-form">
-            {(error || sessionHint) && (
-              <p
-                className={error ? "atlas-signin-error" : "atlas-signin-hint"}
-                role={error ? "alert" : "status"}
-              >
-                {error || sessionHint}
-              </p>
-            )}
-
-            <label className="atlas-signin-label" htmlFor="atlas-username">
-              Username
-            </label>
-            <input
-              id="atlas-username"
-              name="username"
-              type="text"
-              value={username}
-              onChange={(e) => {
-                setUsername(e.target.value);
-                if (error) setError(null);
-              }}
-              autoComplete="username"
-              autoFocus
-              placeholder="admin"
-              className="atlas-signin-input"
-              disabled={busy}
-            />
-
-            <label className="atlas-signin-label atlas-signin-label--next" htmlFor="atlas-password">
-              Password
-            </label>
-            <input
-              id="atlas-password"
-              name="password"
-              type="password"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (error) setError(null);
-              }}
-              autoComplete="current-password"
-              placeholder="••••••••"
-              className="atlas-signin-input"
-              disabled={busy}
-            />
-
-            <label className="atlas-signin-remember">
+          <div className="login-apple-fields">
+            <LoginField label="Username" id="atlas-username">
+              <User className="login-field-icon" />
               <input
-                type="checkbox"
-                checked={remember}
-                onChange={(e) => setRemember(e.target.checked)}
+                id="atlas-username"
+                name="username"
+                type="text"
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  if (error) setError(null);
+                }}
+                className="login-input"
+                placeholder="admin"
+                autoComplete="username"
+                autoFocus
+                required
                 disabled={busy}
               />
-              <span>Remember on this device</span>
-            </label>
+            </LoginField>
+          </div>
 
-            <button type="submit" className="atlas-signin-submit" disabled={busy}>
-              <span>{busy ? "Signing in…" : `Sign in to ${PRODUCT}`}</span>
-              {!busy ? <ArrowRight className="w-4 h-4" aria-hidden /> : null}
-            </button>
+          <LoginSubmit loading={false} disabled={!username.trim() || busy}>
+            <span>Continue</span>
+            <ArrowRight className="h-4 w-4" />
+          </LoginSubmit>
 
-            {ssoEnabled && (
+          {ssoEnabled ? (
+            <>
+              <LoginDivider label="or" />
+              <a href={`${API_BASE}/auth/oidc/login`} className="login-btn-secondary">
+                Sign in with SSO
+              </a>
+            </>
+          ) : null}
+        </form>
+      ) : (
+        <form
+          key="password"
+          onSubmit={go}
+          autoComplete="on"
+          aria-label="Password"
+          className="login-apple-step text-left"
+        >
+          <button type="button" onClick={handleBack} className="login-apple-identity" aria-label="Change account">
+            <ChevronLeft aria-hidden className="h-4 w-4 shrink-0" />
+            <span className="truncate">{username.trim()}</span>
+          </button>
+          <input type="text" name="username" value={username} autoComplete="username" readOnly hidden />
+
+          {displayError ? <LoginError message={displayError} /> : null}
+
+          <div className="login-apple-fields">
+            <LoginField label="Password" id="atlas-password">
+              <Lock className="login-field-icon" />
+              <input
+                id="atlas-password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (error) setError(null);
+                }}
+                className="login-input pr-11"
+                placeholder="Enter your password"
+                autoComplete="current-password"
+                autoFocus
+                required
+                disabled={busy}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700 transition-colors"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </LoginField>
+          </div>
+
+          <LoginRemember
+            checked={remember}
+            onChange={setRemember}
+            label="Remember username on this device"
+            hint="Only your username is stored locally — never your password."
+          />
+
+          <LoginSubmit loading={busy} disabled={!password}>
+            {busy ? (
               <>
-                <div className="atlas-signin-divider" role="separator">
-                  <span>or</span>
-                </div>
-                <button
-                  type="button"
-                  className="atlas-signin-sso"
-                  disabled={busy}
-                  onClick={() => {
-                    // Full-page navigation, not fetch — the identity provider needs a real
-                    // browser round-trip (it may set its own cookies / can't run in an iframe).
-                    window.location.href = `${API_BASE}/auth/oidc/login`;
-                  }}
-                >
-                  Sign in with SSO
-                </button>
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                <span>Signing in…</span>
+              </>
+            ) : (
+              <>
+                <span>Sign In</span>
+                <ArrowRight className="h-4 w-4" />
               </>
             )}
-
-            <p className="atlas-signin-meta">
-              <span
-                className={`atlas-signin-dot atlas-signin-dot--${
-                  health === "ok" ? "ok" : health === "down" ? "down" : "wait"
-                }`}
-              />
-              {hostLabel || "gateway"}
-              {ver ? ` · v${ver}` : ""}
-              {" · "}
-              {health === "…" ? "checking" : health}
-            </p>
-          </form>
-        </section>
-      </main>
-
-      <footer className="atlas-signin-footer" role="contentinfo">
-        <a href="https://zyvor.dev" target="_blank" rel="noopener noreferrer">
-          zyvor.dev
-        </a>
-        <span aria-hidden>·</span>
-        <span>Atlas</span>
-        <span aria-hidden>·</span>
-        <span>© 2026</span>
-      </footer>
-    </div>
+          </LoginSubmit>
+        </form>
+      )}
+    </PremiumLoginShell>
   );
 }

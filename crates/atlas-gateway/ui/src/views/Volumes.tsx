@@ -292,9 +292,9 @@ export default function Volumes() {
         {!sorted ? (
           <div style={{ padding: 32, color: "var(--at-ink-4)", fontSize: 13 }}>Loading volumes…</div>
         ) : !sorted.length ? (
-          <div style={{ padding: 36, textAlign: "center" }}>
-            <div style={{ color: "var(--at-ink-3)", marginBottom: 12, fontSize: 13.5 }}>
-              {state || tenant || backend || kind ? "No volumes match your filters." : "No volumes yet."}
+          <div className="at-empty-box" style={{ margin: 16, boxShadow: "none" }}>
+            <div className="at-empty-title">
+              {state || tenant || backend || kind ? "No volumes match your filters" : "No volumes yet"}
             </div>
             {!(state || tenant || backend || kind) && (
               <button type="button" className="at-btn primary" onClick={() => setCreateOpen(true)}>

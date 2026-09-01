@@ -13,7 +13,7 @@ Day-2 Ceph signals — health rollup, df pools, OSD tree.
 ## How to get there
 
 - Route: `/ceph`
-- Nav: **INFRASTRUCTURE → Ceph (menubar Ceph)**
+- Nav: **INFRASTRUCTURE → Ceph (sidebar Ceph)**
 
 ## Operate from the console (UX)
 

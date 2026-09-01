@@ -13,13 +13,13 @@ Console settings — theme and session preferences for Storage Center.
 ## How to get there
 
 - Route: `/settings`
-- Nav: **GOVERNANCE → Settings (menubar Settings)**
+- Nav: **GOVERNANCE → Settings (sidebar Settings)**
 
 ## Operate from the console (UX)
 
 1. Open `/settings`.
-2. Adjust Look & feel from the rail theme menu (Carbon, Nebula, …) if not on this page.
-3. Confirm token/session via rail key icon.
+2. Adjust Look & feel from the top-bar theme menu (Carbon, Apple Lite) if not on this page.
+3. Confirm token/session via the Account menu (top-bar key icon).
 4. **Empty / fail:** Changes not sticking → local storage blocked; re-auth.
 5. **Success:** Theme/session match operator preference.
 

@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-// Observatory — Soundings archetype D: one wide echogram + breakdowns (lenses secondary).
+// Observatory — shop archetype D: charts inside elevated boxes (+ optional swipe lenses).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -459,7 +459,7 @@ export default function Observatory() {
           <span className="at-modtitle">Lenses</span>
           <span className="at-modnote">optional canvases — one at a time</span>
         </div>
-        <div className="at-chips">
+        <div className="at-chip-row">
           {LENSES.map((t) => (
             <button
               key={t.id}

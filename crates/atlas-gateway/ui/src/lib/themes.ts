@@ -1,13 +1,13 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-/** Shell look & feel options — ported 1:1 from Zeus OS's two shipped shells. */
+/** Shell look & feel — Apple shop dark / light. */
 import type { Theme } from "../store/ui";
 
 export const THEME_OPTIONS: { id: Theme; title: string; hint: string }[] = [
-  { id: "carbon", title: "Carbon", hint: "Graphite + Cosmic Orange — Zeus OS default dark shell" },
+  { id: "carbon", title: "Carbon", hint: "Dark shop — black canvas + Apple Blue" },
   {
     id: "apple-lite",
     title: "Apple Lite",
-    hint: "iPhone 17 Magichromatic — Mist Blue · Sage · Lavender",
+    hint: "Light shop — #F5F5F7 canvas + Apple Blue",
   },
 ];
 
