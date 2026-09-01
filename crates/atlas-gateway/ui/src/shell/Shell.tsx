@@ -19,10 +19,12 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { navLabelForPath } from "../nav/routes";
-import { modulesForRole } from "../nav/modules";
+import { navLabelForPath, activeModuleFromPath, modulesForRole, shortcutTargets } from "../nav/routes";
 import { useNavGroups } from "../nav/useNavGroups";
-import { NavFilter, NavSectionLinks } from "./NavPanel";
+import { NavFilter, NavSectionLinks, NavRecents, NavSuiteRail } from "./NavPanel";
+import { SUITE_LINKS } from "../nav/suiteLinks";
+import { filterNavRecents, getNavRecents, recordNavRecent } from "../lib/navRecents";
+import { roleLabel, ROLE_OPERATOR } from "../lib/auth";
 import { http, isUnauthorized } from "../api/client";
 import { useAlerts, useCephHealthRollup, useClusters, useJobs } from "../api/hooks";
 import { useUi } from "../store/ui";
@@ -124,6 +126,7 @@ function MenuBar({
   const [themeOpen, setThemeOpen] = useState(false);
   const [acctOpen, setAcctOpen] = useState(false);
   const token = useUi((s) => s.token);
+  const role = useUi((s) => s.role);
   const setToken = useUi((s) => s.setToken);
   const theme = useUi((s) => s.theme);
   const setTheme = useUi((s) => s.setTheme);
@@ -313,6 +316,10 @@ function MenuBar({
                 <div className="at-theme-menu" role="menu" aria-label="Account">
                   <div className="at-theme-menu-label">Account</div>
                   <div className="at-theme-item" style={{ cursor: "default" }}>
+                    <span>Role</span>
+                    <span className="hint">{roleLabel(role)}</span>
+                  </div>
+                  <div className="at-theme-item" style={{ cursor: "default" }}>
                     <span className="hint">Local time</span>
                     <Clock />
                   </div>
@@ -389,11 +396,20 @@ function MenuBar({
 function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const roleLevel = useUi((s) => s.roleLevel);
   const { grouped, filter, setFilter, isSectionClosed, toggleSection } = useNavGroups(roleLevel);
+  const recents = useMemo(() => {
+    const valid = new Set(modulesForRole(roleLevel).map((m) => m.id));
+    return filterNavRecents(getNavRecents(), valid);
+  }, [roleLevel]);
 
   return (
     <aside className={cx("at-sidebar", collapsed && "collapsed")} aria-label="Primary">
       {!collapsed && <NavFilter value={filter} onChange={setFilter} />}
       <nav className="at-sidebar-body">
+        <NavRecents
+          recents={recents}
+          compact={collapsed}
+          linkClass={(active) => cx("at-sidebar-link", active && "on")}
+        />
         <NavSectionLinks
           groups={grouped}
           isSectionClosed={isSectionClosed}
@@ -403,6 +419,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
           linkClass={(active) => cx("at-sidebar-link", active && "on")}
           iconSize={16}
         />
+        <NavSuiteRail links={SUITE_LINKS} compact={collapsed} />
       </nav>
       <button
         type="button"
@@ -453,6 +470,11 @@ function MobileNavDrawer({ open, onClose }: { open: boolean; onClose: () => void
         </div>
         <div className="at-drawer-body">
           <NavFilter value={filter} onChange={setFilter} className="at-drawer-filter" />
+          <NavRecents
+            recents={filterNavRecents(getNavRecents(), new Set(modulesForRole(roleLevel).map((m) => m.id)))}
+            linkClass={(active) => cx("at-drawer-item", active && "on")}
+            onNavigate={onClose}
+          />
           <NavSectionLinks
             groups={grouped}
             isSectionClosed={isSectionClosed}
@@ -460,6 +482,7 @@ function MobileNavDrawer({ open, onClose }: { open: boolean; onClose: () => void
             linkClass={(active) => cx("at-drawer-item", active && "on")}
             onNavigate={onClose}
           />
+          <NavSuiteRail links={SUITE_LINKS} />
         </div>
       </aside>
     </div>,
@@ -491,6 +514,10 @@ function Spotlight({ open, onClose }: { open: boolean; onClose: () => void }) {
   }, [q]);
   useEffect(() => {
     if (!open) return;
+    if (roleLevel < ROLE_OPERATOR) {
+      setResources([]);
+      return;
+    }
     Promise.allSettled([
       http.get("/volumes"),
       http.get("/buckets"),
@@ -521,7 +548,7 @@ function Spotlight({ open, onClose }: { open: boolean; onClose: () => void }) {
         );
       setResources(out);
     });
-  }, [open]);
+  }, [open, roleLevel]);
 
   const modItems: SpotItem[] = modulesForRole(roleLevel).map((m) => ({
     label: m.label,
@@ -613,7 +640,14 @@ let welcomed = false;
 
 const SHORTCUTS: [string, string][] = [
   ["H", "Go to Command Deck"],
+  ["V", "Volumes (operator+)"],
+  ["O", "Observatory"],
+  ["A", "Alerts (operator+)"],
+  ["J", "Jobs (operator+)"],
+  ["C", "Ceph (operator+)"],
+  ["G", "Settings (admin)"],
   ["⌘K / Ctrl-K", "Open command palette"],
+  ["⌘⌥S / Ctrl-Alt-S", "Collapse / expand sidebar"],
   ["↑ ↓ / Enter", "Navigate & open in palette"],
   ["?", "Show this help"],
   ["Esc", "Close dialogs / menus"],
@@ -624,28 +658,44 @@ export function Shell() {
   const setSpot = useUi((s) => s.setSpotlight);
   const sidebarCollapsed = useUi((s) => s.sidebarCollapsed);
   const toggleSidebar = useUi((s) => s.toggleSidebar);
+  const roleLevel = useUi((s) => s.roleLevel);
   const [helpOpen, setHelpOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const loc = useLocation();
   const nav = useNavigate();
+
   useEffect(() => {
+    const mod = activeModuleFromPath(loc.pathname);
+    if (mod && !mod.hiddenFromNav) recordNavRecent(mod.id, mod.label);
+  }, [loc.pathname]);
+
+  useEffect(() => {
+    const shortcuts = shortcutTargets(roleLevel);
     const h = (e: KeyboardEvent) => {
       const typing = ["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName)
         || (e.target as HTMLElement)?.isContentEditable;
+      if ((e.metaKey || e.ctrlKey) && e.altKey && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        toggleSidebar();
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setSpot(true);
       } else if (e.key === "?" && !typing) {
         e.preventDefault();
         setHelpOpen(true);
-      } else if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "h") {
-        e.preventDefault();
-        nav("/");
+      } else if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const path = shortcuts.get(e.key.toLowerCase());
+        if (path) {
+          e.preventDefault();
+          nav(path);
+        }
       }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [setSpot, nav]);
+  }, [setSpot, nav, toggleSidebar, roleLevel]);
   useEffect(() => {
     // Only set the title for routes with a known static label. Dynamic detail routes
     // (/pools/:id, PlanDetail, …) aren't in MODULES — leave the title alone for those so the

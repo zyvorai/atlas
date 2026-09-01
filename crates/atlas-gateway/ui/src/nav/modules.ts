@@ -13,4 +13,6 @@ export {
   navLabelForPath,
   sectionForPath,
   APP_ROUTES,
+  shortcutTargets,
+  moduleById,
 } from "./routes";

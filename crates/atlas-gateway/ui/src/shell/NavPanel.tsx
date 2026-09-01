@@ -2,6 +2,9 @@
 import { NavLink } from "react-router-dom";
 import { ChevronDown, Search } from "lucide-react";
 import type { NavGroup } from "../nav/useNavGroups";
+import type { NavRecent } from "../lib/navRecents";
+import type { SuiteLink } from "../nav/suiteLinks";
+import { moduleById } from "../nav/routes";
 import { cx } from "../lib/format";
 
 export function NavFilter({
@@ -91,5 +94,65 @@ export function NavSectionLinks({
         );
       })}
     </>
+  );
+}
+
+export function NavRecents({
+  recents,
+  compact,
+  linkClass,
+  onNavigate,
+}: {
+  recents: NavRecent[];
+  compact?: boolean;
+  linkClass: (active: boolean) => string;
+  onNavigate?: () => void;
+}) {
+  if (compact || recents.length === 0) return null;
+  return (
+    <div className="at-sidebar-group at-sidebar-recents">
+      <div className="at-sidebar-label">Recent</div>
+      {recents.map((r) => {
+        const mod = moduleById(r.id);
+        if (!mod) return null;
+        return (
+          <NavLink
+            key={r.id}
+            to={mod.path}
+            end={mod.path === "/"}
+            title={r.label}
+            aria-label={r.label}
+            className={({ isActive }) => linkClass(isActive)}
+            onClick={onNavigate}
+          >
+            <mod.icon size={16} strokeWidth={2} aria-hidden />
+            <span>{r.label}</span>
+          </NavLink>
+        );
+      })}
+      <div className="at-sidebar-divider" aria-hidden />
+    </div>
+  );
+}
+
+export function NavSuiteRail({ links, compact }: { links: SuiteLink[]; compact?: boolean }) {
+  if (compact) return null;
+  return (
+    <div className="at-sidebar-group at-sidebar-suite">
+      <div className="at-sidebar-label">Suite</div>
+      {links.map((link) => (
+        <a
+          key={link.id}
+          href={link.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="at-sidebar-link at-sidebar-suite-link"
+          title={link.label}
+        >
+          <link.icon size={16} strokeWidth={2} aria-hidden />
+          <span>{link.label}</span>
+        </a>
+      ))}
+    </div>
   );
 }

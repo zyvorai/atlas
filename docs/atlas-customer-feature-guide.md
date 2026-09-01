@@ -262,7 +262,7 @@ _A Zeus OS-style React console embedded in the gateway, wiring every capability 
 - **Embedded React Console** — A React/Vite/Tailwind SPA served from the gateway binary over HTTPS with a branded login. — _Nothing extra to deploy — the UI ships inside Atlas._
   - **How:** Browse to `http://127.0.0.1:5110/` (local) or `http://:30511/` (Ceph-mode NodePort) — the SPA is served from the same gateway binary.
 - **Full-Capability Coverage** — Inventory, capacity/health, job progress via SSE, alerts, metrics, tenants, and every write action are wired into the UI. — _Drive the whole control plane without touching the CLI._
-  - **How:** Storage Center's collapsible sidebar — Inventory, Capacity, Jobs, Alerts, Tenants, Backends — each backed by the matching `/api/atlas/v1/*` endpoints.
+  - **How:** Storage Center's persistent sidebar — six section groups (Storage, Data Protection, DataBridge, Observability, Governance, Infrastructure) with collapsible headers, **Filter navigation…**, role-aware entries, and **Recent** / **Suite** links — each page backed by the matching `/api/atlas/v1/*` endpoints.
 - **Live Job Progress (SSE)** — Async jobs stream progress to the console over server-sent events as they run. — _Watch provisioning, backups, and migrations advance in real time._
   - **How:** Console Jobs view subscribes to `GET /api/atlas/v1/jobs/{id}/watch` (`text/event-stream`); the gRPC parity is `WatchJob`.
 - **Themeable Design** — Two Apple shop shells: **Carbon** (black canvas + Apple Blue, dark, default) and **Apple Lite** (#F5F5F7 + Apple Blue, light). Elevated boxes, SF system type, selection tiles, and swipe rails. — _A console that looks like a product shop, in whichever lighting your ops team prefers._

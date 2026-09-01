@@ -116,7 +116,7 @@ export const MODULES: NavModule[] = [
     shortcut: "H",
     element: Overview,
   },
-  { id: "volumes", codename: "atlas", label: "Volumes", path: "/volumes", icon: HardDrive, section: "STORAGE", minRole: "operator", pinned: true, element: Volumes },
+  { id: "volumes", codename: "atlas", label: "Volumes", path: "/volumes", icon: HardDrive, section: "STORAGE", minRole: "operator", pinned: true, shortcut: "V", element: Volumes },
   { id: "rbd", codename: "hephaestus", label: "RBD Images", path: "/rbd", icon: Layers, section: "STORAGE", minRole: "operator", element: Rbd },
   { id: "snapshots", codename: "mnemosyne", label: "Snapshots", path: "/snapshots", icon: Camera, section: "STORAGE", minRole: "operator", element: Snapshots },
   { id: "schedules", codename: "chronos", label: "Schedules", path: "/schedules", icon: Timer, section: "STORAGE", minRole: "operator", element: Schedules },
@@ -131,28 +131,28 @@ export const MODULES: NavModule[] = [
   { id: "replication", codename: "echo", label: "Replication", path: "/databridge/replication", icon: Radio, section: "DATABRIDGE", minRole: "operator", element: Replication },
   { id: "validation", codename: "astraea", label: "Validation", path: "/databridge/validation", icon: BadgeCheck, section: "DATABRIDGE", minRole: "operator", element: Validation },
 
-  { id: "observatory", codename: "orrery", label: "Observatory", path: "/observatory", icon: Orbit, section: "OBSERVABILITY", pinned: true, element: Observatory },
+  { id: "observatory", codename: "orrery", label: "Observatory", path: "/observatory", icon: Orbit, section: "OBSERVABILITY", pinned: true, shortcut: "O", element: Observatory },
   { id: "activity", codename: "kairos", label: "Activity", path: "/activity", icon: Activity, section: "OBSERVABILITY", element: ActivityView },
-  { id: "alerts", codename: "hermes", label: "Alerts", path: "/alerts", icon: Bell, section: "OBSERVABILITY", minRole: "operator", pinned: true, element: Alerts },
+  { id: "alerts", codename: "hermes", label: "Alerts", path: "/alerts", icon: Bell, section: "OBSERVABILITY", minRole: "operator", pinned: true, shortcut: "A", element: Alerts },
   { id: "metrics", codename: "helios", label: "Metrics", path: "/metrics-dashboard", icon: Gauge, section: "OBSERVABILITY", element: Metrics },
-  { id: "jobs", codename: "nike", label: "Jobs", path: "/jobs", icon: Clock, section: "OBSERVABILITY", minRole: "operator", pinned: true, element: Jobs },
+  { id: "jobs", codename: "nike", label: "Jobs", path: "/jobs", icon: Clock, section: "OBSERVABILITY", minRole: "operator", pinned: true, shortcut: "J", element: Jobs },
   { id: "audit", codename: "themis", label: "Audit", path: "/audit", icon: FileClock, section: "OBSERVABILITY", element: Audit },
 
   { id: "tenants", codename: "athena", label: "Tenants", path: "/tenants", icon: Users, section: "GOVERNANCE", minRole: "admin", element: Tenants },
   { id: "access", codename: "aegis", label: "Access", path: "/access", icon: KeyRound, section: "GOVERNANCE", minRole: "admin", element: Access },
   { id: "policies", codename: "dike", label: "Policies", path: "/policies", icon: ShieldCheck, section: "GOVERNANCE", minRole: "admin", element: Policies },
-  { id: "settings", codename: "hestia-ui", label: "Settings", path: "/settings", icon: Settings, section: "GOVERNANCE", minRole: "admin", pinned: true, element: SettingsView },
+  { id: "settings", codename: "hestia-ui", label: "Settings", path: "/settings", icon: Settings, section: "GOVERNANCE", minRole: "admin", pinned: true, shortcut: "G", element: SettingsView },
   { id: "api-docs", codename: "hermes-docs", label: "API Docs", path: "/api-docs", icon: BookOpen, section: "GOVERNANCE", element: ApiDocs },
 
   { id: "backends", codename: "gaia", label: "Backends", path: "/backends", icon: Server, section: "INFRASTRUCTURE", minRole: "admin", element: Backends },
   { id: "kubernetes", codename: "talos", label: "Kubernetes", path: "/kubernetes", icon: Boxes, section: "INFRASTRUCTURE", minRole: "operator", element: Kubernetes },
   { id: "cluster", codename: "oracle", label: "Cluster", path: "/cluster", icon: Database, section: "INFRASTRUCTURE", minRole: "operator", element: Cluster },
-  { id: "ceph", codename: "kraken", label: "Ceph", path: "/ceph", icon: Aperture, section: "INFRASTRUCTURE", minRole: "operator", pinned: true, element: Ceph },
+  { id: "ceph", codename: "kraken", label: "Ceph", path: "/ceph", icon: Aperture, section: "INFRASTRUCTURE", minRole: "operator", pinned: true, shortcut: "C", element: Ceph },
   { id: "maintenance", codename: "hestia", label: "Maintenance", path: "/maintenance", icon: Wrench, section: "INFRASTRUCTURE", minRole: "operator", element: Maintenance },
   { id: "dr", codename: "styx", label: "Disaster Recovery", path: "/dr", icon: GitBranch, section: "INFRASTRUCTURE", minRole: "admin", element: DR },
 
-  { id: "pool-detail", codename: "pool", label: "Pool", path: "/pools/:id", icon: Database, section: "STORAGE", hiddenFromNav: true, element: PoolDetail },
-  { id: "plan-detail", codename: "plan", label: "Plan", path: "/databridge/plans/:id", icon: RouteIcon, section: "DATABRIDGE", hiddenFromNav: true, element: PlanDetail },
+  { id: "pool-detail", codename: "pool", label: "Pool", path: "/pools/:id", icon: Database, section: "STORAGE", minRole: "operator", hiddenFromNav: true, element: PoolDetail },
+  { id: "plan-detail", codename: "plan", label: "Plan", path: "/databridge/plans/:id", icon: RouteIcon, section: "DATABRIDGE", minRole: "operator", hiddenFromNav: true, element: PlanDetail },
 ];
 
 export const SPARK = Sparkles;
@@ -172,14 +172,30 @@ export function pinnedModules(actorLevel: number): NavModule[] {
   return modulesForRole(actorLevel).filter((m) => m.pinned);
 }
 
-/** Longest-prefix match for active nav item (h2kvm pattern). */
+/** Longest-prefix / param-route match for active nav item (h2kvm pattern). */
+function pathMatchesModule(pathname: string, pattern: string): boolean {
+  if (pattern === "/") return pathname === "/";
+  if (!pattern.includes(":")) {
+    return pathname === pattern || pathname.startsWith(`${pattern}/`);
+  }
+  const re = new RegExp(`^${pattern.replace(/:[^/]+/g, "[^/]+")}(?:/|$)`);
+  return re.test(pathname);
+}
+
+function patternRank(pattern: string): number {
+  const parts = pattern.split("/").filter(Boolean);
+  const staticCount = parts.filter((p) => !p.startsWith(":")).length;
+  return staticCount * 100 + parts.length;
+}
+
 export function activeModuleFromPath(pathname: string): NavModule | undefined {
   if (pathname === "/") return MODULES.find((m) => m.path === "/");
-  let best: { m: NavModule; len: number } | undefined;
+  let best: { m: NavModule; rank: number } | undefined;
   for (const m of MODULES) {
     if (m.path === "/") continue;
-    if (pathname === m.path || pathname.startsWith(`${m.path}/`)) {
-      if (!best || m.path.length > best.len) best = { m, len: m.path.length };
+    if (pathMatchesModule(pathname, m.path)) {
+      const rank = patternRank(m.path);
+      if (!best || rank > best.rank) best = { m, rank };
     }
   }
   return best?.m;
@@ -189,8 +205,21 @@ export function navLabelForPath(pathname: string): string | undefined {
   return activeModuleFromPath(pathname)?.label;
 }
 
+export function moduleById(id: string): NavModule | undefined {
+  return MODULES.find((m) => m.id === id);
+}
+
 export function sectionForPath(pathname: string): SectionId | undefined {
   return activeModuleFromPath(pathname)?.section;
 }
 
 export const APP_ROUTES = MODULES.filter((m) => m.element);
+
+/** Single-letter shortcuts for pinned modules visible at the current role. */
+export function shortcutTargets(actorLevel: number): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const m of pinnedModules(actorLevel)) {
+    if (m.shortcut) out.set(m.shortcut.toLowerCase(), m.path);
+  }
+  return out;
+}

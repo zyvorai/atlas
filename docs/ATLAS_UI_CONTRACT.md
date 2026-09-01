@@ -102,7 +102,11 @@ on the icon-only rail). The whole sidebar collapses to a 64px icon rail (toggle 
 
 **Role-aware nav:** JWT role (`viewer` | `operator` | `admin`) filters sidebar and Spotlight
 entries by `minRole` on each module in `nav/routes.ts`. Gated routes show an access-denied
-panel if opened directly.
+panel if opened directly. The account menu shows the decoded session role.
+
+**Recent** (last five pages, role-filtered) and **Suite** (Zeus OS, zyvor.dev, Atlas docs)
+sit at the bottom of the expanded sidebar. Pinned modules expose single-letter shortcuts
+(`H` Command Deck, `V` Volumes, …); **⌘⌥S** collapses the sidebar.
 
 The **topbar** is a bare 44px (`--rail-h`) frosted shop strip: Zyvor mark + **Atlas** left,
 icon cluster right (⌘K, Look & feel, jobs, alerts, pause, health, account). No nav chips in
