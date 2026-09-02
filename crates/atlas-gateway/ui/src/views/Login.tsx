@@ -1,6 +1,6 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
 // Atlas sign-in — same 2-chapter Store shell as h2kvm-, Atlas copy + auth.
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, useMemo } from "react";
 import {
   ArrowRight,
   ChevronLeft,
@@ -36,6 +36,91 @@ function LoginThemeSwitcher() {
   const theme = useUi((s) => s.theme);
   const setTheme = useUi((s) => s.setTheme);
   const [open, setOpen] = useState(false);
+
+
+  const loginDest = useMemo(() => {
+    if (typeof window === 'undefined') return { host: '', origin: '', port: '', protocol: '' }
+    const { hostname, origin, port, protocol } = window.location
+    return {
+      host: hostname || 'localhost',
+      origin: origin || '',
+      port: port || (protocol === 'https:' ? '443' : protocol === 'http:' ? '80' : ''),
+      protocol: protocol.replace(':', '') || 'https',
+    }
+  }, [])
+
+  const scrollToChapter = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  const loginLocalNav = (
+    <nav className="login-localnav" aria-label="Login chapters">
+      <a href="#login-product" onClick={(e) => { e.preventDefault(); scrollToChapter('login-product') }}>Product</a>
+      <a href="#login-machine" onClick={(e) => { e.preventDefault(); scrollToChapter('login-machine') }}>This machine</a>
+      <a href="#login-sign-in" onClick={(e) => { e.preventDefault(); scrollToChapter('login-sign-in') }}>Sign in</a>
+      {loginDest.host ? (
+        <span className="login-localnav-host" title={loginDest.origin}>{loginDest.host}</span>
+      ) : null}
+    </nav>
+  )
+
+
+  useEffect(() => {
+    document.querySelector<HTMLElement>('.login-store-scroll')?.scrollTo({ top: 0 })
+  }, [])
+
+  const loginMiddleChapters = (
+    <>
+      <section id="login-product" className="login-chapter login-chapter-product" aria-label="Product">
+        <div className="login-chapter-inner">
+          <p className="login-chapter-kicker">Product</p>
+          <h2 className="login-hero-title">Atlas.</h2>
+          <p className="login-tagline">Capacity, volumes, and Ceph — storage control plane for this cluster.</p>
+          <div className="login-cta">
+            <button type="button" className="login-cta-primary" onClick={() => scrollToChapter('login-machine')}>
+              See this machine
+            </button>
+          </div>
+        </div>
+      </section>
+      <section id="login-machine" className="login-chapter login-chapter-destination" aria-label="This machine">
+        <div className="login-chapter-inner">
+          <p className="login-chapter-kicker">This machine</p>
+          <h2 className="login-dest-title">{loginDest.host || 'localhost'}.</h2>
+          <p className="login-tagline">
+            You are signing in to <strong style={{ color: '#fff', fontWeight: 600 }}>Atlas</strong> on
+            this host — not a public cloud console.
+          </p>
+          <ul className="login-dest-facts">
+            <li className="login-dest-fact">
+              <span className="login-dest-fact-label">Product</span>
+              <span className="login-dest-fact-value is-display">Atlas</span>
+            </li>
+            <li className="login-dest-fact">
+              <span className="login-dest-fact-label">Host</span>
+              <span className="login-dest-fact-value">{loginDest.host || '—'}</span>
+            </li>
+            <li className="login-dest-fact">
+              <span className="login-dest-fact-label">Origin</span>
+              <span className="login-dest-fact-value">{loginDest.origin || '—'}</span>
+            </li>
+            <li className="login-dest-fact">
+              <span className="login-dest-fact-label">Protocol</span>
+              <span className="login-dest-fact-value">
+                {loginDest.protocol || '—'}
+                {loginDest.port ? ` · ${loginDest.port}` : ''}
+              </span>
+            </li>
+          </ul>
+          <div className="login-cta">
+            <button type="button" className="login-cta-primary" onClick={() => scrollToChapter('login-sign-in')}>
+              Continue to sign in
+            </button>
+          </div>
+        </div>
+      </section>
+    </>
+  )
 
   useEffect(() => {
     if (!open) return;
@@ -113,7 +198,7 @@ export function Login() {
   const hostLabel = typeof window !== "undefined" ? window.location.hostname : "";
 
   useEffect(() => {
-    document.title = `Sign in · ${PRODUCT}`;
+    document.title = `Sign in · ${PRODUCT} · ${loginDest.host || 'cluster'}`;
     clearToasts();
     localStorage.removeItem("atlas.login-remember-token");
     const remembered = localStorage.getItem(REMEMBER_FLAG_KEY) === "true";
@@ -240,8 +325,10 @@ export function Login() {
     );
 
   return (
+
     <PremiumLoginShell
-      themeSwitcher={<LoginThemeSwitcher />}
+      themeSwitcher={<>{loginLocalNav}<LoginThemeSwitcher /></>}
+      middleChapters={loginMiddleChapters}
       logo={
         <img
           src="/zyvor-logo.png"
@@ -275,6 +362,15 @@ export function Login() {
       }
       showSignInChapter
     >
+      <p className="login-sign-in-context">
+        Signing in to <strong>Atlas</strong>
+        {loginDest.host ? (
+          <>
+            {' '}
+            on <span className="login-apple-host">{loginDest.host}</span>
+          </>
+        ) : null}
+      </p>
       {step === "identify" ? (
         <form
           key="identify"

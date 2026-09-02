@@ -28,6 +28,7 @@ export type PremiumLoginShellProps = {
   footer?: ReactNode;
   formClassName?: string;
   showSignInChapter?: boolean;
+  middleChapters?: ReactNode;
   themeSwitcher?: ReactNode;
   children?: ReactNode;
 };
@@ -53,6 +54,7 @@ export function PremiumLoginShell({
   footer,
   formClassName = "",
   showSignInChapter = true,
+  middleChapters,
   themeSwitcher,
   children,
 }: PremiumLoginShellProps) {
@@ -80,6 +82,8 @@ export function PremiumLoginShell({
             {chapterNote ? <p className="login-chapter-note">{chapterNote}</p> : null}
           </div>
         </section>
+
+        {middleChapters}
 
         {showSignInChapter && children ? (
           <section
