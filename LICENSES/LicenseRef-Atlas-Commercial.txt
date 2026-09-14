@@ -1,0 +1,11 @@
+# Atlas Commercial License (LicenseRef-Atlas-Commercial)
+
+This is the SPDX `LicenseRef-Atlas-Commercial` companion to Atlas's dual-license
+model. The open-source track is AGPL-3.0-only (see `LICENSES/AGPL-3.0-only.txt`
+and the root `LICENSE` file).
+
+Binding commercial terms are provided by Zyvor sales when you purchase an
+Atlas Commercial License (ACL). A summary of options and pricing lives in
+`COMMERCIAL_LICENSE.md` at the repository root.
+
+Contact: sales@zyvor.dev
