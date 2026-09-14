@@ -1,0 +1,28 @@
+---
+sidebar_position: 1
+title: Quickstart
+---
+
+# Quickstart
+
+Run Atlas locally with the fake Ceph driver — no cluster required.
+
+```bash
+make run
+# Console: http://127.0.0.1:5110
+cargo run -p atlas-cli -- --base-url http://127.0.0.1:5110 health
+```
+
+Default console login is `admin` with the gateway password for your deployment
+(`ATLAS_ADMIN_PASSWORD`, or the shipped lab default when auth is open).
+
+## Deploy to k3s
+
+```bash
+./scripts/deploy-remote.sh <host> <user>
+# NodePort UI: http://<host>:30510
+```
+
+See the repo [`README`](https://github.com/zyvorai/atlas#readme) and
+[`docs/DEPLOYMENT.md`](https://github.com/zyvorai/atlas/blob/main/docs/DEPLOYMENT.md)
+for Rook Ceph and real-Ceph gateway paths.
