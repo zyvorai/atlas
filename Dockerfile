@@ -1,7 +1,7 @@
 # Copyright (c) 2026 ZyvorAI Labs Private Limited.
 # SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 # ---- UI builder (React Storage Center → dist) ----
-FROM docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS ui
+FROM docker.io/library/node:26-alpine@sha256:ef24c5053d50fdc3e4e56eb4e7ddb7861874ab0fdc797046ba897581deb8e868 AS ui
 WORKDIR /ui
 # node:22-alpine ships npm 10.9.8, which mis-resolves this lockfile's optional/platform deps
 # (npm ci "succeeds" but leaves node_modules incomplete — vite/rollup then fail to resolve
