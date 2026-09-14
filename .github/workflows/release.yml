@@ -68,9 +68,15 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake libcurl4-openssl-dev
       - if: contains(matrix.target, 'darwin')
         run: brew install protobuf cmake
+      # `package: atlas-cli` (not just `bin: atlasctl`) matters here: without -p, cross/cargo
+      # resolves features against the whole workspace's Cargo.lock, and atlas-gateway's default
+      # reqwest (native-tls/openssl-sys) bleeds back in even though atlas-cli itself uses
+      # rustls-tls-native-roots — reintroducing the exact cross-compile failure that dependency
+      # override exists to avoid.
       - uses: taiki-e/upload-rust-binary-action@f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6 # v1.30.2
         with:
           bin: atlasctl
+          package: atlas-cli
           target: ${{ matrix.target }}
           archive: atlasctl-$tag-$target
           token: ${{ secrets.GITHUB_TOKEN }}
