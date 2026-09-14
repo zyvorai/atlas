@@ -1,3 +1,5 @@
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 /target
 **/*.rs.bk
 .env
@@ -8,11 +10,6 @@ atlas.db-shm
 *.db-wal
 *.db-shm
 .DS_Store
-
-# Trial/license signing key + issued tokens — never committed (see docs/LICENSING.md).
-/secrets/
-*.pkcs8
-trial.token
 
 # Atlas Storage Center UI (React) — build artifacts (the Docker node stage / `make ui` regenerate dist)
 crates/atlas-gateway/ui/node_modules/

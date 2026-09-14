@@ -1,3 +1,5 @@
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
 # Dex OIDC lab
 
 Throwaway [Dex](https://dexidp.io/) identity provider for testing Atlas's OIDC/SSO login

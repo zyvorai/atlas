@@ -1,3 +1,5 @@
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
 # Atlas lab — Rook Ceph + KubeVirt
 
 Stands up the storage fabric Atlas manages, on an existing Kubernetes/K3s cluster (PDF §6.1).

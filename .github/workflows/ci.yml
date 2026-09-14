@@ -1,4 +1,5 @@
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 name: atlas-ci
 
 on:
@@ -22,6 +23,8 @@ jobs:
       - name: Install protoc + cmake
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake
       - uses: Swatinem/rust-cache@v2
+      - name: License headers
+        run: ./scripts/check-license-headers.sh
       # Non-blocking: the committed style is denser than stable rustfmt's defaults (~280 files of
       # drift). Clippy (-D warnings), tests, and build below are the enforced Rust gates; fmt is
       # surfaced so drift is visible without failing every PR. Prefer `make fmt` on touched files.

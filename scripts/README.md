@@ -1,7 +1,19 @@
-<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved. -->
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
 # Atlas scripts
 
 Reusable automation for testing and deploying Atlas. Run from the repo root.
+
+## License headers
+
+```bash
+make headers                              # CI gate — scripts/check-license-headers.sh
+python3 scripts/rewrite-spdx-headers.py   # one-shot rewrite of legacy banners → SPDX
+```
+
+Every source file needs Zyvor copyright +
+`SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial`.
+See [`CLA.md`](../CLA.md), [`DCO.md`](../DCO.md), [`NOTICE`](../NOTICE).
 
 ## `test-all.sh` — full local gate
 One-shot "test everything that needs no external infra, then real DBs if a container runtime is up."

@@ -1,4 +1,5 @@
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 # Grafana with the Atlas Prometheus datasource + the Atlas overview dashboard auto-provisioned.
 # The dashboard JSON ConfigMap (atlas-grafana-dashboard) is created by up.sh from atlas-overview.json.
 # Admin password comes from Secret `atlas-grafana-admin` (created by up.sh if missing) — never

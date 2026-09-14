@@ -1,4 +1,5 @@
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 # Single-node CephCluster override for a one-node k3s lab (1 mon, 1 mgr, one OSD on /dev/sdb).
 # NOT for production — the canonical 3-node profile is in ../02-cephcluster.yaml.
 apiVersion: ceph.rook.io/v1

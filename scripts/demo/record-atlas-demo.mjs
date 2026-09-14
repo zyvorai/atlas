@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 /**
  * Atlas — client demo reel (website + 1080p). Same pipeline as the Zeus OS wow reel
  * (zeus-os/ui/scripts/record-wow-reel.mjs): Playwright drives a real Chromium session with a

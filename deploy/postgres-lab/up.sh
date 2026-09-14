@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 # Stand up a throwaway Postgres in the lab k3s cluster to verify atlas-inventory's Phase-1 HA
 # scaffolding (connect_postgres/migrate_postgres, docs/HA.md) against real infrastructure — not
 # just a compile-check behind the `postgres` cargo feature. See deployment.yaml.

@@ -1,4 +1,5 @@
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 # RGW object store (S3-compatible) + an object-bucket StorageClass for backups/exports (PDF §2, §9.9).
 apiVersion: ceph.rook.io/v1
 kind: CephObjectStore

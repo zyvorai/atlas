@@ -1,4 +1,5 @@
--- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+-- Copyright (c) 2026 ZyvorAI Labs Private Limited.
+-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 -- Console users are now tenant-scoped for read isolation: a viewer/operator only sees their own
 -- tenant's volumes/buckets on list/get endpoints; admin remains cross-tenant regardless of this
 -- column's value (see require_tenant/tenant_scope in crates/atlas-gateway/src/auth.rs).

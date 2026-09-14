@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-#
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 # setup-k3s-disk.sh — carve /dev/sdb2 from the free tail of the OSD disk and relocate the
 # k3s data-dir (containerd image store + local-path PV data + datastore) onto it.
 #

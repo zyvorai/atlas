@@ -1,4 +1,5 @@
--- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+-- Copyright (c) 2026 ZyvorAI Labs Private Limited.
+-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 -- Per-tenant storage quotas (PDF §14: multi-tenancy). A tenant's total provisioned volume capacity
 -- and volume count are capped here; the gateway rejects a create that would exceed either limit.
 -- A value of 0 means "unlimited" for that dimension.

@@ -1,4 +1,5 @@
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 # Kafka Connect image for DataBridge CDC: Strimzi Kafka base + Debezium source connectors
 # (PostgreSQL, MySQL/MariaDB, MongoDB, Oracle, SQL Server) + the Aiven JDBC sink connector
 # (Postgres + MySQL + SQL Server + Oracle JDBC drivers) + the MongoDB Kafka sink. One image serves

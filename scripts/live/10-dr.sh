@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 # DR control-plane: create peer → preflight → direct-RBD → enable-mirror (soft) → delete all.
 # Live rbd mirror dataplane is not asserted (needs a second Ceph cluster).
 set -euo pipefail

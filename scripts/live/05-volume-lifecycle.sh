@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 # Volume lifecycle on real Ceph CSI (zyvor-rbd-prod): create→snap→schedule→expand→delete.
 set -euo pipefail
 # shellcheck source=lib.sh

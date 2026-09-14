@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 # Discover: Ceph only by default (serialized). Set ATLAS_LIVE_DISCOVER_ALL=1 for nfs/zfs too.
 set -euo pipefail
 # shellcheck source=lib.sh

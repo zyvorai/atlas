@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-#
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 # Opt-in Tier-3 live tests against a deployed Ceph-mode Atlas gateway.
 #
 #   ATLAS_LIVE=1 ./scripts/test-live.sh

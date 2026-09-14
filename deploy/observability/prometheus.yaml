@@ -1,4 +1,5 @@
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 # Minimal standalone Prometheus that scrapes the Atlas control plane's own /metrics
 # (atlas_* gauges) plus the Ceph mgr Prometheus module. No operator/CRDs required.
 apiVersion: v1

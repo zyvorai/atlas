@@ -1,4 +1,5 @@
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 # Minimal HTTP log receiver standing in for a SIEM's ingestion endpoint (Splunk HEC, Elastic/
 # Fluent Bit HTTP input, a generic webhook collector) — stdlib only, no dependencies. Accepts any
 # POST, logs the JSON body to stdout (so `kubectl logs` shows exactly what Atlas exported), and

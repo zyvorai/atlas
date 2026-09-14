@@ -1,4 +1,5 @@
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 # Atlas gateway in ATLAS_CEPH_DRIVER_MODE=real. Runs in the rook-ceph namespace so it can mount
 # the mon endpoints ConfigMap + admin keyring Secret; an initContainer renders /etc/ceph/{ceph.conf,keyring}
 # so the credential never leaves the cluster. Live k8s driver also works via the mounted SA.
@@ -141,15 +142,6 @@ spec:
                   key: admin-password
             - name: ATLAS_CEPH_PROMETHEUS_URL
               value: "http://rook-ceph-mgr.rook-ceph.svc:9283/metrics"
-            # Trial/license enforcement — see docs/LICENSING.md. `Config::license_enforce`
-            # defaults to true (enforced) when unset; explicitly disabled here since no
-            # `atlas-license` Secret/token exists for this deployment yet — leaving this unset
-            # would 402 every protected route on the next rollout. Once a real token is issued
-            # for this deployment (create a Secret named `atlas-license` with key
-            # `trial-token`, then add an ATLAS_TRIAL_TOKEN secretKeyRef here — see
-            # deploy/k8s/atlas-gateway.yaml for the exact pattern), remove this override.
-            - name: ATLAS_LICENSE_ENFORCE
-              value: "false"
             # GET /dr/status and /dr/preflight's `dataplane_verified` field — see docs/DR.md's
             # "Live two-site checklist". Defaults to false (Config::dr_dataplane_verified) —
             # only set to "true" once *this specific deployment's* operator has personally

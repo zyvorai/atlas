@@ -1,4 +1,5 @@
--- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+-- Copyright (c) 2026 ZyvorAI Labs Private Limited.
+-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 -- DR hardening: track last failover / last error and optional force-promote metadata so drills and
 -- failed real `rbd mirror` ops are visible in the catalog (see docs/DR.md).
 ALTER TABLE dr_mirrors ADD COLUMN last_failover_at TEXT;

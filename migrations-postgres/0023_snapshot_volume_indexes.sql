@@ -1,4 +1,5 @@
--- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+-- Copyright (c) 2026 ZyvorAI Labs Private Limited.
+-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 -- Hot-path read indexes: both tables are looked up by `volume_id` on every
 -- "list snapshots/schedules for this volume" request (atlas-inventory
 -- snapshots::list_snapshots / schedules::list), and `volume_id` is also the

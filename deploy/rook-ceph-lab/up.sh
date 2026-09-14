@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-#
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 # Stand up the Atlas lab storage stack on an existing Kubernetes/K3s cluster:
 #   Rook operator -> CephCluster -> RBD/CephFS/RGW + StorageClasses -> snapshotter
 #   -> (optional) KubeVirt + CDI -> (optional) sample VM on a Ceph-backed PVC.
