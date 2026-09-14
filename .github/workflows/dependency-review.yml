@@ -1,0 +1,25 @@
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+name: Dependency review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          # Mirrors deny.toml's [licenses] allow-list, so a PR gets the same signal
+          # cargo-deny already gives main for the Rust side.
+          allow-licenses: >-
+            MIT, Apache-2.0, Apache-2.0 WITH LLVM-exception, BSD-2-Clause, BSD-3-Clause, ISC,
+            Unicode-3.0, Zlib, Unlicense, BSL-1.0, AGPL-3.0-only, LicenseRef-Atlas-Commercial
+          comment-summary-in-pr: always
