@@ -18,4 +18,8 @@ secrets/
 crates/atlas-gateway/ui/node_modules/
 crates/atlas-gateway/ui/dist/
 crates/atlas-gateway/ui/.screenshots/
+crates/atlas-gateway/ui/coverage/
 .docs-tools/
+
+# cargo-llvm-cov output
+/lcov.info

@@ -15,9 +15,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      # Pinned to match rust-toolchain.toml's `channel` — dtolnay/rust-toolchain resolves its
+      # version from the @rev of the action itself, not from rust-toolchain.toml, so the two
+      # must be bumped together or CI silently drifts back to a rolling "stable".
+      - uses: dtolnay/rust-toolchain@1.98.1
         with:
-          components: rustfmt, clippy
+          # llvm-tools-preview is needed by cargo-llvm-cov below, not just fmt/clippy.
+          components: rustfmt, clippy, llvm-tools-preview
       # The gRPC crates compile .proto at build time, so protoc must be present (mirrors the
       # deployment Dockerfile). Without it clippy/test/build fail before any Rust runs. libcurl
       # headers are needed by the kafka-lag feature's vendored librdkafka cmake build, which
@@ -36,8 +40,17 @@ jobs:
         continue-on-error: true
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Test
-        run: cargo test --workspace
+      # cargo-llvm-cov wraps `cargo test` itself, so this both runs the suite (same pass/fail
+      # gate as plain `cargo test --workspace`) and produces a CI-artifact-only coverage report
+      # — no external service/token, downloadable per-run, not enforced as a gate.
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Test + coverage
+        run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-coverage
+          path: lcov.info
+          retention-days: 14
       # Supply-chain gate: known-vulnerable/yanked advisories, disallowed licenses, unknown
       # registries/git sources (deny.toml). Scoped to default features — what's actually shipped;
       # see deny.toml's [graph] comment for why the optional DataBridge connectors are excluded.
@@ -74,15 +87,22 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version-file: crates/atlas-gateway/ui/.nvmrc
           cache: npm
           cache-dependency-path: crates/atlas-gateway/ui/package-lock.json
       - name: Install
         run: npm ci
       - name: Lint
         run: npm run lint
-      - name: Test
-        run: npm run test
+      # Runs the suite (same pass/fail gate as `npm run test`) and produces a CI-artifact-only
+      # coverage report — no external service/token, downloadable per-run.
+      - name: Test + coverage
+        run: npm run test:coverage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-coverage
+          path: crates/atlas-gateway/ui/coverage
+          retention-days: 14
       # UI-side equivalent of the Rust cargo-deny gate above. High severity only — same bar as a
       # blocking gate; lower-severity advisories are visible in the job log without failing CI.
       - name: Supply-chain audit (npm audit)
