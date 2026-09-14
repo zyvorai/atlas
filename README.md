@@ -14,8 +14,6 @@
 ![gRPC](https://img.shields.io/badge/gRPC-4285F4?logo=grpc&logoColor=white)
 ![Ceph](https://img.shields.io/badge/Ceph-EF5C55?logo=ceph&logoColor=white)
 
-![Atlas — Survey the cluster. Provision with intent. Operate day-2.](docs/social/atlas-share-card.png)
-
 **Storage, as a product.** Atlas is the **central storage control plane** for the Zyvor
 suite. Products call stable Atlas APIs; Atlas maps intent to Ceph (and NFS/ZFS) through
 pluggable drivers — with an Apple Shop console for operators.

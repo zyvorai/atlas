@@ -49,7 +49,6 @@ const config: Config = {
   ],
 
   themeConfig: {
-    image: 'atlas-share-card.png',
     colorMode: {
       respectPrefersColorScheme: true,
     },
