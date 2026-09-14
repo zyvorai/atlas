@@ -7,7 +7,7 @@ WORKDIR /ui
 # (npm ci "succeeds" but leaves node_modules incomplete — vite/rollup then fail to resolve
 # packages like recharts that are present on disk with a valid package.json). npm >=11 installs
 # cleanly against the same lockfile; pin newer npm before `ci` rather than downgrading the base image.
-RUN npm install -g npm@12
+RUN npm install -g npm@12.0.2
 COPY crates/atlas-gateway/ui/package.json crates/atlas-gateway/ui/package-lock.json ./
 RUN npm ci
 COPY crates/atlas-gateway/ui/ ./
