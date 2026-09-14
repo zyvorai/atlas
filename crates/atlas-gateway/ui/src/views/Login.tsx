@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 // Atlas sign-in — same 2-chapter Store shell as h2kvm-, Atlas copy + auth.
 import { useEffect, useState, type FormEvent, useMemo } from "react";
 import {
@@ -28,8 +29,8 @@ const REMEMBER_FLAG_KEY = "atlas.login-remember";
 const DEFAULT_USER = "admin";
 
 const THEME_OPTIONS: { id: Theme; label: string }[] = [
-  { id: "carbon", label: "Carbon" },
-  { id: "apple-lite", label: "Apple Lite" },
+  { id: "night", label: "Night" },
+  { id: "day", label: "Day" },
 ];
 
 function LoginThemeSwitcher() {
@@ -80,8 +81,10 @@ function LoginThemeSwitcher() {
                 setTheme(id);
                 setOpen(false);
               }}
-              className={`block w-full px-3 py-2 text-left text-sm ${
-                theme === id ? "bg-sky-50 text-sky-800 font-medium" : "text-neutral-700 hover:bg-neutral-50"
+              className={`block w-full px-3 py-2.5 text-left text-sm transition-colors ${
+                theme === id
+                  ? "bg-[#0071E3]/10 text-[#0071E3] font-semibold"
+                  : "text-neutral-700 hover:bg-neutral-50"
               }`}
             >
               {label}
@@ -359,6 +362,12 @@ export function Login() {
         ) : null
       }
       showSignInChapter
+      footer={
+        <p className="login-license-notice">
+          Copyright © {new Date().getFullYear()} Atlas · AGPL-3.0 ·{" "}
+          <a href="mailto:sales@zyvor.dev">Commercial (ACL)</a>
+        </p>
+      }
     >
       <p className="login-sign-in-context">
         Signing in to <strong>Atlas</strong>

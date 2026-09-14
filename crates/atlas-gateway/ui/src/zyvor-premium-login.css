@@ -1,3 +1,7 @@
+/* Copyright (c) 2026 ZyvorAI Labs Private Limited.
+ * SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+ */
+
 /* Apple Store chapter login — full-bleed white hero matching gallery screenshot.
    Brand → huge title → lede → side-by-side Action Blue pills → quiet note. */
 
@@ -294,22 +298,26 @@ a.login-cta-secondary:active {
   gap: 0.375rem;
   width: 100%;
   margin-top: 1.25rem;
-  padding: 0.8125rem 1rem;
+  min-height: 44px;
+  padding: 0.8125rem 1.25rem;
   font-size: 0.9375rem;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: hsl(0 0% 100%);
   border-radius: 980px;
   border: none;
-  background: hsl(211 100% 45%);
+  background: #0071e3;
   box-shadow: 0 1px 0 hsl(0 0% 100% / 0.18) inset;
   font-family: inherit;
   cursor: pointer;
-  transition: background 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
+  transition:
+    background 0.22s cubic-bezier(0.28, 0.11, 0.32, 1),
+    opacity 0.22s cubic-bezier(0.28, 0.11, 0.32, 1),
+    transform 0.18s cubic-bezier(0.28, 0.11, 0.32, 1);
 }
 
 .login-btn-primary:hover:not(:disabled) {
-  background: hsl(211 100% 40%);
+  background: #0077ed;
 }
 
 .login-btn-primary:active:not(:disabled) {
@@ -394,6 +402,25 @@ a.login-cta-secondary:active {
 
 .login-page .zyvor-footer {
   display: none;
+}
+
+.login-page .login-license-notice {
+  margin: 0;
+  padding: 0.75rem 1rem 1.25rem;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.4;
+  color: hsl(220 9% 46%);
+}
+
+.login-page .login-license-notice a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.login-page .login-license-notice a:hover {
+  color: hsl(220 13% 18%);
 }
 
 .login-page .login-btn-primary,

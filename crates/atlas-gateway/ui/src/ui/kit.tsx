@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 // Bespoke primitive kit styled with the vendored Zeus/Tahoe design foundation.
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -17,10 +18,10 @@ function useEscape(active: boolean, onClose: () => void) {
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 const VAR: Record<Variant, string> = {
-  primary: "btn-primary",
-  secondary: "btn-secondary",
-  ghost: "btn-ghost",
-  danger: "btn-danger",
+  primary: "at-btn primary",
+  secondary: "at-btn",
+  ghost: "at-btn",
+  danger: "at-btn danger",
 };
 
 export const Button = React.forwardRef<
@@ -38,7 +39,7 @@ export const Button = React.forwardRef<
       ref={ref}
       {...rest}
       disabled={rest.disabled || loading}
-      className={cx("btn", VAR[variant], size === "sm" && "btn-sm", className)}
+      className={cx(VAR[variant], size === "sm" && "compact", className)}
     >
       {loading ? <Loader2 size={14} className="animate-spin" /> : Icon ? <Icon size={14} /> : null}
       {children}
@@ -149,11 +150,12 @@ export function PageHeader({
   );
 }
 
-export function EmptyState({ msg, cta }: { msg: string; cta?: React.ReactNode }) {
+export function EmptyState({ msg, copy, cta }: { msg: string; copy?: string; cta?: React.ReactNode }) {
   return (
-    <div className="at-empty-box">
+    <div className="at-empty-box" style={{ boxShadow: "none" }}>
       <div className="at-empty-title">{msg}</div>
-      {cta && <div className="mt-1 flex justify-center">{cta}</div>}
+      {copy ? <p className="at-empty-copy">{copy}</p> : null}
+      {cta && <div className="mt-2 flex justify-center gap-2 flex-wrap">{cta}</div>}
     </div>
   );
 }
@@ -163,7 +165,8 @@ export function Copyable({ text, className }: { text: string; className?: string
   const [ok, setOk] = useState(false);
   return (
     <button
-      className={cx("mono hover:text-sky-300 transition text-left", className)}
+      type="button"
+      className={cx("mono at-copyable text-left", className)}
       title="Click to copy"
       onClick={(e) => {
         e.stopPropagation();
@@ -186,14 +189,14 @@ export function RadialGauge({ pct, size = 120, label }: { pct: number; size?: nu
   const r = size / 2 - 10;
   const c = 2 * Math.PI * r;
   const p = Math.max(0, Math.min(100, pct));
-  const color = p >= 90 ? "#E23B3B" : p >= 75 ? "#FBBF24" : "#38BDF8";
+  const color = p >= 90 ? "var(--at-fail)" : p >= 75 ? "var(--at-warn)" : "var(--at-cyan)";
   return (
     <div className="relative grid place-items-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={9} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--at-line)" strokeWidth={9} />
         <circle
           cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={9} strokeLinecap="round"
-          strokeDasharray={c} strokeDashoffset={c - (p / 100) * c} style={{ transition: "stroke-dashoffset .6s ease" }}
+          strokeDasharray={c} strokeDashoffset={c - (p / 100) * c} style={{ transition: "stroke-dashoffset .6s var(--ease-apple, ease)" }}
         />
       </svg>
       <div className="absolute text-center">
@@ -213,19 +216,75 @@ export function Spinner() {
 
 export function Tabs({ tabs, value, onChange }: { tabs: string[]; value: string; onChange: (t: string) => void }) {
   return (
-    <div className="flex gap-1 p-1 rounded-full glass w-fit mb-4">
+    <div className="at-chips" style={{ paddingInline: 0, marginBottom: 16 }}>
       {tabs.map((t) => (
         <button
           key={t}
+          type="button"
           onClick={() => onChange(t)}
-          className={cx(
-            "px-3.5 py-1.5 rounded-full text-xs font-semibold transition",
-            value === t ? "bg-white/10 text-white" : "text-muted-foreground hover:text-white",
-          )}
+          className={cx("at-chip", value === t && "on")}
         >
           {t}
         </button>
       ))}
+    </div>
+  );
+}
+
+/** Colorize a JSON string for TerminalPane (keys / strings / numbers / literals). */
+export function colorizeJson(raw: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  const re =
+    /("(?:\\.|[^"\\])*")\s*:|("(?:\\.|[^"\\])*")|(\btrue\b|\bfalse\b|\bnull\b)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|([{}\[\],:])|(\s+)|([^\s"{}[\],:]+)/g;
+  let m: RegExpExecArray | null;
+  let i = 0;
+  while ((m = re.exec(raw))) {
+    const [full, key, str, lit, num, punct, ws, other] = m;
+    if (key) {
+      parts.push(
+        <span key={i++} className="term-key">
+          {key}
+        </span>,
+        <span key={i++} className="term-punct">
+          :
+        </span>,
+      );
+    } else if (str) parts.push(<span key={i++} className="term-str">{str}</span>);
+    else if (lit) parts.push(<span key={i++} className="term-lit">{lit}</span>);
+    else if (num) parts.push(<span key={i++} className="term-num">{num}</span>);
+    else if (punct) parts.push(<span key={i++} className="term-punct">{punct}</span>);
+    else if (ws) parts.push(ws);
+    else if (other) parts.push(<span key={i++} className="term-plain">{other}</span>);
+    else parts.push(full);
+  }
+  return parts.length ? parts : [raw];
+}
+
+/** macOS Terminal–style black pane for logs, JSON, tokens, CRUSH dumps. */
+export function TerminalPane({
+  children,
+  title,
+  variant = "default",
+  chrome = true,
+  className,
+}: {
+  children: React.ReactNode;
+  title?: string;
+  variant?: "default" | "error";
+  chrome?: boolean;
+  className?: string;
+}) {
+  return (
+    <div className={cx("at-terminal", variant === "error" && "is-error", className)}>
+      {chrome && (
+        <div className="at-terminal-chrome">
+          <span className="at-terminal-dot red" />
+          <span className="at-terminal-dot yellow" />
+          <span className="at-terminal-dot green" />
+          {title ? <span className="at-terminal-title">{title}</span> : null}
+        </div>
+      )}
+      <div className="at-terminal-body">{children}</div>
     </div>
   );
 }
@@ -257,7 +316,7 @@ export function SlideOver({
           <div className="at-caption grow" style={{ flex: 1, color: "var(--at-ink)", fontSize: 13 }}>
             {title}
           </div>
-          <button type="button" className="at-btn" style={{ height: 28 }} onClick={onClose}>
+          <button type="button" className="at-btn compact" onClick={onClose}>
             <X size={14} />
           </button>
         </div>
@@ -294,7 +353,7 @@ export function Modal({
           <div className="at-caption grow" style={{ flex: 1, color: "var(--at-ink)", fontSize: 14 }}>
             {title}
           </div>
-          <button type="button" className="at-btn" style={{ height: 28 }} onClick={onClose}>
+          <button type="button" className="at-btn compact" onClick={onClose}>
             <X size={14} />
           </button>
         </div>

@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 // react-query hooks for the Atlas API. Queries auto-refetch; write helpers live in views.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { http } from "./client";

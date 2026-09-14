@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { filterNavRecents, getNavRecents, recordNavRecent } from "./navRecents";
 
@@ -35,7 +36,7 @@ describe("navRecents", () => {
 
   it("filterNavRecents drops entries the role cannot open", () => {
     recordNavRecent("volumes", "Volumes");
-    recordNavRecent("overview", "Command Deck");
+    recordNavRecent("overview", "Overview");
     const filtered = filterNavRecents(getNavRecents(), new Set(["overview"]));
     expect(filtered).toEqual([]);
   });

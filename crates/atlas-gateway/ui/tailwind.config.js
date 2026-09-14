@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 // Design tokens vendored from Zeus OS (v9s) so Atlas matches the suite look-and-feel.
 /** @type {import('tailwindcss').Config} */
 export default {

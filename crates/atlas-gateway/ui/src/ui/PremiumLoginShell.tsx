@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 /**
  * Apple Store chapter login — same shell as h2kvm- / Zeus OS.
  * Full-bleed white hero (brand → title → lede → pill CTAs), second chapter for credentials.

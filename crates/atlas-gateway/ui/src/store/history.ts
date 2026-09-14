@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 // Client-side rolling history of /metrics/summary so the Command Deck can draw live trends
 // (the gateway keeps only point-in-time snapshots; real time-series lives in Prometheus).
 import type { MetricHistoryPoint, MetricsSummary } from "../api/types";

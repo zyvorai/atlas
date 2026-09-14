@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import React, { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import { Button, EmptyState, Spinner } from "./kit";
@@ -91,20 +92,13 @@ export function Table<T>({
           </div>
         );
       }
-      return soundings ? (
-        <div style={{ padding: 32, color: "var(--at-ink-4)", fontSize: 13 }}>Loading…</div>
-      ) : (
-        <Spinner />
-      );
+      return soundings ? <div className="at-loading">Loading…</div> : <Spinner />;
     }
     if (!rows.length) {
-      return soundings ? (
-        <div style={{ padding: 36, textAlign: "center" }}>
-          <div style={{ color: "var(--at-ink-3)", marginBottom: emptyCta ? 12 : 0, fontSize: 13.5 }}>{empty}</div>
-          {emptyCta}
+      return (
+        <div style={{ margin: soundings ? 16 : 0 }}>
+          <EmptyState msg={empty} cta={emptyCta} />
         </div>
-      ) : (
-        <EmptyState msg={empty} cta={emptyCta} />
       );
     }
 

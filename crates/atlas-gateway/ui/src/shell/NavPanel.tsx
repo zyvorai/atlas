@@ -1,9 +1,9 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { NavLink } from "react-router-dom";
 import { ChevronDown, Search } from "lucide-react";
 import type { NavGroup } from "../nav/useNavGroups";
 import type { NavRecent } from "../lib/navRecents";
-import type { SuiteLink } from "../nav/suiteLinks";
 import { moduleById } from "../nav/routes";
 import { NavAppIcon } from "../nav/NavAppIcon";
 import { cx } from "../lib/format";
@@ -138,25 +138,3 @@ export function NavRecents({
   );
 }
 
-export function NavSuiteRail({ links, compact }: { links: SuiteLink[]; compact?: boolean }) {
-  if (compact) return null;
-  return (
-    <div className="at-sidebar-group at-sidebar-suite">
-      <div className="at-sidebar-label">Suite</div>
-      {links.map((link) => (
-        <a
-          key={link.id}
-          href={link.href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="at-sidebar-link at-sidebar-suite-link"
-          title={link.label}
-          data-label={link.label}
-        >
-          <link.icon size={16} strokeWidth={2} aria-hidden />
-          <span>{link.label}</span>
-        </a>
-      ))}
-    </div>
-  );
-}
