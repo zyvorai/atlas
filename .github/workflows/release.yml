@@ -19,7 +19,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
@@ -40,7 +40,7 @@ jobs:
             echo "_(No CHANGELOG.md [$version] section found.)_" > release-notes.md
           fi
 
-      - uses: softprops/action-gh-release@v3
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           body_path: release-notes.md
           generate_release_notes: true
@@ -63,12 +63,12 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - if: contains(matrix.target, 'linux')
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake libcurl4-openssl-dev
       - if: contains(matrix.target, 'darwin')
         run: brew install protobuf cmake
-      - uses: taiki-e/upload-rust-binary-action@v1.30.2
+      - uses: taiki-e/upload-rust-binary-action@f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6 # v1.30.2
         with:
           bin: atlasctl
           target: ${{ matrix.target }}
@@ -84,8 +84,8 @@ jobs:
       run:
         working-directory: crates/atlas-gateway/ui
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: crates/atlas-gateway/ui/.nvmrc
           cache: npm
@@ -93,6 +93,6 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: (cd dist && zip -r "../atlas-ui-dist-${GITHUB_REF_NAME}.zip" .)
-      - uses: softprops/action-gh-release@v3
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           files: crates/atlas-gateway/ui/atlas-ui-dist-*.zip

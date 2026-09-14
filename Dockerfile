@@ -1,7 +1,7 @@
 # Copyright (c) 2026 ZyvorAI Labs Private Limited.
 # SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 # ---- UI builder (React Storage Center → dist) ----
-FROM docker.io/library/node:22-alpine AS ui
+FROM docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS ui
 WORKDIR /ui
 # node:22-alpine ships npm 10.9.8, which mis-resolves this lockfile's optional/platform deps
 # (npm ci "succeeds" but leaves node_modules incomplete — vite/rollup then fail to resolve
@@ -14,7 +14,7 @@ COPY crates/atlas-gateway/ui/ ./
 RUN npm run build
 
 # ---- builder ----
-FROM docker.io/library/rust:1.88-bookworm AS builder
+FROM docker.io/library/rust:1.88-bookworm@sha256:af306cfa71d987911a781c37b59d7d67d934f49684058f96cf72079c3626bfe0 AS builder
 # protoc for the gRPC crates; cmake for the vendored librdkafka (kafka-lag feature).
 RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler cmake && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
@@ -27,7 +27,7 @@ RUN cargo build --release -p atlas-gateway -p atlas-cli \
     --features atlas-databridge/mongodb,atlas-databridge/sqlserver,atlas-databridge/oracle,atlas-databridge/kafka-lag
 
 # ---- runtime ----
-FROM docker.io/library/debian:bookworm-slim AS runtime
+FROM docker.io/library/debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171 AS runtime
 # ceph/rbd CLIs are only needed when ATLAS_CEPH_DRIVER_MODE=real against a real cluster.
 # Oracle Instant Client (Basic Lite) + libaio provide libclntsh.so, which ODPI-C dlopens at runtime
 # for the DataBridge `oracle` connector; freely redistributable. The URL is a build ARG so air-gapped

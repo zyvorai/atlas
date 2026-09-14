@@ -7,6 +7,10 @@ on:
     branches: [main]
   pull_request:
 
+# None of these three jobs push, comment, or upload releases — read-only checkout is enough.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -14,11 +18,11 @@ jobs:
   build-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       # Pinned to match rust-toolchain.toml's `channel` — dtolnay/rust-toolchain resolves its
       # version from the @rev of the action itself, not from rust-toolchain.toml, so the two
       # must be bumped together or CI silently drifts back to a rolling "stable".
-      - uses: dtolnay/rust-toolchain@1.98.1
+      - uses: dtolnay/rust-toolchain@ce678459e9fc7500d337468f904b95f1b5c10b5e # 1.98.1
         with:
           # llvm-tools-preview is needed by cargo-llvm-cov below, not just fmt/clippy.
           components: rustfmt, clippy, llvm-tools-preview
@@ -29,7 +33,7 @@ jobs:
       # curl.h ships with the system SDK there).
       - name: Install protoc + cmake + libcurl
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake libcurl4-openssl-dev
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - name: License headers
         run: ./scripts/check-license-headers.sh
       # Non-blocking: the committed style is denser than stable rustfmt's defaults (~280 files of
@@ -43,10 +47,14 @@ jobs:
       # cargo-llvm-cov wraps `cargo test` itself, so this both runs the suite (same pass/fail
       # gate as plain `cargo test --workspace`) and produces a CI-artifact-only coverage report
       # — no external service/token, downloadable per-run, not enforced as a gate.
-      - uses: taiki-e/install-action@cargo-llvm-cov
+      # taiki-e/install-action's `@<tool-name>` shorthand can't be SHA-pinned (the tool name
+      # lives in the ref itself); the documented SHA-pinned form is @<version> + `with: tool:`.
+      - uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2
+        with:
+          tool: cargo-llvm-cov
       - name: Test + coverage
         run: cargo llvm-cov --workspace --lcov --output-path lcov.info
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: rust-coverage
           path: lcov.info
@@ -59,7 +67,7 @@ jobs:
       # above says are deliberately excluded from this gate — override it back to the default
       # feature set the rest of this job (and the shipped binary) actually builds.
       - name: Supply-chain audit (cargo-deny)
-        uses: EmbarkStudios/cargo-deny-action@v2
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
         with:
           command: check advisories bans licenses sources
           arguments: --locked
@@ -84,8 +92,8 @@ jobs:
       run:
         working-directory: crates/atlas-gateway/ui
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: crates/atlas-gateway/ui/.nvmrc
           cache: npm
@@ -98,7 +106,7 @@ jobs:
       # coverage report — no external service/token, downloadable per-run.
       - name: Test + coverage
         run: npm run test:coverage
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ui-coverage
           path: crates/atlas-gateway/ui/coverage
@@ -110,7 +118,7 @@ jobs:
       - name: Typecheck + production build
         run: npm run build
       - name: Upload dist artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: atlas-ui-dist
           path: crates/atlas-gateway/ui/dist
@@ -119,11 +127,11 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       # UI stage of both images — fast, catches broken node/npm/lockfile paths used by deploy.
       - name: Build Dockerfile UI stage
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: Dockerfile
@@ -133,7 +141,7 @@ jobs:
           cache-from: type=gha,scope=ui
           cache-to: type=gha,mode=max,scope=ui
       - name: Build Dockerfile.ceph UI stage
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: Dockerfile.ceph
@@ -145,7 +153,7 @@ jobs:
       # Full Ceph deploy image (no Instant Client / optional features) — mirrors
       # scripts/deploy-ceph-gateway-remote.sh. Uses GHA cache so subsequent PRs are faster.
       - name: Build Dockerfile.ceph (full image)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: Dockerfile.ceph
