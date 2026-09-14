@@ -1,0 +1,94 @@
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+#
+# Publishes container images on a tagged release. Every push/PR already build-tests both
+# Dockerfiles in ci.yml's `docker` job (push: false) — this workflow only fires on `v*` tags
+# (or manual dispatch) and is the one place images actually get pushed, signed, and scanned.
+name: Publish container images
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # keyless cosign signing
+      security-events: write # Trivy SARIF upload
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dockerfile: Dockerfile
+            image: ghcr.io/zyvorai/atlas
+          - dockerfile: Dockerfile.ceph
+            image: ghcr.io/zyvorai/atlas-ceph
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ matrix.image }}:${{ steps.ver.outputs.version }}
+            ${{ matrix.image }}:latest
+          cache-from: type=gha,scope=${{ matrix.dockerfile }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.dockerfile }}
+
+      - uses: sigstore/cosign-installer@v4.1.2
+
+      # Keyless signing via this run's own OIDC token — no signing key/secret to manage.
+      - name: Sign image (keyless)
+        run: cosign sign --yes "${{ matrix.image }}@${{ steps.build.outputs.digest }}"
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0.24.2
+        with:
+          image: "${{ matrix.image }}:${{ steps.ver.outputs.version }}"
+          format: cyclonedx-json
+          output-file: "sbom-${{ matrix.image == 'ghcr.io/zyvorai/atlas' && 'atlas' || 'atlas-ceph' }}.cdx.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.image == 'ghcr.io/zyvorai/atlas' && 'atlas' || 'atlas-ceph' }}
+          path: "sbom-*.cdx.json"
+          retention-days: 90
+
+      # Informational until a baseline is established, same posture as ci.yml's fmt check.
+      - name: Scan image (Trivy)
+        uses: aquasecurity/trivy-action@v0.36.0
+        continue-on-error: true
+        with:
+          image-ref: "${{ matrix.image }}:${{ steps.ver.outputs.version }}"
+          format: sarif
+          output: trivy-results.sarif
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: trivy-results.sarif
+          category: "trivy-${{ matrix.dockerfile }}"
