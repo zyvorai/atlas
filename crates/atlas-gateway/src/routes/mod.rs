@@ -74,7 +74,10 @@ pub fn router(state: AppState) -> Router {
         .route("/dr/mirrors/{id}/rpo", post(set_mirror_rpo))
         .route("/dr/failover", post(dr_failover))
         .route("/protection-status", get(list_protection_status))
-        .route("/volumes/{id}/mirror", post(enable_mirror).delete(disable_mirror))
+        .route(
+            "/volumes/{id}/mirror",
+            post(enable_mirror).delete(disable_mirror),
+        )
         .route("/clusters", get(list_clusters))
         .route("/clusters/{id}/health", get(cluster_health))
         .route("/clusters/{id}/capabilities", get(cluster_capabilities))
@@ -120,7 +123,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/rbd-images/{pool}/{image}/clone", post(clone_rbd_image))
         .route("/rbd-images/{pool}/{image}/resize", post(resize_rbd_image))
-        .route("/rbd-images/{pool}/{image}/migrate", post(migrate_rbd_image))
+        .route(
+            "/rbd-images/{pool}/{image}/migrate",
+            post(migrate_rbd_image),
+        )
         .route("/rbd-images/{pool}/{image}/qos", post(qos_rbd_image))
         .route(
             "/rbd-images/{pool}/{image}/flatten",
@@ -144,8 +150,14 @@ pub fn router(state: AppState) -> Router {
             "/buckets/{id}/objects",
             get(bucket_objects).delete(bucket_object_delete),
         )
-        .route("/buckets/{id}/objects/upload-url", post(bucket_object_upload_url))
-        .route("/buckets/{id}/objects/download-url", get(bucket_object_download_url))
+        .route(
+            "/buckets/{id}/objects/upload-url",
+            post(bucket_object_upload_url),
+        )
+        .route(
+            "/buckets/{id}/objects/download-url",
+            get(bucket_object_download_url),
+        )
         .route("/buckets/{id}/objects/prune", post(bucket_objects_prune))
         .route("/volumes/{id}/bindings", get(list_volume_bindings))
         .route(
@@ -177,9 +189,15 @@ pub fn router(state: AppState) -> Router {
             "/databridge/sources/{id}",
             get(db_get_source).delete(db_delete_source),
         )
-        .route("/databridge/sources/{id}/discover", post(db_discover_source))
+        .route(
+            "/databridge/sources/{id}/discover",
+            post(db_discover_source),
+        )
         .route("/databridge/plans", get(db_list_plans).post(db_create_plan))
-        .route("/databridge/plans/{id}", get(db_get_plan).delete(db_delete_plan))
+        .route(
+            "/databridge/plans/{id}",
+            get(db_get_plan).delete(db_delete_plan),
+        )
         .route("/databridge/plans/{id}/assess", post(db_assess_plan))
         .route("/databridge/plans/{id}/provision", post(db_provision_edge))
         .route("/databridge/plans/{id}/full-load", post(db_full_load))
@@ -200,7 +218,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/databridge/object/{id}/start", post(db_object_start))
         .route("/databridge/edge-clusters", get(db_list_edge_clusters))
-        .route("/databridge/edge-clusters/{id}", get(db_get_edge_cluster).delete(db_delete_edge_cluster))
+        .route(
+            "/databridge/edge-clusters/{id}",
+            get(db_get_edge_cluster).delete(db_delete_edge_cluster),
+        )
         .route("/databridge/cdc-streams", get(db_list_cdc_streams))
         .route("/databridge/cdc-streams/{id}", get(db_get_cdc_stream))
         .route("/databridge/validations", get(db_list_validations))

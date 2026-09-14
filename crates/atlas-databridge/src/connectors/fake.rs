@@ -50,13 +50,42 @@ impl SourceConnector for FakeSourceConnector {
             ),
             SourceKind::Sqlserver => ("sqlserver", "16.0.4125", vec!["cdc".to_string()], "dbo"),
             // MongoDB: "tables" are collections and the schema namespace is the database name.
-            SourceKind::Mongodb => ("mongodb", "7.0.12", vec!["replicaSet:rs0".to_string()], "appdb"),
+            SourceKind::Mongodb => (
+                "mongodb",
+                "7.0.12",
+                vec!["replicaSet:rs0".to_string()],
+                "appdb",
+            ),
         };
         let tables = vec![
-            TableInfo { schema: schema_ns.into(), name: "customers".into(), est_rows: 1_240_000, size_bytes: 512 * 1024 * 1024, has_primary_key: true },
-            TableInfo { schema: schema_ns.into(), name: "orders".into(), est_rows: 8_900_000, size_bytes: 3 * 1024 * 1024 * 1024, has_primary_key: true },
-            TableInfo { schema: schema_ns.into(), name: "order_items".into(), est_rows: 41_000_000, size_bytes: 9 * 1024 * 1024 * 1024, has_primary_key: true },
-            TableInfo { schema: schema_ns.into(), name: "audit_log".into(), est_rows: 15_000_000, size_bytes: 2 * 1024 * 1024 * 1024, has_primary_key: false },
+            TableInfo {
+                schema: schema_ns.into(),
+                name: "customers".into(),
+                est_rows: 1_240_000,
+                size_bytes: 512 * 1024 * 1024,
+                has_primary_key: true,
+            },
+            TableInfo {
+                schema: schema_ns.into(),
+                name: "orders".into(),
+                est_rows: 8_900_000,
+                size_bytes: 3 * 1024 * 1024 * 1024,
+                has_primary_key: true,
+            },
+            TableInfo {
+                schema: schema_ns.into(),
+                name: "order_items".into(),
+                est_rows: 41_000_000,
+                size_bytes: 9 * 1024 * 1024 * 1024,
+                has_primary_key: true,
+            },
+            TableInfo {
+                schema: schema_ns.into(),
+                name: "audit_log".into(),
+                est_rows: 15_000_000,
+                size_bytes: 2 * 1024 * 1024 * 1024,
+                has_primary_key: false,
+            },
         ];
         let total_size_bytes = tables.iter().map(|t| t.size_bytes).sum();
         Ok(DiscoveredSchema {

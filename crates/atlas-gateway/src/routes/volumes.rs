@@ -12,9 +12,9 @@ use atlas_api_types::{CreateVolumeRequest, Owner, Placement};
 use atlas_common::{ids, AppError, AppResult};
 use atlas_jobs::{JobSpec, OwnerRef};
 
+use super::util::{accepted, validate_k8s_name, CEPH_BACKEND_ID};
 use crate::auth::Actor;
 use crate::state::AppState;
-use super::util::{accepted, validate_k8s_name, CEPH_BACKEND_ID};
 
 // ---- snapshots (read) ----
 
@@ -96,23 +96,20 @@ pub(crate) async fn create_volume(
     } else {
         None
     };
-    let mut placement = match atlas_policy::resolve(
-        body.policy.as_deref(),
-        body.kind,
-        sc_override.as_deref(),
-    ) {
-        Ok(p) => p,
-        // Unrecognized by the built-in catalog, but the tenant has its own override for this
-        // intent — the fields below get overwritten from `tenant_override` immediately after.
-        Err(_) if tenant_override.is_some() => Placement {
-            intent: body.policy.clone().unwrap_or_default(),
-            storage_class: String::new(),
-            access_mode: String::new(),
-            volume_mode: String::new(),
-            kind: body.kind,
-        },
-        Err(e) => return Err(AppError::Validation(e)),
-    };
+    let mut placement =
+        match atlas_policy::resolve(body.policy.as_deref(), body.kind, sc_override.as_deref()) {
+            Ok(p) => p,
+            // Unrecognized by the built-in catalog, but the tenant has its own override for this
+            // intent — the fields below get overwritten from `tenant_override` immediately after.
+            Err(_) if tenant_override.is_some() => Placement {
+                intent: body.policy.clone().unwrap_or_default(),
+                storage_class: String::new(),
+                access_mode: String::new(),
+                volume_mode: String::new(),
+                kind: body.kind,
+            },
+            Err(e) => return Err(AppError::Validation(e)),
+        };
     if let Some(tp) = tenant_override {
         placement.storage_class = tp.storage_class;
         placement.access_mode = tp.access_mode;
@@ -264,7 +261,12 @@ pub(crate) async fn expand_volume(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("volume {id}")))?;
     let resource_tenant = atlas_inventory::volume_tenant(&s.pool, &id).await?;
-    crate::auth::require_tenant(s.config.auth_required, &actor, &resource_tenant, format!("volume {id}"))?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        &actor,
+        &resource_tenant,
+        format!("volume {id}"),
+    )?;
     if body.new_size_bytes <= vol.size_bytes {
         return Err(AppError::Validation(
             "new_size_bytes must be larger than the current size".into(),
@@ -313,7 +315,12 @@ pub(crate) async fn create_snapshot(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("volume {id}")))?;
     let resource_tenant = atlas_inventory::volume_tenant(&s.pool, &id).await?;
-    crate::auth::require_tenant(s.config.auth_required, &actor, &resource_tenant, format!("volume {id}"))?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        &actor,
+        &resource_tenant,
+        format!("volume {id}"),
+    )?;
     let namespace = vol
         .kubernetes_namespace
         .ok_or_else(|| AppError::Validation("volume has no kubernetes namespace".into()))?;
@@ -385,7 +392,11 @@ impl ConfirmParams {
 }
 
 fn volume_requires_delete_confirm(vol: &atlas_api_types::StorageVolume) -> bool {
-    let sc = vol.storage_class_name.as_deref().unwrap_or("").to_ascii_lowercase();
+    let sc = vol
+        .storage_class_name
+        .as_deref()
+        .unwrap_or("")
+        .to_ascii_lowercase();
     // Production / protected classes (zyvor-rbd-prod, *-production*, etc.).
     sc.contains("prod") || sc.contains("production") || sc.contains("database")
 }
@@ -405,7 +416,12 @@ pub(crate) async fn delete_snapshot(
     let snap = atlas_inventory::snapshots::get_snapshot(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("snapshot {id}")))?;
-    crate::auth::require_tenant(s.config.auth_required, &actor, &snap.tenant_id, format!("snapshot {id}"))?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        &actor,
+        &snap.tenant_id,
+        format!("snapshot {id}"),
+    )?;
 
     // Safe-by-default: refuse to delete a snapshot that still has clones/restores derived from it.
     let deps = atlas_inventory::count_snapshot_dependents(&s.pool, &id).await?;
@@ -494,7 +510,12 @@ pub(crate) async fn enqueue_clone(
     let snap = atlas_inventory::snapshots::get_snapshot(&s.pool, snapshot_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("snapshot {snapshot_id}")))?;
-    crate::auth::require_tenant(s.config.auth_required, actor, &snap.tenant_id, format!("snapshot {snapshot_id}"))?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        actor,
+        &snap.tenant_id,
+        format!("snapshot {snapshot_id}"),
+    )?;
     // Defaults come from the source volume.
     let src = atlas_inventory::get_volume(&s.pool, &snap.volume_id).await?;
     let namespace = body

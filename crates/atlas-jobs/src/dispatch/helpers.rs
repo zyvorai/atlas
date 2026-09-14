@@ -114,7 +114,13 @@ pub(crate) async fn provision_from_snapshot(
     };
     // Idempotent retry: skip re-creating the PVC if a prior attempt already got it in place (the
     // k8s API errors on a name that already exists).
-    if k8s.get_pvc(namespace, new_name).await.ok().flatten().is_none() {
+    if k8s
+        .get_pvc(namespace, new_name)
+        .await
+        .ok()
+        .flatten()
+        .is_none()
+    {
         k8s.create_pvc(&create)
             .await
             .with_context(|| format!("{provenance} PVC {namespace}/{new_name} from snapshot"))?;
@@ -235,7 +241,11 @@ pub(crate) async fn poll_cr_ready(
             .await
             .ok()
             .flatten()
-            .and_then(|s| s.get("phase").and_then(|p| p.as_str()).map(|p| p.to_string()));
+            .and_then(|s| {
+                s.get("phase")
+                    .and_then(|p| p.as_str())
+                    .map(|p| p.to_string())
+            });
         if phase.as_deref() == Some("Ready") {
             return phase;
         }

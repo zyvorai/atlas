@@ -52,13 +52,21 @@ fn config(db: &str) -> Config {
 
 #[tokio::test]
 async fn rate_limit_trips_429() {
-    let db = format!("{}/atlas-rl-{}.db", std::env::temp_dir().display(), std::process::id());
+    let db = format!(
+        "{}/atlas-rl-{}.db",
+        std::env::temp_dir().display(),
+        std::process::id()
+    );
     let _ = std::fs::remove_file(&db);
     // build_state reads ATLAS_RATE_LIMIT_RPM at startup; set it before, clear it after (value captured).
     std::env::set_var("ATLAS_RATE_LIMIT_RPM", "5");
     let state = build_state(
         config(&db),
-        BuildOptions { enable_k8s: false, initial_discovery: false, enable_monitor: false },
+        BuildOptions {
+            enable_k8s: false,
+            initial_discovery: false,
+            enable_monitor: false,
+        },
     )
     .await
     .unwrap();
@@ -75,7 +83,11 @@ async fn rate_limit_trips_429() {
     let mut ok = 0;
     let mut limited = 0;
     for _ in 0..12 {
-        let r = c.get(format!("http://{addr}/api/atlas/v1/alerts")).send().await.unwrap();
+        let r = c
+            .get(format!("http://{addr}/api/atlas/v1/alerts"))
+            .send()
+            .await
+            .unwrap();
         match r.status().as_u16() {
             200 => ok += 1,
             429 => limited += 1,

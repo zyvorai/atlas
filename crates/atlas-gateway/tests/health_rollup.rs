@@ -85,7 +85,11 @@ async fn health_rollup_classifies_fake_fixture_as_degraded() {
     let base = format!("http://{addr}/api/atlas/v1");
     let c = reqwest::Client::new();
 
-    let resp = c.get(format!("{base}/ceph/health-rollup")).send().await.unwrap();
+    let resp = c
+        .get(format!("{base}/ceph/health-rollup"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(resp.status(), 200);
     let body: Value = resp.json().await.unwrap();
 

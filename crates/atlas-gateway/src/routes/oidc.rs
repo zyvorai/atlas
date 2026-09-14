@@ -90,8 +90,12 @@ pub(crate) async fn oidc_callback(
             q.error_description.unwrap_or_default()
         )));
     }
-    let code = q.code.ok_or_else(|| AppError::Validation("missing code".into()))?;
-    let csrf_state = q.state.ok_or_else(|| AppError::Validation("missing state".into()))?;
+    let code = q
+        .code
+        .ok_or_else(|| AppError::Validation("missing code".into()))?;
+    let csrf_state = q
+        .state
+        .ok_or_else(|| AppError::Validation("missing state".into()))?;
 
     let pending = oidc
         .take(&csrf_state)
@@ -162,20 +166,29 @@ pub(crate) async fn oidc_callback(
     // serves the console), so the token reaching the server here is fine, and a fragment would
     // never even be visible to this handler in the first place. `main.tsx` strips it from the
     // URL immediately after reading it.
-    Ok(Redirect::to(&format!("/?atlas_token={token}&atlas_role={role}")))
+    Ok(Redirect::to(&format!(
+        "/?atlas_token={token}&atlas_role={role}"
+    )))
 }
 
 fn id_token_groups(id_token: &openidconnect::core::CoreIdToken) -> Vec<String> {
     id_token_raw_payload(id_token)
         .and_then(|p| p.get("groups").cloned())
         .and_then(|g| g.as_array().cloned())
-        .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
 /// Read an arbitrary string claim (e.g. a bank IdP's `"tenant"` or `"department"` claim) from the
 /// already-signature-verified token's raw JSON payload — same rationale as `id_token_groups`.
-fn id_token_string_claim(id_token: &openidconnect::core::CoreIdToken, claim: &str) -> Option<String> {
+fn id_token_string_claim(
+    id_token: &openidconnect::core::CoreIdToken,
+    claim: &str,
+) -> Option<String> {
     id_token_raw_payload(id_token)?
         .get(claim)?
         .as_str()

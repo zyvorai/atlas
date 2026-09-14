@@ -36,8 +36,14 @@ pub async fn register_peer(
 
 /// Remove a mirroring peer and any mirrors that referenced it (stale/decommissioned peer).
 pub async fn delete_peer(pool: &SqlitePool, id: &str) -> Result<()> {
-    sqlx::query("DELETE FROM dr_mirrors WHERE peer_id=?").bind(id).execute(pool).await?;
-    sqlx::query("DELETE FROM dr_peers WHERE id=?").bind(id).execute(pool).await?;
+    sqlx::query("DELETE FROM dr_mirrors WHERE peer_id=?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM dr_peers WHERE id=?")
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -127,7 +133,10 @@ pub async fn set_mirror_state(pool: &SqlitePool, id: &str, state: &str) -> Resul
 }
 
 /// A mirror's `(pool, image, role)` — used by the promote/demote/disable jobs.
-pub async fn mirror_target(pool: &SqlitePool, id: &str) -> Result<Option<(String, String, String)>> {
+pub async fn mirror_target(
+    pool: &SqlitePool,
+    id: &str,
+) -> Result<Option<(String, String, String)>> {
     let row = sqlx::query("SELECT pool, image, role FROM dr_mirrors WHERE id=?")
         .bind(id)
         .fetch_optional(pool)
@@ -184,14 +193,7 @@ pub async fn mirror_detail(
         .bind(id)
         .fetch_optional(pool)
         .await?;
-    Ok(row.map(|r| {
-        (
-            r.get("pool"),
-            r.get("image"),
-            r.get("role"),
-            r.get("state"),
-        )
-    }))
+    Ok(row.map(|r| (r.get("pool"), r.get("image"), r.get("role"), r.get("state"))))
 }
 
 /// Stamp an error onto a mirror (real `rbd mirror` failure) without changing role.
@@ -304,10 +306,15 @@ pub async fn preflight(pool: &SqlitePool, dataplane_verified: bool) -> Result<se
         "detail": format!("{secondaries} secondary mirror(s) can be promoted")
     }));
     if !failover_ready && !mirrors.is_empty() {
-        warnings.push("no secondary role yet — demote a primary (or wait for peer sync) before promote");
+        warnings.push(
+            "no secondary role yet — demote a primary (or wait for peer sync) before promote",
+        );
     }
 
-    let with_rpo = mirrors.iter().filter(|m| m["rpo_seconds"].as_i64().is_some()).count();
+    let with_rpo = mirrors
+        .iter()
+        .filter(|m| m["rpo_seconds"].as_i64().is_some())
+        .count();
     let rpo_ok = mirrors.is_empty() || with_rpo > 0;
     checks.push(serde_json::json!({
         "id": "rpo_observed", "ok": rpo_ok,
@@ -385,16 +392,31 @@ mod tests {
         let pre = preflight(&pool, false).await.unwrap();
         assert_eq!(pre["ready"], false);
         assert_eq!(pre["dataplane_verified"], false);
-        assert!(pre["blockers"].as_array().unwrap().iter().any(|b| b.as_str().unwrap().contains("peer")));
+        assert!(pre["blockers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|b| b.as_str().unwrap().contains("peer")));
 
-        register_peer(&pool, "p1", "dc2", Some("fsid"), "bidirectional", Some("sec")).await.unwrap();
+        register_peer(
+            &pool,
+            "p1",
+            "dc2",
+            Some("fsid"),
+            "bidirectional",
+            Some("sec"),
+        )
+        .await
+        .unwrap();
         let pre2 = preflight(&pool, false).await.unwrap();
         assert_eq!(pre2["ready"], true);
         assert_eq!(pre2["control_plane_ready"], true);
         assert_eq!(pre2["dataplane_verified"], false);
-        assert!(pre2["warnings"].as_array().unwrap().iter().any(|w| {
-            w.as_str().unwrap().contains("dataplane unverified")
-        }));
+        assert!(pre2["warnings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|w| { w.as_str().unwrap().contains("dataplane unverified") }));
     }
 
     #[tokio::test]
@@ -406,11 +428,12 @@ mod tests {
         let pre = preflight(&pool, true).await.unwrap();
         assert_eq!(pre["dataplane_verified"], true);
         assert!(
-            !pre["warnings"].as_array().unwrap().iter().any(|w| {
-                w.as_str().unwrap().contains("dataplane unverified")
-            }),
+            !pre["warnings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|w| { w.as_str().unwrap().contains("dataplane unverified") }),
             "the unverified-dataplane warning must not fire once verified"
         );
     }
 }
-

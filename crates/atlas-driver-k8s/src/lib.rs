@@ -342,8 +342,17 @@ impl K8sDriver {
         labels: &BTreeMap<String, String>,
         spec: serde_json::Value,
     ) -> Result<(), K8sError> {
-        self.apply_cr_meta(group, version, kind, ns, name, labels, &BTreeMap::new(), spec)
-            .await
+        self.apply_cr_meta(
+            group,
+            version,
+            kind,
+            ns,
+            name,
+            labels,
+            &BTreeMap::new(),
+            spec,
+        )
+        .await
     }
 
     /// Like `apply_cr_labeled` but also stamps `metadata.annotations` — needed e.g. for Strimzi

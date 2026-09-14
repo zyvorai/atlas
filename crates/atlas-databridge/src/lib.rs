@@ -57,8 +57,8 @@ pub fn build_connector(
                         password,
                     ),
                 )),
-                SourceKind::Mysql | SourceKind::Mariadb => Ok(Box::new(
-                    connectors::mysql::MysqlSourceConnector::new(
+                SourceKind::Mysql | SourceKind::Mariadb => {
+                    Ok(Box::new(connectors::mysql::MysqlSourceConnector::new(
                         source.id.clone(),
                         kind.as_str(),
                         host,
@@ -67,9 +67,11 @@ pub fn build_connector(
                         user,
                         password,
                         &source.tls_mode,
-                    ),
-                )),
-                SourceKind::Sqlserver => build_sqlserver(source, host, port, database, user, password),
+                    )))
+                }
+                SourceKind::Sqlserver => {
+                    build_sqlserver(source, host, port, database, user, password)
+                }
                 SourceKind::Oracle => build_oracle(source, host, port, database, user, password),
                 SourceKind::Mongodb => build_mongodb(source, host, port, database, user, password),
             }
@@ -88,15 +90,17 @@ fn build_sqlserver(
     user: &str,
     password: &str,
 ) -> anyhow::Result<Box<dyn SourceConnector>> {
-    Ok(Box::new(connectors::sqlserver::SqlServerSourceConnector::new(
-        source.id.clone(),
-        host,
-        port,
-        database,
-        user,
-        password,
-        &source.tls_mode,
-    )))
+    Ok(Box::new(
+        connectors::sqlserver::SqlServerSourceConnector::new(
+            source.id.clone(),
+            host,
+            port,
+            database,
+            user,
+            password,
+            &source.tls_mode,
+        ),
+    ))
 }
 
 #[cfg(not(feature = "sqlserver"))]

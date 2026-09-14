@@ -387,7 +387,9 @@ impl Config {
             );
         }
         if self.disable_http
-            && (self.https_addr.is_none() || self.tls_cert_path.is_none() || self.tls_key_path.is_none())
+            && (self.https_addr.is_none()
+                || self.tls_cert_path.is_none()
+                || self.tls_key_path.is_none())
         {
             return Err(
                 "ATLAS_DISABLE_HTTP is set but ATLAS_HTTPS_ADDR/ATLAS_TLS_CERT/ATLAS_TLS_KEY aren't all configured — that would leave no REST listener at all, refuse to start"

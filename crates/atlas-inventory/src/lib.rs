@@ -20,9 +20,9 @@ use sqlx::{Row, SqlitePool};
 pub mod alerts;
 pub mod audit;
 pub mod backups;
-pub mod dr;
 pub mod buckets;
 pub mod databridge;
+pub mod dr;
 pub mod events;
 pub mod jobs;
 pub mod leader;
@@ -31,8 +31,8 @@ pub mod protection;
 pub mod rbd_snapshots;
 pub mod schedules;
 pub mod snapshots;
-pub mod tokens;
 pub mod tenants;
+pub mod tokens;
 pub mod users;
 
 /// Open the SQLite pool with WAL + foreign keys, creating the file if missing.
@@ -98,7 +98,9 @@ pub async fn connect_postgres(database_url: &str) -> Result<sqlx::PgPool> {
 /// Run Postgres migrations from workspace-root `migrations-postgres/`.
 #[cfg(feature = "postgres")]
 pub async fn migrate_postgres(pool: &sqlx::PgPool) -> Result<()> {
-    sqlx::migrate!("../../migrations-postgres").run(pool).await?;
+    sqlx::migrate!("../../migrations-postgres")
+        .run(pool)
+        .await?;
     Ok(())
 }
 
@@ -1173,6 +1175,9 @@ mod connect_tests {
             .to_string();
         assert!(err.contains("PostgreSQL is not wired yet"), "{err}");
         assert!(err.contains("docs/HA.md"), "{err}");
-        assert!(err.contains("connect_postgres") || err.contains("postgres"), "{err}");
+        assert!(
+            err.contains("connect_postgres") || err.contains("postgres"),
+            "{err}"
+        );
     }
 }

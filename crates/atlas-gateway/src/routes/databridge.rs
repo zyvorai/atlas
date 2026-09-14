@@ -11,9 +11,9 @@ use serde_json::{json, Value};
 use atlas_common::{ids, AppError, AppResult};
 use atlas_jobs::JobSpec;
 
+use super::util::accepted;
 use crate::auth::Actor;
 use crate::state::AppState;
-use super::util::accepted;
 
 // ---- DataBridge: sources (cloud-to-edge DB migration) ----
 
@@ -42,7 +42,10 @@ pub(crate) async fn db_list_sources(State(s): State<AppState>) -> AppResult<Json
     )))
 }
 
-pub(crate) async fn db_get_source(State(s): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
+pub(crate) async fn db_get_source(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
     let src = atlas_inventory::databridge::sources::get_source(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("source {id}")))?;
@@ -162,7 +165,10 @@ pub(crate) async fn db_list_plans(State(s): State<AppState>) -> AppResult<Json<V
     )))
 }
 
-pub(crate) async fn db_get_plan(State(s): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
+pub(crate) async fn db_get_plan(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
     let p = atlas_inventory::databridge::plans::get_plan(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("plan {id}")))?;
@@ -240,7 +246,9 @@ pub(crate) async fn db_assess_plan(
         )));
     }
     let job_id = ids::job_id();
-    let spec = JobSpec::MigrationAssess { plan_id: id.clone() };
+    let spec = JobSpec::MigrationAssess {
+        plan_id: id.clone(),
+    };
     let job = s
         .jobs
         .enqueue(&job_id, "global", &actor.id, spec, None)
@@ -265,7 +273,9 @@ pub(crate) async fn db_provision_edge(
         ));
     }
     let job_id = ids::job_id();
-    let spec = JobSpec::EdgeDbProvision { plan_id: id.clone() };
+    let spec = JobSpec::EdgeDbProvision {
+        plan_id: id.clone(),
+    };
     let job = s
         .jobs
         .enqueue(&job_id, "global", &actor.id, spec, None)
@@ -330,7 +340,15 @@ pub(crate) async fn db_full_load(
     Extension(actor): Extension<Actor>,
     Path(id): Path<String>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
-    db_stage_job(&s, &actor, &id, JobSpec::FullLoad { plan_id: id.clone() }).await
+    db_stage_job(
+        &s,
+        &actor,
+        &id,
+        JobSpec::FullLoad {
+            plan_id: id.clone(),
+        },
+    )
+    .await
 }
 
 pub(crate) async fn db_cdc_start(
@@ -338,7 +356,15 @@ pub(crate) async fn db_cdc_start(
     Extension(actor): Extension<Actor>,
     Path(id): Path<String>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
-    db_stage_job(&s, &actor, &id, JobSpec::CdcStart { plan_id: id.clone() }).await
+    db_stage_job(
+        &s,
+        &actor,
+        &id,
+        JobSpec::CdcStart {
+            plan_id: id.clone(),
+        },
+    )
+    .await
 }
 
 pub(crate) async fn db_cdc_stop(
@@ -346,7 +372,15 @@ pub(crate) async fn db_cdc_stop(
     Extension(actor): Extension<Actor>,
     Path(id): Path<String>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
-    db_stage_job(&s, &actor, &id, JobSpec::CdcStop { plan_id: id.clone() }).await
+    db_stage_job(
+        &s,
+        &actor,
+        &id,
+        JobSpec::CdcStop {
+            plan_id: id.clone(),
+        },
+    )
+    .await
 }
 
 /// `POST /databridge/plans/{id}/cdc/restart` — re-establish a stalled/errored CDC stream (self-heal).
@@ -355,7 +389,15 @@ pub(crate) async fn db_cdc_restart(
     Extension(actor): Extension<Actor>,
     Path(id): Path<String>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
-    db_stage_job(&s, &actor, &id, JobSpec::CdcRestart { plan_id: id.clone() }).await
+    db_stage_job(
+        &s,
+        &actor,
+        &id,
+        JobSpec::CdcRestart {
+            plan_id: id.clone(),
+        },
+    )
+    .await
 }
 
 pub(crate) async fn db_validate(
@@ -367,7 +409,10 @@ pub(crate) async fn db_validate(
         &s,
         &actor,
         &id,
-        JobSpec::ValidateRun { plan_id: id.clone(), kind: "rowcount".into() },
+        JobSpec::ValidateRun {
+            plan_id: id.clone(),
+            kind: "rowcount".into(),
+        },
     )
     .await
 }
@@ -408,11 +453,27 @@ pub(crate) async fn db_cutover(
     let job_id = ids::job_id();
     let job = s
         .jobs
-        .enqueue(&job_id, "global", &actor.id, JobSpec::Cutover { plan_id: id.clone() }, None)
+        .enqueue(
+            &job_id,
+            "global",
+            &actor.id,
+            JobSpec::Cutover {
+                plan_id: id.clone(),
+            },
+            None,
+        )
         .await
         .map_err(AppError::from)?;
     let _ = atlas_inventory::audit::record(
-        &s.pool, None, &actor.id, "databridge.cutover", "migration.plan", &id, "accepted", None, None,
+        &s.pool,
+        None,
+        &actor.id,
+        "databridge.cutover",
+        "migration.plan",
+        &id,
+        "accepted",
+        None,
+        None,
     )
     .await;
     Ok(accepted(&job, json!({ "plan_id": id })))
@@ -443,7 +504,15 @@ pub(crate) async fn db_rollback(
     let job_id = ids::job_id();
     let job = s
         .jobs
-        .enqueue(&job_id, "global", &actor.id, JobSpec::Rollback { plan_id: id.clone() }, None)
+        .enqueue(
+            &job_id,
+            "global",
+            &actor.id,
+            JobSpec::Rollback {
+                plan_id: id.clone(),
+            },
+            None,
+        )
         .await
         .map_err(AppError::from)?;
     Ok(accepted(&job, json!({ "plan_id": id })))
@@ -508,25 +577,42 @@ pub(crate) async fn db_object_create(
     }
     let mode = body.mode.as_deref().unwrap_or("incremental");
     if mode != "full" && mode != "incremental" {
-        return Err(AppError::Validation("mode must be 'full' or 'incremental'".into()));
+        return Err(AppError::Validation(
+            "mode must be 'full' or 'incremental'".into(),
+        ));
     }
     let id = ids::object_migration_id();
     let rec = atlas_inventory::databridge::object_migrations::NewObjectMigration {
         id: id.clone(),
         tenant_id: "global".into(),
         name: body.name.clone(),
-        source_provider: body.source_provider.clone().unwrap_or_else(|| "s3-compatible".into()),
+        source_provider: body
+            .source_provider
+            .clone()
+            .unwrap_or_else(|| "s3-compatible".into()),
         source_endpoint: body.source_endpoint.clone(),
-        source_region: body.source_region.clone().unwrap_or_else(|| "us-east-1".into()),
+        source_region: body
+            .source_region
+            .clone()
+            .unwrap_or_else(|| "us-east-1".into()),
         source_bucket: body.source_bucket.clone(),
         source_prefix: body.source_prefix.clone(),
         source_secret_ref: body.source_secret_ref.clone(),
-        dest_provider: body.dest_provider.clone().unwrap_or_else(|| "s3-compatible".into()),
+        dest_provider: body
+            .dest_provider
+            .clone()
+            .unwrap_or_else(|| "s3-compatible".into()),
         dest_endpoint: body.dest_endpoint.clone(),
-        dest_region: body.dest_region.clone().unwrap_or_else(|| "us-east-1".into()),
+        dest_region: body
+            .dest_region
+            .clone()
+            .unwrap_or_else(|| "us-east-1".into()),
         dest_bucket: body.dest_bucket.clone(),
         dest_secret_ref: body.dest_secret_ref.clone(),
-        secret_namespace: body.secret_namespace.clone().unwrap_or_else(|| "zyvor-databridge".into()),
+        secret_namespace: body
+            .secret_namespace
+            .clone()
+            .unwrap_or_else(|| "zyvor-databridge".into()),
         mode: mode.into(),
         concurrency: body.concurrency,
         part_size_mb: body.part_size_mb,
@@ -555,7 +641,9 @@ pub(crate) async fn db_object_start(
             &job_id,
             "global",
             &actor.id,
-            JobSpec::ObjectMigrate { migration_id: id.clone() },
+            JobSpec::ObjectMigrate {
+                migration_id: id.clone(),
+            },
             None,
         )
         .await
@@ -564,7 +652,10 @@ pub(crate) async fn db_object_start(
     Ok(accepted(&job, json!({ "object_migration_id": id })))
 }
 
-pub(crate) async fn db_object_get(State(s): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
+pub(crate) async fn db_object_get(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
     let rec = atlas_inventory::databridge::object_migrations::get(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("object migration {id}")))?;

@@ -104,9 +104,17 @@ async fn seed_volume(pool: &sqlx::SqlitePool, id: &str, tenant_id: &str, name: &
 }
 
 async fn seed_bucket(pool: &sqlx::SqlitePool, id: &str, tenant_id: &str, name: &str) {
-    atlas_inventory::buckets::insert_bucket(pool, id, tenant_id, name, "rook-ceph", name, "zyvor-rgw-bucket")
-        .await
-        .unwrap();
+    atlas_inventory::buckets::insert_bucket(
+        pool,
+        id,
+        tenant_id,
+        name,
+        "rook-ceph",
+        name,
+        "zyvor-rgw-bucket",
+    )
+    .await
+    .unwrap();
 }
 
 fn client() -> reqwest::Client {
@@ -145,7 +153,11 @@ async fn viewer_is_scoped_to_own_tenant() {
         .json()
         .await
         .unwrap();
-    assert_eq!(vols_a.len(), 1, "tenant A viewer should see exactly 1 volume");
+    assert_eq!(
+        vols_a.len(),
+        1,
+        "tenant A viewer should see exactly 1 volume"
+    );
     assert_eq!(vols_a[0]["id"], "vol_tenant_a");
 
     let vols_b: Vec<serde_json::Value> = c
@@ -157,7 +169,11 @@ async fn viewer_is_scoped_to_own_tenant() {
         .json()
         .await
         .unwrap();
-    assert_eq!(vols_b.len(), 1, "tenant B viewer should see exactly 1 volume");
+    assert_eq!(
+        vols_b.len(),
+        1,
+        "tenant B viewer should see exactly 1 volume"
+    );
     assert_eq!(vols_b[0]["id"], "vol_tenant_b");
 
     let vols_admin: Vec<serde_json::Value> = c
@@ -169,7 +185,11 @@ async fn viewer_is_scoped_to_own_tenant() {
         .json()
         .await
         .unwrap();
-    assert_eq!(vols_admin.len(), 2, "admin should see both tenants' volumes");
+    assert_eq!(
+        vols_admin.len(),
+        2,
+        "admin should see both tenants' volumes"
+    );
 
     // --- explicit ?tenant= override attempt must not escape scope ---
     let vols_a_probe: Vec<serde_json::Value> = c
@@ -195,7 +215,11 @@ async fn viewer_is_scoped_to_own_tenant() {
         .send()
         .await
         .unwrap();
-    assert_eq!(cross.status(), 404, "tenant A viewer must not fetch tenant B's volume by id");
+    assert_eq!(
+        cross.status(),
+        404,
+        "tenant A viewer must not fetch tenant B's volume by id"
+    );
 
     let own = c
         .get(format!("{base}/volumes/vol_tenant_a"))
@@ -203,7 +227,11 @@ async fn viewer_is_scoped_to_own_tenant() {
         .send()
         .await
         .unwrap();
-    assert_eq!(own.status(), 200, "tenant A viewer must fetch their own volume");
+    assert_eq!(
+        own.status(),
+        200,
+        "tenant A viewer must fetch their own volume"
+    );
 
     let admin_cross = c
         .get(format!("{base}/volumes/vol_tenant_b"))
@@ -211,7 +239,11 @@ async fn viewer_is_scoped_to_own_tenant() {
         .send()
         .await
         .unwrap();
-    assert_eq!(admin_cross.status(), 200, "admin must fetch any tenant's volume");
+    assert_eq!(
+        admin_cross.status(),
+        200,
+        "admin must fetch any tenant's volume"
+    );
 
     // --- volumes.csv must not leak the other tenant's row ---
     let csv_a = c
@@ -223,7 +255,10 @@ async fn viewer_is_scoped_to_own_tenant() {
         .text()
         .await
         .unwrap();
-    assert!(csv_a.contains("vol_tenant_a"), "CSV must contain the caller's own volume");
+    assert!(
+        csv_a.contains("vol_tenant_a"),
+        "CSV must contain the caller's own volume"
+    );
     assert!(
         !csv_a.contains("vol_tenant_b"),
         "CSV must not leak another tenant's volume row"
@@ -248,7 +283,11 @@ async fn viewer_is_scoped_to_own_tenant() {
         .send()
         .await
         .unwrap();
-    assert_eq!(bkt_cross.status(), 404, "tenant A viewer must not fetch tenant B's bucket by id");
+    assert_eq!(
+        bkt_cross.status(),
+        404,
+        "tenant A viewer must not fetch tenant B's bucket by id"
+    );
 
     let bkts_admin: Vec<serde_json::Value> = c
         .get(format!("{base}/buckets"))
@@ -259,7 +298,11 @@ async fn viewer_is_scoped_to_own_tenant() {
         .json()
         .await
         .unwrap();
-    assert_eq!(bkts_admin.len(), 2, "admin should see both tenants' buckets");
+    assert_eq!(
+        bkts_admin.len(),
+        2,
+        "admin should see both tenants' buckets"
+    );
 }
 
 /// Regression guard for the cross-tenant *write* gap found while adding this file's coverage:

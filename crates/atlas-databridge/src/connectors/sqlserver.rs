@@ -85,7 +85,10 @@ impl SourceConnector for SqlServerSourceConnector {
             .context("TDS handshake with source SQL Server")?;
 
         let version: String = client
-            .query("SELECT CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(128))", &[])
+            .query(
+                "SELECT CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(128))",
+                &[],
+            )
             .await?
             .into_first_result()
             .await?
@@ -106,7 +109,10 @@ impl SourceConnector for SqlServerSourceConnector {
             .unwrap_or(false);
 
         let databases: Vec<String> = client
-            .query("SELECT name FROM sys.databases WHERE database_id > 4 ORDER BY name", &[])
+            .query(
+                "SELECT name FROM sys.databases WHERE database_id > 4 ORDER BY name",
+                &[],
+            )
             .await?
             .into_first_result()
             .await?
@@ -138,8 +144,14 @@ impl SourceConnector for SqlServerSourceConnector {
         let tables: Vec<TableInfo> = rows
             .iter()
             .map(|r| TableInfo {
-                schema: r.get::<&str, _>("schema_name").unwrap_or_default().to_string(),
-                name: r.get::<&str, _>("table_name").unwrap_or_default().to_string(),
+                schema: r
+                    .get::<&str, _>("schema_name")
+                    .unwrap_or_default()
+                    .to_string(),
+                name: r
+                    .get::<&str, _>("table_name")
+                    .unwrap_or_default()
+                    .to_string(),
                 est_rows: r.get::<i64, _>("est_rows").unwrap_or(0).max(0),
                 size_bytes: r.get::<i64, _>("size_bytes").unwrap_or(0).max(0),
                 has_primary_key: r.get::<i32, _>("has_pk").unwrap_or(0) != 0,
@@ -150,7 +162,11 @@ impl SourceConnector for SqlServerSourceConnector {
         Ok(DiscoveredSchema {
             engine: "sqlserver".to_string(),
             version,
-            databases: if databases.is_empty() { vec![self.database.clone()] } else { databases },
+            databases: if databases.is_empty() {
+                vec![self.database.clone()]
+            } else {
+                databases
+            },
             tables,
             extensions: vec![],
             total_size_bytes,
@@ -174,7 +190,11 @@ mod tests {
             return;
         };
         let p: Vec<&str> = spec.split(',').collect();
-        assert_eq!(p.len(), 5, "DATABRIDGE_TEST_MSSQL must be host,port,database,user,password");
+        assert_eq!(
+            p.len(),
+            5,
+            "DATABRIDGE_TEST_MSSQL must be host,port,database,user,password"
+        );
         let conn = SqlServerSourceConnector::new(
             "src_test",
             p[0],

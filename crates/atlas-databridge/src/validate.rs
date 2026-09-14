@@ -10,7 +10,10 @@ use serde_json::{json, Value};
 
 /// Deterministic validation Job name for a validation-run id.
 pub fn job_name(validation_id: &str) -> String {
-    format!("validate-{}", &validation_id[validation_id.len().saturating_sub(8)..])
+    format!(
+        "validate-{}",
+        &validation_id[validation_id.len().saturating_sub(8)..]
+    )
 }
 
 fn env_val(name: &str, value: &str) -> Value {
@@ -165,24 +168,48 @@ mod tests {
     #[test]
     fn pg_validate_compares_counts() {
         let spec = pg_validate_job_spec("src", "edge-app", "h", 5432, "appdb", "require");
-        let args = spec["template"]["spec"]["containers"][0]["args"][0].as_str().unwrap();
+        let args = spec["template"]["spec"]["containers"][0]["args"][0]
+            .as_str()
+            .unwrap();
         assert!(args.contains("SELECT count(*)"));
         assert!(args.contains("MISMATCH"));
-        let env = spec["template"]["spec"]["containers"][0]["env"].as_array().unwrap();
+        let env = spec["template"]["spec"]["containers"][0]["env"]
+            .as_array()
+            .unwrap();
         assert!(env.iter().any(|e| e["name"] == "EDGE_URI"));
     }
 
     #[test]
     fn mysql_validate_uses_information_schema() {
-        let spec = mysql_validate_job_spec("src", "edge-secrets", "h", 3306, "appdb", "edge-haproxy", "appdb");
-        let args = spec["template"]["spec"]["containers"][0]["args"][0].as_str().unwrap();
+        let spec = mysql_validate_job_spec(
+            "src",
+            "edge-secrets",
+            "h",
+            3306,
+            "appdb",
+            "edge-haproxy",
+            "appdb",
+        );
+        let args = spec["template"]["spec"]["containers"][0]["args"][0]
+            .as_str()
+            .unwrap();
         assert!(args.contains("information_schema.tables"));
     }
 
     #[test]
     fn mongo_validate_counts_documents() {
-        let spec = mongo_validate_job_spec("src", "edge-secrets", "h", 27017, "appdb", "edge-rs0", "appdb");
-        let args = spec["template"]["spec"]["containers"][0]["args"][0].as_str().unwrap();
+        let spec = mongo_validate_job_spec(
+            "src",
+            "edge-secrets",
+            "h",
+            27017,
+            "appdb",
+            "edge-rs0",
+            "appdb",
+        );
+        let args = spec["template"]["spec"]["containers"][0]["args"][0]
+            .as_str()
+            .unwrap();
         assert!(args.contains("countDocuments"));
         assert!(args.contains("MISMATCH"));
         assert!(args.contains("authSource=admin"));

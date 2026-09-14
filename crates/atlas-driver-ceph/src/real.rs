@@ -202,8 +202,11 @@ impl StorageDriver for RealCephDriver {
         let images = out.as_array().unwrap_or(&empty);
         // `rbd ls -l` has no `used_size` field (only `size`, the provisioned size); fetch actual
         // usage separately via `rbd du`.
-        let used: std::collections::HashMap<String, i64> =
-            rbd_du_pool(pool).await.unwrap_or_default().into_iter().collect();
+        let used: std::collections::HashMap<String, i64> = rbd_du_pool(pool)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
         Ok(images
             .iter()
             // `rbd ls -l` also lists snapshot rows (with a "snapshot" field); keep base images.

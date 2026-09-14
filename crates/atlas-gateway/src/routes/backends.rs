@@ -10,13 +10,15 @@ use serde_json::{json, Value};
 use atlas_api_types::{BackendMode, BackendType, StorageBackend};
 use atlas_common::{AppError, AppResult};
 
+use super::util::ceph_default_caps;
 use crate::auth::Actor;
 use crate::state::AppState;
-use super::util::ceph_default_caps;
 
 // ---- backends ----
 
-pub(crate) async fn list_backends(State(s): State<AppState>) -> AppResult<Json<Vec<StorageBackend>>> {
+pub(crate) async fn list_backends(
+    State(s): State<AppState>,
+) -> AppResult<Json<Vec<StorageBackend>>> {
     Ok(Json(atlas_inventory::list_backends(&s.pool).await?))
 }
 
@@ -50,7 +52,9 @@ pub(crate) async fn delete_backend(
         purged = atlas_inventory::delete_volumes_by_backend(&s.pool, &id).await?;
     }
     atlas_inventory::delete_backend(&s.pool, &id).await?;
-    Ok(Json(json!({ "backend_id": id, "deleted": true, "volumes_purged": purged })))
+    Ok(Json(
+        json!({ "backend_id": id, "deleted": true, "volumes_purged": purged }),
+    ))
 }
 
 /// `GET /backends/summary` — per-backend inventory breakdown (type, clusters/volumes, capacity).
@@ -107,24 +111,46 @@ pub(crate) async fn create_backend(
     let id = atlas_common::ids::backend_id();
     // NFS/ZFS drivers can be instantiated live and registered into the running driver registry, so
     // the backend actually discovers + serves — not just a catalog row. Others stay a `pending` row.
-    let (status, live): (&str, Option<std::sync::Arc<dyn atlas_driver_core::StorageDriver>>) =
-        match backend_type {
-            BackendType::Nfs => {
-                let server = body.server.clone().unwrap_or_else(|| "nfs01.zyvor.lab".into());
-                let exports = body.targets.clone().filter(|t| !t.is_empty()).unwrap_or_else(|| {
-                    vec!["/exports/vmstore".into(), "/exports/backups".into()]
-                });
-                ("active", Some(std::sync::Arc::new(atlas_driver_nfs::NfsDriver::new(&id, server, exports))))
-            }
-            BackendType::Zfs => {
-                let host = body.server.clone().unwrap_or_else(|| "zfs01.zyvor.lab".into());
-                let pools = body.targets.clone().filter(|t| !t.is_empty()).unwrap_or_else(|| {
-                    vec!["tank".into(), "vault".into()]
-                });
-                ("active", Some(std::sync::Arc::new(atlas_driver_zfs::ZfsDriver::new(&id, host, pools))))
-            }
-            _ => ("pending", None),
-        };
+    let (status, live): (
+        &str,
+        Option<std::sync::Arc<dyn atlas_driver_core::StorageDriver>>,
+    ) = match backend_type {
+        BackendType::Nfs => {
+            let server = body
+                .server
+                .clone()
+                .unwrap_or_else(|| "nfs01.zyvor.lab".into());
+            let exports = body
+                .targets
+                .clone()
+                .filter(|t| !t.is_empty())
+                .unwrap_or_else(|| vec!["/exports/vmstore".into(), "/exports/backups".into()]);
+            (
+                "active",
+                Some(std::sync::Arc::new(atlas_driver_nfs::NfsDriver::new(
+                    &id, server, exports,
+                ))),
+            )
+        }
+        BackendType::Zfs => {
+            let host = body
+                .server
+                .clone()
+                .unwrap_or_else(|| "zfs01.zyvor.lab".into());
+            let pools = body
+                .targets
+                .clone()
+                .filter(|t| !t.is_empty())
+                .unwrap_or_else(|| vec!["tank".into(), "vault".into()]);
+            (
+                "active",
+                Some(std::sync::Arc::new(atlas_driver_zfs::ZfsDriver::new(
+                    &id, host, pools,
+                ))),
+            )
+        }
+        _ => ("pending", None),
+    };
     let backend = StorageBackend {
         id: id.clone(),
         name: body.name,

@@ -62,7 +62,11 @@ async fn spawn() -> SocketAddr {
     };
     let state = build_state(
         config,
-        BuildOptions { enable_k8s: false, initial_discovery: true, enable_monitor: false },
+        BuildOptions {
+            enable_k8s: false,
+            initial_discovery: true,
+            enable_monitor: false,
+        },
     )
     .await
     .expect("build_state");
@@ -89,13 +93,27 @@ async fn post_backend_registers_live_nfs_driver() {
         .json()
         .await
         .unwrap();
-    assert_eq!(created["status"], "active", "nfs backend should be live, not pending: {created}");
+    assert_eq!(
+        created["status"], "active",
+        "nfs backend should be live, not pending: {created}"
+    );
     let bid = created["id"].as_str().unwrap();
 
     // The newly-registered backend discovered its export as a pool.
-    let pools: Value = c.get(format!("{base}/pools")).send().await.unwrap().json().await.unwrap();
+    let pools: Value = c
+        .get(format!("{base}/pools"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
     assert!(
-        pools.as_array().unwrap().iter().any(|p| p["kind"] == "nfs_export"),
+        pools
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["kind"] == "nfs_export"),
         "the live NFS backend should have discovered an export pool: {pools}"
     );
     assert!(!bid.is_empty());

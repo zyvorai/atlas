@@ -95,7 +95,10 @@ async fn interrupted_running_job_is_recovered_on_restart() {
     let s2 = boot(&db).await;
     let mut last = String::new();
     for _ in 0..40 {
-        if let Some(j) = atlas_inventory::jobs::get_job(&s2.pool, "j_stuck").await.unwrap() {
+        if let Some(j) = atlas_inventory::jobs::get_job(&s2.pool, "j_stuck")
+            .await
+            .unwrap()
+        {
             last = j.state.clone();
             if last == "failed" {
                 assert!(

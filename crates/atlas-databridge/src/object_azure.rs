@@ -35,8 +35,8 @@ impl AzureBlobSource {
     /// (the account key).
     pub fn new(account: &str, access_key: &str, container: &str) -> Result<Self> {
         let creds = StorageCredentials::access_key(account.to_string(), access_key.to_string());
-        let container = ClientBuilder::new(account.to_string(), creds)
-            .container_client(container.to_string());
+        let container =
+            ClientBuilder::new(account.to_string(), creds).container_client(container.to_string());
         Ok(Self { container })
     }
 }

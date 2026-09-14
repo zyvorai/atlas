@@ -30,7 +30,10 @@ impl PostgresSourceConnector {
         let conn_str = format!(
             "host={host} port={port} dbname={database} user={user} password={password} sslmode=disable connect_timeout=10"
         );
-        Self { source_id: source_id.into(), conn_str }
+        Self {
+            source_id: source_id.into(),
+            conn_str,
+        }
     }
 
     async fn introspect(&self, client: &tokio_postgres::Client) -> Result<DiscoveredSchema> {
@@ -94,7 +97,11 @@ impl PostgresSourceConnector {
         Ok(DiscoveredSchema {
             engine: "postgres".to_string(),
             version,
-            databases: if databases.is_empty() { vec![current_db] } else { databases },
+            databases: if databases.is_empty() {
+                vec![current_db]
+            } else {
+                databases
+            },
             tables,
             extensions,
             total_size_bytes,
@@ -138,11 +145,18 @@ mod tests {
             return;
         };
         // spec is a full conn string; wrap it directly.
-        let conn = PgTestConn { source_id: "src_test".into(), conn_str: spec };
+        let conn = PgTestConn {
+            source_id: "src_test".into(),
+            conn_str: spec,
+        };
         let schema = conn.discover().await.expect("discover");
         assert_eq!(schema.engine, "postgres");
         assert!(schema.tables.iter().any(|t| t.name == "customers"));
-        let orders = schema.tables.iter().find(|t| t.name == "orders").expect("orders table");
+        let orders = schema
+            .tables
+            .iter()
+            .find(|t| t.name == "orders")
+            .expect("orders table");
         assert!(orders.has_primary_key);
     }
 
@@ -157,7 +171,10 @@ mod tests {
             &self.source_id
         }
         async fn discover(&self) -> anyhow::Result<crate::connector::DiscoveredSchema> {
-            let real = PostgresSourceConnector { source_id: self.source_id.clone(), conn_str: self.conn_str.clone() };
+            let real = PostgresSourceConnector {
+                source_id: self.source_id.clone(),
+                conn_str: self.conn_str.clone(),
+            };
             real.discover().await
         }
     }

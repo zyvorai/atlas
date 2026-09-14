@@ -34,7 +34,14 @@ fn csi_secret_params(prefix: &str, ns: &str) -> Vec<(String, String)> {
         let value = if suffix.ends_with("namespace") {
             ns.to_string()
         } else {
-            format!("rook-csi-{prefix}-{}", if suffix.starts_with("node") { "node" } else { "provisioner" })
+            format!(
+                "rook-csi-{prefix}-{}",
+                if suffix.starts_with("node") {
+                    "node"
+                } else {
+                    "provisioner"
+                }
+            )
         };
         (key, value)
     })
@@ -64,8 +71,15 @@ pub(crate) async fn dispatch_rook(
             if let Some(dc) = &device_class {
                 cr_spec["deviceClass"] = serde_json::json!(dc);
             }
-            k8s.apply_cr(ROOK_GROUP, ROOK_VERSION, "CephBlockPool", &namespace, &name, cr_spec)
-                .await?;
+            k8s.apply_cr(
+                ROOK_GROUP,
+                ROOK_VERSION,
+                "CephBlockPool",
+                &namespace,
+                &name,
+                cr_spec,
+            )
+            .await?;
 
             let mut params: BTreeMap<String, String> = BTreeMap::new();
             params.insert("clusterID".into(), namespace.clone());
@@ -91,14 +105,26 @@ pub(crate) async fn dispatch_rook(
             )
             .await?;
 
-            let phase = poll_cr_ready(&k8s, ROOK_GROUP, ROOK_VERSION, "CephBlockPool", &namespace, &name).await;
+            let phase = poll_cr_ready(
+                &k8s,
+                ROOK_GROUP,
+                ROOK_VERSION,
+                "CephBlockPool",
+                &namespace,
+                &name,
+            )
+            .await;
             Ok(serde_json::json!({
                 "pool": name, "storage_class": storage_class, "phase": phase,
                 "ready": phase.as_deref() == Some("Ready")
             }))
         }
 
-        JobSpec::CephPoolDelete { name, namespace, storage_class } => {
+        JobSpec::CephPoolDelete {
+            name,
+            namespace,
+            storage_class,
+        } => {
             let k8s = require_k8s(k8s)?;
             k8s.delete_storage_class(&storage_class).await?;
             k8s.delete_cr(ROOK_GROUP, ROOK_VERSION, "CephBlockPool", &namespace, &name)
@@ -114,14 +140,22 @@ pub(crate) async fn dispatch_rook(
             replicated_size,
         } => {
             let k8s = require_k8s(k8s)?;
-            let replicated = serde_json::json!({ "size": replicated_size, "requireSafeReplicaSize": false });
+            let replicated =
+                serde_json::json!({ "size": replicated_size, "requireSafeReplicaSize": false });
             let cr_spec = serde_json::json!({
                 "metadataPool": { "replicated": replicated.clone() },
                 "dataPools": [{ "name": data_pool_name, "replicated": replicated }],
                 "metadataServer": { "activeCount": 1, "activeStandby": true },
             });
-            k8s.apply_cr(ROOK_GROUP, ROOK_VERSION, "CephFilesystem", &namespace, &name, cr_spec)
-                .await?;
+            k8s.apply_cr(
+                ROOK_GROUP,
+                ROOK_VERSION,
+                "CephFilesystem",
+                &namespace,
+                &name,
+                cr_spec,
+            )
+            .await?;
 
             let mut params: BTreeMap<String, String> = BTreeMap::new();
             params.insert("clusterID".into(), namespace.clone());
@@ -143,18 +177,36 @@ pub(crate) async fn dispatch_rook(
             )
             .await?;
 
-            let phase = poll_cr_ready(&k8s, ROOK_GROUP, ROOK_VERSION, "CephFilesystem", &namespace, &name).await;
+            let phase = poll_cr_ready(
+                &k8s,
+                ROOK_GROUP,
+                ROOK_VERSION,
+                "CephFilesystem",
+                &namespace,
+                &name,
+            )
+            .await;
             Ok(serde_json::json!({
                 "filesystem": name, "storage_class": storage_class, "phase": phase,
                 "ready": phase.as_deref() == Some("Ready")
             }))
         }
 
-        JobSpec::CephFilesystemDelete { name, namespace, storage_class } => {
+        JobSpec::CephFilesystemDelete {
+            name,
+            namespace,
+            storage_class,
+        } => {
             let k8s = require_k8s(k8s)?;
             k8s.delete_storage_class(&storage_class).await?;
-            k8s.delete_cr(ROOK_GROUP, ROOK_VERSION, "CephFilesystem", &namespace, &name)
-                .await?;
+            k8s.delete_cr(
+                ROOK_GROUP,
+                ROOK_VERSION,
+                "CephFilesystem",
+                &namespace,
+                &name,
+            )
+            .await?;
             Ok(serde_json::json!({ "filesystem": name, "deleted": true }))
         }
 
@@ -167,15 +219,23 @@ pub(crate) async fn dispatch_rook(
             gateway_instances,
         } => {
             let k8s = require_k8s(k8s)?;
-            let replicated = serde_json::json!({ "size": replicated_size, "requireSafeReplicaSize": false });
+            let replicated =
+                serde_json::json!({ "size": replicated_size, "requireSafeReplicaSize": false });
             let cr_spec = serde_json::json!({
                 "metadataPool": { "failureDomain": "host", "replicated": replicated.clone() },
                 "dataPool": { "failureDomain": "host", "replicated": replicated },
                 "preservePoolsOnDelete": false,
                 "gateway": { "port": gateway_port, "instances": gateway_instances },
             });
-            k8s.apply_cr(ROOK_GROUP, ROOK_VERSION, "CephObjectStore", &namespace, &name, cr_spec)
-                .await?;
+            k8s.apply_cr(
+                ROOK_GROUP,
+                ROOK_VERSION,
+                "CephObjectStore",
+                &namespace,
+                &name,
+                cr_spec,
+            )
+            .await?;
 
             let mut params: BTreeMap<String, String> = BTreeMap::new();
             params.insert("objectStoreName".into(), name.clone());
@@ -192,18 +252,36 @@ pub(crate) async fn dispatch_rook(
             )
             .await?;
 
-            let phase = poll_cr_ready(&k8s, ROOK_GROUP, ROOK_VERSION, "CephObjectStore", &namespace, &name).await;
+            let phase = poll_cr_ready(
+                &k8s,
+                ROOK_GROUP,
+                ROOK_VERSION,
+                "CephObjectStore",
+                &namespace,
+                &name,
+            )
+            .await;
             Ok(serde_json::json!({
                 "object_store": name, "storage_class": storage_class, "phase": phase,
                 "ready": phase.as_deref() == Some("Ready")
             }))
         }
 
-        JobSpec::CephObjectStoreDelete { name, namespace, storage_class } => {
+        JobSpec::CephObjectStoreDelete {
+            name,
+            namespace,
+            storage_class,
+        } => {
             let k8s = require_k8s(k8s)?;
             k8s.delete_storage_class(&storage_class).await?;
-            k8s.delete_cr(ROOK_GROUP, ROOK_VERSION, "CephObjectStore", &namespace, &name)
-                .await?;
+            k8s.delete_cr(
+                ROOK_GROUP,
+                ROOK_VERSION,
+                "CephObjectStore",
+                &namespace,
+                &name,
+            )
+            .await?;
             Ok(serde_json::json!({ "object_store": name, "deleted": true }))
         }
 

@@ -1,15 +1,18 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
 // SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 
-use axum::{http::StatusCode, Json};
 use atlas_api_types::{BackendType, Capabilities};
 use atlas_common::AppError;
+use axum::{http::StatusCode, Json};
 use serde_json::{json, Value};
 
 pub(crate) const CEPH_BACKEND_ID: &str = "bkd_ceph_lab";
 pub(crate) const DEFAULT_RBD_POOL: &str = "rbd-nvme-prod";
 
-pub(crate) fn accepted(job: &atlas_api_types::JobRecord, resource: Value) -> (StatusCode, Json<Value>) {
+pub(crate) fn accepted(
+    job: &atlas_api_types::JobRecord,
+    resource: Value,
+) -> (StatusCode, Json<Value>) {
     (
         StatusCode::ACCEPTED,
         Json(json!({
@@ -26,7 +29,11 @@ pub(crate) fn csv_field(v: &Value, key: &str) -> String {
     // Neutralize CSV formula injection: a cell starting with =/+/-/@ can be interpreted as a
     // formula by spreadsheet apps (Excel/Sheets) when this export is opened.
     let needs_guard = matches!(s.as_bytes().first(), Some(b'=' | b'+' | b'-' | b'@'));
-    let guarded = if needs_guard { format!("'{s}") } else { s.to_string() };
+    let guarded = if needs_guard {
+        format!("'{s}")
+    } else {
+        s.to_string()
+    };
     format!("\"{}\"", guarded.replace('"', "\"\""))
 }
 
@@ -40,7 +47,8 @@ pub(crate) fn validate_k8s_name(name: &str) -> Result<(), AppError> {
     let valid_label = |s: &str| {
         !s.is_empty()
             && s.len() <= 63
-            && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            && s.chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
             && s.chars().next().is_some_and(|c| c.is_ascii_alphanumeric())
             && s.chars().last().is_some_and(|c| c.is_ascii_alphanumeric())
     };

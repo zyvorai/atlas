@@ -9,9 +9,9 @@ use serde_json::{json, Value};
 
 use atlas_common::{AppError, AppResult};
 
+use super::util::csv_field;
 use crate::auth::Actor;
 use crate::state::AppState;
-use super::util::csv_field;
 
 pub(crate) async fn metrics_summary(State(s): State<AppState>) -> AppResult<Json<Value>> {
     Ok(Json(atlas_inventory::metrics_summary(&s.pool).await?))
@@ -92,7 +92,15 @@ pub(crate) async fn ack_alert(
         return Err(AppError::NotFound(format!("alert {id}")));
     }
     let _ = atlas_inventory::audit::record(
-        &s.pool, None, &actor.id, "alert.ack", "alert", &id, "success", None, None,
+        &s.pool,
+        None,
+        &actor.id,
+        "alert.ack",
+        "alert",
+        &id,
+        "success",
+        None,
+        None,
     )
     .await;
     Ok(Json(json!({ "id": id, "acknowledged_by": actor.id })))
@@ -118,8 +126,15 @@ pub(crate) async fn silence_alert(
         return Err(AppError::NotFound(format!("alert {id}")));
     }
     let _ = atlas_inventory::audit::record(
-        &s.pool, None, &actor.id, "alert.silence", "alert", &id, "success",
-        None, Some(json!({ "secs": secs })),
+        &s.pool,
+        None,
+        &actor.id,
+        "alert.silence",
+        "alert",
+        &id,
+        "success",
+        None,
+        Some(json!({ "secs": secs })),
     )
     .await;
     Ok(Json(json!({ "id": id, "silenced_secs": secs })))
@@ -136,7 +151,15 @@ pub(crate) async fn resolve_alert(
         return Err(AppError::NotFound(format!("open alert {id}")));
     }
     let _ = atlas_inventory::audit::record(
-        &s.pool, None, &actor.id, "alert.resolve", "alert", &id, "success", None, None,
+        &s.pool,
+        None,
+        &actor.id,
+        "alert.resolve",
+        "alert",
+        &id,
+        "success",
+        None,
+        None,
     )
     .await;
     Ok(Json(json!({ "id": id, "state": "resolved" })))
@@ -149,7 +172,10 @@ pub(crate) async fn list_jobs(State(s): State<AppState>) -> AppResult<Json<Value
     )))
 }
 
-pub(crate) async fn get_job(State(s): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
+pub(crate) async fn get_job(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
     let job = atlas_inventory::jobs::get_job(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("job {id}")))?;
@@ -184,7 +210,15 @@ pub(crate) async fn cancel_job(
         )));
     }
     let _ = atlas_inventory::audit::record(
-        &s.pool, None, &actor.id, "job.cancel", "job", &id, "success", None, None,
+        &s.pool,
+        None,
+        &actor.id,
+        "job.cancel",
+        "job",
+        &id,
+        "success",
+        None,
+        None,
     )
     .await;
     Ok(Json(json!({ "id": id, "cancelled": true })))
@@ -305,7 +339,9 @@ pub(crate) async fn chargeback(
             })
         })
         .collect();
-    Ok(Json(json!({ "usd_per_gib_month": rate, "tenants": tenants })))
+    Ok(Json(
+        json!({ "usd_per_gib_month": rate, "tenants": tenants }),
+    ))
 }
 
 /// `GET /policy-drift` — volumes whose applied StorageClass no longer matches their policy (or whose

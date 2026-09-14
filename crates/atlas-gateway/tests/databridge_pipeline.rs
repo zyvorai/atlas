@@ -64,7 +64,11 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
     };
     let state = build_state(
         config,
-        BuildOptions { enable_k8s: false, initial_discovery: false, enable_monitor: false },
+        BuildOptions {
+            enable_k8s: false,
+            initial_discovery: false,
+            enable_monitor: false,
+        },
     )
     .await
     .expect("build_state");
@@ -111,8 +115,16 @@ async fn full_pipeline_fake() {
         .await
         .unwrap();
     let sid = src["id"].as_str().unwrap().to_string();
-    c.post(format!("{base}/databridge/sources/{sid}/discover")).send().await.unwrap();
-    wait_state(&c, &format!("{base}/databridge/sources/{sid}"), "discovered").await;
+    c.post(format!("{base}/databridge/sources/{sid}/discover"))
+        .send()
+        .await
+        .unwrap();
+    wait_state(
+        &c,
+        &format!("{base}/databridge/sources/{sid}"),
+        "discovered",
+    )
+    .await;
 
     // 2. create plan
     let plan: Value = c
@@ -135,7 +147,10 @@ async fn full_pipeline_fake() {
         ("cdc/start", "cdc_streaming"),
         ("validate", "validated"),
     ] {
-        c.post(format!("{base}/databridge/plans/{pid}/{stage}")).send().await.unwrap();
+        c.post(format!("{base}/databridge/plans/{pid}/{stage}"))
+            .send()
+            .await
+            .unwrap();
         wait_state(&c, &plan_url, want).await;
     }
 
@@ -144,20 +159,40 @@ async fn full_pipeline_fake() {
     assert_eq!(p["readiness_score"], 90);
 
     // 4. cutover guard: CDC lag starts at 45s (> threshold) -> 409
-    let blocked = c.post(format!("{base}/databridge/plans/{pid}/cutover")).send().await.unwrap();
-    assert_eq!(blocked.status(), 409, "cutover must be blocked while CDC lag is high");
+    let blocked = c
+        .post(format!("{base}/databridge/plans/{pid}/cutover"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        blocked.status(),
+        409,
+        "cutover must be blocked while CDC lag is high"
+    );
 
     // 5. simulate the reconciler draining CDC lag to zero, then cutover succeeds
     sqlx::query("UPDATE cdc_streams SET lag_seconds = 0, lag_bytes = 0")
         .execute(&pool)
         .await
         .unwrap();
-    let ok = c.post(format!("{base}/databridge/plans/{pid}/cutover")).send().await.unwrap();
-    assert_eq!(ok.status(), 202, "cutover should be accepted once lag is drained");
+    let ok = c
+        .post(format!("{base}/databridge/plans/{pid}/cutover"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        ok.status(),
+        202,
+        "cutover should be accepted once lag is drained"
+    );
     wait_state(&c, &plan_url, "cutover_complete").await;
 
     // 6. rollback within the window
-    let rb = c.post(format!("{base}/databridge/plans/{pid}/rollback")).send().await.unwrap();
+    let rb = c
+        .post(format!("{base}/databridge/plans/{pid}/rollback"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(rb.status(), 202);
     wait_state(&c, &plan_url, "rolled_back").await;
 

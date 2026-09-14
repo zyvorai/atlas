@@ -938,9 +938,17 @@ async fn backup_requires_known_volume_and_bound_bucket() {
 
     // Seed a volume + a *pending* bucket → backup rejected (400) until the bucket binds.
     seed_volume(&pool, "vol_b", "vol-b").await;
-    atlas_inventory::buckets::insert_bucket(&pool, "bkt_1", "t1", "b1", "rook-ceph", "b1", "zyvor-rgw-bucket")
-        .await
-        .unwrap();
+    atlas_inventory::buckets::insert_bucket(
+        &pool,
+        "bkt_1",
+        "t1",
+        "b1",
+        "rook-ceph",
+        "b1",
+        "zyvor-rgw-bucket",
+    )
+    .await
+    .unwrap();
     let r400 = client()
         .post(format!("{base}/api/atlas/v1/backup-jobs"))
         .json(&serde_json::json!({ "volume_id": "vol_b", "bucket_id": "bkt_1" }))
@@ -1002,9 +1010,17 @@ async fn restore_from_backup_enqueues() {
     )
     .await
     .unwrap();
-    atlas_inventory::buckets::insert_bucket(&pool, "bkt_r", "t1", "b", "rook-ceph", "b", "zyvor-rgw-bucket")
-        .await
-        .unwrap();
+    atlas_inventory::buckets::insert_bucket(
+        &pool,
+        "bkt_r",
+        "t1",
+        "b",
+        "rook-ceph",
+        "b",
+        "zyvor-rgw-bucket",
+    )
+    .await
+    .unwrap();
     atlas_inventory::buckets::set_bound(&pool, "bkt_r", "b-1", "http://rgw:80", "us-east-1", "b")
         .await
         .unwrap();
@@ -1049,9 +1065,17 @@ async fn backup_delete_enqueues() {
 
     // Seed volume + bound bucket + backup, then DELETE → 202.
     seed_volume(&pool, "vol_bd", "vol-bd").await;
-    atlas_inventory::buckets::insert_bucket(&pool, "bkt_bd", "t1", "b", "rook-ceph", "b", "zyvor-rgw-bucket")
-        .await
-        .unwrap();
+    atlas_inventory::buckets::insert_bucket(
+        &pool,
+        "bkt_bd",
+        "t1",
+        "b",
+        "rook-ceph",
+        "b",
+        "zyvor-rgw-bucket",
+    )
+    .await
+    .unwrap();
     atlas_inventory::buckets::set_bound(&pool, "bkt_bd", "b-1", "http://rgw:80", "us-east-1", "b")
         .await
         .unwrap();
@@ -1093,9 +1117,17 @@ async fn bucket_delete_guarded_by_backups() {
     assert_eq!(r.status(), reqwest::StatusCode::NOT_FOUND);
 
     // Empty bucket → 202.
-    atlas_inventory::buckets::insert_bucket(&pool, "bkt_empty", "t1", "e", "rook-ceph", "e", "zyvor-rgw-bucket")
-        .await
-        .unwrap();
+    atlas_inventory::buckets::insert_bucket(
+        &pool,
+        "bkt_empty",
+        "t1",
+        "e",
+        "rook-ceph",
+        "e",
+        "zyvor-rgw-bucket",
+    )
+    .await
+    .unwrap();
     let r = client()
         .delete(format!("{base}/api/atlas/v1/buckets/bkt_empty"))
         .send()
@@ -1105,9 +1137,17 @@ async fn bucket_delete_guarded_by_backups() {
 
     // Bucket with a backup → 409, force → 202.
     seed_volume(&pool, "vol_bk", "vol-bk").await;
-    atlas_inventory::buckets::insert_bucket(&pool, "bkt_used", "t1", "u", "rook-ceph", "u", "zyvor-rgw-bucket")
-        .await
-        .unwrap();
+    atlas_inventory::buckets::insert_bucket(
+        &pool,
+        "bkt_used",
+        "t1",
+        "u",
+        "rook-ceph",
+        "u",
+        "zyvor-rgw-bucket",
+    )
+    .await
+    .unwrap();
     atlas_inventory::backups::insert_backup(
         &pool,
         "bkp_u",
@@ -1140,9 +1180,17 @@ async fn backup_retention_prunes_old() {
     let (addr, pool) = spawn().await;
     let base = format!("http://{addr}");
     seed_volume(&pool, "vol_ret", "vol-ret").await;
-    atlas_inventory::buckets::insert_bucket(&pool, "bkt_ret", "t1", "b", "rook-ceph", "b", "zyvor-rgw-bucket")
-        .await
-        .unwrap();
+    atlas_inventory::buckets::insert_bucket(
+        &pool,
+        "bkt_ret",
+        "t1",
+        "b",
+        "rook-ceph",
+        "b",
+        "zyvor-rgw-bucket",
+    )
+    .await
+    .unwrap();
     atlas_inventory::buckets::set_bound(&pool, "bkt_ret", "b-1", "http://rgw:80", "us-east-1", "b")
         .await
         .unwrap();
@@ -1354,7 +1402,11 @@ async fn discovery_reconciles_id_by_backend_native_id_not_duplicate() {
         matches[0].id, "vol_creation_time_random",
         "the original id must survive re-discovery, not get orphaned behind a duplicate"
     );
-    assert_eq!(matches[0].used_bytes, Some(52428800), "discovery's fresh data must still land");
+    assert_eq!(
+        matches[0].used_bytes,
+        Some(52428800),
+        "discovery's fresh data must still land"
+    );
 }
 
 /// The mirror-image race: a `VolumeCreate` job only calls `upsert_volume` once, at the very end,
@@ -1422,9 +1474,15 @@ async fn create_volume_reconciles_onto_intended_id_after_discovery_race() {
         pvc_name: Some("live-race-vol".into()),
         storage_class_name: Some("zyvor-rbd-prod".into()),
     };
-    atlas_inventory::upsert_volume(&pool, "bkd_ceph_lab", "tnt_default", &intended, Some("development"))
-        .await
-        .expect("must reconcile onto the intended id instead of erroring on the UNIQUE index");
+    atlas_inventory::upsert_volume(
+        &pool,
+        "bkd_ceph_lab",
+        "tnt_default",
+        &intended,
+        Some("development"),
+    )
+    .await
+    .expect("must reconcile onto the intended id instead of erroring on the UNIQUE index");
 
     let all = atlas_inventory::list_volumes(&pool).await.unwrap();
     let matches: Vec<_> = all
@@ -1437,5 +1495,8 @@ async fn create_volume_reconciles_onto_intended_id_after_discovery_race() {
         "the id the caller's API response already promised must be the one that's live \
          (a product_bindings insert right after this uses that exact id)"
     );
-    assert_eq!(matches[0].state, "bound", "create-time data must win, not be lost to the race");
+    assert_eq!(
+        matches[0].state, "bound",
+        "create-time data must win, not be lost to the race"
+    );
 }

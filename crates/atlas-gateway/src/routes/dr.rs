@@ -11,9 +11,9 @@ use serde_json::{json, Value};
 use atlas_common::{ids, AppError, AppResult};
 use atlas_jobs::JobSpec;
 
+use super::util::accepted;
 use crate::auth::Actor;
 use crate::state::AppState;
-use super::util::accepted;
 
 // ---- cross-cluster DR (RBD mirroring; scaffolding — real ops UNVERIFIED without a 2nd cluster) ----
 
@@ -50,10 +50,18 @@ pub(crate) async fn register_dr_peer(
     let id = ids::stable_id("drp", &body.name);
     let direction = body.direction.as_deref().unwrap_or("rx-tx");
     atlas_inventory::dr::register_peer(
-        &s.pool, &id, &body.name, body.cluster_fsid.as_deref(), direction, body.secret_ref.as_deref(),
+        &s.pool,
+        &id,
+        &body.name,
+        body.cluster_fsid.as_deref(),
+        direction,
+        body.secret_ref.as_deref(),
     )
     .await?;
-    Ok((StatusCode::CREATED, Json(json!({ "id": id, "name": body.name, "direction": direction }))))
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({ "id": id, "name": body.name, "direction": direction })),
+    ))
 }
 
 pub(crate) async fn list_dr_peers(
@@ -69,7 +77,9 @@ pub(crate) async fn list_dr_mirrors(
     Extension(actor): Extension<Actor>,
 ) -> AppResult<Json<Value>> {
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
-    Ok(Json(json!(atlas_inventory::dr::list_mirrors(&s.pool).await?)))
+    Ok(Json(json!(
+        atlas_inventory::dr::list_mirrors(&s.pool).await?
+    )))
 }
 
 /// `GET /dr/status` — DR posture: mirror counts by role/state + worst RPO.
@@ -82,7 +92,10 @@ pub(crate) async fn dr_status(
     let primaries = mirrors.iter().filter(|m| m["role"] == "primary").count();
     let secondaries = mirrors.iter().filter(|m| m["role"] == "secondary").count();
     let errored = mirrors.iter().filter(|m| m["state"] == "error").count();
-    let worst_rpo = mirrors.iter().filter_map(|m| m["rpo_seconds"].as_i64()).max();
+    let worst_rpo = mirrors
+        .iter()
+        .filter_map(|m| m["rpo_seconds"].as_i64())
+        .max();
     let peers = atlas_inventory::dr::list_peers(&s.pool).await?.len();
     let control_plane_ready = peers > 0 && errored == 0;
     Ok(Json(json!({
@@ -145,7 +158,9 @@ pub(crate) async fn enable_mirror(
     let (rbd_pool, image) = rbd_of_volume(&s, &volume_id).await?;
     let mode = q.mode.as_deref().unwrap_or("snapshot");
     if !matches!(mode, "snapshot" | "journal") {
-        return Err(AppError::Validation("mode must be snapshot or journal".into()));
+        return Err(AppError::Validation(
+            "mode must be snapshot or journal".into(),
+        ));
     }
     let peer = if let Some(peer) = q.peer.as_deref() {
         if !atlas_inventory::dr::peer_exists(&s.pool, peer).await? {
@@ -164,11 +179,22 @@ pub(crate) async fn enable_mirror(
         None
     };
     let mirror_id = ids::stable_id("drm", &format!("{rbd_pool}/{image}"));
-    let real = matches!(s.config.ceph_driver_mode, atlas_common::config::CephDriverMode::Real);
+    let real = matches!(
+        s.config.ceph_driver_mode,
+        atlas_common::config::CephDriverMode::Real
+    );
     let state = if real { "enabling" } else { "enabled" };
     atlas_inventory::dr::upsert_mirror(
-        &s.pool, &mirror_id, "global", Some(&volume_id), &rbd_pool, &image,
-        peer.as_deref(), mode, "primary", state,
+        &s.pool,
+        &mirror_id,
+        "global",
+        Some(&volume_id),
+        &rbd_pool,
+        &image,
+        peer.as_deref(),
+        mode,
+        "primary",
+        state,
     )
     .await?;
     let job_id = ids::job_id();
@@ -180,8 +206,14 @@ pub(crate) async fn enable_mirror(
         mode: mode.to_string(),
         force: false,
     };
-    let job = s.jobs.enqueue(&job_id, "global", &actor.id, spec, None).await?;
-    Ok(accepted(&job, json!({ "mirror_id": mirror_id, "rbd": format!("{rbd_pool}/{image}"), "state": state })))
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, spec, None)
+        .await?;
+    Ok(accepted(
+        &job,
+        json!({ "mirror_id": mirror_id, "rbd": format!("{rbd_pool}/{image}"), "state": state }),
+    ))
 }
 
 /// `DELETE /volumes/{id}/mirror` — disable RBD mirroring for a volume (admin).
@@ -193,8 +225,17 @@ pub(crate) async fn disable_mirror(
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
     let (rbd_pool, image) = rbd_of_volume(&s, &volume_id).await?;
     let mirror_id = ids::stable_id("drm", &format!("{rbd_pool}/{image}"));
-    let real = matches!(s.config.ceph_driver_mode, atlas_common::config::CephDriverMode::Real);
-    atlas_inventory::dr::set_mirror(&s.pool, &mirror_id, "primary", if real { "disabling" } else { "disabled" }).await?;
+    let real = matches!(
+        s.config.ceph_driver_mode,
+        atlas_common::config::CephDriverMode::Real
+    );
+    atlas_inventory::dr::set_mirror(
+        &s.pool,
+        &mirror_id,
+        "primary",
+        if real { "disabling" } else { "disabled" },
+    )
+    .await?;
     let job_id = ids::job_id();
     let spec = JobSpec::RbdMirror {
         mirror_id: mirror_id.clone(),
@@ -204,8 +245,14 @@ pub(crate) async fn disable_mirror(
         mode: "snapshot".into(),
         force: false,
     };
-    let job = s.jobs.enqueue(&job_id, "global", &actor.id, spec, None).await?;
-    Ok(accepted(&job, json!({ "mirror_id": mirror_id, "state": "disabling" })))
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, spec, None)
+        .await?;
+    Ok(accepted(
+        &job,
+        json!({ "mirror_id": mirror_id, "state": "disabling" }),
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -267,15 +314,26 @@ pub(crate) async fn mirror_role_op(
         }
         _ => {}
     }
-    let real = matches!(s.config.ceph_driver_mode, atlas_common::config::CephDriverMode::Real);
+    let real = matches!(
+        s.config.ceph_driver_mode,
+        atlas_common::config::CephDriverMode::Real
+    );
     if !real {
-        let new_role = if action == "promote" { "primary" } else { "secondary" };
+        let new_role = if action == "promote" {
+            "primary"
+        } else {
+            "secondary"
+        };
         atlas_inventory::dr::set_mirror(&s.pool, id, new_role, "enabled").await?;
         if action == "promote" {
             let _ = atlas_inventory::dr::record_failover(&s.pool, id, force).await;
         }
     } else {
-        let pending = if action == "promote" { "promoting" } else { "demoting" };
+        let pending = if action == "promote" {
+            "promoting"
+        } else {
+            "demoting"
+        };
         atlas_inventory::dr::set_mirror(&s.pool, id, &role, pending).await?;
     }
     let job_id = ids::job_id();
@@ -287,13 +345,26 @@ pub(crate) async fn mirror_role_op(
         mode: "snapshot".into(),
         force,
     };
-    let job = s.jobs.enqueue(&job_id, "global", &actor.id, spec, None).await?;
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, spec, None)
+        .await?;
     let _ = atlas_inventory::audit::record(
-        &s.pool, None, &actor.id, &format!("dr.mirror.{action}"), "dr_mirror", id, "ok",
-        Some(json!({ "force": force })), None,
+        &s.pool,
+        None,
+        &actor.id,
+        &format!("dr.mirror.{action}"),
+        "dr_mirror",
+        id,
+        "ok",
+        Some(json!({ "force": force })),
+        None,
     )
     .await;
-    Ok(accepted(&job, json!({ "mirror_id": id, "action": action, "force": force })))
+    Ok(accepted(
+        &job,
+        json!({ "mirror_id": id, "action": action, "force": force }),
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -325,8 +396,15 @@ pub(crate) async fn dr_failover(
     }
     let result = mirror_role_op(&s, &actor, &body.mirror_id, "promote", body.force).await?;
     let _ = atlas_inventory::audit::record(
-        &s.pool, None, &actor.id, "dr.failover", "dr_mirror", &body.mirror_id, "ok",
-        Some(json!({ "force": body.force, "preflight": pre })), None,
+        &s.pool,
+        None,
+        &actor.id,
+        "dr.failover",
+        "dr_mirror",
+        &body.mirror_id,
+        "ok",
+        Some(json!({ "force": body.force, "preflight": pre })),
+        None,
     )
     .await;
     Ok(result)
@@ -348,5 +426,7 @@ pub(crate) async fn set_mirror_rpo(
     if !atlas_inventory::dr::set_rpo(&s.pool, &id, body.rpo_seconds).await? {
         return Err(AppError::NotFound(format!("mirror {id}")));
     }
-    Ok(Json(json!({ "mirror_id": id, "rpo_seconds": body.rpo_seconds })))
+    Ok(Json(
+        json!({ "mirror_id": id, "rpo_seconds": body.rpo_seconds }),
+    ))
 }

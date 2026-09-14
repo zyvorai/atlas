@@ -11,9 +11,9 @@ use serde_json::{json, Value};
 use atlas_common::{ids, AppError, AppResult};
 use atlas_jobs::JobSpec;
 
+use super::util::{accepted, CEPH_BACKEND_ID, DEFAULT_RBD_POOL};
 use crate::auth::Actor;
 use crate::state::AppState;
-use super::util::{accepted, CEPH_BACKEND_ID, DEFAULT_RBD_POOL};
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct CreateRbdBody {
@@ -430,7 +430,9 @@ pub(crate) async fn migrate_rbd_image(
 ) -> AppResult<(StatusCode, Json<Value>)> {
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
     if q.dest_pool.trim().is_empty() || q.dest_pool == pool_name {
-        return Err(AppError::Validation("dest_pool must be a different, non-empty pool".into()));
+        return Err(AppError::Validation(
+            "dest_pool must be a different, non-empty pool".into(),
+        ));
     }
     let native = format!("rbd:{pool_name}/{image}");
     let volume_id = atlas_inventory::list_volumes(&s.pool)
@@ -453,7 +455,10 @@ pub(crate) async fn migrate_rbd_image(
         image: image.clone(),
         dest_pool: q.dest_pool.clone(),
     };
-    let job = s.jobs.enqueue(&job_id, "global", &actor.id, spec, None).await?;
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, spec, None)
+        .await?;
     let _ = atlas_inventory::audit::record(
         &s.pool,
         None,
@@ -466,7 +471,10 @@ pub(crate) async fn migrate_rbd_image(
         None,
     )
     .await;
-    Ok(accepted(&job, json!({ "from": format!("{pool_name}/{image}"), "to": format!("{}/{image}", q.dest_pool) })))
+    Ok(accepted(
+        &job,
+        json!({ "from": format!("{pool_name}/{image}"), "to": format!("{}/{image}", q.dest_pool) }),
+    ))
 }
 
 /// `POST /rbd-images/{pool}/{image}/flatten` — detach a COW clone from its parent (operator).

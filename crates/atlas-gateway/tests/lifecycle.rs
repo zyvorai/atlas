@@ -88,9 +88,17 @@ async fn orphan_backups_are_reported() {
     let base = format!("http://{addr}/api/atlas/v1");
     let c = reqwest::Client::new();
 
-    atlas_inventory::buckets::insert_bucket(&pool, "bkt1", "t", "b", "ns", "obc", "zyvor-rgw-bucket")
-        .await
-        .unwrap();
+    atlas_inventory::buckets::insert_bucket(
+        &pool,
+        "bkt1",
+        "t",
+        "b",
+        "ns",
+        "obc",
+        "zyvor-rgw-bucket",
+    )
+    .await
+    .unwrap();
     // A live volume + its backup (not an orphan).
     sqlx::query(
         "INSERT INTO storage_volumes (id, tenant_id, backend_id, name, kind, size_bytes, state)
@@ -99,13 +107,33 @@ async fn orphan_backups_are_reported() {
     .execute(&pool)
     .await
     .unwrap();
-    atlas_inventory::backups::insert_backup(&pool, "bk_live", "t", "live_vol", None, "bkt1", "k/live", "manifest-v1", &json!({}))
-        .await
-        .unwrap();
+    atlas_inventory::backups::insert_backup(
+        &pool,
+        "bk_live",
+        "t",
+        "live_vol",
+        None,
+        "bkt1",
+        "k/live",
+        "manifest-v1",
+        &json!({}),
+    )
+    .await
+    .unwrap();
     // A backup whose source volume is gone (orphan).
-    atlas_inventory::backups::insert_backup(&pool, "bk_orphan", "t", "gone_vol", None, "bkt1", "k/orphan", "manifest-v1", &json!({}))
-        .await
-        .unwrap();
+    atlas_inventory::backups::insert_backup(
+        &pool,
+        "bk_orphan",
+        "t",
+        "gone_vol",
+        None,
+        "bkt1",
+        "k/orphan",
+        "manifest-v1",
+        &json!({}),
+    )
+    .await
+    .unwrap();
 
     let orphans: Value = c
         .get(format!("{base}/maintenance/orphans"))
@@ -115,7 +143,10 @@ async fn orphan_backups_are_reported() {
         .json()
         .await
         .unwrap();
-    assert_eq!(orphans["count"], 1, "exactly one orphan expected: {orphans}");
+    assert_eq!(
+        orphans["count"], 1,
+        "exactly one orphan expected: {orphans}"
+    );
     let ids: Vec<&str> = orphans["orphan_backups"]
         .as_array()
         .unwrap()
@@ -132,15 +163,33 @@ async fn qos_enqueues_and_validates() {
     let c = reqwest::Client::new();
 
     // Valid: an IOPS cap → 202 with the limits echoed.
-    let ok = c.post(format!("{base}/rbd-images/nvme/img1/qos?iops=1000")).send().await.unwrap();
+    let ok = c
+        .post(format!("{base}/rbd-images/nvme/img1/qos?iops=1000"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(ok.status(), 202);
     let body: Value = ok.json().await.unwrap();
     assert_eq!(body["resource"]["iops_limit"], 1000);
     assert!(body["job_id"].is_string());
 
     // No limits → 400; negative → 400.
-    assert_eq!(c.post(format!("{base}/rbd-images/nvme/img1/qos")).send().await.unwrap().status(), 400);
-    assert_eq!(c.post(format!("{base}/rbd-images/nvme/img1/qos?bps=-1")).send().await.unwrap().status(), 400);
+    assert_eq!(
+        c.post(format!("{base}/rbd-images/nvme/img1/qos"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        400
+    );
+    assert_eq!(
+        c.post(format!("{base}/rbd-images/nvme/img1/qos?bps=-1"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        400
+    );
 }
 
 /// Resize-down is opt-in (allow_shrink), and pool migration validates its destination.
@@ -158,7 +207,8 @@ async fn resize_down_and_migrate() {
         .unwrap();
     assert_eq!(default_shrink.status(), 202);
     assert_eq!(
-        default_shrink.json::<Value>().await.unwrap()["resource"]["allow_shrink"], false,
+        default_shrink.json::<Value>().await.unwrap()["resource"]["allow_shrink"],
+        false,
         "allow_shrink must default to false when omitted"
     );
 
@@ -170,10 +220,36 @@ async fn resize_down_and_migrate() {
         .await
         .unwrap();
     assert_eq!(shrink.status(), 202);
-    assert_eq!(shrink.json::<Value>().await.unwrap()["resource"]["allow_shrink"], true);
+    assert_eq!(
+        shrink.json::<Value>().await.unwrap()["resource"]["allow_shrink"],
+        true
+    );
 
     // Migrate to another pool → 202; same pool or missing dest → 400.
-    assert_eq!(c.post(format!("{base}/rbd-images/nvme/img1/migrate?dest_pool=hdd")).send().await.unwrap().status(), 202);
-    assert_eq!(c.post(format!("{base}/rbd-images/nvme/img1/migrate?dest_pool=nvme")).send().await.unwrap().status(), 400);
-    assert_eq!(c.post(format!("{base}/rbd-images/nvme/img1/migrate")).send().await.unwrap().status(), 400);
+    assert_eq!(
+        c.post(format!("{base}/rbd-images/nvme/img1/migrate?dest_pool=hdd"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        202
+    );
+    assert_eq!(
+        c.post(format!(
+            "{base}/rbd-images/nvme/img1/migrate?dest_pool=nvme"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .status(),
+        400
+    );
+    assert_eq!(
+        c.post(format!("{base}/rbd-images/nvme/img1/migrate"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        400
+    );
 }

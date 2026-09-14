@@ -43,7 +43,8 @@ pub(crate) async fn list_protection_status(
     if let Some(t) = crate::auth::tenant_scope(s.config.auth_required, &actor) {
         q.tenant = Some(t.to_string());
     }
-    let mut rows = atlas_inventory::protection::list_protection_status(&s.pool, q.tenant.as_deref()).await?;
+    let mut rows =
+        atlas_inventory::protection::list_protection_status(&s.pool, q.tenant.as_deref()).await?;
     if let Some(v) = q.verdict.as_deref() {
         rows.retain(|r| verdict_str(r.verdict) == v);
     }
@@ -58,7 +59,12 @@ pub(crate) async fn get_volume_protection(
 ) -> AppResult<Json<Value>> {
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
     let resource_tenant = atlas_inventory::volume_tenant(&s.pool, &id).await?;
-    crate::auth::require_tenant(s.config.auth_required, &actor, &resource_tenant, format!("volume {id}"))?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        &actor,
+        &resource_tenant,
+        format!("volume {id}"),
+    )?;
     let status = atlas_inventory::protection::volume_protection_status(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("volume {id}")))?;

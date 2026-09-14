@@ -98,10 +98,20 @@ async fn new_rules_raise_alerts() {
     let c = reqwest::Client::new();
 
     // 1. a recently-failed job
-    atlas_inventory::jobs::insert_job(&pool, "j1", "acme", "volume.create", "me", &serde_json::json!({}), None)
+    atlas_inventory::jobs::insert_job(
+        &pool,
+        "j1",
+        "acme",
+        "volume.create",
+        "me",
+        &serde_json::json!({}),
+        None,
+    )
+    .await
+    .unwrap();
+    atlas_inventory::jobs::mark_failed(&pool, "j1", "boom")
         .await
         .unwrap();
-    atlas_inventory::jobs::mark_failed(&pool, "j1", "boom").await.unwrap();
 
     // 2. a CDC stream in error
     atlas_inventory::databridge::cdc::insert_stream(
@@ -109,10 +119,14 @@ async fn new_rules_raise_alerts() {
     )
     .await
     .unwrap();
-    atlas_inventory::databridge::cdc::set_state(&pool, "cdc1", "error").await.unwrap();
+    atlas_inventory::databridge::cdc::set_state(&pool, "cdc1", "error")
+        .await
+        .unwrap();
 
     // 3. a tenant at 90% of its byte quota
-    atlas_inventory::tenants::set_quota(&pool, "acme", 1000, 100).await.unwrap();
+    atlas_inventory::tenants::set_quota(&pool, "acme", 1000, 100)
+        .await
+        .unwrap();
     sqlx::query(
         "INSERT INTO storage_volumes (id, tenant_id, backend_id, name, kind, size_bytes, state)
          VALUES ('v1', 'acme', 'bkd_ceph_lab', 'db', 'block', 900, 'ready')",
@@ -122,7 +136,11 @@ async fn new_rules_raise_alerts() {
     .unwrap();
 
     // Evaluate the rules on demand.
-    let r = c.post(format!("{base}/alerts/evaluate")).send().await.unwrap();
+    let r = c
+        .post(format!("{base}/alerts/evaluate"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(r.status(), 200);
 
     let open: Value = c
@@ -134,9 +152,18 @@ async fn new_rules_raise_alerts() {
         .await
         .unwrap();
     let open_ids = ids(&open);
-    assert!(open_ids.contains(&"alert_jobs_failing".to_string()), "jobs rule: {open_ids:?}");
-    assert!(open_ids.contains(&"alert_cdc_error_cdc1".to_string()), "cdc rule: {open_ids:?}");
-    assert!(open_ids.contains(&"alert_tenant_quota_acme".to_string()), "quota rule: {open_ids:?}");
+    assert!(
+        open_ids.contains(&"alert_jobs_failing".to_string()),
+        "jobs rule: {open_ids:?}"
+    );
+    assert!(
+        open_ids.contains(&"alert_cdc_error_cdc1".to_string()),
+        "cdc rule: {open_ids:?}"
+    );
+    assert!(
+        open_ids.contains(&"alert_tenant_quota_acme".to_string()),
+        "quota rule: {open_ids:?}"
+    );
 }
 
 /// Ack, silence, and manual resolve work; a silenced alert is skipped by the webhook notifier.
@@ -147,18 +174,38 @@ async fn ack_silence_resolve_lifecycle() {
     let c = reqwest::Client::new();
 
     // Produce one alert to act on.
-    atlas_inventory::jobs::insert_job(&pool, "j1", "acme", "volume.create", "me", &serde_json::json!({}), None)
+    atlas_inventory::jobs::insert_job(
+        &pool,
+        "j1",
+        "acme",
+        "volume.create",
+        "me",
+        &serde_json::json!({}),
+        None,
+    )
+    .await
+    .unwrap();
+    atlas_inventory::jobs::mark_failed(&pool, "j1", "boom")
         .await
         .unwrap();
-    atlas_inventory::jobs::mark_failed(&pool, "j1", "boom").await.unwrap();
-    c.post(format!("{base}/alerts/evaluate")).send().await.unwrap();
+    c.post(format!("{base}/alerts/evaluate"))
+        .send()
+        .await
+        .unwrap();
     let id = "alert_jobs_failing";
 
     // Acknowledge.
-    let ack = c.post(format!("{base}/alerts/{id}/ack")).send().await.unwrap();
+    let ack = c
+        .post(format!("{base}/alerts/{id}/ack"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(ack.status(), 200);
     let ack_body: Value = ack.json().await.unwrap();
-    assert_eq!(ack_body["acknowledged_by"], "anonymous", "ack response should name the acking actor");
+    assert_eq!(
+        ack_body["acknowledged_by"], "anonymous",
+        "ack response should name the acking actor"
+    );
     // The ack must actually be persisted, not just accepted — fetch it back and check the row.
     let acked: Value = c
         .get(format!("{base}/alerts?state=open"))
@@ -174,24 +221,44 @@ async fn ack_silence_resolve_lifecycle() {
         .iter()
         .find(|a| a["id"] == id)
         .expect("acked alert should still be open and listed");
-    assert_eq!(row["acknowledged_by"], "anonymous", "alert record should persist who acknowledged it");
-    assert!(!row["acknowledged_at"].is_null(), "alert record should persist when it was acknowledged");
+    assert_eq!(
+        row["acknowledged_by"], "anonymous",
+        "alert record should persist who acknowledged it"
+    );
+    assert!(
+        !row["acknowledged_at"].is_null(),
+        "alert record should persist when it was acknowledged"
+    );
 
     // Silence for 60s → the notifier should skip it.
-    let sil = c.post(format!("{base}/alerts/{id}/silence?secs=60")).send().await.unwrap();
+    let sil = c
+        .post(format!("{base}/alerts/{id}/silence?secs=60"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(sil.status(), 200);
-    let unnotified = atlas_inventory::alerts::list_unnotified_open(&pool).await.unwrap();
+    let unnotified = atlas_inventory::alerts::list_unnotified_open(&pool)
+        .await
+        .unwrap();
     assert!(
         !unnotified.iter().any(|a| a.id == id),
         "a silenced alert must be excluded from webhook delivery"
     );
 
     // Acking an unknown alert → 404.
-    let missing = c.post(format!("{base}/alerts/does_not_exist/ack")).send().await.unwrap();
+    let missing = c
+        .post(format!("{base}/alerts/does_not_exist/ack"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(missing.status(), 404);
 
     // Manual resolve.
-    let res = c.post(format!("{base}/alerts/{id}/resolve")).send().await.unwrap();
+    let res = c
+        .post(format!("{base}/alerts/{id}/resolve"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(res.status(), 200);
     let open: Value = c
         .get(format!("{base}/alerts?state=open"))
@@ -201,5 +268,8 @@ async fn ack_silence_resolve_lifecycle() {
         .json()
         .await
         .unwrap();
-    assert!(!ids(&open).contains(&id.to_string()), "resolved alert should not be open");
+    assert!(
+        !ids(&open).contains(&id.to_string()),
+        "resolved alert should not be open"
+    );
 }

@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 use anyhow::{Context, Result};
 use atlas_api_types::{Health, StorageVolume};
+use atlas_driver_k8s::{K8sDriver, PvcCreateSpec};
 use sqlx::SqlitePool;
 use std::sync::Arc;
-use atlas_driver_k8s::{K8sDriver, PvcCreateSpec};
 
+use super::helpers::{
+    parse_kind, poll_pvc_phase, poll_snapshot_ready, provision_from_snapshot, require_k8s,
+};
 use crate::spec::JobSpec;
-use super::helpers::{parse_kind, poll_pvc_phase, poll_snapshot_ready, provision_from_snapshot, require_k8s};
 
 pub(crate) async fn dispatch_volumes(
     pool: &SqlitePool,
@@ -48,7 +50,13 @@ pub(crate) async fn dispatch_volumes(
             // Idempotent retry: if a prior attempt already created the PVC (e.g. dispatch
             // succeeded but the job's mark-succeeded write failed, forcing a full re-run), the
             // k8s API errors on a PVC that already exists — skip it and just verify/record.
-            if k8s.get_pvc(&namespace, &name).await.ok().flatten().is_none() {
+            if k8s
+                .get_pvc(&namespace, &name)
+                .await
+                .ok()
+                .flatten()
+                .is_none()
+            {
                 k8s.create_pvc(&create)
                     .await
                     .with_context(|| format!("create PVC {namespace}/{name}"))?;
@@ -182,7 +190,10 @@ pub(crate) async fn dispatch_volumes(
             }
             // Likewise, skip re-creating the VolumeSnapshot if a prior attempt already put it in
             // place — the k8s API errors on a name that already exists.
-            if !matches!(k8s.volume_snapshot_ready(&namespace, &name).await, Ok(Some(_))) {
+            if !matches!(
+                k8s.volume_snapshot_ready(&namespace, &name).await,
+                Ok(Some(_))
+            ) {
                 k8s.create_volume_snapshot(&namespace, &name, &pvc_name, &snapshot_class)
                     .await
                     .with_context(|| format!("create VolumeSnapshot {namespace}/{name}"))?;

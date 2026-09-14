@@ -11,10 +11,9 @@ use serde_json::{json, Value};
 use atlas_common::{ids, AppError, AppResult};
 use atlas_jobs::JobSpec;
 
+use super::util::accepted;
 use crate::auth::Actor;
 use crate::state::AppState;
-use super::util::accepted;
-
 
 // ---- maintenance & cluster ops (day-2) ----
 
@@ -36,12 +35,21 @@ pub(crate) async fn uncordon_backend(
     set_cordon(&s, &actor, &id, false).await
 }
 
-pub(crate) async fn set_cordon(s: &AppState, actor: &Actor, id: &str, cordoned: bool) -> AppResult<Json<Value>> {
+pub(crate) async fn set_cordon(
+    s: &AppState,
+    actor: &Actor,
+    id: &str,
+    cordoned: bool,
+) -> AppResult<Json<Value>> {
     crate::auth::require_role(s.config.auth_required, actor, crate::auth::ROLE_ADMIN)?;
     if !atlas_inventory::set_backend_cordoned(&s.pool, id, cordoned).await? {
         return Err(AppError::NotFound(format!("backend {id}")));
     }
-    let action = if cordoned { "backend.cordon" } else { "backend.uncordon" };
+    let action = if cordoned {
+        "backend.cordon"
+    } else {
+        "backend.uncordon"
+    };
     let _ = atlas_inventory::audit::record(
         &s.pool, None, &actor.id, action, "backend", id, "ok", None, None,
     )
@@ -72,7 +80,11 @@ pub(crate) async fn set_maintenance(
         &s.pool,
         None,
         &actor.id,
-        if body.paused { "maintenance.pause" } else { "maintenance.resume" },
+        if body.paused {
+            "maintenance.pause"
+        } else {
+            "maintenance.resume"
+        },
         "control_plane",
         "job_engine",
         "ok",
@@ -137,11 +149,18 @@ pub(crate) async fn enqueue_osd_op(
             &job_id,
             "global",
             &actor.id,
-            JobSpec::CephOsdOp { osd_id, action: op.to_string(), weight },
+            JobSpec::CephOsdOp {
+                osd_id,
+                action: op.to_string(),
+                weight,
+            },
             None,
         )
         .await?;
-    Ok(accepted(&job, json!({ "osd_id": osd_id, "op": op, "weight": weight })))
+    Ok(accepted(
+        &job,
+        json!({ "osd_id": osd_id, "op": op, "weight": weight }),
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -160,10 +179,14 @@ pub(crate) async fn qos_rbd_image(
 ) -> AppResult<(StatusCode, Json<Value>)> {
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
     if q.iops.is_none() && q.bps.is_none() {
-        return Err(AppError::Validation("at least one of iops/bps is required".into()));
+        return Err(AppError::Validation(
+            "at least one of iops/bps is required".into(),
+        ));
     }
     if q.iops.is_some_and(|v| v < 0) || q.bps.is_some_and(|v| v < 0) {
-        return Err(AppError::Validation("qos limits must be >= 0 (0 clears the cap)".into()));
+        return Err(AppError::Validation(
+            "qos limits must be >= 0 (0 clears the cap)".into(),
+        ));
     }
     let native = format!("rbd:{pool_name}/{image}");
     let volume_id = atlas_inventory::list_volumes(&s.pool)
@@ -180,7 +203,10 @@ pub(crate) async fn qos_rbd_image(
         iops_limit: q.iops,
         bps_limit: q.bps,
     };
-    let job = s.jobs.enqueue(&job_id, "global", &actor.id, spec, None).await?;
+    let job = s
+        .jobs
+        .enqueue(&job_id, "global", &actor.id, spec, None)
+        .await?;
     Ok(accepted(
         &job,
         json!({ "rbd": format!("{pool_name}/{image}"), "iops_limit": q.iops, "bps_limit": q.bps }),
@@ -195,7 +221,9 @@ pub(crate) async fn list_orphans(
 ) -> AppResult<Json<Value>> {
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
     let orphan_backups = atlas_inventory::backups::list_orphans(&s.pool).await?;
-    Ok(Json(json!({ "orphan_backups": orphan_backups, "count": orphan_backups.len() })))
+    Ok(Json(
+        json!({ "orphan_backups": orphan_backups, "count": orphan_backups.len() }),
+    ))
 }
 
 /// `GET /upgrade/preflight` — health-gated "is it safe to upgrade / take the control plane down?"
@@ -226,7 +254,11 @@ pub(crate) async fn upgrade_preflight(
     add(
         "cluster_health",
         ok,
-        if ok { "no cluster in HEALTH_ERR".into() } else { format!("critical: {critical_clusters:?}") },
+        if ok {
+            "no cluster in HEALTH_ERR".into()
+        } else {
+            format!("critical: {critical_clusters:?}")
+        },
         Some(format!("cluster(s) unhealthy: {critical_clusters:?}")),
     );
 
@@ -240,7 +272,9 @@ pub(crate) async fn upgrade_preflight(
         "critical_alerts",
         crit == 0,
         format!("{crit} open critical alert(s)"),
-        Some(format!("{crit} open critical alert(s) — resolve or silence first")),
+        Some(format!(
+            "{crit} open critical alert(s) — resolve or silence first"
+        )),
     );
 
     // No in-flight jobs (anything not yet terminal — pause + drain via /maintenance first).
@@ -254,7 +288,9 @@ pub(crate) async fn upgrade_preflight(
         "active_jobs",
         active == 0,
         format!("{active} active job(s)"),
-        Some(format!("{active} job(s) in flight — pause + drain via /maintenance first")),
+        Some(format!(
+            "{active} job(s) in flight — pause + drain via /maintenance first"
+        )),
     );
 
     // No CDC stream lagging (an upgrade window shouldn't lose replication progress).
@@ -268,9 +304,13 @@ pub(crate) async fn upgrade_preflight(
         "cdc_lag",
         lagging == 0,
         format!("{lagging} CDC stream(s) lagging > {CDC_LAG_THRESHOLD_SECS}s"),
-        Some(format!("{lagging} CDC stream(s) lagging — let them catch up first")),
+        Some(format!(
+            "{lagging} CDC stream(s) lagging — let them catch up first"
+        )),
     );
 
     let ready = blockers.is_empty();
-    Ok(Json(json!({ "ready": ready, "checks": checks, "blockers": blockers })))
+    Ok(Json(
+        json!({ "ready": ready, "checks": checks, "blockers": blockers }),
+    ))
 }

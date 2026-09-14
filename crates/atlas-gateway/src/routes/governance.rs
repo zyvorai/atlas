@@ -10,9 +10,9 @@ use serde_json::{json, Value};
 
 use atlas_common::{ids, AppError, AppResult};
 
+use super::object_store::ListBackupsQuery;
 use crate::auth::Actor;
 use crate::state::AppState;
-use super::object_store::ListBackupsQuery;
 
 // ---- policies ----
 
@@ -165,7 +165,9 @@ pub(crate) async fn login(
     Json(body): Json<LoginBody>,
 ) -> AppResult<(StatusCode, Json<Value>)> {
     if body.username.trim().is_empty() || body.password.is_empty() {
-        return Err(AppError::Validation("username and password are required".into()));
+        return Err(AppError::Validation(
+            "username and password are required".into(),
+        ));
     }
     const MAX_TTL: u64 = 90 * 24 * 3600;
     let ttl_secs = body.ttl_secs.unwrap_or(86_400).clamp(60, MAX_TTL);
@@ -310,7 +312,11 @@ pub(crate) async fn create_user(
     if username.is_empty() {
         return Err(AppError::Validation("username is required".into()));
     }
-    if username.len() > 64 || !username.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.') {
+    if username.len() > 64
+        || !username
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+    {
         return Err(AppError::Validation(
             "username must be 1–64 chars of [A-Za-z0-9._-]".into(),
         ));
@@ -322,7 +328,9 @@ pub(crate) async fn create_user(
         )));
     }
     if body.password.len() < 8 {
-        return Err(AppError::Validation("password must be at least 8 characters".into()));
+        return Err(AppError::Validation(
+            "password must be at least 8 characters".into(),
+        ));
     }
     let role = crate::auth::normalize_console_role(body.role.as_deref().unwrap_or("viewer"))
         .map_err(AppError::Validation)?;
@@ -389,7 +397,9 @@ pub(crate) async fn update_user(
     };
     if let Some(pw) = body.password.as_deref() {
         if pw.len() < 8 {
-            return Err(AppError::Validation("password must be at least 8 characters".into()));
+            return Err(AppError::Validation(
+                "password must be at least 8 characters".into(),
+            ));
         }
     }
     // Refuse demoting/disabling the last enabled admin in the DB (bootstrap still works, but
@@ -403,7 +413,8 @@ pub(crate) async fn update_user(
                 let admins = atlas_inventory::users::count_admins(&s.pool)
                     .await
                     .map_err(|e| AppError::Database(e.to_string()))?;
-                if admins <= 1 && (body.disabled == Some(true) || role.is_some_and(|r| r != "admin"))
+                if admins <= 1
+                    && (body.disabled == Some(true) || role.is_some_and(|r| r != "admin"))
                 {
                     return Err(AppError::Validation(
                         "cannot disable or demote the last admin user".into(),
@@ -413,16 +424,11 @@ pub(crate) async fn update_user(
         }
     }
     let hash = body.password.as_deref().map(crate::auth::hash_password);
-    let user = atlas_inventory::users::update(
-        &s.pool,
-        &username,
-        role,
-        hash.as_deref(),
-        body.disabled,
-    )
-    .await
-    .map_err(|e| AppError::Database(e.to_string()))?
-    .ok_or_else(|| AppError::NotFound(format!("user {username}")))?;
+    let user =
+        atlas_inventory::users::update(&s.pool, &username, role, hash.as_deref(), body.disabled)
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?
+            .ok_or_else(|| AppError::NotFound(format!("user {username}")))?;
     let _ = atlas_inventory::audit::record(
         &s.pool,
         None,
@@ -455,7 +461,9 @@ pub(crate) async fn delete_user(
 ) -> AppResult<Json<Value>> {
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
     if username.eq_ignore_ascii_case(&s.config.admin_username) {
-        return Err(AppError::Validation("cannot delete the bootstrap admin".into()));
+        return Err(AppError::Validation(
+            "cannot delete the bootstrap admin".into(),
+        ));
     }
     if let Some(existing) = atlas_inventory::users::get(&s.pool, &username)
         .await
@@ -514,8 +522,13 @@ pub(crate) async fn issue_token(
     // Cap the lifetime so a leaked token has a bounded blast radius.
     const MAX_TTL: u64 = 90 * 24 * 3600;
     let ttl_secs = body.ttl_secs.unwrap_or(3600).clamp(60, MAX_TTL);
-    let (token, exp, jti) =
-        crate::auth::mint_token(&s.config.jwt_secret, &body.subject, &role, tenant_id, ttl_secs)?;
+    let (token, exp, jti) = crate::auth::mint_token(
+        &s.config.jwt_secret,
+        &body.subject,
+        &role,
+        tenant_id,
+        ttl_secs,
+    )?;
     let _ = atlas_inventory::audit::record(
         &s.pool,
         None,
@@ -555,7 +568,15 @@ pub(crate) async fn revoke_token(
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_ADMIN)?;
     atlas_inventory::tokens::revoke(&s.pool, &jti, &actor.id).await?;
     let _ = atlas_inventory::audit::record(
-        &s.pool, None, &actor.id, "auth.token.revoked", "service_account", &jti, "ok", None, None,
+        &s.pool,
+        None,
+        &actor.id,
+        "auth.token.revoked",
+        "service_account",
+        &jti,
+        "ok",
+        None,
+        None,
     )
     .await;
     Ok(Json(json!({ "jti": jti, "revoked": true })))

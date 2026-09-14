@@ -1,18 +1,16 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
 // SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
-use axum::{
-    extract::State,
-    http::StatusCode,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, Json};
 use serde_json::{json, Value};
 
-use crate::state::AppState;
 use super::util::CEPH_BACKEND_ID;
+use crate::state::AppState;
 
 /// `GET /metrics` — Atlas's own operational state in Prometheus text-exposition format, so a
 /// Prometheus/Grafana stack can scrape the control plane itself (unauthenticated, like `/health`).
-pub(crate) async fn prometheus_metrics(State(s): State<AppState>) -> impl axum::response::IntoResponse {
+pub(crate) async fn prometheus_metrics(
+    State(s): State<AppState>,
+) -> impl axum::response::IntoResponse {
     use std::fmt::Write;
     let mut out = String::with_capacity(1024);
     let summary = atlas_inventory::metrics_summary(&s.pool)
@@ -178,14 +176,19 @@ pub(crate) async fn readyz(State(s): State<AppState>) -> (StatusCode, Json<Value
     // Keep this under the k8s readinessProbe timeoutSeconds (5s in deploy/k8s) so kubelet sees a
     // real 503 rather than "context deadline exceeded" and flapping NotReady / empty Endpoints.
     let (driver_ok, driver_status) = match s.driver_for(CEPH_BACKEND_ID) {
-        Some(d) => match tokio::time::timeout(std::time::Duration::from_secs(3), d.health()).await {
-            Ok(Ok(h)) => (
-                matches!(h.status, atlas_api_types::Health::Ok | atlas_api_types::Health::Warn),
-                format!("{:?}", h.status).to_lowercase(),
-            ),
-            Ok(Err(e)) => (false, format!("error: {e}")),
-            Err(_) => (false, "probe timed out".into()),
-        },
+        Some(d) => {
+            match tokio::time::timeout(std::time::Duration::from_secs(3), d.health()).await {
+                Ok(Ok(h)) => (
+                    matches!(
+                        h.status,
+                        atlas_api_types::Health::Ok | atlas_api_types::Health::Warn
+                    ),
+                    format!("{:?}", h.status).to_lowercase(),
+                ),
+                Ok(Err(e)) => (false, format!("error: {e}")),
+                Err(_) => (false, "probe timed out".into()),
+            }
+        }
         None => (false, "no driver registered".into()),
     };
     let k8s_ok = s.k8s.is_some();

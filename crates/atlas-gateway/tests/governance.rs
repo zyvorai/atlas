@@ -114,7 +114,12 @@ async fn revoked_token_is_rejected() {
     let op2 = t2["token"].as_str().unwrap();
 
     // The token works before revocation.
-    let ok = c.get(format!("{base}/alerts")).bearer_auth(op1).send().await.unwrap();
+    let ok = c
+        .get(format!("{base}/alerts"))
+        .bearer_auth(op1)
+        .send()
+        .await
+        .unwrap();
     assert_eq!(ok.status(), 200);
 
     // A non-admin cannot revoke.
@@ -136,9 +141,19 @@ async fn revoked_token_is_rejected() {
     assert_eq!(rev.status(), 200);
 
     // Token 1 is now rejected (401) even though it hasn't expired; token 2 still works.
-    let after = c.get(format!("{base}/alerts")).bearer_auth(op1).send().await.unwrap();
+    let after = c
+        .get(format!("{base}/alerts"))
+        .bearer_auth(op1)
+        .send()
+        .await
+        .unwrap();
     assert_eq!(after.status(), 401, "revoked token must be rejected");
-    let still = c.get(format!("{base}/alerts")).bearer_auth(op2).send().await.unwrap();
+    let still = c
+        .get(format!("{base}/alerts"))
+        .bearer_auth(op2)
+        .send()
+        .await
+        .unwrap();
     assert_eq!(still.status(), 200, "an unrevoked token keeps working");
 
     // The deny-list lists the revoked jti.
@@ -174,7 +189,9 @@ async fn bootstrap_admin_token_can_mint_jwts() {
         .json()
         .await
         .unwrap();
-    let jwt = minted["token"].as_str().expect("bootstrap mint returns a JWT");
+    let jwt = minted["token"]
+        .as_str()
+        .expect("bootstrap mint returns a JWT");
 
     let ok = c
         .get(format!("{base}/alerts"))

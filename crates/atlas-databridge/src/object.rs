@@ -250,7 +250,11 @@ impl ObjectMigrator {
     }
 
     /// Build a migrator from an arbitrary source (e.g. Azure Blob) into an RGW destination.
-    pub fn with_source(source: Box<dyn ObjectSource>, dest: S3Target, prefix: Option<String>) -> Self {
+    pub fn with_source(
+        source: Box<dyn ObjectSource>,
+        dest: S3Target,
+        prefix: Option<String>,
+    ) -> Self {
         Self {
             source,
             sink: Box::new(S3ObjectSink(dest)),
@@ -264,7 +268,11 @@ impl ObjectMigrator {
         sink: Box<dyn ObjectSink>,
         prefix: Option<String>,
     ) -> Self {
-        Self { source, sink, prefix }
+        Self {
+            source,
+            sink,
+            prefix,
+        }
     }
 
     /// List both sides and compute the copy plan.
@@ -365,7 +373,12 @@ impl ObjectMigrator {
             match dmap.get(obj.key.as_str()) {
                 Some(&sz) if sz == obj.size => {}
                 Some(&sz) => {
-                    anyhow::bail!("size mismatch for {}: expected {}, got {}", obj.key, obj.size, sz)
+                    anyhow::bail!(
+                        "size mismatch for {}: expected {}, got {}",
+                        obj.key,
+                        obj.size,
+                        sz
+                    )
                 }
                 None => anyhow::bail!("object missing on destination: {}", obj.key),
             }
@@ -391,7 +404,9 @@ async fn resolve_creds(
         .get("access_key")
         .or_else(|| data.get("AWS_ACCESS_KEY_ID"))
         .cloned()
-        .ok_or_else(|| anyhow::anyhow!("secret {secret_ref} missing access_key/AWS_ACCESS_KEY_ID"))?;
+        .ok_or_else(|| {
+            anyhow::anyhow!("secret {secret_ref} missing access_key/AWS_ACCESS_KEY_ID")
+        })?;
     let secret = data
         .get("secret_key")
         .or_else(|| data.get("AWS_SECRET_ACCESS_KEY"))
@@ -462,7 +477,9 @@ async fn run_migration_inner(
     }
 
     let k8s = k8s.ok_or_else(|| {
-        anyhow::anyhow!("object migration requires a Kubernetes driver to resolve credential secrets")
+        anyhow::anyhow!(
+            "object migration requires a Kubernetes driver to resolve credential secrets"
+        )
     })?;
 
     let src_ref = rec
@@ -504,7 +521,11 @@ async fn run_migration_inner(
                     &src_sk,
                     &rec.source_bucket,
                 )?;
-                ObjectMigrator::with_source(Box::new(src), dest.target()?, rec.source_prefix.clone())
+                ObjectMigrator::with_source(
+                    Box::new(src),
+                    dest.target()?,
+                    rec.source_prefix.clone(),
+                )
             }
             #[cfg(not(feature = "azure-blob"))]
             {
@@ -677,8 +698,12 @@ mod tests {
         }
         let received = Arc::new(Mutex::new(HashMap::new()));
         let mig = ObjectMigrator::with_source_sink(
-            Box::new(FakeSource { objects: objects.clone() }),
-            Box::new(FakeSink { received: received.clone() }),
+            Box::new(FakeSource {
+                objects: objects.clone(),
+            }),
+            Box::new(FakeSink {
+                received: received.clone(),
+            }),
             None,
         );
 
@@ -687,7 +712,9 @@ mod tests {
 
         let mut max_done = 0usize;
         let report = mig
-            .run(&plan, 4, MIN_PART_SIZE, |p| max_done = max_done.max(p.objects_done))
+            .run(&plan, 4, MIN_PART_SIZE, |p| {
+                max_done = max_done.max(p.objects_done)
+            })
             .await
             .unwrap();
 
@@ -699,7 +726,11 @@ mod tests {
         let recv = received.lock().unwrap();
         assert_eq!(recv.len(), 20);
         for (k, v) in &objects {
-            assert_eq!(recv.get(k), Some(&(v.len() as u64)), "size mismatch for {k}");
+            assert_eq!(
+                recv.get(k),
+                Some(&(v.len() as u64)),
+                "size mismatch for {k}"
+            );
         }
     }
 
@@ -714,7 +745,9 @@ mod tests {
 
         let mig = ObjectMigrator::with_source_sink(
             Box::new(FakeSource { objects }),
-            Box::new(FakeSink { received: received.clone() }),
+            Box::new(FakeSink {
+                received: received.clone(),
+            }),
             None,
         );
         let plan = mig.plan(CopyMode::Incremental).await.unwrap();
@@ -782,9 +815,6 @@ mod tests {
             serde_json::from_str::<CopyMode>("\"incremental\"").unwrap(),
             CopyMode::Incremental
         );
-        assert_eq!(
-            serde_json::to_string(&CopyMode::Full).unwrap(),
-            "\"full\""
-        );
+        assert_eq!(serde_json::to_string(&CopyMode::Full).unwrap(), "\"full\"");
     }
 }

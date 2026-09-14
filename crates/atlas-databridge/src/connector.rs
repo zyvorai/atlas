@@ -98,7 +98,10 @@ impl SourceKind {
     /// full-load applies. Heterogeneous sources (Oracle/SQL Server → Postgres) are instead seeded by
     /// Debezium's initial snapshot and have no separate full-load Job.
     pub fn homogeneous(&self) -> bool {
-        matches!(self, Self::Postgres | Self::Mysql | Self::Mariadb | Self::Mongodb)
+        matches!(
+            self,
+            Self::Postgres | Self::Mysql | Self::Mariadb | Self::Mongodb
+        )
     }
 
     /// Default network port for the engine, used when the source didn't specify one.

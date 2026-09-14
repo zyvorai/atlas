@@ -165,7 +165,11 @@ impl SourceConnector for MysqlSourceConnector {
         Ok(DiscoveredSchema {
             engine: self.engine.to_string(),
             version,
-            databases: if databases.is_empty() { vec![self.database.clone()] } else { databases },
+            databases: if databases.is_empty() {
+                vec![self.database.clone()]
+            } else {
+                databases
+            },
             tables,
             extensions,
             total_size_bytes,
@@ -183,7 +187,10 @@ mod tests {
         // MySqlSslMode doesn't derive PartialEq, so match on the variant.
         assert!(matches!(ssl_mode("require"), MySqlSslMode::Required));
         assert!(matches!(ssl_mode("disable"), MySqlSslMode::Disabled));
-        assert!(matches!(ssl_mode("verify-full"), MySqlSslMode::VerifyIdentity));
+        assert!(matches!(
+            ssl_mode("verify-full"),
+            MySqlSslMode::VerifyIdentity
+        ));
         // unknown falls back to Preferred
         assert!(matches!(ssl_mode("banana"), MySqlSslMode::Preferred));
     }
@@ -224,7 +231,10 @@ mod tests {
             .find(|t| t.name == "customers")
             .expect("customers table");
         assert!(customers.has_primary_key, "customers should have a PK");
-        assert!(schema.cdc_capable, "binlog should be ROW-format enabled for CDC");
+        assert!(
+            schema.cdc_capable,
+            "binlog should be ROW-format enabled for CDC"
+        );
     }
 
     #[tokio::test]

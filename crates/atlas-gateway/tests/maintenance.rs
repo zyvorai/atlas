@@ -96,20 +96,62 @@ async fn cordon_blocks_provisioning() {
     let c = reqwest::Client::new();
 
     // Baseline: create accepted (the job fails later without k8s, but enqueue is 202).
-    assert_eq!(c.post(format!("{base}/volumes")).json(&vol("v0")).send().await.unwrap().status(), 202);
+    assert_eq!(
+        c.post(format!("{base}/volumes"))
+            .json(&vol("v0"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        202
+    );
 
     // Cordon → new provisioning rejected with 503.
-    let cor = c.post(format!("{base}/backends/{CEPH}/cordon")).send().await.unwrap();
+    let cor = c
+        .post(format!("{base}/backends/{CEPH}/cordon"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(cor.status(), 200);
     assert_eq!(cor.json::<Value>().await.unwrap()["cordoned"], true);
-    assert_eq!(c.post(format!("{base}/volumes")).json(&vol("v1")).send().await.unwrap().status(), 503);
+    assert_eq!(
+        c.post(format!("{base}/volumes"))
+            .json(&vol("v1"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        503
+    );
 
     // Uncordon → provisioning resumes.
-    assert_eq!(c.post(format!("{base}/backends/{CEPH}/uncordon")).send().await.unwrap().status(), 200);
-    assert_eq!(c.post(format!("{base}/volumes")).json(&vol("v2")).send().await.unwrap().status(), 202);
+    assert_eq!(
+        c.post(format!("{base}/backends/{CEPH}/uncordon"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    assert_eq!(
+        c.post(format!("{base}/volumes"))
+            .json(&vol("v2"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        202
+    );
 
     // Cordoning an unknown backend → 404.
-    assert_eq!(c.post(format!("{base}/backends/nope/cordon")).send().await.unwrap().status(), 404);
+    assert_eq!(
+        c.post(format!("{base}/backends/nope/cordon"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
 }
 
 /// The maintenance pause holds jobs in `queued` until resumed, then they drain.
@@ -119,9 +161,21 @@ async fn pause_holds_jobs_until_resumed() {
     let c = reqwest::Client::new();
 
     // Enter maintenance.
-    let p = c.post(format!("{base}/maintenance")).json(&json!({ "paused": true })).send().await.unwrap();
+    let p = c
+        .post(format!("{base}/maintenance"))
+        .json(&json!({ "paused": true }))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(p.status(), 200);
-    let m: Value = c.get(format!("{base}/maintenance")).send().await.unwrap().json().await.unwrap();
+    let m: Value = c
+        .get(format!("{base}/maintenance"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
     assert_eq!(m["paused"], true);
 
     // Enqueue an OSD op; the worker should hold it (leave it queued) while paused.
@@ -152,12 +206,24 @@ async fn pause_holds_jobs_until_resumed() {
 
     // Resume → the held job drains to a terminal state (failed here — no real ceph binary).
     assert_eq!(
-        c.post(format!("{base}/maintenance")).json(&json!({ "paused": false })).send().await.unwrap().status(),
+        c.post(format!("{base}/maintenance"))
+            .json(&json!({ "paused": false }))
+            .send()
+            .await
+            .unwrap()
+            .status(),
         200
     );
     let mut last = String::new();
     for _ in 0..40 {
-        let j: Value = c.get(format!("{base}/jobs/{job_id}")).send().await.unwrap().json().await.unwrap();
+        let j: Value = c
+            .get(format!("{base}/jobs/{job_id}"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
         last = j["state"].as_str().unwrap_or("").to_string();
         if last == "failed" || last == "succeeded" {
             return;
@@ -176,31 +242,76 @@ async fn cancel_queued_job() {
     let c = reqwest::Client::new();
 
     assert_eq!(
-        c.post(format!("{base}/maintenance")).json(&json!({ "paused": true })).send().await.unwrap().status(),
+        c.post(format!("{base}/maintenance"))
+            .json(&json!({ "paused": true }))
+            .send()
+            .await
+            .unwrap()
+            .status(),
         200
     );
-    let job: Value = c.post(format!("{base}/osds/7/out")).send().await.unwrap().json().await.unwrap();
+    let job: Value = c
+        .post(format!("{base}/osds/7/out"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
     let job_id = job["job_id"].as_str().unwrap().to_string();
 
     tokio::time::sleep(Duration::from_millis(200)).await;
-    let held: Value = c.get(format!("{base}/jobs/{job_id}")).send().await.unwrap().json().await.unwrap();
-    assert!(matches!(held["state"].as_str(), Some("queued") | Some("pending")));
+    let held: Value = c
+        .get(format!("{base}/jobs/{job_id}"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(matches!(
+        held["state"].as_str(),
+        Some("queued") | Some("pending")
+    ));
 
-    let cancel = c.post(format!("{base}/jobs/{job_id}/cancel")).send().await.unwrap();
+    let cancel = c
+        .post(format!("{base}/jobs/{job_id}/cancel"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(cancel.status(), 200);
     assert_eq!(cancel.json::<Value>().await.unwrap()["cancelled"], true);
 
-    let after: Value = c.get(format!("{base}/jobs/{job_id}")).send().await.unwrap().json().await.unwrap();
+    let after: Value = c
+        .get(format!("{base}/jobs/{job_id}"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
     assert_eq!(after["state"], "failed");
     assert_eq!(after["error"], "cancelled by operator");
 
     // Resuming maintenance must not resurrect the cancelled job — it's terminal, try_claim skips it.
     assert_eq!(
-        c.post(format!("{base}/maintenance")).json(&json!({ "paused": false })).send().await.unwrap().status(),
+        c.post(format!("{base}/maintenance"))
+            .json(&json!({ "paused": false }))
+            .send()
+            .await
+            .unwrap()
+            .status(),
         200
     );
     tokio::time::sleep(Duration::from_millis(300)).await;
-    let still: Value = c.get(format!("{base}/jobs/{job_id}")).send().await.unwrap().json().await.unwrap();
+    let still: Value = c
+        .get(format!("{base}/jobs/{job_id}"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
     assert_eq!(still["state"], "failed");
 }
 
@@ -211,15 +322,36 @@ async fn cancel_rejects_terminal_and_unknown() {
     let c = reqwest::Client::new();
 
     // Unknown job id → 404.
-    assert_eq!(c.post(format!("{base}/jobs/job_does_not_exist/cancel")).send().await.unwrap().status(), 404);
+    assert_eq!(
+        c.post(format!("{base}/jobs/job_does_not_exist/cancel"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
 
     // A fake-mode OSD op completes almost immediately (no real `ceph` CLI call) — cancel after
     // it's terminal should be 409, not silently accepted.
-    let job: Value = c.post(format!("{base}/osds/8/out")).send().await.unwrap().json().await.unwrap();
+    let job: Value = c
+        .post(format!("{base}/osds/8/out"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
     let job_id = job["job_id"].as_str().unwrap().to_string();
     let mut terminal = false;
     for _ in 0..40 {
-        let j: Value = c.get(format!("{base}/jobs/{job_id}")).send().await.unwrap().json().await.unwrap();
+        let j: Value = c
+            .get(format!("{base}/jobs/{job_id}"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
         if matches!(j["state"].as_str(), Some("succeeded") | Some("failed")) {
             terminal = true;
             break;
@@ -227,7 +359,14 @@ async fn cancel_rejects_terminal_and_unknown() {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     assert!(terminal, "job never reached a terminal state");
-    assert_eq!(c.post(format!("{base}/jobs/{job_id}/cancel")).send().await.unwrap().status(), 409);
+    assert_eq!(
+        c.post(format!("{base}/jobs/{job_id}/cancel"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        409
+    );
 }
 
 /// OSD ops enqueue as jobs; reweight validates its weight.
@@ -241,7 +380,28 @@ async fn osd_ops_enqueue_and_validate() {
     assert!(out.json::<Value>().await.unwrap()["job_id"].is_string());
 
     // reweight without a weight → 400; out of range → 400; valid → 202.
-    assert_eq!(c.post(format!("{base}/osds/3/reweight")).send().await.unwrap().status(), 400);
-    assert_eq!(c.post(format!("{base}/osds/3/reweight?weight=2.0")).send().await.unwrap().status(), 400);
-    assert_eq!(c.post(format!("{base}/osds/3/reweight?weight=0.8")).send().await.unwrap().status(), 202);
+    assert_eq!(
+        c.post(format!("{base}/osds/3/reweight"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        400
+    );
+    assert_eq!(
+        c.post(format!("{base}/osds/3/reweight?weight=2.0"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        400
+    );
+    assert_eq!(
+        c.post(format!("{base}/osds/3/reweight?weight=0.8"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        202
+    );
 }

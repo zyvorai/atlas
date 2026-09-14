@@ -122,12 +122,18 @@ pub fn decode_token(
 ) -> jsonwebtoken::errors::Result<jsonwebtoken::TokenData<Claims>> {
     let mut validation = Validation::new(Algorithm::HS256);
     validation.validate_exp = true;
-    let primary = decode::<Claims>(token, &DecodingKey::from_secret(secret.as_bytes()), &validation);
+    let primary = decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &validation,
+    );
     match (primary, previous_secret) {
         (Ok(data), _) => Ok(data),
-        (Err(_), Some(prev)) => {
-            decode::<Claims>(token, &DecodingKey::from_secret(prev.as_bytes()), &validation)
-        }
+        (Err(_), Some(prev)) => decode::<Claims>(
+            token,
+            &DecodingKey::from_secret(prev.as_bytes()),
+            &validation,
+        ),
         (Err(e), None) => Err(e),
     }
 }
@@ -211,7 +217,8 @@ pub async fn auth_middleware(
                     // Deny-list check: a revoked token is rejected even before it expires. Fail open on a
                     // DB error (readiness already gates on the DB) so a transient blip can't lock everyone out.
                     if !data.claims.jti.is_empty() {
-                        match atlas_inventory::tokens::is_revoked(&state.pool, &data.claims.jti).await
+                        match atlas_inventory::tokens::is_revoked(&state.pool, &data.claims.jti)
+                            .await
                         {
                             Ok(true) => return unauthorized("token has been revoked"),
                             Ok(false) => {}
@@ -362,7 +369,14 @@ mod tests {
 
     #[test]
     fn decode_token_accepts_current_secret() {
-        let (token, _, _) = mint_token("new-secret-32-bytes-or-more!!!!", "alice", "admin", "global", 3600).unwrap();
+        let (token, _, _) = mint_token(
+            "new-secret-32-bytes-or-more!!!!",
+            "alice",
+            "admin",
+            "global",
+            3600,
+        )
+        .unwrap();
         let decoded = decode_token(&token, "new-secret-32-bytes-or-more!!!!", None).unwrap();
         assert_eq!(decoded.claims.sub, "alice");
     }
@@ -370,8 +384,14 @@ mod tests {
     #[test]
     fn decode_token_falls_back_to_previous_secret_during_rotation() {
         // A token minted before rotation, with the OLD secret...
-        let (token, _, _) =
-            mint_token("old-secret-32-bytes-or-more!!!!", "bob", "operator", "global", 3600).unwrap();
+        let (token, _, _) = mint_token(
+            "old-secret-32-bytes-or-more!!!!",
+            "bob",
+            "operator",
+            "global",
+            3600,
+        )
+        .unwrap();
         // ...must still validate against the NEW current secret, as long as the old one is
         // supplied as jwt_secret_previous — this is the whole point of the rotation window.
         let decoded = decode_token(
@@ -385,8 +405,14 @@ mod tests {
 
     #[test]
     fn decode_token_rejects_stale_secret_once_rotation_window_closes() {
-        let (token, _, _) =
-            mint_token("old-secret-32-bytes-or-more!!!!", "carol", "viewer", "global", 3600).unwrap();
+        let (token, _, _) = mint_token(
+            "old-secret-32-bytes-or-more!!!!",
+            "carol",
+            "viewer",
+            "global",
+            3600,
+        )
+        .unwrap();
         // No jwt_secret_previous configured (the operator finished the rotation and removed it) —
         // a token signed with the retired secret must be rejected.
         let result = decode_token(&token, "new-secret-32-bytes-or-more!!!!", None);

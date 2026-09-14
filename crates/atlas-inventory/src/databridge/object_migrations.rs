@@ -129,7 +129,13 @@ pub async fn set_progress(
 }
 
 /// Terminal outcome: verified + final state, clearing/setting the error.
-pub async fn finish(pool: &SqlitePool, id: &str, state: &str, verified: bool, error: Option<&str>) -> Result<()> {
+pub async fn finish(
+    pool: &SqlitePool,
+    id: &str,
+    state: &str,
+    verified: bool,
+    error: Option<&str>,
+) -> Result<()> {
     sqlx::query(
         "UPDATE object_migrations SET state=?, verified=?, last_error=?,
          updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",

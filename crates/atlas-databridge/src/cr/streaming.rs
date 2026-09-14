@@ -110,7 +110,11 @@ pub fn debezium_source_spec(
     let pass = format!("${{secrets:{secret_ns}/{secret}:password}}");
     let prefix = topic_prefix(short);
     let bootstrap = "zyvor-kafka-kafka-bootstrap:9092";
-    let snapshot_mode = if kind.homogeneous() { "never" } else { "initial" };
+    let snapshot_mode = if kind.homogeneous() {
+        "never"
+    } else {
+        "initial"
+    };
     let mut config = json!({
         "connector.class": kind.debezium_class(),
         "tasks.max": 1,
@@ -246,7 +250,16 @@ pub fn mongo_sink_spec(
 /// JDBC sink connector config applying the source topics to the edge DB. `edge_secret` is the
 /// operator app Secret (CNPG `uri`/Percona `root`); we build a JDBC URL to the edge service.
 #[allow(clippy::too_many_arguments)]
-pub fn jdbc_sink_spec(short: &str, jdbc_url: &str, secret_ns: &str, edge_secret: &str, edge_user: &str, edge_pass_key: &str, pk_fields: &str, auto_create: bool) -> Value {
+pub fn jdbc_sink_spec(
+    short: &str,
+    jdbc_url: &str,
+    secret_ns: &str,
+    edge_secret: &str,
+    edge_user: &str,
+    edge_pass_key: &str,
+    pk_fields: &str,
+    auto_create: bool,
+) -> Value {
     let prefix = topic_prefix(short);
     let config = json!({
         "connector.class": "io.aiven.connect.jdbc.JdbcSinkConnector",
@@ -304,61 +317,154 @@ mod tests {
 
     #[test]
     fn pg_source_uses_pgoutput_and_secret_provider() {
-        let s = debezium_source_spec(SourceKind::Postgres, "abc123", "prod.rds.aws", 5432, "appdb", "zyvor-databridge", "src-creds");
-        assert_eq!(s["config"]["connector.class"], "io.debezium.connector.postgresql.PostgresConnector");
+        let s = debezium_source_spec(
+            SourceKind::Postgres,
+            "abc123",
+            "prod.rds.aws",
+            5432,
+            "appdb",
+            "zyvor-databridge",
+            "src-creds",
+        );
+        assert_eq!(
+            s["config"]["connector.class"],
+            "io.debezium.connector.postgresql.PostgresConnector"
+        );
         assert_eq!(s["config"]["plugin.name"], "pgoutput");
         assert_eq!(s["config"]["topic.prefix"], "dbabc123");
         assert_eq!(s["config"]["snapshot.mode"], "never"); // homogeneous — full-load seeded it
-        assert_eq!(s["config"]["database.password"], "${secrets:zyvor-databridge/src-creds:password}");
+        assert_eq!(
+            s["config"]["database.password"],
+            "${secrets:zyvor-databridge/src-creds:password}"
+        );
     }
 
     #[test]
     fn mysql_source_sets_server_id_and_history() {
-        let s = debezium_source_spec(SourceKind::Mysql, "abc123", "prod.rds.aws", 3306, "appdb", "zyvor-databridge", "src-creds");
-        assert_eq!(s["config"]["connector.class"], "io.debezium.connector.mysql.MySqlConnector");
+        let s = debezium_source_spec(
+            SourceKind::Mysql,
+            "abc123",
+            "prod.rds.aws",
+            3306,
+            "appdb",
+            "zyvor-databridge",
+            "src-creds",
+        );
+        assert_eq!(
+            s["config"]["connector.class"],
+            "io.debezium.connector.mysql.MySqlConnector"
+        );
         assert!(s["config"]["database.server.id"].as_i64().unwrap() > 0);
-        assert!(s["config"]["schema.history.internal.kafka.topic"].as_str().unwrap().contains("abc123"));
+        assert!(s["config"]["schema.history.internal.kafka.topic"]
+            .as_str()
+            .unwrap()
+            .contains("abc123"));
     }
 
     #[test]
     fn mariadb_uses_its_own_connector_class() {
-        let s = debezium_source_spec(SourceKind::Mariadb, "abc123", "h", 3306, "appdb", "ns", "creds");
-        assert_eq!(s["config"]["connector.class"], "io.debezium.connector.mariadb.MariaDbConnector");
+        let s = debezium_source_spec(
+            SourceKind::Mariadb,
+            "abc123",
+            "h",
+            3306,
+            "appdb",
+            "ns",
+            "creds",
+        );
+        assert_eq!(
+            s["config"]["connector.class"],
+            "io.debezium.connector.mariadb.MariaDbConnector"
+        );
         assert!(s["config"]["database.server.id"].as_i64().unwrap() > 0);
     }
 
     #[test]
     fn heterogeneous_sources_snapshot_initial() {
-        let ora = debezium_source_spec(SourceKind::Oracle, "abc123", "h", 1521, "ORCLPDB", "ns", "creds");
-        assert_eq!(ora["config"]["connector.class"], "io.debezium.connector.oracle.OracleConnector");
+        let ora = debezium_source_spec(
+            SourceKind::Oracle,
+            "abc123",
+            "h",
+            1521,
+            "ORCLPDB",
+            "ns",
+            "creds",
+        );
+        assert_eq!(
+            ora["config"]["connector.class"],
+            "io.debezium.connector.oracle.OracleConnector"
+        );
         assert_eq!(ora["config"]["snapshot.mode"], "initial");
         assert_eq!(ora["config"]["database.pdb.name"], "ORCLPDB");
-        let mss = debezium_source_spec(SourceKind::Sqlserver, "abc123", "h", 1433, "appdb", "ns", "creds");
-        assert_eq!(mss["config"]["connector.class"], "io.debezium.connector.sqlserver.SqlServerConnector");
+        let mss = debezium_source_spec(
+            SourceKind::Sqlserver,
+            "abc123",
+            "h",
+            1433,
+            "appdb",
+            "ns",
+            "creds",
+        );
+        assert_eq!(
+            mss["config"]["connector.class"],
+            "io.debezium.connector.sqlserver.SqlServerConnector"
+        );
         assert_eq!(mss["config"]["snapshot.mode"], "initial");
         assert_eq!(mss["config"]["database.names"], "appdb");
     }
 
     #[test]
     fn sink_targets_topic_regex_and_upsert() {
-        let s = jdbc_sink_spec("abc123", "jdbc:postgresql://edge-rw:5432/appdb", "zyvor-databridge", "edge-app", "app", "password", "id", false);
+        let s = jdbc_sink_spec(
+            "abc123",
+            "jdbc:postgresql://edge-rw:5432/appdb",
+            "zyvor-databridge",
+            "edge-app",
+            "app",
+            "password",
+            "id",
+            false,
+        );
         assert_eq!(s["config"]["insert.mode"], "upsert");
         assert_eq!(s["config"]["pk.fields"], "id");
         assert_eq!(s["config"]["auto.create"], false);
-        assert_eq!(s["config"]["transforms.unwrap.type"], "io.debezium.transforms.ExtractNewRecordState");
+        assert_eq!(
+            s["config"]["transforms.unwrap.type"],
+            "io.debezium.transforms.ExtractNewRecordState"
+        );
         assert_eq!(s["config"]["topics.regex"], "dbabc123[.][^.]+[.].*");
     }
 
     #[test]
     fn sink_auto_creates_for_heterogeneous() {
-        let s = jdbc_sink_spec("abc123", "jdbc:postgresql://edge-rw:5432/appdb", "ns", "edge-app", "app", "password", "id", true);
+        let s = jdbc_sink_spec(
+            "abc123",
+            "jdbc:postgresql://edge-rw:5432/appdb",
+            "ns",
+            "edge-app",
+            "app",
+            "password",
+            "id",
+            true,
+        );
         assert_eq!(s["config"]["auto.create"], true);
     }
 
     #[test]
     fn mongo_source_uses_connection_string_not_jdbc() {
-        let s = debezium_source_spec(SourceKind::Mongodb, "abc123", "mongo.rds.aws", 27017, "appdb", "ns", "src-creds");
-        assert_eq!(s["config"]["connector.class"], "io.debezium.connector.mongodb.MongoDbConnector");
+        let s = debezium_source_spec(
+            SourceKind::Mongodb,
+            "abc123",
+            "mongo.rds.aws",
+            27017,
+            "appdb",
+            "ns",
+            "src-creds",
+        );
+        assert_eq!(
+            s["config"]["connector.class"],
+            "io.debezium.connector.mongodb.MongoDbConnector"
+        );
         let conn = s["config"]["mongodb.connection.string"].as_str().unwrap();
         assert!(conn.contains("mongo.rds.aws:27017"));
         assert!(conn.contains("replicaSet=rs0"));
@@ -369,24 +475,47 @@ mod tests {
 
     #[test]
     fn mongo_sink_routes_topics_to_collections() {
-        let s = mongo_sink_spec("abc123", "edge-rs0.zyvor-databridge.svc:27017", "appdb", "ns", "edge-secrets", "MONGODB_DATABASE_ADMIN_USER", "MONGODB_DATABASE_ADMIN_PASSWORD");
-        assert_eq!(s["config"]["connector.class"], "com.mongodb.kafka.connect.MongoSinkConnector");
+        let s = mongo_sink_spec(
+            "abc123",
+            "edge-rs0.zyvor-databridge.svc:27017",
+            "appdb",
+            "ns",
+            "edge-secrets",
+            "MONGODB_DATABASE_ADMIN_USER",
+            "MONGODB_DATABASE_ADMIN_PASSWORD",
+        );
+        assert_eq!(
+            s["config"]["connector.class"],
+            "com.mongodb.kafka.connect.MongoSinkConnector"
+        );
         assert_eq!(s["config"]["database"], "appdb");
-        assert!(s["config"]["connection.uri"].as_str().unwrap().contains("edge-rs0"));
-        assert!(s["config"]["connection.uri"].as_str().unwrap().contains("authSource=admin"));
-        assert_eq!(s["config"]["change.data.capture.handler"], "com.mongodb.kafka.connect.sink.cdc.debezium.mongodb.MongoDbHandler");
+        assert!(s["config"]["connection.uri"]
+            .as_str()
+            .unwrap()
+            .contains("edge-rs0"));
+        assert!(s["config"]["connection.uri"]
+            .as_str()
+            .unwrap()
+            .contains("authSource=admin"));
+        assert_eq!(
+            s["config"]["change.data.capture.handler"],
+            "com.mongodb.kafka.connect.sink.cdc.debezium.mongodb.MongoDbHandler"
+        );
         assert_eq!(s["config"]["transforms.route.replacement"], "$1");
         assert_eq!(
-            s["config"]["topics.regex"],
-            "(dbabc123[.][^.]+[.].*|[^.]+)",
+            s["config"]["topics.regex"], "(dbabc123[.][^.]+[.].*|[^.]+)",
             "must match Debezium topic and post-RegexRouter collection name"
         );
     }
 
     #[test]
     fn running_status_parsed() {
-        assert!(connector_running(&json!({ "connectorStatus": { "connector": { "state": "RUNNING" } } })));
-        assert!(!connector_running(&json!({ "connectorStatus": { "connector": { "state": "FAILED" } } })));
+        assert!(connector_running(
+            &json!({ "connectorStatus": { "connector": { "state": "RUNNING" } } })
+        ));
+        assert!(!connector_running(
+            &json!({ "connectorStatus": { "connector": { "state": "FAILED" } } })
+        ));
         assert!(!connector_running(&json!({})));
     }
 }

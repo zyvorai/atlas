@@ -36,9 +36,11 @@ pub async fn is_revoked(pool: &SqlitePool, jti: &str) -> Result<bool> {
 
 /// List the current revocations (newest first).
 pub async fn list(pool: &SqlitePool) -> Result<Vec<serde_json::Value>> {
-    let rows = sqlx::query("SELECT jti, revoked_by, revoked_at FROM revoked_tokens ORDER BY revoked_at DESC")
-        .fetch_all(pool)
-        .await?;
+    let rows = sqlx::query(
+        "SELECT jti, revoked_by, revoked_at FROM revoked_tokens ORDER BY revoked_at DESC",
+    )
+    .fetch_all(pool)
+    .await?;
     Ok(rows
         .into_iter()
         .map(|r| {

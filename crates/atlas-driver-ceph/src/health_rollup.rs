@@ -61,12 +61,17 @@ pub async fn compute(driver: &dyn StorageDriver) -> Result<HealthRollup, DriverE
 /// `osd_tree` is accepted (and fetched by [`compute`]) for future CRUSH-topology-aware rules
 /// (e.g. an entire failure domain down) but isn't consulted by the current rule set.
 pub fn classify(status: &Value, _osd_tree: &Value, osd_df: &Value) -> HealthRollup {
-    let raw_status = status["health"]["status"].as_str().unwrap_or("").to_string();
+    let raw_status = status["health"]["status"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
     let osds_total = status["osdmap"]["num_osds"].as_i64().unwrap_or(0);
     let osds_up = status["osdmap"]["num_up_osds"].as_i64().unwrap_or(0);
     let osds_in = status["osdmap"]["num_in_osds"].as_i64().unwrap_or(0);
     let pgs_total = status["pgmap"]["num_pgs"].as_i64().unwrap_or(0);
-    let recovering_bytes = status["pgmap"]["recovering_bytes_per_sec"].as_f64().unwrap_or(0.0);
+    let recovering_bytes = status["pgmap"]["recovering_bytes_per_sec"]
+        .as_f64()
+        .unwrap_or(0.0);
 
     let pg_states: Vec<(String, i64)> = status["pgmap"]["pgs_by_state"]
         .as_array()
@@ -142,7 +147,17 @@ pub fn classify(status: &Value, _osd_tree: &Value, osd_df: &Value) -> HealthRoll
         if osds_total > 0 && osds_up == 0 {
             reasons.push("no OSDs are up".into());
         }
-        return finish(ClusterHealthState::Critical, reasons, raw_status, osds_up, osds_in, osds_total, pgs_total, pgs_not_clean, recovering);
+        return finish(
+            ClusterHealthState::Critical,
+            reasons,
+            raw_status,
+            osds_up,
+            osds_in,
+            osds_total,
+            pgs_total,
+            pgs_not_clean,
+            recovering,
+        );
     }
 
     // At Risk: capacity pressure or degraded fault tolerance, not yet an outage.
@@ -157,7 +172,9 @@ pub fn classify(status: &Value, _osd_tree: &Value, osd_df: &Value) -> HealthRoll
         || osds_in < osds_total;
     if at_risk {
         if max_osd_util >= AT_RISK_UTILIZATION_PCT {
-            reasons.push(format!("an OSD is {max_osd_util:.1}% utilized (>= {AT_RISK_UTILIZATION_PCT}%)"));
+            reasons.push(format!(
+                "an OSD is {max_osd_util:.1}% utilized (>= {AT_RISK_UTILIZATION_PCT}%)"
+            ));
         }
         if has_check_named("NEARFULL") || has_check_named("BACKFILLFULL") {
             reasons.push("cluster is near capacity (NEARFULL/BACKFILLFULL)".into());
@@ -171,13 +188,33 @@ pub fn classify(status: &Value, _osd_tree: &Value, osd_df: &Value) -> HealthRoll
         if osds_in < osds_total {
             reasons.push(format!("{} OSD(s) marked out", osds_total - osds_in));
         }
-        return finish(ClusterHealthState::AtRisk, reasons, raw_status, osds_up, osds_in, osds_total, pgs_total, pgs_not_clean, recovering);
+        return finish(
+            ClusterHealthState::AtRisk,
+            reasons,
+            raw_status,
+            osds_up,
+            osds_in,
+            osds_total,
+            pgs_total,
+            pgs_not_clean,
+            recovering,
+        );
     }
 
     // Rebuilding: an active recovery/backfill is under way but nothing above fired.
     if recovering {
         reasons.push("recovery/backfill in progress".into());
-        return finish(ClusterHealthState::Rebuilding, reasons, raw_status, osds_up, osds_in, osds_total, pgs_total, pgs_not_clean, recovering);
+        return finish(
+            ClusterHealthState::Rebuilding,
+            reasons,
+            raw_status,
+            osds_up,
+            osds_in,
+            osds_total,
+            pgs_total,
+            pgs_not_clean,
+            recovering,
+        );
     }
 
     // Degraded: a warning-level condition with no more specific classification above.
@@ -195,10 +232,30 @@ pub fn classify(status: &Value, _osd_tree: &Value, osd_df: &Value) -> HealthRoll
         if osds_down == 1 {
             reasons.push("1 OSD is down".into());
         }
-        return finish(ClusterHealthState::Degraded, reasons, raw_status, osds_up, osds_in, osds_total, pgs_total, pgs_not_clean, recovering);
+        return finish(
+            ClusterHealthState::Degraded,
+            reasons,
+            raw_status,
+            osds_up,
+            osds_in,
+            osds_total,
+            pgs_total,
+            pgs_not_clean,
+            recovering,
+        );
     }
 
-    finish(ClusterHealthState::Healthy, vec!["all checks nominal".into()], raw_status, osds_up, osds_in, osds_total, pgs_total, pgs_not_clean, recovering)
+    finish(
+        ClusterHealthState::Healthy,
+        vec!["all checks nominal".into()],
+        raw_status,
+        osds_up,
+        osds_in,
+        osds_total,
+        pgs_total,
+        pgs_not_clean,
+        recovering,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -213,7 +270,10 @@ fn finish(
     pgs_not_clean: i64,
     recovering: bool,
 ) -> HealthRollup {
-    let summary = reasons.first().cloned().unwrap_or_else(|| "no signal".into());
+    let summary = reasons
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "no signal".into());
     HealthRollup {
         state,
         summary,
@@ -240,7 +300,9 @@ fn finish(
 /// the CLI-derived classification is left as the primary signal — it's recorded in
 /// `rook_disagreement` so callers can surface it rather than silently trusting one source.
 pub fn merge_rook_health(rollup: &mut HealthRollup, rook_health: Option<&str>) {
-    let Some(rook_health) = rook_health else { return };
+    let Some(rook_health) = rook_health else {
+        return;
+    };
     rollup.sources.push("rook-crd".to_string());
     if rook_health != rollup.raw_status {
         rollup.rook_disagreement = Some(format!(
@@ -315,8 +377,17 @@ mod tests {
             json!({ "num_osds": 6, "num_up_osds": 5, "num_in_osds": 6 }),
             json!({ "num_pgs": 289, "pgs_by_state": [{"state_name": "active+clean", "count": 281}, {"state_name": "active+undersized+degraded", "count": 8}], "recovering_bytes_per_sec": 0 }),
         );
-        let r = classify(&s, &empty_tree(), &osd_df(&[41.2, 44.8, 39.5, 0.0, 47.1, 43.3]));
-        assert_eq!(r.state, ClusterHealthState::Degraded, "reasons: {:?}", r.reasons);
+        let r = classify(
+            &s,
+            &empty_tree(),
+            &osd_df(&[41.2, 44.8, 39.5, 0.0, 47.1, 43.3]),
+        );
+        assert_eq!(
+            r.state,
+            ClusterHealthState::Degraded,
+            "reasons: {:?}",
+            r.reasons
+        );
         assert!(!r.reasons.is_empty());
     }
 
@@ -328,7 +399,11 @@ mod tests {
             json!({ "num_osds": 6, "num_up_osds": 5, "num_in_osds": 6 }),
             json!({ "num_pgs": 289, "pgs_by_state": [{"state_name": "active+recovering", "count": 8}], "recovering_bytes_per_sec": 5_000_000 }),
         );
-        let r = classify(&s, &empty_tree(), &osd_df(&[41.2, 44.8, 39.5, 0.0, 47.1, 43.3]));
+        let r = classify(
+            &s,
+            &empty_tree(),
+            &osd_df(&[41.2, 44.8, 39.5, 0.0, 47.1, 43.3]),
+        );
         assert_eq!(r.state, ClusterHealthState::Rebuilding);
     }
 
@@ -340,7 +415,11 @@ mod tests {
             json!({ "num_osds": 6, "num_up_osds": 6, "num_in_osds": 6 }),
             json!({ "num_pgs": 289, "pgs_by_state": [{"state_name": "active+clean", "count": 289}], "recovering_bytes_per_sec": 0 }),
         );
-        let r = classify(&s, &empty_tree(), &osd_df(&[41.2, 44.8, 39.5, 88.0, 47.1, 43.3]));
+        let r = classify(
+            &s,
+            &empty_tree(),
+            &osd_df(&[41.2, 44.8, 39.5, 88.0, 47.1, 43.3]),
+        );
         assert_eq!(r.state, ClusterHealthState::AtRisk);
     }
 
@@ -378,8 +457,17 @@ mod tests {
             json!({ "num_osds": 6, "num_up_osds": 6, "num_in_osds": 6 }),
             json!({ "num_pgs": 289, "pgs_by_state": [{"state_name": "active+recovering", "count": 8}], "recovering_bytes_per_sec": 5_000_000 }),
         );
-        let r = classify(&s, &empty_tree(), &osd_df(&[90.0, 44.8, 39.5, 41.0, 47.1, 43.3]));
-        assert_eq!(r.state, ClusterHealthState::AtRisk, "reasons: {:?}", r.reasons);
+        let r = classify(
+            &s,
+            &empty_tree(),
+            &osd_df(&[90.0, 44.8, 39.5, 41.0, 47.1, 43.3]),
+        );
+        assert_eq!(
+            r.state,
+            ClusterHealthState::AtRisk,
+            "reasons: {:?}",
+            r.reasons
+        );
     }
 
     #[test]
@@ -419,9 +507,18 @@ mod tests {
 
     #[test]
     fn from_rook_only_maps_health_strings() {
-        assert_eq!(from_rook_only("HEALTH_OK").state, ClusterHealthState::Healthy);
-        assert_eq!(from_rook_only("HEALTH_WARN").state, ClusterHealthState::Degraded);
-        assert_eq!(from_rook_only("HEALTH_ERR").state, ClusterHealthState::Critical);
+        assert_eq!(
+            from_rook_only("HEALTH_OK").state,
+            ClusterHealthState::Healthy
+        );
+        assert_eq!(
+            from_rook_only("HEALTH_WARN").state,
+            ClusterHealthState::Degraded
+        );
+        assert_eq!(
+            from_rook_only("HEALTH_ERR").state,
+            ClusterHealthState::Critical
+        );
         assert_eq!(from_rook_only("HEALTH_OK").sources, vec!["rook-crd"]);
     }
 }

@@ -63,11 +63,13 @@ pub async fn list_jobs_filtered(
     let limit = limit.max(1);
     let rows = match state {
         Some(s) if !s.is_empty() => {
-            sqlx::query(&job_select("WHERE state = ? ORDER BY created_at DESC LIMIT ?"))
-                .bind(s)
-                .bind(limit)
-                .fetch_all(pool)
-                .await?
+            sqlx::query(&job_select(
+                "WHERE state = ? ORDER BY created_at DESC LIMIT ?",
+            ))
+            .bind(s)
+            .bind(limit)
+            .fetch_all(pool)
+            .await?
         }
         _ => {
             sqlx::query(&job_select("ORDER BY created_at DESC LIMIT ?"))
@@ -170,8 +172,9 @@ pub async fn ids_by_states(pool: &SqlitePool, states: &[&str]) -> Result<Vec<Str
         return Ok(vec![]);
     }
     let placeholders = states.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-    let sql =
-        format!("SELECT id FROM storage_jobs WHERE state IN ({placeholders}) ORDER BY created_at ASC");
+    let sql = format!(
+        "SELECT id FROM storage_jobs WHERE state IN ({placeholders}) ORDER BY created_at ASC"
+    );
     let mut q = sqlx::query(&sql);
     for s in states {
         q = q.bind(*s);

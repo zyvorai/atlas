@@ -96,43 +96,43 @@ async fn main() -> anyhow::Result<()> {
     // gRPC edge (served concurrently). Empty ATLAS_GRPC_ADDR disables it. TLS (same cert/key as
     // the REST HTTPS listener) is used automatically when configured — previously this edge had
     // no TLS option at all, plaintext-only regardless of how REST was configured.
-    let grpc_task: Option<tokio::task::JoinHandle<anyhow::Result<()>>> = if grpc_addr.trim().is_empty()
-    {
-        None
-    } else {
-        let gaddr: SocketAddr = grpc_addr.parse()?;
-        let reflection = tonic_reflection::server::Builder::configure()
-            .register_encoded_file_descriptor_set(atlas_gateway::proto::FILE_DESCRIPTOR_SET)
-            .build_v1()?;
-        let mut builder = tonic::transport::Server::builder();
-        if let Some((cert, key)) = grpc_tls {
-            // Idempotent: a no-op if the REST HTTPS listener above already installed it, but gRPC
-            // TLS can in principle be configured without ATLAS_HTTPS_ADDR set, so don't rely on
-            // that side effect.
-            let _ = rustls::crypto::ring::default_provider().install_default();
-            let cert_pem = tokio::fs::read(&cert)
-                .await
-                .map_err(|e| anyhow::anyhow!("read gRPC TLS cert {cert}: {e}"))?;
-            let key_pem = tokio::fs::read(&key)
-                .await
-                .map_err(|e| anyhow::anyhow!("read gRPC TLS key {key}: {e}"))?;
-            let identity = tonic::transport::Identity::from_pem(cert_pem, key_pem);
-            builder = builder
-                .tls_config(tonic::transport::ServerTlsConfig::new().identity(identity))
-                .map_err(|e| anyhow::anyhow!("configure gRPC TLS: {e}"))?;
-            info!("atlas-gateway gRPC (TLS) listening on {gaddr}");
+    let grpc_task: Option<tokio::task::JoinHandle<anyhow::Result<()>>> =
+        if grpc_addr.trim().is_empty() {
+            None
         } else {
-            info!("atlas-gateway gRPC listening on {gaddr}");
-        }
-        Some(tokio::spawn(async move {
-            builder
-                .add_service(grpc::service(state))
-                .add_service(reflection)
-                .serve_with_shutdown(gaddr, shutdown_signal())
-                .await
-                .map_err(anyhow::Error::from)
-        }))
-    };
+            let gaddr: SocketAddr = grpc_addr.parse()?;
+            let reflection = tonic_reflection::server::Builder::configure()
+                .register_encoded_file_descriptor_set(atlas_gateway::proto::FILE_DESCRIPTOR_SET)
+                .build_v1()?;
+            let mut builder = tonic::transport::Server::builder();
+            if let Some((cert, key)) = grpc_tls {
+                // Idempotent: a no-op if the REST HTTPS listener above already installed it, but gRPC
+                // TLS can in principle be configured without ATLAS_HTTPS_ADDR set, so don't rely on
+                // that side effect.
+                let _ = rustls::crypto::ring::default_provider().install_default();
+                let cert_pem = tokio::fs::read(&cert)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("read gRPC TLS cert {cert}: {e}"))?;
+                let key_pem = tokio::fs::read(&key)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("read gRPC TLS key {key}: {e}"))?;
+                let identity = tonic::transport::Identity::from_pem(cert_pem, key_pem);
+                builder = builder
+                    .tls_config(tonic::transport::ServerTlsConfig::new().identity(identity))
+                    .map_err(|e| anyhow::anyhow!("configure gRPC TLS: {e}"))?;
+                info!("atlas-gateway gRPC (TLS) listening on {gaddr}");
+            } else {
+                info!("atlas-gateway gRPC listening on {gaddr}");
+            }
+            Some(tokio::spawn(async move {
+                builder
+                    .add_service(grpc::service(state))
+                    .add_service(reflection)
+                    .serve_with_shutdown(gaddr, shutdown_signal())
+                    .await
+                    .map_err(anyhow::Error::from)
+            }))
+        };
 
     for task in [rest_task, https_task, grpc_task].into_iter().flatten() {
         if let Err(e) = task.await? {

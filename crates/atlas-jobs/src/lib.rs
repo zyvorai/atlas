@@ -45,10 +45,20 @@ mod durability_tests {
     }
 
     async fn seed(pool: &SqlitePool, id: &str, state: &str) {
-        atlas_inventory::jobs::insert_job(pool, id, "t", "volume.create", "me", &serde_json::json!({}), None)
+        atlas_inventory::jobs::insert_job(
+            pool,
+            id,
+            "t",
+            "volume.create",
+            "me",
+            &serde_json::json!({}),
+            None,
+        )
+        .await
+        .unwrap();
+        atlas_inventory::jobs::set_state(pool, id, state, 0)
             .await
             .unwrap();
-        atlas_inventory::jobs::set_state(pool, id, state, 0).await.unwrap();
     }
 
     #[tokio::test]
@@ -61,7 +71,10 @@ mod durability_tests {
         recover(&pool, &tx).await.unwrap();
 
         // The interrupted running job is failed-safe.
-        let run = atlas_inventory::jobs::get_job(&pool, "j_run").await.unwrap().unwrap();
+        let run = atlas_inventory::jobs::get_job(&pool, "j_run")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(run.state, "failed");
         assert!(run.error.unwrap_or_default().contains("interrupted"));
 
@@ -79,19 +92,29 @@ mod durability_tests {
 
         let (tx, mut rx) = mpsc::unbounded_channel::<String>();
         recover(&pool, &tx).await.unwrap();
-        assert!(rx.try_recv().is_err(), "not-yet-due retry must not wake the worker");
+        assert!(
+            rx.try_recv().is_err(),
+            "not-yet-due retry must not wake the worker"
+        );
     }
 
     #[tokio::test]
     async fn try_claim_is_exclusive() {
         let pool = migrated_pool().await;
         seed(&pool, "j", "queued").await;
-        assert!(atlas_inventory::jobs::try_claim(&pool, "j", "w1").await.unwrap());
+        assert!(atlas_inventory::jobs::try_claim(&pool, "j", "w1")
+            .await
+            .unwrap());
         assert!(
-            !atlas_inventory::jobs::try_claim(&pool, "j", "w2").await.unwrap(),
+            !atlas_inventory::jobs::try_claim(&pool, "j", "w2")
+                .await
+                .unwrap(),
             "second claim must lose"
         );
-        let j = atlas_inventory::jobs::get_job(&pool, "j").await.unwrap().unwrap();
+        let j = atlas_inventory::jobs::get_job(&pool, "j")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(j.state, "running");
     }
 
@@ -99,14 +122,28 @@ mod durability_tests {
     async fn retry_budget_bumps_count_and_requeues() {
         let pool = migrated_pool().await;
         seed(&pool, "j", "running").await;
-        atlas_inventory::jobs::set_max_retries(&pool, "j", 2).await.unwrap();
+        atlas_inventory::jobs::set_max_retries(&pool, "j", 2)
+            .await
+            .unwrap();
 
-        assert_eq!(atlas_inventory::jobs::retry_budget(&pool, "j").await.unwrap(), (0, 2));
-        atlas_inventory::jobs::bump_retry(&pool, "j", "+4 seconds").await.unwrap();
+        assert_eq!(
+            atlas_inventory::jobs::retry_budget(&pool, "j")
+                .await
+                .unwrap(),
+            (0, 2)
+        );
+        atlas_inventory::jobs::bump_retry(&pool, "j", "+4 seconds")
+            .await
+            .unwrap();
 
-        let (count, max) = atlas_inventory::jobs::retry_budget(&pool, "j").await.unwrap();
+        let (count, max) = atlas_inventory::jobs::retry_budget(&pool, "j")
+            .await
+            .unwrap();
         assert_eq!((count, max), (1, 2));
-        let j = atlas_inventory::jobs::get_job(&pool, "j").await.unwrap().unwrap();
+        let j = atlas_inventory::jobs::get_job(&pool, "j")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(j.state, "queued", "a retried job returns to the queue");
     }
 }

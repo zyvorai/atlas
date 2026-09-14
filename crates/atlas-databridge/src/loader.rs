@@ -29,7 +29,12 @@ pub enum JobOutcome {
 }
 
 pub fn job_outcome(status: &Value) -> JobOutcome {
-    if status.get("succeeded").and_then(|v| v.as_i64()).unwrap_or(0) >= 1 {
+    if status
+        .get("succeeded")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0)
+        >= 1
+    {
         JobOutcome::Succeeded
     } else if status.get("failed").and_then(|v| v.as_i64()).unwrap_or(0) >= 1 {
         JobOutcome::Failed
@@ -194,7 +199,10 @@ mod tests {
 
     #[test]
     fn outcome_from_status() {
-        assert_eq!(job_outcome(&json!({ "succeeded": 1 })), JobOutcome::Succeeded);
+        assert_eq!(
+            job_outcome(&json!({ "succeeded": 1 })),
+            JobOutcome::Succeeded
+        );
         assert_eq!(job_outcome(&json!({ "failed": 1 })), JobOutcome::Failed);
         assert_eq!(job_outcome(&json!({ "active": 1 })), JobOutcome::Running);
         assert_eq!(job_outcome(&json!({})), JobOutcome::Running);
@@ -202,34 +210,63 @@ mod tests {
 
     #[test]
     fn pg_job_wires_secrets_and_pipes() {
-        let spec = pg_job_spec("src-creds", "edge-app", "prod.rds.aws", 5432, "appdb", "require");
+        let spec = pg_job_spec(
+            "src-creds",
+            "edge-app",
+            "prod.rds.aws",
+            5432,
+            "appdb",
+            "require",
+        );
         let c = &spec["template"]["spec"]["containers"][0];
         assert!(c["args"][0].as_str().unwrap().contains("pg_dump"));
-        assert!(c["args"][0].as_str().unwrap().contains("psql \"$EDGE_URI\""));
+        assert!(c["args"][0]
+            .as_str()
+            .unwrap()
+            .contains("psql \"$EDGE_URI\""));
         let env = c["env"].as_array().unwrap();
         assert!(env.iter().any(|e| e["name"] == "EDGE_URI"
             && e["valueFrom"]["secretKeyRef"]["name"] == "edge-app"
             && e["valueFrom"]["secretKeyRef"]["key"] == "uri"));
-        assert!(env.iter().any(|e| e["name"] == "SRC_PASS"
-            && e["valueFrom"]["secretKeyRef"]["name"] == "src-creds"));
+        assert!(env
+            .iter()
+            .any(|e| e["name"] == "SRC_PASS"
+                && e["valueFrom"]["secretKeyRef"]["name"] == "src-creds"));
     }
 
     #[test]
     fn mysql_job_wires_secrets() {
-        let spec = mysql_job_spec("src-creds", "edge-secrets", "prod.rds.aws", 3306, "appdb", "edge-haproxy", "appdb");
+        let spec = mysql_job_spec(
+            "src-creds",
+            "edge-secrets",
+            "prod.rds.aws",
+            3306,
+            "appdb",
+            "edge-haproxy",
+            "appdb",
+        );
         let c = &spec["template"]["spec"]["containers"][0];
         let script = c["args"][0].as_str().unwrap();
         assert!(script.contains("mysqldump"));
         // MariaDB sources fail without this (MySQL-8 mysqldump probes a table MariaDB lacks).
         assert!(script.contains("--column-statistics=0"));
         let env = c["env"].as_array().unwrap();
-        assert!(env.iter().any(|e| e["name"] == "EDGE_PASS"
-            && e["valueFrom"]["secretKeyRef"]["key"] == "root"));
+        assert!(env
+            .iter()
+            .any(|e| e["name"] == "EDGE_PASS" && e["valueFrom"]["secretKeyRef"]["key"] == "root"));
     }
 
     #[test]
     fn mongo_job_pipes_dump_to_restore() {
-        let spec = mongo_job_spec("src-creds", "edge-secrets", "mongo.rds.aws", 27017, "appdb", "edge-rs0", "appdb");
+        let spec = mongo_job_spec(
+            "src-creds",
+            "edge-secrets",
+            "mongo.rds.aws",
+            27017,
+            "appdb",
+            "edge-rs0",
+            "appdb",
+        );
         let c = &spec["template"]["spec"]["containers"][0];
         let args = c["args"][0].as_str().unwrap();
         assert!(args.contains("mongodump"));

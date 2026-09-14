@@ -90,7 +90,11 @@ impl FakeCephDriver {
                 in_cluster: true,
                 device_class: Some(if id < 3 { "nvme" } else { "ssd" }.into()),
                 host: Some(format!("node0{}", (id / 2) + 1)),
-                used_bytes: if id == 3 { Some(0) } else { Some(16_000_000_000_000) },
+                used_bytes: if id == 3 {
+                    Some(0)
+                } else {
+                    Some(16_000_000_000_000)
+                },
                 capacity_bytes: Some(36_000_000_000_000),
             })
             .collect()

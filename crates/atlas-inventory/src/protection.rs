@@ -68,14 +68,19 @@ async fn policy_targets_by_volume(
         .map(|r| {
             (
                 r.get::<String, _>("volume_id"),
-                (r.get::<Option<i64>, _>("rpo_target_seconds"), r.get::<Option<i64>, _>("rto_target_seconds")),
+                (
+                    r.get::<Option<i64>, _>("rpo_target_seconds"),
+                    r.get::<Option<i64>, _>("rto_target_seconds"),
+                ),
             )
         })
         .collect())
 }
 
 fn parse_ts(ts: &str) -> Option<chrono::DateTime<Utc>> {
-    chrono::DateTime::parse_from_rfc3339(ts).ok().map(|dt| dt.with_timezone(&Utc))
+    chrono::DateTime::parse_from_rfc3339(ts)
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc))
 }
 
 fn storage_backend_label(kind: atlas_api_types::VolumeKind) -> &'static str {
@@ -119,7 +124,10 @@ async fn build_context(pool: &SqlitePool) -> Result<Context> {
     }
     let mut schedules_by_volume: HashMap<String, Vec<SnapshotSchedule>> = HashMap::new();
     for s in schedules::list(pool, None).await? {
-        schedules_by_volume.entry(s.volume_id.clone()).or_default().push(s);
+        schedules_by_volume
+            .entry(s.volume_id.clone())
+            .or_default()
+            .push(s);
     }
     let policy_targets = policy_targets_by_volume(pool).await?;
     Ok(Context {
@@ -157,11 +165,17 @@ fn compute(v: &atlas_api_types::StorageVolume, ctx: &Context) -> VolumeProtectio
     let mirror_rpo_observed = mirror.and_then(|m| m["rpo_seconds"].as_i64());
     let mirror_errored = dr_state.as_deref() == Some("error");
 
-    let (policy_rpo, policy_rto) =
-        ctx.policy_targets.get(&v.id).copied().unwrap_or((None, None));
+    let (policy_rpo, policy_rto) = ctx
+        .policy_targets
+        .get(&v.id)
+        .copied()
+        .unwrap_or((None, None));
     let schedules = ctx.schedules_by_volume.get(&v.id);
     let schedule_rpo = schedules.and_then(|ss| {
-        ss.iter().filter(|s| s.enabled).map(|s| s.interval_secs).min()
+        ss.iter()
+            .filter(|s| s.enabled)
+            .map(|s| s.interval_secs)
+            .min()
     });
     let (rpo_target_seconds, rpo_target_source) = match (policy_rpo, schedule_rpo) {
         (Some(p), _) => (Some(p), "policy"),
@@ -177,7 +191,8 @@ fn compute(v: &atlas_api_types::StorageVolume, ctx: &Context) -> VolumeProtectio
     .flatten()
     .filter_map(parse_ts)
     .max();
-    let protection_point_age_seconds = last_protection_point.map(|dt| (Utc::now() - dt).num_seconds().max(0));
+    let protection_point_age_seconds =
+        last_protection_point.map(|dt| (Utc::now() - dt).num_seconds().max(0));
 
     let rpo_current_seconds = mirror_rpo_observed.or(protection_point_age_seconds);
 
@@ -185,7 +200,9 @@ fn compute(v: &atlas_api_types::StorageVolume, ctx: &Context) -> VolumeProtectio
     // target, permission error the job silently swallowed, etc.).
     let never_fired_overdue_schedule = schedules.is_some_and(|ss| {
         ss.iter().any(|s| {
-            s.enabled && s.last_run_at.is_none() && parse_ts(&s.next_run_at).is_some_and(|t| t < Utc::now())
+            s.enabled
+                && s.last_run_at.is_none()
+                && parse_ts(&s.next_run_at).is_some_and(|t| t < Utc::now())
         })
     });
 
@@ -196,10 +213,14 @@ fn compute(v: &atlas_api_types::StorageVolume, ctx: &Context) -> VolumeProtectio
     } else if mirror_errored {
         reasons.push(format!(
             "DR mirror is in error state{}",
-            mirror.and_then(|m| m["last_error"].as_str()).map(|e| format!(": {e}")).unwrap_or_default()
+            mirror
+                .and_then(|m| m["last_error"].as_str())
+                .map(|e| format!(": {e}"))
+                .unwrap_or_default()
         ));
         ClusterHealthState::Critical
-    } else if rpo_target_seconds.is_some_and(|t| protection_point_age_seconds.is_some_and(|a| a > t * AT_RISK_RPO_MULTIPLE))
+    } else if rpo_target_seconds
+        .is_some_and(|t| protection_point_age_seconds.is_some_and(|a| a > t * AT_RISK_RPO_MULTIPLE))
         || (replication_factor == Some(1) && mirror.is_none())
         || never_fired_overdue_schedule
     {
@@ -215,13 +236,23 @@ fn compute(v: &atlas_api_types::StorageVolume, ctx: &Context) -> VolumeProtectio
             reasons.push("an enabled schedule is overdue and has never run".into());
         }
         ClusterHealthState::AtRisk
-    } else if matches!(dr_state.as_deref(), Some("enabling") | Some("disabling") | Some("promoting") | Some("demoting")) {
-        reasons.push(format!("DR mirror transition in progress ({})", dr_state.as_deref().unwrap_or("")));
+    } else if matches!(
+        dr_state.as_deref(),
+        Some("enabling") | Some("disabling") | Some("promoting") | Some("demoting")
+    ) {
+        reasons.push(format!(
+            "DR mirror transition in progress ({})",
+            dr_state.as_deref().unwrap_or("")
+        ));
         ClusterHealthState::Rebuilding
     } else if rpo_target_seconds.is_none() {
-        reasons.push("no RPO target is knowable (no schedule, no policy) — freshness can't be graded".into());
+        reasons.push(
+            "no RPO target is knowable (no schedule, no policy) — freshness can't be graded".into(),
+        );
         ClusterHealthState::Degraded
-    } else if rpo_target_seconds.is_some_and(|t| protection_point_age_seconds.is_some_and(|a| a > t)) {
+    } else if rpo_target_seconds
+        .is_some_and(|t| protection_point_age_seconds.is_some_and(|a| a > t))
+    {
         reasons.push("last recovery point is older than the RPO target".into());
         ClusterHealthState::Degraded
     } else {
@@ -282,7 +313,9 @@ mod tests {
             NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
         );
         let _ = std::fs::remove_file(&db);
-        let pool = crate::connect_sqlite(&format!("sqlite://{db}?mode=rwc")).await.unwrap();
+        let pool = crate::connect_sqlite(&format!("sqlite://{db}?mode=rwc"))
+            .await
+            .unwrap();
         crate::migrate(&pool).await.unwrap();
         pool
     }
@@ -348,15 +381,24 @@ mod tests {
     }
 
     fn now_minus(secs: i64) -> String {
-        (Utc::now() - chrono::Duration::seconds(secs)).to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+        (Utc::now() - chrono::Duration::seconds(secs))
+            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
     }
 
     #[tokio::test]
     async fn no_protection_is_critical() {
         let pool = temp_db().await;
         seed_volume(&pool, "v1", None).await;
-        let status = volume_protection_status(&pool, "v1").await.unwrap().unwrap();
-        assert_eq!(status.verdict, ClusterHealthState::Critical, "{:?}", status.verdict_reasons);
+        let status = volume_protection_status(&pool, "v1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            status.verdict,
+            ClusterHealthState::Critical,
+            "{:?}",
+            status.verdict_reasons
+        );
     }
 
     #[tokio::test]
@@ -364,21 +406,52 @@ mod tests {
         let pool = temp_db().await;
         seed_volume(&pool, "v1", None).await;
         seed_snapshot(&pool, "v1", &now_minus(60)).await;
-        dr::upsert_mirror(&pool, "m1", "global", Some("v1"), "rbd", "v1", None, "snapshot", "primary", "error")
+        dr::upsert_mirror(
+            &pool,
+            "m1",
+            "global",
+            Some("v1"),
+            "rbd",
+            "v1",
+            None,
+            "snapshot",
+            "primary",
+            "error",
+        )
+        .await
+        .unwrap();
+        let status = volume_protection_status(&pool, "v1")
             .await
+            .unwrap()
             .unwrap();
-        let status = volume_protection_status(&pool, "v1").await.unwrap().unwrap();
-        assert_eq!(status.verdict, ClusterHealthState::Critical, "{:?}", status.verdict_reasons);
+        assert_eq!(
+            status.verdict,
+            ClusterHealthState::Critical,
+            "{:?}",
+            status.verdict_reasons
+        );
     }
 
     #[tokio::test]
     async fn stale_beyond_4x_target_is_at_risk() {
         let pool = temp_db().await;
         seed_volume(&pool, "v1", None).await;
-        schedules::insert(&pool, "sch1", "global", "v1", "snapshot", None, "manifest", 60, 5).await.unwrap();
+        schedules::insert(
+            &pool, "sch1", "global", "v1", "snapshot", None, "manifest", 60, 5,
+        )
+        .await
+        .unwrap();
         seed_snapshot(&pool, "v1", &now_minus(1000)).await; // 1000s old, target 60s -> >4x
-        let status = volume_protection_status(&pool, "v1").await.unwrap().unwrap();
-        assert_eq!(status.verdict, ClusterHealthState::AtRisk, "{:?}", status.verdict_reasons);
+        let status = volume_protection_status(&pool, "v1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            status.verdict,
+            ClusterHealthState::AtRisk,
+            "{:?}",
+            status.verdict_reasons
+        );
     }
 
     #[tokio::test]
@@ -387,8 +460,16 @@ mod tests {
         seed_pool(&pool, "p1", 1).await;
         seed_volume(&pool, "v1", Some("p1")).await;
         seed_snapshot(&pool, "v1", &now_minus(10)).await;
-        let status = volume_protection_status(&pool, "v1").await.unwrap().unwrap();
-        assert_eq!(status.verdict, ClusterHealthState::AtRisk, "{:?}", status.verdict_reasons);
+        let status = volume_protection_status(&pool, "v1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            status.verdict,
+            ClusterHealthState::AtRisk,
+            "{:?}",
+            status.verdict_reasons
+        );
         assert_eq!(status.replication_factor, Some(1));
     }
 
@@ -398,11 +479,30 @@ mod tests {
         seed_pool(&pool, "p1", 3).await;
         seed_volume(&pool, "v1", Some("p1")).await;
         seed_snapshot(&pool, "v1", &now_minus(10)).await;
-        dr::upsert_mirror(&pool, "m1", "global", Some("v1"), "rbd", "v1", None, "snapshot", "primary", "enabling")
+        dr::upsert_mirror(
+            &pool,
+            "m1",
+            "global",
+            Some("v1"),
+            "rbd",
+            "v1",
+            None,
+            "snapshot",
+            "primary",
+            "enabling",
+        )
+        .await
+        .unwrap();
+        let status = volume_protection_status(&pool, "v1")
             .await
+            .unwrap()
             .unwrap();
-        let status = volume_protection_status(&pool, "v1").await.unwrap().unwrap();
-        assert_eq!(status.verdict, ClusterHealthState::Rebuilding, "{:?}", status.verdict_reasons);
+        assert_eq!(
+            status.verdict,
+            ClusterHealthState::Rebuilding,
+            "{:?}",
+            status.verdict_reasons
+        );
     }
 
     #[tokio::test]
@@ -410,10 +510,22 @@ mod tests {
         let pool = temp_db().await;
         seed_pool(&pool, "p1", 3).await;
         seed_volume(&pool, "v1", Some("p1")).await;
-        schedules::insert(&pool, "sch1", "global", "v1", "snapshot", None, "manifest", 60, 5).await.unwrap();
+        schedules::insert(
+            &pool, "sch1", "global", "v1", "snapshot", None, "manifest", 60, 5,
+        )
+        .await
+        .unwrap();
         seed_snapshot(&pool, "v1", &now_minus(120)).await; // 2x target, within 4x
-        let status = volume_protection_status(&pool, "v1").await.unwrap().unwrap();
-        assert_eq!(status.verdict, ClusterHealthState::Degraded, "{:?}", status.verdict_reasons);
+        let status = volume_protection_status(&pool, "v1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            status.verdict,
+            ClusterHealthState::Degraded,
+            "{:?}",
+            status.verdict_reasons
+        );
     }
 
     #[tokio::test]
@@ -421,13 +533,36 @@ mod tests {
         let pool = temp_db().await;
         seed_pool(&pool, "p1", 3).await;
         seed_volume(&pool, "v1", Some("p1")).await;
-        schedules::insert(&pool, "sch1", "global", "v1", "snapshot", None, "manifest", 3600, 5).await.unwrap();
+        schedules::insert(
+            &pool, "sch1", "global", "v1", "snapshot", None, "manifest", 3600, 5,
+        )
+        .await
+        .unwrap();
         seed_snapshot(&pool, "v1", &now_minus(10)).await;
-        dr::upsert_mirror(&pool, "m1", "global", Some("v1"), "rbd", "v1", None, "snapshot", "primary", "enabled")
+        dr::upsert_mirror(
+            &pool,
+            "m1",
+            "global",
+            Some("v1"),
+            "rbd",
+            "v1",
+            None,
+            "snapshot",
+            "primary",
+            "enabled",
+        )
+        .await
+        .unwrap();
+        let status = volume_protection_status(&pool, "v1")
             .await
+            .unwrap()
             .unwrap();
-        let status = volume_protection_status(&pool, "v1").await.unwrap().unwrap();
-        assert_eq!(status.verdict, ClusterHealthState::Healthy, "{:?}", status.verdict_reasons);
+        assert_eq!(
+            status.verdict,
+            ClusterHealthState::Healthy,
+            "{:?}",
+            status.verdict_reasons
+        );
         assert_eq!(status.rto_note, "not measured — no restore drill on record");
         assert!(status.rto_target_seconds.is_none());
     }
@@ -437,8 +572,16 @@ mod tests {
         let pool = temp_db().await;
         seed_volume(&pool, "v1", None).await;
         seed_snapshot(&pool, "v1", &now_minus(10)).await;
-        let status = volume_protection_status(&pool, "v1").await.unwrap().unwrap();
-        assert_eq!(status.verdict, ClusterHealthState::Degraded, "{:?}", status.verdict_reasons);
+        let status = volume_protection_status(&pool, "v1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            status.verdict,
+            ClusterHealthState::Degraded,
+            "{:?}",
+            status.verdict_reasons
+        );
         assert_eq!(status.rpo_target_source, "none");
     }
 }

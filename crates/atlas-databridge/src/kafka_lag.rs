@@ -26,7 +26,12 @@ mod imp {
 
     /// Sum `high_watermark − committed_offset` over every partition of the topics whose name starts
     /// with `topic_prefix`, for consumer group `group`. Blocking (librdkafka).
-    fn offset_lag(bootstrap: &str, group: &str, topic_prefix: &str, timeout_ms: u64) -> Result<i64> {
+    fn offset_lag(
+        bootstrap: &str,
+        group: &str,
+        topic_prefix: &str,
+        timeout_ms: u64,
+    ) -> Result<i64> {
         let consumer: BaseConsumer = ClientConfig::new()
             .set("bootstrap.servers", bootstrap)
             .set("group.id", group)
@@ -74,7 +79,10 @@ mod imp {
         tokio::task::spawn_blocking(move || offset_lag(&bootstrap, &group, &topic_prefix, 5000))
             .await
             .ok()
-            .and_then(|r| r.map_err(|e| tracing::warn!("kafka lag measure failed: {e:#}")).ok())
+            .and_then(|r| {
+                r.map_err(|e| tracing::warn!("kafka lag measure failed: {e:#}"))
+                    .ok()
+            })
             .unwrap_or(0)
     }
 }

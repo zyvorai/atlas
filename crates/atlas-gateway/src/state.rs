@@ -52,7 +52,11 @@ const PENDING_LOGIN_TTL_SECS: u64 = 600;
 
 impl OidcRuntime {
     pub(crate) fn new(client: DiscoveredOidcClient, http: openidconnect::reqwest::Client) -> Self {
-        Self { client, http, pending: Mutex::new(HashMap::new()) }
+        Self {
+            client,
+            http,
+            pending: Mutex::new(HashMap::new()),
+        }
     }
 
     pub(crate) fn stash(&self, csrf_state: String, nonce: String, pkce_verifier: String) {
@@ -61,7 +65,14 @@ impl OidcRuntime {
             Err(_) => return,
         };
         g.retain(|_, v| v.created_at.elapsed().as_secs() < PENDING_LOGIN_TTL_SECS);
-        g.insert(csrf_state, PendingOidcLogin { nonce, pkce_verifier, created_at: Instant::now() });
+        g.insert(
+            csrf_state,
+            PendingOidcLogin {
+                nonce,
+                pkce_verifier,
+                created_at: Instant::now(),
+            },
+        );
     }
 
     /// Consume (remove) the pending login for `csrf_state`, if present and not expired.
@@ -110,7 +121,10 @@ pub async fn build_oidc_runtime(cfg: &Config) -> Option<Arc<OidcRuntime>> {
     let metadata = match CoreProviderMetadata::discover_async(issuer_url, &http).await {
         Ok(m) => m,
         Err(e) => {
-            tracing::warn!("OIDC discovery against {} failed, SSO disabled: {e}", oidc_cfg.issuer_url);
+            tracing::warn!(
+                "OIDC discovery against {} failed, SSO disabled: {e}",
+                oidc_cfg.issuer_url
+            );
             return None;
         }
     };
@@ -162,7 +176,10 @@ pub struct RateLimiter {
 
 impl RateLimiter {
     pub fn new(rpm: u32) -> Self {
-        Self { rpm, windows: Arc::new(Mutex::new(HashMap::new())) }
+        Self {
+            rpm,
+            windows: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     /// Whether the request is allowed. Increments the actor's count for the current minute and

@@ -2,15 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 use anyhow::{anyhow, Context, Result};
 use atlas_api_types::{Health, StorageVolume, VolumeKind};
+use atlas_driver_k8s::{K8sDriver, PvcCreateSpec};
 use sqlx::SqlitePool;
 use std::sync::Arc;
-use atlas_driver_k8s::{K8sDriver, PvcCreateSpec};
 
-use crate::spec::JobSpec;
 use super::helpers::{
-    build_s3_target, poll_configmap, poll_pvc_phase, poll_snapshot_ready,
-    provision_from_snapshot, read_backup_manifest, require_k8s, sha256_hex,
+    build_s3_target, poll_configmap, poll_pvc_phase, poll_snapshot_ready, provision_from_snapshot,
+    read_backup_manifest, require_k8s, sha256_hex,
 };
+use crate::spec::JobSpec;
 
 pub(crate) async fn dispatch_object(
     pool: &SqlitePool,
@@ -93,7 +93,13 @@ pub(crate) async fn dispatch_object(
                 };
                 // Idempotent retry: skip re-creating the PVC if a prior attempt already got it in
                 // place (the k8s API errors on a name that already exists).
-                if k8s.get_pvc(&namespace, &new_name).await.ok().flatten().is_none() {
+                if k8s
+                    .get_pvc(&namespace, &new_name)
+                    .await
+                    .ok()
+                    .flatten()
+                    .is_none()
+                {
                     k8s.create_pvc(&create)
                         .await
                         .with_context(|| format!("create restore PVC {namespace}/{new_name}"))?;
@@ -313,7 +319,13 @@ pub(crate) async fn dispatch_object(
             // (or a prior attempt already had) — inserting this earlier, from the HTTP handler
             // before the job even ran, left a permanent orphan row whenever OBC creation failed.
             atlas_inventory::buckets::insert_bucket(
-                pool, &bucket_id, "global", &obc_name, &namespace, &obc_name, &storage_class,
+                pool,
+                &bucket_id,
+                "global",
+                &obc_name,
+                &namespace,
+                &obc_name,
+                &storage_class,
             )
             .await?;
 
@@ -389,7 +401,8 @@ pub(crate) async fn dispatch_object(
             // re-creating it if a prior attempt already put it in place (the k8s API errors on a
             // name that already exists).
             if !matches!(
-                k8s.volume_snapshot_ready(&volume_namespace, &snapshot_name).await,
+                k8s.volume_snapshot_ready(&volume_namespace, &snapshot_name)
+                    .await,
                 Ok(Some(_))
             ) {
                 k8s.create_volume_snapshot(
@@ -399,7 +412,9 @@ pub(crate) async fn dispatch_object(
                     &snapshot_class,
                 )
                 .await
-                .with_context(|| format!("snapshot {volume_namespace}/{snapshot_name} for backup"))?;
+                .with_context(|| {
+                    format!("snapshot {volume_namespace}/{snapshot_name} for backup")
+                })?;
             }
             let ready = poll_snapshot_ready(&k8s, &volume_namespace, &snapshot_name).await;
             atlas_inventory::snapshots::set_state(
@@ -511,7 +526,11 @@ pub(crate) async fn dispatch_object(
             // The row was inserted with format="manifest-v1" regardless of mode; reflect the real
             // format now that we know whether data was actually streamed, so the UI can tell
             // manifest-only backups apart from full rbd-export-diff ones.
-            let format = if mode == "data" { Some("rbd-export-diff") } else { None };
+            let format = if mode == "data" {
+                Some("rbd-export-diff")
+            } else {
+                None
+            };
             atlas_inventory::backups::set_state(
                 pool,
                 &backup_id,

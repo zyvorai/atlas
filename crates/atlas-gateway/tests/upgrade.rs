@@ -116,14 +116,33 @@ async fn preflight_blocks_on_active_job_and_critical_alert() {
     .await
     .unwrap();
     atlas_inventory::alerts::upsert_open(
-        &pool, "a1", "critical", "monitor", "cluster", "c1", "Cluster down", "HEALTH_ERR", &json!({}),
+        &pool,
+        "a1",
+        "critical",
+        "monitor",
+        "cluster",
+        "c1",
+        "Cluster down",
+        "HEALTH_ERR",
+        &json!({}),
     )
     .await
     .unwrap();
 
     let pf = preflight(&reqwest::Client::new(), addr).await;
     assert_eq!(pf["ready"], false, "{pf}");
-    let blockers: Vec<&str> = pf["blockers"].as_array().unwrap().iter().filter_map(|b| b.as_str()).collect();
-    assert!(blockers.iter().any(|b| b.contains("job")), "job blocker: {blockers:?}");
-    assert!(blockers.iter().any(|b| b.contains("critical alert")), "alert blocker: {blockers:?}");
+    let blockers: Vec<&str> = pf["blockers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|b| b.as_str())
+        .collect();
+    assert!(
+        blockers.iter().any(|b| b.contains("job")),
+        "job blocker: {blockers:?}"
+    );
+    assert!(
+        blockers.iter().any(|b| b.contains("critical alert")),
+        "alert blocker: {blockers:?}"
+    );
 }

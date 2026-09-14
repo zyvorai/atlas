@@ -390,7 +390,6 @@ enum Command {
     },
 
     // ---- Day-2 / DR / DataBridge (parity with REST) ----
-
     /// GET /api/atlas/v1/maintenance — worker pause flag
     Maintenance,
     /// POST /api/atlas/v1/maintenance — pause or resume the job worker
@@ -457,10 +456,7 @@ enum Command {
     /// GET /api/atlas/v1/databridge/plans
     DatabridgePlans,
     /// POST /api/atlas/v1/databridge/plans/{id}/{stage} — stage ∈ assess|provision|full-load|cdc-start|cdc-stop|cdc-restart|validate|cutover|rollback
-    DatabridgeStage {
-        plan_id: String,
-        stage: String,
-    },
+    DatabridgeStage { plan_id: String, stage: String },
 }
 
 #[tokio::main]
@@ -870,11 +866,9 @@ async fn main() -> Result<()> {
             "/api/atlas/v1/maintenance".to_string(),
             Some(serde_json::json!({ "paused": paused })),
         ),
-        Command::CordonBackend { id } => (
-            "POST",
-            format!("/api/atlas/v1/backends/{id}/cordon"),
-            None,
-        ),
+        Command::CordonBackend { id } => {
+            ("POST", format!("/api/atlas/v1/backends/{id}/cordon"), None)
+        }
         Command::UncordonBackend { id } => (
             "POST",
             format!("/api/atlas/v1/backends/{id}/uncordon"),
@@ -924,11 +918,9 @@ async fn main() -> Result<()> {
             format!("/api/atlas/v1/volumes/{id}/mirror?mode={mode}&peer={peer}"),
             None,
         ),
-        Command::VolumeMirrorDisable { id } => (
-            "DELETE",
-            format!("/api/atlas/v1/volumes/{id}/mirror"),
-            None,
-        ),
+        Command::VolumeMirrorDisable { id } => {
+            ("DELETE", format!("/api/atlas/v1/volumes/{id}/mirror"), None)
+        }
         Command::DatabridgeSources => ("GET", "/api/atlas/v1/databridge/sources".to_string(), None),
         Command::DatabridgePlans => ("GET", "/api/atlas/v1/databridge/plans".to_string(), None),
         Command::DatabridgeStage { plan_id, stage } => {

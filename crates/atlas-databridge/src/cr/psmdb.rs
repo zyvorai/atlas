@@ -66,7 +66,8 @@ mod tests {
             "zyvor-rbd-prod"
         );
         assert_eq!(
-            spec["replsets"][0]["volumeSpec"]["persistentVolumeClaim"]["resources"]["requests"]["storage"],
+            spec["replsets"][0]["volumeSpec"]["persistentVolumeClaim"]["resources"]["requests"]
+                ["storage"],
             "40Gi"
         );
     }
@@ -75,7 +76,10 @@ mod tests {
     fn readiness_and_naming() {
         assert!(is_ready(&serde_json::json!({ "state": "ready" })));
         assert!(!is_ready(&serde_json::json!({ "state": "initializing" })));
-        assert_eq!(endpoint("edge-abc", "zyvor-databridge"), "edge-abc-rs0.zyvor-databridge.svc:27017");
+        assert_eq!(
+            endpoint("edge-abc", "zyvor-databridge"),
+            "edge-abc-rs0.zyvor-databridge.svc:27017"
+        );
         assert_eq!(secret_ref("edge-abc"), "internal-edge-abc-users");
     }
 }

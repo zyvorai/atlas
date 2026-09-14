@@ -104,23 +104,38 @@ async fn protection_status_endpoints_return_expected_shape() {
 
     // Fleet view includes the seeded volume, unprotected -> critical, and rto_note is honest
     // about not being a measured value — a regression guard against ever fabricating a number.
-    let resp = c.get(format!("{base}/protection-status")).send().await.unwrap();
+    let resp = c
+        .get(format!("{base}/protection-status"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(resp.status(), 200);
     let body: Value = resp.json().await.unwrap();
     let rows = body.as_array().unwrap();
-    let v1 = rows.iter().find(|r| r["volume_id"] == "v1").expect("v1 present");
+    let v1 = rows
+        .iter()
+        .find(|r| r["volume_id"] == "v1")
+        .expect("v1 present");
     assert_eq!(v1["verdict"], "critical", "body: {v1}");
     assert_eq!(v1["rto_note"], "not measured — no restore drill on record");
     assert!(v1["rto_target_seconds"].is_null());
 
     // Single-volume view agrees with the fleet view.
-    let resp = c.get(format!("{base}/volumes/v1/protection")).send().await.unwrap();
+    let resp = c
+        .get(format!("{base}/volumes/v1/protection"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(resp.status(), 200);
     let single: Value = resp.json().await.unwrap();
     assert_eq!(single["verdict"], "critical");
     assert_eq!(single["volume_id"], "v1");
 
     // Unknown volume -> 404, not a panic or a null-verdict row.
-    let resp = c.get(format!("{base}/volumes/does-not-exist/protection")).send().await.unwrap();
+    let resp = c
+        .get(format!("{base}/volumes/does-not-exist/protection"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(resp.status(), 404);
 }

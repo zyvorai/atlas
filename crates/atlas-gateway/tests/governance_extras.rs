@@ -62,7 +62,11 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
     };
     let state = build_state(
         config,
-        BuildOptions { enable_k8s: false, initial_discovery: false, enable_monitor: false },
+        BuildOptions {
+            enable_k8s: false,
+            initial_discovery: false,
+            enable_monitor: false,
+        },
     )
     .await
     .expect("build_state");
@@ -82,14 +86,27 @@ async fn audit_export_and_retention() {
     let base = format!("http://{addr}/api/atlas/v1");
     let c = reqwest::Client::new();
 
-    atlas_inventory::audit::record(&pool, None, "me", "test.action", "res", "r1", "ok", None, None)
-        .await
-        .unwrap();
+    atlas_inventory::audit::record(
+        &pool,
+        None,
+        "me",
+        "test.action",
+        "res",
+        "r1",
+        "ok",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
 
     // CSV export includes the row + a text/csv content type.
     let r = c.get(format!("{base}/audit.csv")).send().await.unwrap();
     assert_eq!(r.status(), 200);
-    assert!(r.headers()["content-type"].to_str().unwrap().starts_with("text/csv"));
+    assert!(r.headers()["content-type"]
+        .to_str()
+        .unwrap()
+        .starts_with("text/csv"));
     let csv = r.text().await.unwrap();
     assert!(csv.contains("test.action"), "csv: {csv}");
 
@@ -103,7 +120,9 @@ async fn audit_export_and_retention() {
     .unwrap();
     let pruned = atlas_inventory::audit::prune(&pool, 30).await.unwrap();
     assert!(pruned >= 1, "the year-2000 row should be pruned");
-    let after = atlas_inventory::audit::list(&pool, None, None, None, None, 100).await.unwrap();
+    let after = atlas_inventory::audit::list(&pool, None, None, None, None, 100)
+        .await
+        .unwrap();
     assert!(after.iter().all(|a| a["action"] != "old.action"));
 }
 
@@ -113,7 +132,9 @@ async fn chargeback_reports_tenant_usage() {
     let base = format!("http://{addr}/api/atlas/v1");
     let c = reqwest::Client::new();
 
-    atlas_inventory::tenants::set_quota(&pool, "acme", 10_000_000_000, 100).await.unwrap();
+    atlas_inventory::tenants::set_quota(&pool, "acme", 10_000_000_000, 100)
+        .await
+        .unwrap();
     sqlx::query(
         "INSERT INTO storage_volumes (id, tenant_id, backend_id, name, kind, size_bytes, state)
          VALUES ('v1', 'acme', 'bkd_ceph_lab', 'db', 'block', 2147483648, 'bound')",
@@ -122,7 +143,14 @@ async fn chargeback_reports_tenant_usage() {
     .await
     .unwrap();
 
-    let cb: Value = c.get(format!("{base}/chargeback")).send().await.unwrap().json().await.unwrap();
+    let cb: Value = c
+        .get(format!("{base}/chargeback"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
     let acme = cb["tenants"]
         .as_array()
         .unwrap()
@@ -148,7 +176,14 @@ async fn policy_drift_flags_deleted_policy() {
     .await
     .unwrap();
 
-    let drift: Value = c.get(format!("{base}/policy-drift")).send().await.unwrap().json().await.unwrap();
+    let drift: Value = c
+        .get(format!("{base}/policy-drift"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
     assert_eq!(drift["count"], 1, "{drift}");
     assert_eq!(drift["drift"][0]["volume_id"], "v1");
     assert_eq!(drift["drift"][0]["reason"], "policy deleted");

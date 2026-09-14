@@ -58,7 +58,10 @@ pub async fn get_validation(pool: &SqlitePool, id: &str) -> Result<Option<Valida
     Ok(row.map(row_to_validation))
 }
 
-pub async fn list_validations(pool: &SqlitePool, plan_id: Option<&str>) -> Result<Vec<ValidationRun>> {
+pub async fn list_validations(
+    pool: &SqlitePool,
+    plan_id: Option<&str>,
+) -> Result<Vec<ValidationRun>> {
     let rows = match plan_id {
         Some(pid) => {
             sqlx::query(&select("WHERE plan_id = ? ORDER BY created_at DESC"))
@@ -86,10 +89,12 @@ pub async fn list_by_state(pool: &SqlitePool, state: &str) -> Result<Vec<Validat
 
 /// The most recent validation for a plan — used by the cutover guard.
 pub async fn latest_for_plan(pool: &SqlitePool, plan_id: &str) -> Result<Option<ValidationRun>> {
-    let row = sqlx::query(&select("WHERE plan_id = ? ORDER BY created_at DESC LIMIT 1"))
-        .bind(plan_id)
-        .fetch_optional(pool)
-        .await?;
+    let row = sqlx::query(&select(
+        "WHERE plan_id = ? ORDER BY created_at DESC LIMIT 1",
+    ))
+    .bind(plan_id)
+    .fetch_optional(pool)
+    .await?;
     Ok(row.map(row_to_validation))
 }
 

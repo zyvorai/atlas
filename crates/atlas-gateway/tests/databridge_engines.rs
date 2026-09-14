@@ -108,14 +108,44 @@ struct Case {
 }
 
 const CASES: &[Case] = &[
-    Case { kind: "postgres", discovered_engine: "postgres", edge_operator: "cnpg", edge_engine: "postgres" },
-    Case { kind: "mysql", discovered_engine: "mysql", edge_operator: "percona", edge_engine: "mysql" },
-    Case { kind: "mariadb", discovered_engine: "mariadb", edge_operator: "percona", edge_engine: "mysql" },
+    Case {
+        kind: "postgres",
+        discovered_engine: "postgres",
+        edge_operator: "cnpg",
+        edge_engine: "postgres",
+    },
+    Case {
+        kind: "mysql",
+        discovered_engine: "mysql",
+        edge_operator: "percona",
+        edge_engine: "mysql",
+    },
+    Case {
+        kind: "mariadb",
+        discovered_engine: "mariadb",
+        edge_operator: "percona",
+        edge_engine: "mysql",
+    },
     // Heterogeneous: Oracle / SQL Server land on a Postgres (CNPG) edge.
-    Case { kind: "oracle", discovered_engine: "oracle", edge_operator: "cnpg", edge_engine: "postgres" },
-    Case { kind: "sqlserver", discovered_engine: "sqlserver", edge_operator: "cnpg", edge_engine: "postgres" },
+    Case {
+        kind: "oracle",
+        discovered_engine: "oracle",
+        edge_operator: "cnpg",
+        edge_engine: "postgres",
+    },
+    Case {
+        kind: "sqlserver",
+        discovered_engine: "sqlserver",
+        edge_operator: "cnpg",
+        edge_engine: "postgres",
+    },
     // Document: MongoDB lands on Percona Server for MongoDB.
-    Case { kind: "mongodb", discovered_engine: "mongodb", edge_operator: "psmdb", edge_engine: "mongodb" },
+    Case {
+        kind: "mongodb",
+        discovered_engine: "mongodb",
+        edge_operator: "psmdb",
+        edge_engine: "mongodb",
+    },
 ];
 
 #[tokio::test]
@@ -127,7 +157,9 @@ async fn every_engine_runs_pipeline_and_routes_to_its_edge() {
         // 1. register + discover
         let src: Value = c
             .post(format!("{base}/databridge/sources"))
-            .json(&json!({ "name": format!("{}-src", case.kind), "kind": case.kind, "cloud": "rds" }))
+            .json(
+                &json!({ "name": format!("{}-src", case.kind), "kind": case.kind, "cloud": "rds" }),
+            )
             .send()
             .await
             .unwrap()
@@ -135,8 +167,16 @@ async fn every_engine_runs_pipeline_and_routes_to_its_edge() {
             .await
             .unwrap();
         let sid = src["id"].as_str().unwrap().to_string();
-        c.post(format!("{base}/databridge/sources/{sid}/discover")).send().await.unwrap();
-        wait_state(&c, &format!("{base}/databridge/sources/{sid}"), "discovered").await;
+        c.post(format!("{base}/databridge/sources/{sid}/discover"))
+            .send()
+            .await
+            .unwrap();
+        wait_state(
+            &c,
+            &format!("{base}/databridge/sources/{sid}"),
+            "discovered",
+        )
+        .await;
 
         let discovered: Value = c
             .get(format!("{base}/databridge/sources/{sid}"))
@@ -171,7 +211,10 @@ async fn every_engine_runs_pipeline_and_routes_to_its_edge() {
             ("cdc/start", "cdc_streaming"),
             ("validate", "validated"),
         ] {
-            c.post(format!("{base}/databridge/plans/{pid}/{stage}")).send().await.unwrap();
+            c.post(format!("{base}/databridge/plans/{pid}/{stage}"))
+                .send()
+                .await
+                .unwrap();
             wait_state(&c, &plan_url, want).await;
         }
 

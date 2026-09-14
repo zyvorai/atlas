@@ -55,7 +55,12 @@ impl MongoSourceConnector {
         let tls = if self.tls { "&tls=true" } else { "" };
         // Omit the credentials block entirely for an unauthenticated server (empty user).
         if self.user.is_empty() {
-            return format!("mongodb://{}:{}/?{}", self.host, self.port, tls.trim_start_matches('&'));
+            return format!(
+                "mongodb://{}:{}/?{}",
+                self.host,
+                self.port,
+                tls.trim_start_matches('&')
+            );
         }
         // Credentials must be percent-encoded in the userinfo component — a raw ':', '@', '/', or
         // '%' in the password (common in generated secrets) would otherwise be parsed as a URI
@@ -77,7 +82,9 @@ fn percent_encode_userinfo(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => out.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                out.push(b as char)
+            }
             _ => out.push_str(&format!("%{b:02X}")),
         }
     }
@@ -153,7 +160,11 @@ impl SourceConnector for MongoSourceConnector {
         Ok(DiscoveredSchema {
             engine: "mongodb".to_string(),
             version,
-            databases: if databases.is_empty() { vec![self.database.clone()] } else { databases },
+            databases: if databases.is_empty() {
+                vec![self.database.clone()]
+            } else {
+                databases
+            },
             tables,
             extensions: vec![],
             total_size_bytes,
@@ -180,7 +191,15 @@ mod tests {
     fn uri_percent_encodes_special_chars_in_credentials() {
         // A password containing ':', '@', or '/' must not be parsed as a URI delimiter — a raw
         // '@' here would otherwise shift the host to whatever follows it.
-        let c = MongoSourceConnector::new("s1", "mongo.host", 27017, "appdb", "u@1", "p:a/s@s", "require");
+        let c = MongoSourceConnector::new(
+            "s1",
+            "mongo.host",
+            27017,
+            "appdb",
+            "u@1",
+            "p:a/s@s",
+            "require",
+        );
         let uri = c.uri();
         assert!(uri.starts_with("mongodb://u%401:p%3Aa%2Fs%40s@mongo.host:27017/"));
     }
@@ -195,7 +214,11 @@ mod tests {
             return;
         };
         let p: Vec<&str> = spec.split(',').collect();
-        assert_eq!(p.len(), 5, "DATABRIDGE_TEST_MONGO must be host,port,database,user,password");
+        assert_eq!(
+            p.len(),
+            5,
+            "DATABRIDGE_TEST_MONGO must be host,port,database,user,password"
+        );
         let conn = MongoSourceConnector::new(
             "src_test",
             p[0],

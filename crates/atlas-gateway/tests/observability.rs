@@ -94,9 +94,12 @@ async fn spawn_with(o: Opts) -> (SocketAddr, sqlx::SqlitePool) {
 }
 
 async fn spawn() -> SocketAddr {
-    spawn_with(Opts { initial_discovery: true, ..Default::default() })
-        .await
-        .0
+    spawn_with(Opts {
+        initial_discovery: true,
+        ..Default::default()
+    })
+    .await
+    .0
 }
 
 fn client() -> reqwest::Client {
@@ -123,8 +126,14 @@ async fn ceph_native_passthrough_returns_json() {
         .json()
         .await
         .unwrap();
-    assert_eq!(status["health"]["status"], "HEALTH_WARN", "fixture cluster should report HEALTH_WARN: {status}");
-    assert_eq!(status["osdmap"]["num_up_osds"], 5, "fixture has exactly 1 OSD down: {status}");
+    assert_eq!(
+        status["health"]["status"], "HEALTH_WARN",
+        "fixture cluster should report HEALTH_WARN: {status}"
+    );
+    assert_eq!(
+        status["osdmap"]["num_up_osds"], 5,
+        "fixture has exactly 1 OSD down: {status}"
+    );
 }
 
 /// `GET /metrics` (Prometheus text) exposes the atlas_* gauges when auth is disabled (dev default).
@@ -139,7 +148,12 @@ async fn prometheus_text_metrics_exposed() {
         .text()
         .await
         .unwrap();
-    for needle in ["atlas_build_info", "atlas_pools", "atlas_volumes", "atlas_alerts_open"] {
+    for needle in [
+        "atlas_build_info",
+        "atlas_pools",
+        "atlas_volumes",
+        "atlas_alerts_open",
+    ] {
         assert!(body.contains(needle), "/metrics should expose {needle}");
     }
 }
@@ -148,16 +162,23 @@ async fn prometheus_text_metrics_exposed() {
 /// bearer token as the rest of the API once `ATLAS_AUTH_REQUIRED=1`, not be scrapeable anonymously.
 #[tokio::test]
 async fn prometheus_text_metrics_requires_auth_when_required() {
-    let addr = spawn_with(Opts { auth_required: true, initial_discovery: true, ..Default::default() })
-        .await
-        .0;
+    let addr = spawn_with(Opts {
+        auth_required: true,
+        initial_discovery: true,
+        ..Default::default()
+    })
+    .await
+    .0;
     let status = client()
         .get(format!("http://{addr}/metrics"))
         .send()
         .await
         .unwrap()
         .status();
-    assert_eq!(status, 401, "/metrics should reject anonymous scrapes once auth is required");
+    assert_eq!(
+        status, 401,
+        "/metrics should reject anonymous scrapes once auth is required"
+    );
 }
 
 /// The JSON metrics endpoints all answer 200 (ceph/history are empty-but-OK without a scrape/sampler).
@@ -165,7 +186,12 @@ async fn prometheus_text_metrics_requires_auth_when_required() {
 async fn json_metrics_endpoints_ok() {
     let base = format!("http://{}/api/atlas/v1", spawn().await);
     let c = client();
-    for path in ["metrics/summary", "metrics/ceph", "metrics/history?minutes=60", "metrics/forecast"] {
+    for path in [
+        "metrics/summary",
+        "metrics/ceph",
+        "metrics/history?minutes=60",
+        "metrics/forecast",
+    ] {
         let r = c.get(format!("{base}/{path}")).send().await.unwrap();
         assert_eq!(r.status(), 200, "{path} should be 200");
     }
@@ -222,20 +248,36 @@ async fn readyz_probes_driver_and_livez_is_alive() {
 #[tokio::test]
 async fn events_and_audit_are_operator_gated() {
     let secret = "obs-test-secret-key-at-least-32-bytes!";
-    let (addr, _) = spawn_with(Opts { auth_required: true, ..Default::default() }).await;
+    let (addr, _) = spawn_with(Opts {
+        auth_required: true,
+        ..Default::default()
+    })
+    .await;
     let base = format!("http://{addr}/api/atlas/v1");
     let c = client();
-    let (op, _, _) = atlas_gateway::auth::mint_token(secret, "svc", "operator", "global", 600).unwrap();
-    let (vw, _, _) = atlas_gateway::auth::mint_token(secret, "svc", "viewer", "global", 600).unwrap();
+    let (op, _, _) =
+        atlas_gateway::auth::mint_token(secret, "svc", "operator", "global", 600).unwrap();
+    let (vw, _, _) =
+        atlas_gateway::auth::mint_token(secret, "svc", "viewer", "global", 600).unwrap();
 
     for feed in ["events", "audit"] {
         let anon = c.get(format!("{base}/{feed}")).send().await.unwrap();
         assert_eq!(anon.status(), 401, "{feed} without a token → 401");
 
-        let viewer = c.get(format!("{base}/{feed}")).bearer_auth(&vw).send().await.unwrap();
+        let viewer = c
+            .get(format!("{base}/{feed}"))
+            .bearer_auth(&vw)
+            .send()
+            .await
+            .unwrap();
         assert_eq!(viewer.status(), 403, "{feed} as viewer → 403");
 
-        let operator = c.get(format!("{base}/{feed}")).bearer_auth(&op).send().await.unwrap();
+        let operator = c
+            .get(format!("{base}/{feed}"))
+            .bearer_auth(&op)
+            .send()
+            .await
+            .unwrap();
         assert_eq!(operator.status(), 200, "{feed} as operator → 200");
     }
 }
@@ -270,7 +312,14 @@ async fn quota_admission_rejects_oversized_volume() {
     assert_eq!(over.status(), 409, "over-quota volume must be rejected");
 
     // The rejection must happen before enqueue — no job should exist for tenant "t" yet.
-    let jobs_after_reject: Value = c.get(format!("{base}/jobs")).send().await.unwrap().json().await.unwrap();
+    let jobs_after_reject: Value = c
+        .get(format!("{base}/jobs"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
     assert!(
         jobs_after_reject
             .as_array()
@@ -306,15 +355,28 @@ async fn nfs_and_zfs_backends_surface_over_http() {
     let base = format!("http://{addr}/api/atlas/v1");
     let c = client();
 
-    let pools: Value = c.get(format!("{base}/pools")).send().await.unwrap().json().await.unwrap();
+    let pools: Value = c
+        .get(format!("{base}/pools"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
     let kinds: Vec<&str> = pools
         .as_array()
         .unwrap()
         .iter()
         .filter_map(|p| p["kind"].as_str())
         .collect();
-    assert!(kinds.contains(&"nfs_export"), "NFS export pool should be discovered: {kinds:?}");
-    assert!(kinds.contains(&"zpool"), "ZFS zpool should be discovered: {kinds:?}");
+    assert!(
+        kinds.contains(&"nfs_export"),
+        "NFS export pool should be discovered: {kinds:?}"
+    );
+    assert!(
+        kinds.contains(&"zpool"),
+        "ZFS zpool should be discovered: {kinds:?}"
+    );
 
     // Each driver contributes at least one filesystem volume — filter the inventory by backend.
     for backend in ["bkd_nfs_lab", "bkd_zfs_lab"] {

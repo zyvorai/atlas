@@ -19,7 +19,9 @@ mod tests {
         assert!(super::cnpg::is_ready(
             &serde_json::json!({ "readyInstances": 1, "phase": "Cluster in healthy state" })
         ));
-        assert!(!super::cnpg::is_ready(&serde_json::json!({ "readyInstances": 0 })));
+        assert!(!super::cnpg::is_ready(
+            &serde_json::json!({ "readyInstances": 0 })
+        ));
     }
 
     #[test]
@@ -29,7 +31,11 @@ mod tests {
             spec["pxc"]["volumeSpec"]["persistentVolumeClaim"]["storageClassName"],
             "zyvor-rbd-prod"
         );
-        assert!(super::mysql_operator::is_ready(&serde_json::json!({ "state": "ready" })));
-        assert!(!super::mysql_operator::is_ready(&serde_json::json!({ "state": "initializing" })));
+        assert!(super::mysql_operator::is_ready(
+            &serde_json::json!({ "state": "ready" })
+        ));
+        assert!(!super::mysql_operator::is_ready(
+            &serde_json::json!({ "state": "initializing" })
+        ));
     }
 }

@@ -41,12 +41,11 @@ pub async fn delete_all_for_image(pool: &SqlitePool, rbd_pool: &str, image: &str
 }
 
 pub async fn list(pool: &SqlitePool, rbd_pool: &str, image: &str) -> Result<Vec<String>> {
-    let rows = sqlx::query(
-        "SELECT snap FROM rbd_snapshots WHERE pool=? AND image=? ORDER BY created_at",
-    )
-    .bind(rbd_pool)
-    .bind(image)
-    .fetch_all(pool)
-    .await?;
+    let rows =
+        sqlx::query("SELECT snap FROM rbd_snapshots WHERE pool=? AND image=? ORDER BY created_at")
+            .bind(rbd_pool)
+            .bind(image)
+            .fetch_all(pool)
+            .await?;
     Ok(rows.into_iter().map(|r| r.get("snap")).collect())
 }

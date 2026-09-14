@@ -63,7 +63,9 @@ pub(crate) async fn create_ceph_pool(
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
     require_k8s(&s)?;
     super::util::validate_k8s_name(&body.name)?;
-    let namespace = body.namespace.unwrap_or_else(|| s.config.rook_namespace.clone());
+    let namespace = body
+        .namespace
+        .unwrap_or_else(|| s.config.rook_namespace.clone());
     let storage_class = body
         .storage_class
         .unwrap_or_else(|| format!("zyvor-{}", body.name));
@@ -93,7 +95,10 @@ pub(crate) async fn create_ceph_pool(
         None,
     )
     .await;
-    Ok(accepted(&job, json!({ "name": body.name, "storage_class": storage_class })))
+    Ok(accepted(
+        &job,
+        json!({ "name": body.name, "storage_class": storage_class }),
+    ))
 }
 
 /// `DELETE /ceph/pools/{name}[?force=true]` — delete the CR + StorageClass; blocked (409) while
@@ -160,7 +165,9 @@ pub(crate) async fn create_ceph_filesystem(
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
     require_k8s(&s)?;
     super::util::validate_k8s_name(&body.name)?;
-    let namespace = body.namespace.unwrap_or_else(|| s.config.rook_namespace.clone());
+    let namespace = body
+        .namespace
+        .unwrap_or_else(|| s.config.rook_namespace.clone());
     let storage_class = body
         .storage_class
         .unwrap_or_else(|| format!("zyvor-{}-shared", body.name));
@@ -177,7 +184,10 @@ pub(crate) async fn create_ceph_filesystem(
         .enqueue(&job_id, "global", &actor.id, spec, None)
         .await
         .map_err(AppError::from)?;
-    Ok(accepted(&job, json!({ "name": body.name, "storage_class": storage_class })))
+    Ok(accepted(
+        &job,
+        json!({ "name": body.name, "storage_class": storage_class }),
+    ))
 }
 
 /// `DELETE /ceph/filesystems/{name}[?force=true]`.
@@ -244,7 +254,9 @@ pub(crate) async fn create_ceph_object_store(
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
     require_k8s(&s)?;
     super::util::validate_k8s_name(&body.name)?;
-    let namespace = body.namespace.unwrap_or_else(|| s.config.rook_namespace.clone());
+    let namespace = body
+        .namespace
+        .unwrap_or_else(|| s.config.rook_namespace.clone());
     let storage_class = body
         .storage_class
         .unwrap_or_else(|| format!("zyvor-{}-bucket", body.name));
@@ -262,7 +274,10 @@ pub(crate) async fn create_ceph_object_store(
         .enqueue(&job_id, "global", &actor.id, spec, None)
         .await
         .map_err(AppError::from)?;
-    Ok(accepted(&job, json!({ "name": body.name, "storage_class": storage_class })))
+    Ok(accepted(
+        &job,
+        json!({ "name": body.name, "storage_class": storage_class }),
+    ))
 }
 
 /// `DELETE /ceph/object-stores/{name}[?force=true]` — blocked (409) while any bucket still

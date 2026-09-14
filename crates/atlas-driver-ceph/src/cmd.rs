@@ -73,7 +73,12 @@ pub async fn rbd_mirror_op(
             spec.clone(),
             mode.into(),
         ],
-        "disable" => vec!["mirror".into(), "image".into(), "disable".into(), spec.clone()],
+        "disable" => vec![
+            "mirror".into(),
+            "image".into(),
+            "disable".into(),
+            spec.clone(),
+        ],
         "promote" if force => vec![
             "mirror".into(),
             "image".into(),
@@ -81,8 +86,18 @@ pub async fn rbd_mirror_op(
             spec.clone(),
             "--force".into(),
         ],
-        "promote" => vec!["mirror".into(), "image".into(), "promote".into(), spec.clone()],
-        "demote" => vec!["mirror".into(), "image".into(), "demote".into(), spec.clone()],
+        "promote" => vec![
+            "mirror".into(),
+            "image".into(),
+            "promote".into(),
+            spec.clone(),
+        ],
+        "demote" => vec![
+            "mirror".into(),
+            "image".into(),
+            "demote".into(),
+            spec.clone(),
+        ],
         other => return Err(DriverError::Backend(format!("unknown mirror op: {other}"))),
     };
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -93,7 +108,10 @@ pub async fn rbd_mirror_op(
         .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(DriverError::Backend(format!("rbd {}: {stderr}", refs.join(" "))));
+        return Err(DriverError::Backend(format!(
+            "rbd {}: {stderr}",
+            refs.join(" ")
+        )));
     }
     Ok(())
 }
@@ -136,8 +154,8 @@ pub async fn ceph_osd_op(op: &str, osd_id: i64, weight: Option<f64>) -> Result<(
         "out" => vec!["osd".into(), "out".into(), id],
         "in" => vec!["osd".into(), "in".into(), id],
         "reweight" => {
-            let w = weight
-                .ok_or_else(|| DriverError::Backend("reweight requires a weight".into()))?;
+            let w =
+                weight.ok_or_else(|| DriverError::Backend("reweight requires a weight".into()))?;
             if !(0.0..=1.0).contains(&w) {
                 return Err(DriverError::Backend(
                     "reweight weight must be in [0.0, 1.0]".into(),
@@ -155,7 +173,10 @@ pub async fn ceph_osd_op(op: &str, osd_id: i64, weight: Option<f64>) -> Result<(
         .map_err(|e| DriverError::Unreachable(format!("failed to spawn `ceph`: {e}")))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(DriverError::Backend(format!("ceph {}: {stderr}", refs.join(" "))));
+        return Err(DriverError::Backend(format!(
+            "ceph {}: {stderr}",
+            refs.join(" ")
+        )));
     }
     Ok(())
 }
@@ -193,7 +214,11 @@ pub async fn radosgw_bucket_quota(
 pub async fn radosgw_admin_json(args: &[&str]) -> Result<serde_json::Value, DriverError> {
     let output = tokio::time::timeout(
         RADOSGW_ADMIN_TIMEOUT,
-        cmd("radosgw-admin").args(args).arg("--format").arg("json").output(),
+        cmd("radosgw-admin")
+            .args(args)
+            .arg("--format")
+            .arg("json")
+            .output(),
     )
     .await
     .map_err(|_| DriverError::Unreachable("radosgw-admin timed out".into()))?
@@ -240,10 +265,13 @@ pub async fn rbd_snap_rollback(pool: &str, image: &str, snap: &str) -> Result<()
 }
 
 async fn radosgw_admin(args: &[&str]) -> Result<(), DriverError> {
-    let output = tokio::time::timeout(RADOSGW_ADMIN_TIMEOUT, cmd("radosgw-admin").args(args).output())
-        .await
-        .map_err(|_| DriverError::Unreachable("radosgw-admin timed out".into()))?
-        .map_err(|e| DriverError::Unreachable(format!("failed to spawn `radosgw-admin`: {e}")))?;
+    let output = tokio::time::timeout(
+        RADOSGW_ADMIN_TIMEOUT,
+        cmd("radosgw-admin").args(args).output(),
+    )
+    .await
+    .map_err(|_| DriverError::Unreachable("radosgw-admin timed out".into()))?
+    .map_err(|e| DriverError::Unreachable(format!("failed to spawn `radosgw-admin`: {e}")))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         return Err(DriverError::Backend(format!(
@@ -346,7 +374,10 @@ pub async fn rbd_migrate(pool: &str, image: &str, dest_pool: &str) -> Result<(),
             .map_err(|e| DriverError::Unreachable(format!("failed to spawn `rbd`: {e}")))?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            return Err(DriverError::Backend(format!("rbd {}: {stderr}", stage.join(" "))));
+            return Err(DriverError::Backend(format!(
+                "rbd {}: {stderr}",
+                stage.join(" ")
+            )));
         }
     }
     Ok(())

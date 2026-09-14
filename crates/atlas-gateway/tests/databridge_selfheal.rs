@@ -113,8 +113,16 @@ async fn errored_cdc_stream_restarts() {
         .as_str()
         .unwrap()
         .to_string();
-    c.post(format!("{base}/databridge/sources/{sid}/discover")).send().await.unwrap();
-    wait_state(&c, &format!("{base}/databridge/sources/{sid}"), "discovered").await;
+    c.post(format!("{base}/databridge/sources/{sid}/discover"))
+        .send()
+        .await
+        .unwrap();
+    wait_state(
+        &c,
+        &format!("{base}/databridge/sources/{sid}"),
+        "discovered",
+    )
+    .await;
     let pid = c
         .post(format!("{base}/databridge/plans"))
         .json(&json!({ "name": "orders", "source_id": sid }))
@@ -134,7 +142,10 @@ async fn errored_cdc_stream_restarts() {
         ("full-load", "loaded"),
         ("cdc/start", "cdc_streaming"),
     ] {
-        c.post(format!("{base}/databridge/plans/{pid}/{stage}")).send().await.unwrap();
+        c.post(format!("{base}/databridge/plans/{pid}/{stage}"))
+            .send()
+            .await
+            .unwrap();
         wait_state(&c, &plan_url, want).await;
     }
 
@@ -170,7 +181,11 @@ async fn errored_cdc_stream_restarts() {
     assert_eq!(stream_state(&c, &pid).await["state"], "error");
 
     // Restart → the stream is re-established and the restart counter bumped.
-    let r = c.post(format!("{base}/databridge/plans/{pid}/cdc/restart")).send().await.unwrap();
+    let r = c
+        .post(format!("{base}/databridge/plans/{pid}/cdc/restart"))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(r.status(), 202);
 
     let mut healed = None;

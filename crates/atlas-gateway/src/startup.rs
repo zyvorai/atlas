@@ -311,7 +311,8 @@ fn spawn_leader_election(
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(renew));
         loop {
             tick.tick().await; // fires immediately, so leadership is acquired at startup
-            match atlas_inventory::leader::try_acquire(&pool, "workers", &instance, ttl_secs).await {
+            match atlas_inventory::leader::try_acquire(&pool, "workers", &instance, ttl_secs).await
+            {
                 Ok(leader) => {
                     let was = is_leader.swap(leader, Ordering::Relaxed);
                     if leader && !was {
@@ -352,7 +353,9 @@ fn spawn_audit_retention(pool: sqlx::SqlitePool) {
                 None => atlas_inventory::audit::prune(&pool, days).await,
             };
             match result {
-                Ok(n) if n > 0 => tracing::info!("audit retention: pruned {n} row(s) older than {days}d"),
+                Ok(n) if n > 0 => {
+                    tracing::info!("audit retention: pruned {n} row(s) older than {days}d")
+                }
                 Ok(_) => {}
                 Err(e) if export_url.is_some() => {
                     tracing::warn!("audit export failed, rows kept for retry next tick: {e:#}")
@@ -386,20 +389,22 @@ fn spawn_state_backup(pool: sqlx::SqlitePool, workers: crate::state::WorkerHealt
     let access = std::env::var("ATLAS_STATE_BACKUP_ACCESS_KEY").unwrap_or_default();
     let secret = std::env::var("ATLAS_STATE_BACKUP_SECRET_KEY").unwrap_or_default();
     let region = std::env::var("ATLAS_STATE_BACKUP_REGION").unwrap_or_else(|_| "us-east-1".into());
-    let prefix = std::env::var("ATLAS_STATE_BACKUP_PREFIX").unwrap_or_else(|_| "atlas-state".into());
+    let prefix =
+        std::env::var("ATLAS_STATE_BACKUP_PREFIX").unwrap_or_else(|_| "atlas-state".into());
     let keep: usize = std::env::var("ATLAS_STATE_BACKUP_KEEP")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(24);
 
     tokio::spawn(async move {
-        let s3 = match atlas_driver_rgw::S3Target::new(&endpoint, &region, &bucket, &access, &secret) {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::error!("state backup disabled: invalid S3 target: {e:#}");
-                return;
-            }
-        };
+        let s3 =
+            match atlas_driver_rgw::S3Target::new(&endpoint, &region, &bucket, &access, &secret) {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::error!("state backup disabled: invalid S3 target: {e:#}");
+                    return;
+                }
+            };
         tracing::info!(secs, bucket, prefix, keep, "state backup worker started");
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(secs));
         loop {
@@ -434,7 +439,9 @@ async fn backup_state_once(
     let _ = tokio::fs::remove_file(&snap).await;
     let size = bytes.len();
     let key = format!("{prefix}/atlas-state-{ts:020}.db");
-    s3.put_object(&key, bytes).await.context("upload snapshot")?;
+    s3.put_object(&key, bytes)
+        .await
+        .context("upload snapshot")?;
     tracing::info!("state backup: uploaded {key} ({size} bytes)");
 
     let mut objs = s3

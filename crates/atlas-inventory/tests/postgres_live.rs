@@ -46,7 +46,12 @@ async fn connect_and_migrate_against_real_postgres() {
     // in this session (rbd_snapshots, the native-id unique index, console_users.tenant_id) — a
     // schema-parity gap here would mean migrations-postgres/ silently fell behind migrations/
     // again.
-    for table in ["storage_volumes", "storage_audit_logs", "rbd_snapshots", "console_users"] {
+    for table in [
+        "storage_volumes",
+        "storage_audit_logs",
+        "rbd_snapshots",
+        "console_users",
+    ] {
         let row = sqlx::query(&format!("SELECT COUNT(*) AS c FROM {table}"))
             .fetch_one(&pool)
             .await
@@ -62,7 +67,10 @@ async fn connect_and_migrate_against_real_postgres() {
     .await
     .unwrap()
     .get(0);
-    assert!(tenant_col_exists, "console_users.tenant_id must exist (migration 0028)");
+    assert!(
+        tenant_col_exists,
+        "console_users.tenant_id must exist (migration 0028)"
+    );
 
     pool.close().await;
 }

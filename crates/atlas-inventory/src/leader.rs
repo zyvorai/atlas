@@ -39,10 +39,12 @@ pub async fn try_acquire(
 
 /// The current holder of a lease (for observability), if any.
 pub async fn holder(pool: &SqlitePool, name: &str) -> Result<Option<String>> {
-    Ok(sqlx::query_scalar("SELECT holder FROM leader_lease WHERE name=?")
-        .bind(name)
-        .fetch_optional(pool)
-        .await?)
+    Ok(
+        sqlx::query_scalar("SELECT holder FROM leader_lease WHERE name=?")
+            .bind(name)
+            .fetch_optional(pool)
+            .await?,
+    )
 }
 
 #[cfg(test)]
@@ -60,7 +62,9 @@ mod tests {
             N.fetch_add(1, Ordering::SeqCst),
         );
         let _ = std::fs::remove_file(&db);
-        let p = crate::connect(&format!("sqlite://{db}?mode=rwc")).await.unwrap();
+        let p = crate::connect(&format!("sqlite://{db}?mode=rwc"))
+            .await
+            .unwrap();
         crate::migrate(&p).await.unwrap();
         p
     }
@@ -68,14 +72,26 @@ mod tests {
     #[tokio::test]
     async fn lease_acquire_renew_and_takeover() {
         let p = pool().await;
-        assert!(try_acquire(&p, "workers", "A", 30).await.unwrap(), "A acquires a free lease");
-        assert!(try_acquire(&p, "workers", "A", 30).await.unwrap(), "A renews its own lease");
-        assert!(!try_acquire(&p, "workers", "B", 30).await.unwrap(), "B blocked while A's lease is valid");
+        assert!(
+            try_acquire(&p, "workers", "A", 30).await.unwrap(),
+            "A acquires a free lease"
+        );
+        assert!(
+            try_acquire(&p, "workers", "A", 30).await.unwrap(),
+            "A renews its own lease"
+        );
+        assert!(
+            !try_acquire(&p, "workers", "B", 30).await.unwrap(),
+            "B blocked while A's lease is valid"
+        );
 
         // A renews with a 1s TTL, then lets it lapse; B takes over the expired lease.
         assert!(try_acquire(&p, "workers", "A", 1).await.unwrap());
         tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
-        assert!(try_acquire(&p, "workers", "B", 30).await.unwrap(), "B takes over an expired lease");
+        assert!(
+            try_acquire(&p, "workers", "B", 30).await.unwrap(),
+            "B takes over an expired lease"
+        );
         assert_eq!(holder(&p, "workers").await.unwrap().as_deref(), Some("B"));
     }
 }

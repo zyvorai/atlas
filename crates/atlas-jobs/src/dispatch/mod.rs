@@ -39,7 +39,9 @@ pub(crate) async fn dispatch(
         | JobSpec::VolumeExpand { .. }
         | JobSpec::SnapshotCreate { .. }
         | JobSpec::SnapshotDelete { .. }
-        | JobSpec::SnapshotClone { .. } => volumes::dispatch_volumes(pool, k8s, tenant_id, spec).await,
+        | JobSpec::SnapshotClone { .. } => {
+            volumes::dispatch_volumes(pool, k8s, tenant_id, spec).await
+        }
         JobSpec::BucketCreate { .. }
         | JobSpec::BackupCreate { .. }
         | JobSpec::RestoreBackup { .. }
@@ -50,7 +52,9 @@ pub(crate) async fn dispatch(
         | JobSpec::CephFilesystemCreate { .. }
         | JobSpec::CephFilesystemDelete { .. }
         | JobSpec::CephObjectStoreCreate { .. }
-        | JobSpec::CephObjectStoreDelete { .. } => rook::dispatch_rook(pool, k8s, tenant_id, spec).await,
+        | JobSpec::CephObjectStoreDelete { .. } => {
+            rook::dispatch_rook(pool, k8s, tenant_id, spec).await
+        }
         JobSpec::SourceDiscover { .. }
         | JobSpec::MigrationAssess { .. }
         | JobSpec::EdgeDbProvision { .. }

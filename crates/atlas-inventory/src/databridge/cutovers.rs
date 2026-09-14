@@ -78,10 +78,12 @@ pub async fn list_by_state(pool: &SqlitePool, state: &str) -> Result<Vec<Cutover
 }
 
 pub async fn latest_for_plan(pool: &SqlitePool, plan_id: &str) -> Result<Option<Cutover>> {
-    let row = sqlx::query(&select("WHERE plan_id = ? ORDER BY created_at DESC LIMIT 1"))
-        .bind(plan_id)
-        .fetch_optional(pool)
-        .await?;
+    let row = sqlx::query(&select(
+        "WHERE plan_id = ? ORDER BY created_at DESC LIMIT 1",
+    ))
+    .bind(plan_id)
+    .fetch_optional(pool)
+    .await?;
     Ok(row.map(row_to_cutover))
 }
 

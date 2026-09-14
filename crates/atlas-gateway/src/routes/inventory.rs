@@ -10,9 +10,9 @@ use serde_json::{json, Value};
 use atlas_api_types::{Capabilities, StorageClassInfo};
 use atlas_common::{AppError, AppResult};
 
+use super::util::CEPH_BACKEND_ID;
 use crate::auth::Actor;
 use crate::state::AppState;
-use super::util::CEPH_BACKEND_ID;
 
 // ---- clusters / inventory ----
 
@@ -350,7 +350,9 @@ pub(crate) async fn get_volume(
 }
 // ---- live Kubernetes ----
 
-pub(crate) async fn list_storage_classes(State(s): State<AppState>) -> AppResult<Json<Vec<StorageClassInfo>>> {
+pub(crate) async fn list_storage_classes(
+    State(s): State<AppState>,
+) -> AppResult<Json<Vec<StorageClassInfo>>> {
     let k8s = s
         .k8s
         .as_ref()

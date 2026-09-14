@@ -140,7 +140,10 @@ pub async fn reconcile_snapshots(
         let Some(ns) = vol.kubernetes_namespace else {
             continue;
         };
-        if matches!(k8s.volume_snapshot_ready(&ns, &snap.name).await, Ok(Some(true))) {
+        if matches!(
+            k8s.volume_snapshot_ready(&ns, &snap.name).await,
+            Ok(Some(true))
+        ) {
             atlas_inventory::snapshots::set_state(pool, &snap.id, "ready").await?;
             tracing::info!("snapshot {} reconciled creating -> ready", snap.id);
         }

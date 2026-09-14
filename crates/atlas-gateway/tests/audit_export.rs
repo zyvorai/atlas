@@ -16,10 +16,13 @@ async fn spawn_fake_sink() -> (std::net::SocketAddr, Arc<Mutex<Option<serde_json
     let app = Router::new()
         .route(
             "/",
-            post(|State(s): State<Arc<Mutex<Option<serde_json::Value>>>>, Json(body): Json<serde_json::Value>| async move {
-                *s.lock().unwrap() = Some(body);
-                axum::http::StatusCode::OK
-            }),
+            post(
+                |State(s): State<Arc<Mutex<Option<serde_json::Value>>>>,
+                 Json(body): Json<serde_json::Value>| async move {
+                    *s.lock().unwrap() = Some(body);
+                    axum::http::StatusCode::OK
+                },
+            ),
         )
         .with_state(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -71,17 +74,25 @@ async fn successful_export_deletes_rows() {
     let n = atlas_monitor::audit_export::export_and_prune(&pool, 30, &url)
         .await
         .unwrap();
-    assert!(n >= 1, "should have exported+pruned at least the seeded row");
+    assert!(
+        n >= 1,
+        "should have exported+pruned at least the seeded row"
+    );
 
-    let body = received.lock().unwrap().clone().expect("sink should have received a POST");
+    let body = received
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("sink should have received a POST");
     let logs = body["audit_logs"].as_array().expect("audit_logs array");
     assert!(logs.iter().any(|r| r["resource_id"] == "r-success"));
 
-    let remaining: i64 = sqlx::query("SELECT COUNT(*) AS c FROM storage_audit_logs WHERE resource_id = 'r-success'")
-        .fetch_one(&pool)
-        .await
-        .unwrap()
-        .get("c");
+    let remaining: i64 =
+        sqlx::query("SELECT COUNT(*) AS c FROM storage_audit_logs WHERE resource_id = 'r-success'")
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+            .get("c");
     assert_eq!(remaining, 0, "exported row must be deleted");
 }
 
@@ -98,14 +109,21 @@ async fn failed_export_keeps_rows() {
     let unreachable_url = format!("http://{unreachable_addr}/");
 
     let result = atlas_monitor::audit_export::export_and_prune(&pool, 30, &unreachable_url).await;
-    assert!(result.is_err(), "export to an unreachable sink must error, not silently succeed");
+    assert!(
+        result.is_err(),
+        "export to an unreachable sink must error, not silently succeed"
+    );
 
-    let remaining: i64 = sqlx::query("SELECT COUNT(*) AS c FROM storage_audit_logs WHERE resource_id = 'r-kept'")
-        .fetch_one(&pool)
-        .await
-        .unwrap()
-        .get("c");
-    assert_eq!(remaining, 1, "a failed export must not delete the row — retried next tick");
+    let remaining: i64 =
+        sqlx::query("SELECT COUNT(*) AS c FROM storage_audit_logs WHERE resource_id = 'r-kept'")
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+            .get("c");
+    assert_eq!(
+        remaining, 1,
+        "a failed export must not delete the row — retried next tick"
+    );
 }
 
 /// Live verification against a real network endpoint — the two tests above prove the export

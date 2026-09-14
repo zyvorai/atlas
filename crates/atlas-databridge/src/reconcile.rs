@@ -54,23 +54,33 @@ async fn reconcile_once(
 
     let Some(k8s) = k8s else { return Ok(()) }; // fake mode completes provisioning inline
 
-    for edge in atlas_inventory::databridge::edge_clusters::list_by_state(pool, "provisioning").await? {
-        let Some(cr_name) = edge.cr_name.as_deref() else { continue };
+    for edge in
+        atlas_inventory::databridge::edge_clusters::list_by_state(pool, "provisioning").await?
+    {
+        let Some(cr_name) = edge.cr_name.as_deref() else {
+            continue;
+        };
         let (group, version, kind, ready, endpoint, secret_ref) = match edge.engine.as_str() {
             "postgres" => (
-                cnpg::GROUP, cnpg::VERSION, cnpg::KIND,
+                cnpg::GROUP,
+                cnpg::VERSION,
+                cnpg::KIND,
                 cnpg::is_ready as fn(&serde_json::Value) -> bool,
                 cnpg::endpoint(cr_name, &edge.namespace),
                 cnpg::secret_ref(cr_name),
             ),
             "mysql" => (
-                mysql_operator::GROUP, mysql_operator::VERSION, mysql_operator::KIND,
+                mysql_operator::GROUP,
+                mysql_operator::VERSION,
+                mysql_operator::KIND,
                 mysql_operator::is_ready as fn(&serde_json::Value) -> bool,
                 mysql_operator::endpoint(cr_name, &edge.namespace),
                 mysql_operator::secret_ref(cr_name),
             ),
             "mongodb" => (
-                psmdb::GROUP, psmdb::VERSION, psmdb::KIND,
+                psmdb::GROUP,
+                psmdb::VERSION,
+                psmdb::KIND,
                 psmdb::is_ready as fn(&serde_json::Value) -> bool,
                 psmdb::endpoint(cr_name, &edge.namespace),
                 psmdb::secret_ref(cr_name),
@@ -87,7 +97,10 @@ async fn reconcile_once(
         {
             Ok(Some(status)) if ready(&status) => {
                 atlas_inventory::databridge::edge_clusters::set_ready(
-                    pool, &edge.id, &endpoint, &secret_ref,
+                    pool,
+                    &edge.id,
+                    &endpoint,
+                    &secret_ref,
                 )
                 .await?;
                 if let Some(plan_id) = edge.plan_id.as_deref() {
@@ -118,11 +131,20 @@ async fn reconcile_once(
                 crate::loader::JobOutcome::Succeeded => {
                     atlas_inventory::databridge::plans::set_state(pool, &plan.id, "loaded").await?;
                     if let Some(edge_id) = plan.edge_cluster_id.as_deref() {
-                        let src = atlas_inventory::databridge::sources::get_source(pool, &plan.source_id).await?;
+                        let src =
+                            atlas_inventory::databridge::sources::get_source(pool, &plan.source_id)
+                                .await?;
                         let bytes = src
-                            .and_then(|s| s.discovered.get("total_size_bytes").and_then(|v| v.as_i64()))
+                            .and_then(|s| {
+                                s.discovered
+                                    .get("total_size_bytes")
+                                    .and_then(|v| v.as_i64())
+                            })
                             .unwrap_or(0);
-                        atlas_inventory::databridge::edge_clusters::set_size_bytes(pool, edge_id, bytes).await?;
+                        atlas_inventory::databridge::edge_clusters::set_size_bytes(
+                            pool, edge_id, bytes,
+                        )
+                        .await?;
                     }
                     tracing::info!("plan {} full-load complete", plan.id);
                 }
@@ -146,7 +168,9 @@ async fn reconcile_once(
     // (topic end offset − sink consumer offset) measured via an embedded Kafka client; without it,
     // a healthy stream reports caught-up (0).
     for stream in atlas_inventory::databridge::cdc::list_by_state(pool, "streaming").await? {
-        let Some(connector) = stream.connector_name.as_deref() else { continue };
+        let Some(connector) = stream.connector_name.as_deref() else {
+            continue;
+        };
         match k8s
             .get_cr_status(
                 crate::cr::streaming::GROUP,
@@ -190,20 +214,29 @@ async fn reconcile_once(
                     const MAX_CDC_RESTARTS: i64 = 3;
                     if stream.restart_count < MAX_CDC_RESTARTS {
                         match stream.plan_id.as_deref() {
-                            Some(plan_id) => match crate::pipeline::restart_cdc(pool, Some(k8s), plan_id).await {
-                                Ok(_) => tracing::info!(
+                            Some(plan_id) => {
+                                match crate::pipeline::restart_cdc(pool, Some(k8s), plan_id).await {
+                                    Ok(_) => tracing::info!(
                                     "auto-restarted CDC stream {} (attempt {}/{MAX_CDC_RESTARTS})",
                                     stream.id,
                                     stream.restart_count + 1
                                 ),
-                                Err(e) => tracing::warn!("CDC auto-restart for {} failed: {e:#}", stream.id),
-                            },
+                                    Err(e) => tracing::warn!(
+                                        "CDC auto-restart for {} failed: {e:#}",
+                                        stream.id
+                                    ),
+                                }
+                            }
                             None => {
-                                atlas_inventory::databridge::cdc::set_state(pool, &stream.id, "error").await?;
+                                atlas_inventory::databridge::cdc::set_state(
+                                    pool, &stream.id, "error",
+                                )
+                                .await?;
                             }
                         }
                     } else {
-                        atlas_inventory::databridge::cdc::set_state(pool, &stream.id, "error").await?;
+                        atlas_inventory::databridge::cdc::set_state(pool, &stream.id, "error")
+                            .await?;
                         tracing::warn!(
                             "CDC stream {} connector {connector} not RUNNING; giving up after {} restarts",
                             stream.id,
@@ -237,13 +270,22 @@ async fn reconcile_once(
         if drained {
             let s = crate::pipeline::plan_short(&plan.id);
             if let Err(e) = crate::pipeline::teardown_streaming(k8s, s, true).await {
-                tracing::warn!("cutover {} streaming teardown failed (retrying next tick): {e:#}", cut.id);
+                tracing::warn!(
+                    "cutover {} streaming teardown failed (retrying next tick): {e:#}",
+                    cut.id
+                );
                 continue;
             }
             atlas_inventory::databridge::cutovers::set_state(pool, &cut.id, "switching").await?;
             atlas_inventory::databridge::cutovers::set_complete(pool, &cut.id, "complete").await?;
-            atlas_inventory::databridge::plans::set_state(pool, &plan.id, "cutover_complete").await?;
-            atlas_inventory::databridge::plans::set_cutover_at(pool, &plan.id, &chrono::Utc::now().to_rfc3339()).await?;
+            atlas_inventory::databridge::plans::set_state(pool, &plan.id, "cutover_complete")
+                .await?;
+            atlas_inventory::databridge::plans::set_cutover_at(
+                pool,
+                &plan.id,
+                &chrono::Utc::now().to_rfc3339(),
+            )
+            .await?;
             if let Some(cdc_id) = plan.cdc_stream_id.as_deref() {
                 atlas_inventory::databridge::cdc::set_state(pool, cdc_id, "stopped").await?;
             }
@@ -279,15 +321,25 @@ async fn reconcile_once(
         {
             Ok(Some(status)) => match crate::loader::job_outcome(&status) {
                 crate::loader::JobOutcome::Succeeded => {
-                    let summary = serde_json::json!({ "note": "row counts matched (see Job logs)" });
-                    atlas_inventory::databridge::validations::set_result(pool, &v.id, true, 0, 0, &summary).await?;
-                    atlas_inventory::databridge::plans::set_state(pool, &v.plan_id, "validated").await?;
+                    let summary =
+                        serde_json::json!({ "note": "row counts matched (see Job logs)" });
+                    atlas_inventory::databridge::validations::set_result(
+                        pool, &v.id, true, 0, 0, &summary,
+                    )
+                    .await?;
+                    atlas_inventory::databridge::plans::set_state(pool, &v.plan_id, "validated")
+                        .await?;
                     tracing::info!("validation {} passed", v.id);
                 }
                 crate::loader::JobOutcome::Failed => {
-                    let summary = serde_json::json!({ "note": "row-count mismatch (see Job logs)" });
-                    atlas_inventory::databridge::validations::set_result(pool, &v.id, false, 0, 1, &summary).await?;
-                    atlas_inventory::databridge::plans::set_state(pool, &v.plan_id, "failed").await?;
+                    let summary =
+                        serde_json::json!({ "note": "row-count mismatch (see Job logs)" });
+                    atlas_inventory::databridge::validations::set_result(
+                        pool, &v.id, false, 0, 1, &summary,
+                    )
+                    .await?;
+                    atlas_inventory::databridge::plans::set_state(pool, &v.plan_id, "failed")
+                        .await?;
                     tracing::warn!("validation {} failed", v.id);
                 }
                 crate::loader::JobOutcome::Running => {}

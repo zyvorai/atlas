@@ -140,7 +140,10 @@ impl K8sDriver {
         {
             let fs_name = name_of(&fs);
             out.insert(format!("{fs_name}-metadata"), RookPoolKind::CephfsMetadata);
-            if let Some(data_pools) = fs.data.pointer("/spec/dataPools").and_then(|v| v.as_array())
+            if let Some(data_pools) = fs
+                .data
+                .pointer("/spec/dataPools")
+                .and_then(|v| v.as_array())
             {
                 for dp in data_pools {
                     if let Some(dp_name) = dp.get("name").and_then(|v| v.as_str()) {
@@ -178,7 +181,11 @@ impl K8sDriver {
         ns: &str,
         pool_name: &str,
     ) -> Result<Option<RookPoolKind>, K8sError> {
-        Ok(self.known_rook_pool_kinds(ns).await?.get(pool_name).copied())
+        Ok(self
+            .known_rook_pool_kinds(ns)
+            .await?
+            .get(pool_name)
+            .copied())
     }
 }
 

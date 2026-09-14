@@ -11,10 +11,10 @@ use serde_json::{json, Value};
 use atlas_common::{ids, AppError, AppResult};
 use atlas_jobs::JobSpec;
 
-use crate::auth::Actor;
-use crate::state::AppState;
 use super::util::{accepted, CEPH_BACKEND_ID};
 use super::volumes::ForceParams;
+use crate::auth::Actor;
+use crate::state::AppState;
 
 // ---- object storage (buckets) ----
 
@@ -61,7 +61,12 @@ pub(crate) async fn bucket_stats(
     let b = atlas_inventory::buckets::get_bucket(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("bucket {id}")))?;
-    crate::auth::require_tenant(s.config.auth_required, &actor, &b.tenant_id, format!("bucket {id}"))?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        &actor,
+        &b.tenant_id,
+        format!("bucket {id}"),
+    )?;
     let name = b
         .bucket_name
         .ok_or_else(|| AppError::Validation("bucket has no bucket_name".into()))?;
@@ -130,7 +135,12 @@ pub(crate) async fn bucket_s3_target(
     let b = atlas_inventory::buckets::get_bucket(&s.pool, id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("bucket {id}")))?;
-    crate::auth::require_tenant(s.config.auth_required, actor, &b.tenant_id, format!("bucket {id}"))?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        actor,
+        &b.tenant_id,
+        format!("bucket {id}"),
+    )?;
     if b.state != "bound" {
         return Err(AppError::Validation("bucket is not bound".into()));
     }
@@ -305,7 +315,9 @@ pub(crate) async fn bucket_object_delete(
         None,
     )
     .await;
-    Ok(Json(json!({ "bucket_id": id, "key": key, "deleted": true })))
+    Ok(Json(
+        json!({ "bucket_id": id, "key": key, "deleted": true }),
+    ))
 }
 
 /// `POST /buckets/{id}/objects/prune` — retention for versioned db-file backups. Body:
@@ -369,7 +381,12 @@ pub(crate) async fn delete_bucket(
     let bucket = atlas_inventory::buckets::get_bucket(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("bucket {id}")))?;
-    crate::auth::require_tenant(s.config.auth_required, &actor, &bucket.tenant_id, format!("bucket {id}"))?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        &actor,
+        &bucket.tenant_id,
+        format!("bucket {id}"),
+    )?;
 
     let deps = atlas_inventory::backups::count_for_bucket(&s.pool, &id).await?;
     if deps > 0 && !q.force {
@@ -513,7 +530,12 @@ pub(crate) async fn get_backup(
     let b = atlas_inventory::backups::get_backup(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("backup {id}")))?;
-    crate::auth::require_tenant(s.config.auth_required, &actor, &b.tenant_id, format!("backup {id}"))?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        &actor,
+        &b.tenant_id,
+        format!("backup {id}"),
+    )?;
     Ok(Json(json!(b)))
 }
 
@@ -527,7 +549,12 @@ pub(crate) async fn delete_backup(
     let backup = atlas_inventory::backups::get_backup(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("backup {id}")))?;
-    crate::auth::require_tenant(s.config.auth_required, &actor, &backup.tenant_id, format!("backup {id}"))?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        &actor,
+        &backup.tenant_id,
+        format!("backup {id}"),
+    )?;
     let bucket = atlas_inventory::buckets::get_bucket(&s.pool, &backup.bucket_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("bucket {}", backup.bucket_id)))?;
@@ -579,7 +606,12 @@ pub(crate) async fn download_backup(
     let backup = atlas_inventory::backups::get_backup(&s.pool, &id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("backup {id}")))?;
-    crate::auth::require_tenant(s.config.auth_required, &actor, &backup.tenant_id, format!("backup {id}"))?;
+    crate::auth::require_tenant(
+        s.config.auth_required,
+        &actor,
+        &backup.tenant_id,
+        format!("backup {id}"),
+    )?;
     let bucket = atlas_inventory::buckets::get_bucket(&s.pool, &backup.bucket_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("bucket {}", backup.bucket_id)))?;
@@ -666,7 +698,11 @@ pub(crate) fn make_backup_delete_spec(
 
 /// Enqueue a backup-delete job for one backup (resolves its bucket + volume placement first).
 /// No-op if the bucket is gone/unbound.
-pub(crate) async fn enqueue_backup_delete(s: &AppState, actor_id: &str, old: &atlas_api_types::BackupRecord) {
+pub(crate) async fn enqueue_backup_delete(
+    s: &AppState,
+    actor_id: &str,
+    old: &atlas_api_types::BackupRecord,
+) {
     let bucket = match atlas_inventory::buckets::get_bucket(&s.pool, &old.bucket_id).await {
         Ok(Some(b)) if b.state == "bound" => b,
         _ => return,
@@ -702,7 +738,12 @@ pub(crate) async fn prune_backups(s: &AppState, actor_id: &str, volume_id: &str,
 }
 
 /// Retention: prune backups for a volume older than `max_age_secs` (enqueues delete jobs).
-pub(crate) async fn prune_backups_by_age(s: &AppState, actor_id: &str, volume_id: &str, max_age_secs: i64) {
+pub(crate) async fn prune_backups_by_age(
+    s: &AppState,
+    actor_id: &str,
+    volume_id: &str,
+    max_age_secs: i64,
+) {
     if max_age_secs <= 0 {
         return;
     }

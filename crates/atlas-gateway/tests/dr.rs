@@ -110,7 +110,9 @@ async fn dr_peer_mirror_and_failover() {
 
     // Enable mirroring with a real peer id.
     let en = c
-        .post(format!("{base}/volumes/v1/mirror?mode=snapshot&peer={peer_id}"))
+        .post(format!(
+            "{base}/volumes/v1/mirror?mode=snapshot&peer={peer_id}"
+        ))
         .send()
         .await
         .unwrap();
@@ -125,8 +127,20 @@ async fn dr_peer_mirror_and_failover() {
         let c = c.clone();
         let mid = mirror_id.clone();
         async move {
-            let list: Value = c.get(format!("{base}/dr/mirrors")).send().await.unwrap().json().await.unwrap();
-            list.as_array().unwrap().iter().find(|m| m["id"] == json!(mid)).cloned().unwrap()
+            let list: Value = c
+                .get(format!("{base}/dr/mirrors"))
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            list.as_array()
+                .unwrap()
+                .iter()
+                .find(|m| m["id"] == json!(mid))
+                .cloned()
+                .unwrap()
         }
     };
     let m = mirror(&c).await;
@@ -144,15 +158,43 @@ async fn dr_peer_mirror_and_failover() {
     assert_eq!(bad.status(), 400);
 
     // Failover drill: demote → secondary, then promote → primary.
-    assert_eq!(c.post(format!("{base}/dr/mirrors/{mirror_id}/demote")).send().await.unwrap().status(), 202);
+    assert_eq!(
+        c.post(format!("{base}/dr/mirrors/{mirror_id}/demote"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        202
+    );
     assert_eq!(mirror(&c).await["role"], "secondary");
     // Demoting again is a conflict.
-    assert_eq!(c.post(format!("{base}/dr/mirrors/{mirror_id}/demote")).send().await.unwrap().status(), 409);
+    assert_eq!(
+        c.post(format!("{base}/dr/mirrors/{mirror_id}/demote"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        409
+    );
 
-    assert_eq!(c.post(format!("{base}/dr/mirrors/{mirror_id}/promote")).send().await.unwrap().status(), 202);
+    assert_eq!(
+        c.post(format!("{base}/dr/mirrors/{mirror_id}/promote"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        202
+    );
     assert_eq!(mirror(&c).await["role"], "primary");
     // Promoting an already-primary without force → 409.
-    assert_eq!(c.post(format!("{base}/dr/mirrors/{mirror_id}/promote")).send().await.unwrap().status(), 409);
+    assert_eq!(
+        c.post(format!("{base}/dr/mirrors/{mirror_id}/promote"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        409
+    );
     // Force promote allowed for split-brain drills.
     assert_eq!(
         c.post(format!("{base}/dr/mirrors/{mirror_id}/promote?force=true"))
@@ -164,15 +206,36 @@ async fn dr_peer_mirror_and_failover() {
     );
 
     // Promoting an unknown mirror → 404.
-    assert_eq!(c.post(format!("{base}/dr/mirrors/nope/promote")).send().await.unwrap().status(), 404);
+    assert_eq!(
+        c.post(format!("{base}/dr/mirrors/nope/promote"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
 
     // Preflight + confirm-gated failover runbook.
-    let pre: Value = c.get(format!("{base}/dr/preflight")).send().await.unwrap().json().await.unwrap();
+    let pre: Value = c
+        .get(format!("{base}/dr/preflight"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
     assert_eq!(pre["ready"], true);
     assert_eq!(pre["peers"], 1);
 
     // Demote again so failover has a secondary to promote.
-    assert_eq!(c.post(format!("{base}/dr/mirrors/{mirror_id}/demote")).send().await.unwrap().status(), 202);
+    assert_eq!(
+        c.post(format!("{base}/dr/mirrors/{mirror_id}/demote"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        202
+    );
     let fo = c
         .post(format!("{base}/dr/failover"))
         .json(&json!({ "mirror_id": mirror_id, "confirm": true }))
@@ -205,7 +268,14 @@ async fn dr_peer_mirror_and_failover() {
     assert_eq!(mirror(&c).await["rpo_seconds"], 45);
 
     // DR status summarizes the posture.
-    let status: Value = c.get(format!("{base}/dr/status")).send().await.unwrap().json().await.unwrap();
+    let status: Value = c
+        .get(format!("{base}/dr/status"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
     assert_eq!(status["peers"], 1);
     assert_eq!(status["mirrors"], 1);
     assert_eq!(status["primary"], 1);
@@ -214,7 +284,14 @@ async fn dr_peer_mirror_and_failover() {
     assert_eq!(status["control_plane_ready"], true);
 
     // Preflight always reports dataplane unverified; warnings carry the honesty note.
-    let pre2: Value = c.get(format!("{base}/dr/preflight")).send().await.unwrap().json().await.unwrap();
+    let pre2: Value = c
+        .get(format!("{base}/dr/preflight"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
     assert_eq!(pre2["dataplane_verified"], false);
     assert!(!pre2["warnings"].as_array().unwrap().is_empty());
 }

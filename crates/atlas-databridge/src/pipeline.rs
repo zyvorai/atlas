@@ -27,7 +27,8 @@ pub async fn discover(
     let schema = match async {
         // Resolve credentials from the source Secret for real connectors.
         let creds = if source.driver_mode == "real" {
-            let k8s = k8s.ok_or_else(|| anyhow!("real discovery needs a reachable Kubernetes cluster"))?;
+            let k8s =
+                k8s.ok_or_else(|| anyhow!("real discovery needs a reachable Kubernetes cluster"))?;
             let ns = source.secret_namespace.as_deref().unwrap_or(EDGE_NAMESPACE);
             let secret_ref = source
                 .secret_ref
@@ -38,13 +39,22 @@ pub async fn discover(
                 .await
                 .map_err(|e| anyhow!("read source secret: {e}"))?
                 .ok_or_else(|| anyhow!("source secret {ns}/{secret_ref} not found"))?;
-            let user = secret.get("username").cloned().ok_or_else(|| anyhow!("secret missing 'username'"))?;
-            let pass = secret.get("password").cloned().ok_or_else(|| anyhow!("secret missing 'password'"))?;
+            let user = secret
+                .get("username")
+                .cloned()
+                .ok_or_else(|| anyhow!("secret missing 'username'"))?;
+            let pass = secret
+                .get("password")
+                .cloned()
+                .ok_or_else(|| anyhow!("secret missing 'password'"))?;
             Some((user, pass))
         } else {
             None
         };
-        let connector = build_connector(&source, creds.as_ref().map(|(u, p)| (u.as_str(), p.as_str())))?;
+        let connector = build_connector(
+            &source,
+            creds.as_ref().map(|(u, p)| (u.as_str(), p.as_str())),
+        )?;
         connector.discover().await
     }
     .await
@@ -63,7 +73,13 @@ pub async fn discover(
     // never visibly progress even though the source itself discovered successfully.
     for plan in atlas_inventory::databridge::plans::list_plans(pool).await? {
         if plan.source_id == source_id {
-            let _ = atlas_inventory::databridge::plans::try_transition(pool, &plan.id, "draft", "discovered").await;
+            let _ = atlas_inventory::databridge::plans::try_transition(
+                pool,
+                &plan.id,
+                "draft",
+                "discovered",
+            )
+            .await;
         }
     }
 
@@ -158,7 +174,14 @@ pub async fn provision_edge(
     // here. Re-validate atomically: only the request that finds the plan still `assessed` proceeds,
     // so a duplicate never inserts a second `edge_db_clusters` row that orphans the first and wastes
     // a redundant CR apply.
-    if !atlas_inventory::databridge::plans::try_transition(pool, plan_id, "assessed", "provisioning").await? {
+    if !atlas_inventory::databridge::plans::try_transition(
+        pool,
+        plan_id,
+        "assessed",
+        "provisioning",
+    )
+    .await?
+    {
         anyhow::bail!(
             "plan {plan_id} is not in 'assessed' state — a concurrent provision is already in progress \
              or already completed"
@@ -166,8 +189,17 @@ pub async fn provision_edge(
     }
 
     atlas_inventory::databridge::edge_clusters::insert_edge_cluster(
-        pool, &edge_id, &plan.tenant_id, plan_id, engine_str, operator, namespace, &cr_name,
-        "zyvor-rbd-prod", Some("zyvor-rbd-prod"), 1,
+        pool,
+        &edge_id,
+        &plan.tenant_id,
+        plan_id,
+        engine_str,
+        operator,
+        namespace,
+        &cr_name,
+        "zyvor-rbd-prod",
+        Some("zyvor-rbd-prod"),
+        1,
     )
     .await?;
     atlas_inventory::databridge::plans::set_edge_cluster(pool, plan_id, &edge_id).await?;
@@ -175,9 +207,10 @@ pub async fn provision_edge(
     // Fake source mode (or no reachable k8s): fabricate a ready cluster so the pipeline runs.
     if source.driver_mode == "fake" || k8s.is_none() {
         let (endpoint, secret_ref) = match op {
-            crate::connector::EdgeOperator::Cnpg => {
-                (crate::cr::cnpg::endpoint(&cr_name, namespace), crate::cr::cnpg::secret_ref(&cr_name))
-            }
+            crate::connector::EdgeOperator::Cnpg => (
+                crate::cr::cnpg::endpoint(&cr_name, namespace),
+                crate::cr::cnpg::secret_ref(&cr_name),
+            ),
             crate::connector::EdgeOperator::Percona => (
                 crate::cr::mysql_operator::endpoint(&cr_name, namespace),
                 crate::cr::mysql_operator::secret_ref(&cr_name),
@@ -187,8 +220,13 @@ pub async fn provision_edge(
                 crate::cr::psmdb::secret_ref(&cr_name),
             ),
         };
-        atlas_inventory::databridge::edge_clusters::set_ready(pool, &edge_id, &endpoint, &secret_ref)
-            .await?;
+        atlas_inventory::databridge::edge_clusters::set_ready(
+            pool,
+            &edge_id,
+            &endpoint,
+            &secret_ref,
+        )
+        .await?;
         atlas_inventory::databridge::plans::set_state(pool, plan_id, "provisioned").await?;
         return Ok(serde_json::json!({
             "plan_id": plan_id, "edge_cluster_id": edge_id, "engine": engine_str,
@@ -203,16 +241,21 @@ pub async fn provision_edge(
     let edge_db = if engine.homogeneous() { db } else { "appdb" };
     let (group, version, kind, spec) = match op {
         crate::connector::EdgeOperator::Cnpg => (
-            crate::cr::cnpg::GROUP, crate::cr::cnpg::VERSION, crate::cr::cnpg::KIND,
+            crate::cr::cnpg::GROUP,
+            crate::cr::cnpg::VERSION,
+            crate::cr::cnpg::KIND,
             crate::cr::cnpg::cluster_spec(1, "zyvor-rbd-prod", "zyvor-rbd-prod", size_gib, edge_db),
         ),
         crate::connector::EdgeOperator::Percona => (
-            crate::cr::mysql_operator::GROUP, crate::cr::mysql_operator::VERSION,
+            crate::cr::mysql_operator::GROUP,
+            crate::cr::mysql_operator::VERSION,
             crate::cr::mysql_operator::KIND,
             crate::cr::mysql_operator::cluster_spec(1, "zyvor-rbd-prod", size_gib),
         ),
         crate::connector::EdgeOperator::Psmdb => (
-            crate::cr::psmdb::GROUP, crate::cr::psmdb::VERSION, crate::cr::psmdb::KIND,
+            crate::cr::psmdb::GROUP,
+            crate::cr::psmdb::VERSION,
+            crate::cr::psmdb::KIND,
             crate::cr::psmdb::cluster_spec(1, "zyvor-rbd-prod", size_gib),
         ),
     };
@@ -261,9 +304,12 @@ pub async fn full_load(
                 .get("total_size_bytes")
                 .and_then(|v| v.as_i64())
                 .unwrap_or(0);
-            atlas_inventory::databridge::edge_clusters::set_size_bytes(pool, edge_id, bytes).await?;
+            atlas_inventory::databridge::edge_clusters::set_size_bytes(pool, edge_id, bytes)
+                .await?;
         }
-        return Ok(serde_json::json!({ "plan_id": plan_id, "state": "loaded", "tables": tables, "mode": "fake" }));
+        return Ok(
+            serde_json::json!({ "plan_id": plan_id, "state": "loaded", "tables": tables, "mode": "fake" }),
+        );
     }
 
     // Real mode: apply a batch Job that dumps the source and loads it into the edge DB. The
@@ -277,7 +323,10 @@ pub async fn full_load(
         .await?
         .ok_or_else(|| anyhow!("edge cluster {edge_id} not found"))?;
     if edge.state != "ready" {
-        return Err(anyhow!("edge cluster is not ready yet (state: {})", edge.state));
+        return Err(anyhow!(
+            "edge cluster is not ready yet (state: {})",
+            edge.state
+        ));
     }
     let source_secret = source
         .secret_ref
@@ -334,10 +383,8 @@ pub async fn full_load(
         }
         // MongoDB: mongodump → mongorestore against the edge PSMDB replica set.
         crate::SourceKind::Mongodb => {
-            let edge_ep = crate::cr::psmdb::endpoint(
-                edge.cr_name.as_deref().unwrap_or(""),
-                &edge.namespace,
-            );
+            let edge_ep =
+                crate::cr::psmdb::endpoint(edge.cr_name.as_deref().unwrap_or(""), &edge.namespace);
             let edge_host = edge_ep.split(':').next().unwrap_or("");
             crate::loader::mongo_job_spec(
                 source_secret,
@@ -396,7 +443,9 @@ pub async fn start_cdc(
     // atomically: only the request that finds the plan still `loaded` proceeds, so a duplicate
     // never inserts a second `cdc_streams` row that orphans the first (a stalled/errored stream
     // should go through `/cdc/restart`, not a second `/cdc/start`).
-    if !atlas_inventory::databridge::plans::try_transition(pool, plan_id, "loaded", "cdc_streaming").await? {
+    if !atlas_inventory::databridge::plans::try_transition(pool, plan_id, "loaded", "cdc_streaming")
+        .await?
+    {
         anyhow::bail!(
             "plan {plan_id} is not in 'loaded' state — CDC is already started for this plan \
              (use /cdc/restart to re-establish a stalled stream) or full-load hasn't completed yet"
@@ -404,7 +453,14 @@ pub async fn start_cdc(
     }
 
     atlas_inventory::databridge::cdc::insert_stream(
-        pool, &cdc_id, &plan.tenant_id, plan_id, &engine, &connect, &connector, &topic_prefix,
+        pool,
+        &cdc_id,
+        &plan.tenant_id,
+        plan_id,
+        &engine,
+        &connect,
+        &connector,
+        &topic_prefix,
     )
     .await?;
     atlas_inventory::databridge::plans::set_cdc_stream(pool, plan_id, &cdc_id).await?;
@@ -413,10 +469,18 @@ pub async fn start_cdc(
         atlas_inventory::databridge::cdc::set_state(pool, &cdc_id, "streaming").await?;
         // seed an initial backlog; the reconciler drains it so the UI lag chart animates.
         atlas_inventory::databridge::cdc::update_lag(
-            pool, &cdc_id, 512 * 1024 * 1024, 45, Some("0/1000"), Some("0/0"), 0,
+            pool,
+            &cdc_id,
+            512 * 1024 * 1024,
+            45,
+            Some("0/1000"),
+            Some("0/0"),
+            0,
         )
         .await?;
-        return Ok(serde_json::json!({ "plan_id": plan_id, "cdc_stream_id": cdc_id, "state": "streaming", "mode": "fake" }));
+        return Ok(
+            serde_json::json!({ "plan_id": plan_id, "cdc_stream_id": cdc_id, "state": "streaming", "mode": "fake" }),
+        );
     }
 
     // Real mode: apply the Strimzi KafkaConnect cluster + Debezium source + JDBC sink connectors.
@@ -460,9 +524,18 @@ pub async fn start_cdc(
         "true".to_string(),
     );
     k8s.apply_cr_meta(
-        streaming::GROUP, streaming::VERSION, streaming::CONNECT_KIND, ns, &connect,
-        &std::collections::BTreeMap::new(), &connect_annotations,
-        streaming::connect_spec("zyvor-kafka-kafka-bootstrap:9092", 1, connect_image.as_deref()),
+        streaming::GROUP,
+        streaming::VERSION,
+        streaming::CONNECT_KIND,
+        ns,
+        &connect,
+        &std::collections::BTreeMap::new(),
+        &connect_annotations,
+        streaming::connect_spec(
+            "zyvor-kafka-kafka-bootstrap:9092",
+            1,
+            connect_image.as_deref(),
+        ),
     )
     .await
     .map_err(|e| anyhow!("apply KafkaConnect: {e}"))?;
@@ -472,12 +545,22 @@ pub async fn start_cdc(
 
     // 2. Debezium source connector
     let src_spec = streaming::debezium_source_spec(
-        kind, &s, source.endpoint.as_deref().unwrap_or(""),
+        kind,
+        &s,
+        source.endpoint.as_deref().unwrap_or(""),
         source.port.unwrap_or_else(|| kind.default_port()),
-        db, src_secret_ns, src_secret,
+        db,
+        src_secret_ns,
+        src_secret,
     );
     k8s.apply_cr_labeled(
-        streaming::GROUP, streaming::VERSION, streaming::CONNECTOR_KIND, ns, &connector, &labels, src_spec,
+        streaming::GROUP,
+        streaming::VERSION,
+        streaming::CONNECTOR_KIND,
+        ns,
+        &connector,
+        &labels,
+        src_spec,
     )
     .await
     .map_err(|e| anyhow!("apply Debezium source connector: {e}"))?;
@@ -486,27 +569,56 @@ pub async fn start_cdc(
     // engine — Postgres for heterogeneous sources — with auto.create for heterogeneous); MongoDB uses
     // the MongoDB Kafka sink into the edge PSMDB replica set.
     let edge_db = if kind.homogeneous() { db } else { "appdb" };
-    let pk_fields = std::env::var("ATLAS_DATABRIDGE_SINK_PK_FIELDS").unwrap_or_else(|_| "id".into());
+    let pk_fields =
+        std::env::var("ATLAS_DATABRIDGE_SINK_PK_FIELDS").unwrap_or_else(|_| "id".into());
     let sink_spec = match kind.edge_operator() {
         crate::connector::EdgeOperator::Cnpg => {
             let url = format!("jdbc:postgresql://{cr_name}-rw.{ns}.svc:5432/{edge_db}");
-            streaming::jdbc_sink_spec(&s, &url, ns, edge_secret, "app", "password", &pk_fields, !kind.homogeneous())
+            streaming::jdbc_sink_spec(
+                &s,
+                &url,
+                ns,
+                edge_secret,
+                "app",
+                "password",
+                &pk_fields,
+                !kind.homogeneous(),
+            )
         }
         crate::connector::EdgeOperator::Percona => {
             let url = format!("jdbc:mysql://{cr_name}-haproxy.{ns}.svc:3306/{edge_db}");
-            streaming::jdbc_sink_spec(&s, &url, ns, edge_secret, "root", "root", &pk_fields, !kind.homogeneous())
+            streaming::jdbc_sink_spec(
+                &s,
+                &url,
+                ns,
+                edge_secret,
+                "root",
+                "root",
+                &pk_fields,
+                !kind.homogeneous(),
+            )
         }
         crate::connector::EdgeOperator::Psmdb => {
             let edge_host = format!("{cr_name}-rs0.{ns}.svc:27017");
             streaming::mongo_sink_spec(
-                &s, &edge_host, edge_db, ns, edge_secret,
-                "MONGODB_DATABASE_ADMIN_USER", "MONGODB_DATABASE_ADMIN_PASSWORD",
+                &s,
+                &edge_host,
+                edge_db,
+                ns,
+                edge_secret,
+                "MONGODB_DATABASE_ADMIN_USER",
+                "MONGODB_DATABASE_ADMIN_PASSWORD",
             )
         }
     };
     k8s.apply_cr_labeled(
-        streaming::GROUP, streaming::VERSION, streaming::CONNECTOR_KIND, ns,
-        &streaming::sink_connector_name(&s), &labels, sink_spec,
+        streaming::GROUP,
+        streaming::VERSION,
+        streaming::CONNECTOR_KIND,
+        ns,
+        &streaming::sink_connector_name(&s),
+        &labels,
+        sink_spec,
     )
     .await
     .map_err(|e| anyhow!("apply sink connector: {e}"))?;
@@ -528,20 +640,29 @@ pub(crate) async fn teardown_streaming(
     use crate::cr::streaming;
     let ns = EDGE_NAMESPACE;
     k8s.delete_cr(
-        streaming::GROUP, streaming::VERSION, streaming::CONNECTOR_KIND, ns,
+        streaming::GROUP,
+        streaming::VERSION,
+        streaming::CONNECTOR_KIND,
+        ns,
         &streaming::source_connector_name(plan_short),
     )
     .await
     .map_err(|e| anyhow!("delete Debezium source connector: {e}"))?;
     k8s.delete_cr(
-        streaming::GROUP, streaming::VERSION, streaming::CONNECTOR_KIND, ns,
+        streaming::GROUP,
+        streaming::VERSION,
+        streaming::CONNECTOR_KIND,
+        ns,
         &streaming::sink_connector_name(plan_short),
     )
     .await
     .map_err(|e| anyhow!("delete sink connector: {e}"))?;
     if delete_connect {
         k8s.delete_cr(
-            streaming::GROUP, streaming::VERSION, streaming::CONNECT_KIND, ns,
+            streaming::GROUP,
+            streaming::VERSION,
+            streaming::CONNECT_KIND,
+            ns,
             &streaming::connect_name(plan_short),
         )
         .await
@@ -600,7 +721,13 @@ pub async fn restart_cdc(
         // Fake: re-establish with a fresh backlog so the reconciler drains it back to caught-up.
         atlas_inventory::databridge::cdc::set_state(pool, &cdc_id, "streaming").await?;
         atlas_inventory::databridge::cdc::update_lag(
-            pool, &cdc_id, 256 * 1024 * 1024, 30, Some("0/1000"), Some("0/0"), 0,
+            pool,
+            &cdc_id,
+            256 * 1024 * 1024,
+            30,
+            Some("0/1000"),
+            Some("0/0"),
+            0,
         )
         .await?;
         return Ok(serde_json::json!({
@@ -622,9 +749,15 @@ pub async fn restart_cdc(
         .await?
         .ok_or_else(|| anyhow!("edge cluster not found"))?;
     let ns = EDGE_NAMESPACE;
-    let src_secret = source.secret_ref.as_deref().ok_or_else(|| anyhow!("source has no secret_ref"))?;
+    let src_secret = source
+        .secret_ref
+        .as_deref()
+        .ok_or_else(|| anyhow!("source has no secret_ref"))?;
     let src_secret_ns = source.secret_namespace.as_deref().unwrap_or(ns);
-    let edge_secret = edge.secret_ref.as_deref().ok_or_else(|| anyhow!("edge cluster has no secret"))?;
+    let edge_secret = edge
+        .secret_ref
+        .as_deref()
+        .ok_or_else(|| anyhow!("edge cluster has no secret"))?;
     let cr_name = edge.cr_name.as_deref().unwrap_or("");
     let db = source.database.as_deref().unwrap_or("appdb");
     let connect = crate::cr::streaming::connect_name(&s);
@@ -633,35 +766,68 @@ pub async fn restart_cdc(
     let mut labels = std::collections::BTreeMap::new();
     labels.insert("strimzi.io/cluster".to_string(), connect.clone());
     let src_spec = streaming::debezium_source_spec(
-        kind, &s, source.endpoint.as_deref().unwrap_or(""),
-        source.port.unwrap_or_else(|| kind.default_port()), db, src_secret_ns, src_secret,
+        kind,
+        &s,
+        source.endpoint.as_deref().unwrap_or(""),
+        source.port.unwrap_or_else(|| kind.default_port()),
+        db,
+        src_secret_ns,
+        src_secret,
     );
     k8s.apply_cr_labeled(
-        streaming::GROUP, streaming::VERSION, streaming::CONNECTOR_KIND, ns,
-        &streaming::source_connector_name(&s), &labels, src_spec,
+        streaming::GROUP,
+        streaming::VERSION,
+        streaming::CONNECTOR_KIND,
+        ns,
+        &streaming::source_connector_name(&s),
+        &labels,
+        src_spec,
     )
     .await
     .map_err(|e| anyhow!("re-apply Debezium source connector: {e}"))?;
 
     let edge_db = if kind.homogeneous() { db } else { "appdb" };
-    let pk_fields = std::env::var("ATLAS_DATABRIDGE_SINK_PK_FIELDS").unwrap_or_else(|_| "id".into());
+    let pk_fields =
+        std::env::var("ATLAS_DATABRIDGE_SINK_PK_FIELDS").unwrap_or_else(|_| "id".into());
     let sink_spec = match kind.edge_operator() {
         crate::connector::EdgeOperator::Cnpg => streaming::jdbc_sink_spec(
-            &s, &format!("jdbc:postgresql://{cr_name}-rw.{ns}.svc:5432/{edge_db}"),
-            ns, edge_secret, "app", "password", &pk_fields, !kind.homogeneous(),
+            &s,
+            &format!("jdbc:postgresql://{cr_name}-rw.{ns}.svc:5432/{edge_db}"),
+            ns,
+            edge_secret,
+            "app",
+            "password",
+            &pk_fields,
+            !kind.homogeneous(),
         ),
         crate::connector::EdgeOperator::Percona => streaming::jdbc_sink_spec(
-            &s, &format!("jdbc:mysql://{cr_name}-haproxy.{ns}.svc:3306/{edge_db}"),
-            ns, edge_secret, "root", "root", &pk_fields, !kind.homogeneous(),
+            &s,
+            &format!("jdbc:mysql://{cr_name}-haproxy.{ns}.svc:3306/{edge_db}"),
+            ns,
+            edge_secret,
+            "root",
+            "root",
+            &pk_fields,
+            !kind.homogeneous(),
         ),
         crate::connector::EdgeOperator::Psmdb => streaming::mongo_sink_spec(
-            &s, &format!("{cr_name}-rs0.{ns}.svc:27017"), edge_db, ns, edge_secret,
-            "MONGODB_DATABASE_ADMIN_USER", "MONGODB_DATABASE_ADMIN_PASSWORD",
+            &s,
+            &format!("{cr_name}-rs0.{ns}.svc:27017"),
+            edge_db,
+            ns,
+            edge_secret,
+            "MONGODB_DATABASE_ADMIN_USER",
+            "MONGODB_DATABASE_ADMIN_PASSWORD",
         ),
     };
     k8s.apply_cr_labeled(
-        streaming::GROUP, streaming::VERSION, streaming::CONNECTOR_KIND, ns,
-        &streaming::sink_connector_name(&s), &labels, sink_spec,
+        streaming::GROUP,
+        streaming::VERSION,
+        streaming::CONNECTOR_KIND,
+        ns,
+        &streaming::sink_connector_name(&s),
+        &labels,
+        sink_spec,
     )
     .await
     .map_err(|e| anyhow!("re-apply sink connector: {e}"))?;
@@ -690,7 +856,11 @@ pub async fn validate(
 
     let val_id = atlas_common::ids::validation_id();
     atlas_inventory::databridge::validations::insert_validation(
-        pool, &val_id, &plan.tenant_id, plan_id, kind,
+        pool,
+        &val_id,
+        &plan.tenant_id,
+        plan_id,
+        kind,
     )
     .await?;
 
@@ -703,8 +873,14 @@ pub async fn validate(
         let edge = atlas_inventory::databridge::edge_clusters::get_edge_cluster(pool, edge_id)
             .await?
             .ok_or_else(|| anyhow!("edge cluster not found"))?;
-        let src_secret = source.secret_ref.as_deref().ok_or_else(|| anyhow!("source has no secret_ref"))?;
-        let edge_secret = edge.secret_ref.as_deref().ok_or_else(|| anyhow!("edge has no secret"))?;
+        let src_secret = source
+            .secret_ref
+            .as_deref()
+            .ok_or_else(|| anyhow!("source has no secret_ref"))?;
+        let edge_secret = edge
+            .secret_ref
+            .as_deref()
+            .ok_or_else(|| anyhow!("edge has no secret"))?;
         let engine = crate::SourceKind::parse(&source.kind).ok_or_else(|| anyhow!("bad engine"))?;
         let src_host = source.endpoint.as_deref().unwrap_or("");
         let db = source.database.as_deref().unwrap_or("appdb");
@@ -719,7 +895,10 @@ pub async fn validate(
                          per-table cross-engine row-count validation is advisory",
                 "engine": engine.as_str(),
             });
-            atlas_inventory::databridge::validations::set_result(pool, &val_id, true, 0, 0, &summary).await?;
+            atlas_inventory::databridge::validations::set_result(
+                pool, &val_id, true, 0, 0, &summary,
+            )
+            .await?;
             atlas_inventory::databridge::plans::set_state(pool, plan_id, "validated").await?;
             return Ok(serde_json::json!({
                 "plan_id": plan_id, "validation_id": val_id, "passed": true, "mode": "real",
@@ -729,26 +908,47 @@ pub async fn validate(
 
         let job_spec = match engine {
             crate::SourceKind::Postgres => crate::validate::pg_validate_job_spec(
-                src_secret, edge_secret, src_host, source.port.unwrap_or(5432), db, &source.tls_mode,
+                src_secret,
+                edge_secret,
+                src_host,
+                source.port.unwrap_or(5432),
+                db,
+                &source.tls_mode,
             ),
             crate::SourceKind::Mysql | crate::SourceKind::Mariadb => {
                 let edge_host = format!("{cr_name}-haproxy");
                 crate::validate::mysql_validate_job_spec(
-                    src_secret, edge_secret, src_host, source.port.unwrap_or(3306), db, &edge_host, db,
+                    src_secret,
+                    edge_secret,
+                    src_host,
+                    source.port.unwrap_or(3306),
+                    db,
+                    &edge_host,
+                    db,
                 )
             }
             crate::SourceKind::Mongodb => {
                 let edge_host = format!("{cr_name}-rs0");
                 crate::validate::mongo_validate_job_spec(
-                    src_secret, edge_secret, src_host, source.port.unwrap_or(27017), db, &edge_host, db,
+                    src_secret,
+                    edge_secret,
+                    src_host,
+                    source.port.unwrap_or(27017),
+                    db,
+                    &edge_host,
+                    db,
                 )
             }
             crate::SourceKind::Oracle | crate::SourceKind::Sqlserver => unreachable!(),
         };
         let job_name = crate::validate::job_name(&val_id);
         k8s.apply_cr(
-            crate::loader::JOB_GROUP, crate::loader::JOB_VERSION, crate::loader::JOB_KIND,
-            &edge.namespace, &job_name, job_spec,
+            crate::loader::JOB_GROUP,
+            crate::loader::JOB_VERSION,
+            crate::loader::JOB_KIND,
+            &edge.namespace,
+            &job_name,
+            job_spec,
         )
         .await
         .map_err(|e| anyhow!("apply validation Job: {e}"))?;
@@ -774,12 +974,19 @@ pub async fn validate(
         .collect();
     let summary = serde_json::json!({ "tables": results });
     atlas_inventory::databridge::validations::set_result(
-        pool, &val_id, true, tables.len() as i64, 0, &summary,
+        pool,
+        &val_id,
+        true,
+        tables.len() as i64,
+        0,
+        &summary,
     )
     .await?;
     atlas_inventory::databridge::plans::set_state(pool, plan_id, "validated").await?;
 
-    Ok(serde_json::json!({ "plan_id": plan_id, "validation_id": val_id, "passed": true, "tables": tables.len() }))
+    Ok(
+        serde_json::json!({ "plan_id": plan_id, "validation_id": val_id, "passed": true, "tables": tables.len() }),
+    )
 }
 
 /// Cutover: freeze source, drain CDC, switch endpoint, open the rollback window. Fake mode drains
@@ -810,7 +1017,14 @@ pub async fn cutover(
     // job before the first one lands. Re-validate here with an atomic transition so only the first
     // job to reach this point actually starts a cutover; the loser bails instead of driving a second,
     // conflicting cutover against the same source/edge.
-    if !atlas_inventory::databridge::plans::try_transition(pool, plan_id, "validated", "cutover_in_progress").await? {
+    if !atlas_inventory::databridge::plans::try_transition(
+        pool,
+        plan_id,
+        "validated",
+        "cutover_in_progress",
+    )
+    .await?
+    {
         anyhow::bail!(
             "plan {plan_id} is not in 'validated' state — a concurrent cutover is already in progress \
              or already completed"
@@ -825,7 +1039,14 @@ pub async fn cutover(
     let rollback = (now + chrono::Duration::seconds(plan.rollback_window_secs)).to_rfc3339();
 
     atlas_inventory::databridge::cutovers::insert_cutover(
-        pool, &cut_id, &plan.tenant_id, plan_id, Some(&from), Some(&to), Some(&drain), Some(&rollback),
+        pool,
+        &cut_id,
+        &plan.tenant_id,
+        plan_id,
+        Some(&from),
+        Some(&to),
+        Some(&drain),
+        Some(&rollback),
     )
     .await?;
 
@@ -861,7 +1082,8 @@ pub async fn rollback(pool: &SqlitePool, plan_id: &str) -> Result<serde_json::Va
     let plan = atlas_inventory::databridge::plans::get_plan(pool, plan_id)
         .await?
         .ok_or_else(|| anyhow!("plan {plan_id} not found"))?;
-    if let Some(cut) = atlas_inventory::databridge::cutovers::latest_for_plan(pool, plan_id).await? {
+    if let Some(cut) = atlas_inventory::databridge::cutovers::latest_for_plan(pool, plan_id).await?
+    {
         atlas_inventory::databridge::cutovers::set_complete(pool, &cut.id, "rolled_back").await?;
     }
     atlas_inventory::databridge::plans::set_state(pool, plan_id, "rolled_back").await?;

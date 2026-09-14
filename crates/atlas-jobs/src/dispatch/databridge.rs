@@ -1,9 +1,9 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
 // SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 use anyhow::Result;
+use atlas_driver_k8s::K8sDriver;
 use sqlx::SqlitePool;
 use std::sync::Arc;
-use atlas_driver_k8s::K8sDriver;
 
 use crate::spec::JobSpec;
 
@@ -50,7 +50,9 @@ pub(crate) async fn dispatch_databridge(
             let k8s_owned = k8s.clone();
             atlas_databridge::object::run_migration(pool, k8s_owned, &migration_id)
                 .await
-                .map(|()| serde_json::json!({ "migration_id": migration_id, "result": "completed" }))
+                .map(
+                    |()| serde_json::json!({ "migration_id": migration_id, "result": "completed" }),
+                )
         }
 
         _ => anyhow::bail!("not a databridge spec"),
