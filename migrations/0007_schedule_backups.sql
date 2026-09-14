@@ -1,4 +1,5 @@
--- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+-- Copyright (c) 2026 ZyvorAI Labs Private Limited.
+-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 -- Extend protection schedules to also run periodic backups to RGW (PDF §12.3 "daily backup"), not
 -- just snapshots. `kind` selects the action; backups additionally need a target bucket + mode.
 

@@ -1,4 +1,5 @@
--- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+-- Copyright (c) 2026 ZyvorAI Labs Private Limited.
+-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 -- Server-side metrics time-series: one row per sampler tick, so capacity/IO/job trends
 -- survive gateway restarts and page reloads (the UI previously kept these only in-memory).
 CREATE TABLE IF NOT EXISTS metrics_history (

@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! In-process async job engine backed by the `storage_jobs` table (PDF Rule 1: every storage
 //! operation is a job; §10.5 state machine). A tokio worker consumes job ids from an unbounded
 //! channel **and** a durable DB poller, executes them against the Kubernetes driver + policy, and

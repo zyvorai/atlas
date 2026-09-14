@@ -1,4 +1,5 @@
--- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+-- Copyright (c) 2026 ZyvorAI Labs Private Limited.
+-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 -- Zyvor DataBridge — object-storage migration (cloud object store -> Ceph RGW).
 -- Multi-cloud: any S3-protocol source (AWS S3, Google Cloud Storage via S3-interop,
 -- MinIO/Wasabi/other S3-compatible) copies today; Azure Blob / VMware are provider

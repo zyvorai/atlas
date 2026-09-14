@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! `POST /backends` instantiates a live NFS/ZFS driver (not just a catalog row) and discovers it, so
 //! its pools appear immediately. Fake driver, no infra (NFS/ZFS are deterministic fixture drivers).
 
@@ -57,7 +58,6 @@ async fn spawn() -> SocketAddr {
         oidc: None,
         rook_namespace: "rook-ceph".into(),
         rook_cluster_name: "rook-ceph".into(),
-        license_enforce: false,
         dr_dataplane_verified: false,
     };
     let state = build_state(

@@ -1,4 +1,5 @@
--- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+-- Copyright (c) 2026 ZyvorAI Labs Private Limited.
+-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 -- Fake-driver-mode catalog for direct RBD image snapshots (bypassing CSI). Real mode has no need
 -- for this — truth lives in Ceph itself via `rbd snap ls` — but fake mode has no `rbd` CLI and
 -- previously had no way to remember a snapshot it had just "created", so the panel always looked

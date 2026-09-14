@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Monitor worker (PDF §15): periodically refresh inventory and evaluate alert rules
 //! (cluster unhealthy, pool near-full, OSD down) into `storage_alerts`.
 //!

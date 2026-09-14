@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Day-2 alerting maturity: the new monitor rules (failed jobs, CDC replication error, tenant quota
 //! approaching) raise alerts on conditions that previously failed silently, and the manual lifecycle
 //! (ack / silence / resolve) works end-to-end. Fake driver, no infra.
@@ -58,7 +59,6 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
         oidc: None,
         rook_namespace: "rook-ceph".into(),
         rook_cluster_name: "rook-ceph".into(),
-        license_enforce: false,
         dr_dataplane_verified: false,
     };
     let state = build_state(

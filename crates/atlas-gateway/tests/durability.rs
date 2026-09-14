@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Control-plane durability: a job left mid-flight when the process dies must not stay stuck. On the
 //! next boot the job engine recovers — an interrupted `running` job is failed-safe and any `queued`
 //! job is re-enqueued. Driven through `build_state` (the real startup path) against the fake driver.
@@ -49,7 +50,6 @@ fn config_for(db: &str) -> Config {
         oidc: None,
         rook_namespace: "rook-ceph".into(),
         rook_cluster_name: "rook-ceph".into(),
-        license_enforce: false,
         dr_dataplane_verified: false,
     }
 }

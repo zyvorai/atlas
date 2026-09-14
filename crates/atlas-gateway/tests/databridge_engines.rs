@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Every DataBridge source engine drives the full migration pipeline over REST with the fake
 //! connector, and each provisions the correct edge target. Complements `databridge_pipeline.rs`
 //! (which covers the Postgres state machine + cutover guard in depth) by proving all six engines —
@@ -61,7 +62,6 @@ async fn spawn() -> SocketAddr {
         oidc: None,
         rook_namespace: "rook-ceph".into(),
         rook_cluster_name: "rook-ceph".into(),
-        license_enforce: false,
         dr_dataplane_verified: false,
     };
     let state = build_state(

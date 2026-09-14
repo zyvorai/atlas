@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Token revocation deny-list (day-2 governance). A revoked JWT id (`jti`) is rejected by the auth
 //! middleware, so a leaked or rotated service-account credential can be killed before its TTL.
 

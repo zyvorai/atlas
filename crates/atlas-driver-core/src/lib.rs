@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! The pluggable storage-driver contract (PDF §17.2) plus the driver error type and a registry.
 //!
 //! A `StorageDriver` abstracts one storage backend (Ceph today; NFS/ZFS/SAN/cloud later). The

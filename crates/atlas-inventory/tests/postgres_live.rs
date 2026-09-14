@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Live verification for the Phase-1 HA scaffolding (docs/HA.md): proves connect_postgres() and
 //! migrate_postgres() work against a real Postgres, not just that they compile behind the
 //! `postgres` feature. Does NOT prove the query layer runs on Postgres — that's still SQLite-only

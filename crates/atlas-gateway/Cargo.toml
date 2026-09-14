@@ -1,4 +1,5 @@
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 [package]
 name = "atlas-gateway"
 version.workspace = true
@@ -25,7 +26,6 @@ atlas-discovery = { workspace = true }
 atlas-monitor = { workspace = true }
 atlas-jobs = { workspace = true }
 atlas-databridge = { workspace = true }
-atlas-license = { workspace = true }
 
 axum = { workspace = true }
 tokio = { workspace = true }

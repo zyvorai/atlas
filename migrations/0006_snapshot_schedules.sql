@@ -1,4 +1,5 @@
--- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+-- Copyright (c) 2026 ZyvorAI Labs Private Limited.
+-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 -- Protection schedules (PDF §12.3 "hourly snapshots"): a background scheduler snapshots a volume on
 -- a fixed interval and prunes the scheduled snapshots to a retention count.
 

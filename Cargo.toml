@@ -1,4 +1,5 @@
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 [workspace]
 members = [
     "crates/atlas-common",
@@ -17,15 +18,13 @@ members = [
     "crates/atlas-jobs",
     "crates/atlas-gateway",
     "crates/atlas-cli",
-    "crates/atlas-license",
-    "crates/atlas-license-tool",
 ]
 resolver = "2"
 
 [workspace.package]
 version = "0.2.0"
 edition = "2021"
-license = "LicenseRef-Zyvor-Proprietary"
+license = "AGPL-3.0-only OR LicenseRef-Atlas-Commercial"
 authors = ["ZyvorAI Labs Private Limited"]
 
 [workspace.dependencies]
@@ -44,7 +43,6 @@ atlas-inventory = { path = "crates/atlas-inventory" }
 atlas-discovery = { path = "crates/atlas-discovery" }
 atlas-monitor = { path = "crates/atlas-monitor" }
 atlas-jobs = { path = "crates/atlas-jobs" }
-atlas-license = { path = "crates/atlas-license" }
 
 # Async / runtime
 tokio = { version = "1", features = ["full"] }

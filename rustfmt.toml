@@ -1,4 +1,5 @@
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 # Stable rustfmt config. A whole-tree `cargo fmt` still rewrites denser committed style; CI runs
 # `cargo fmt --check` as informational. Prefer formatting files you touch.
 edition = "2021"

@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Protection schedules: periodic snapshot policy per volume (PDF §12.3). The scheduler worker
 //! (in `atlas-jobs`) reads due schedules, enqueues snapshot jobs, and advances `next_run_at`.
 

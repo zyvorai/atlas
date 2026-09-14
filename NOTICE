@@ -1,0 +1,20 @@
+SPDX-FileCopyrightText: Copyright (c) 2026 ZyvorAI Labs Private Limited.
+SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+
+Atlas
+Copyright (c) 2026 ZyvorAI Labs Private Limited.
+
+This product is dual-licensed:
+
+  - GNU Affero General Public License v3.0 only (AGPL-3.0-only)
+    See LICENSE and LICENSES/AGPL-3.0-only.txt
+
+  - Atlas Commercial License (ACL) — SPDX: LicenseRef-Atlas-Commercial
+    See COMMERCIAL_LICENSE.md and LICENSES/LicenseRef-Atlas-Commercial.txt
+
+Contact: sales@zyvor.dev · https://zyvor.dev
+
+Third-party open-source components bundled or linked by Atlas retain their
+own copyright notices and license terms. Dependency license policy for the
+Rust workspace is enforced by deny.toml (cargo-deny). Frontend dependencies
+are declared in crates/atlas-gateway/ui/package-lock.json.

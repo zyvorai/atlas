@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! NFS storage driver — a second backend behind the `StorageDriver` trait, proving Atlas's
 //! pluggable-driver architecture beyond Ceph.
 //!

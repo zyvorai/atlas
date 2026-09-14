@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Validation batch-Job builders: compare row counts of every table between the source and the edge
 //! DB, inside the cluster. Applied via `apply_cr("batch","v1","Job",…)` and watched by the reconciler
 //! (Job exit 0 = passed, non-zero = mismatch/failed). Per-table detail from logs is a follow-up.

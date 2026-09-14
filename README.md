@@ -1,165 +1,92 @@
-<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved. -->
-# Atlas — Zyvor Storage Control Plane
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
+# Atlas
 
-Atlas is the **central storage control plane** for the Zyvor product suite. Products
-(Zeus OS, Veyron, Hyper2KVM, GuestKit, PacketWolf, Aether, Ragnarok, Machina, HyperSDK)
-call **stable Atlas APIs**; Atlas talks to storage backends through **pluggable drivers**.
-**Ceph is the first driver** (RBD block, CephFS file, RGW/S3 object).
+[![CI](https://github.com/zyvorai/atlas/actions/workflows/ci.yml/badge.svg)](https://github.com/zyvorai/atlas/actions/workflows/ci.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.2.0-informational)](CHANGELOG.md)
 
-> Core principle: products request *intent* ("give me production block storage"), not pool
-> internals. Atlas maps intent → backend, owns inventory/ownership/audit, and keeps every
-> product decoupled from Ceph (or any future NFS/ZFS/SAN/cloud backend).
+![Atlas — Survey the cluster. Provision with intent. Operate day-2.](docs/social/atlas-share-card.png)
 
+**Central storage control plane** for the Zyvor suite. Products call stable Atlas APIs;
+Atlas maps intent to Ceph (and NFS/ZFS) through pluggable drivers — with an Apple Shop
+console for operators.
 
-## 📖 Feature Guide
+📖 **[Read the full docs](https://zyvorai.github.io/atlas/)** — quickstart, architecture, licensing.
 
-**[Atlas — Customer Feature Guide](docs/atlas-customer-feature-guide.md)** — a complete, customer-facing reference covering all **61 features** across **11 areas**, grounded in the product's actual capabilities. Also available as a print-ready **[PDF](docs/atlas-customer-feature-guide.pdf)**.
+![Atlas Storage Center — Overview](docs/ux/00-overview.png)
 
-**[Customer manual (page-by-page)](docs/customer/README.md)** — getting started, admin basics, and a guide for every Storage Center route (PDFs under `docs/customer/pdf/`).
+## Contents
 
-```
- Zeus OS · Veyron · Hyper2KVM · GuestKit · PacketWolf · Aether · Ragnarok · Machina · HyperSDK
-                                        │  (REST / gRPC)
-                                        ▼
-                              ┌──────────────────┐
-                              │  Atlas Gateway   │  auth · audit · API
-                              └────────┬─────────┘
-                     ┌─────────────────┼──────────────────┐
-                     ▼                 ▼                  ▼
-                 discovery         inventory           drivers
-                 (normalize)      (SQLite RO)     ┌──────┴───────┐
-                                                  │ Ceph  │  K8s  │
-                                                  │ (RBD/ │ (SC/  │
-                                                  │ CephFS│  PVC/ │
-                                                  │ /RGW) │  PV)  │
-                                                  └───────┴───────┘
-                                             Ceph cluster   Kubernetes
-```
+- [Dashboard gallery](#dashboard-gallery)
+- [Capabilities](#capabilities)
+- [Quickstart](#quickstart)
+- [Important boundaries](#important-boundaries)
+- [License](#license)
 
-## Status — slices 1 & 2 done, **verified end-to-end on a real k3s + Rook Ceph cluster** ✅
+## Dashboard gallery
 
-**Slice 1 — read-only control plane:**
-- `atlas-*` Cargo workspace; axum 0.8 gateway; SQLite (`sqlx`) inventory.
-- Read-only REST discovery/inventory API (`/api/atlas/v1/...`).
-- Pluggable `StorageDriver` trait: **real Ceph driver** (`ceph`/`rbd` CLI) + **fake driver**;
-  **live Kubernetes driver** (StorageClasses / PVCs / PVs via `kube-rs`).
-- `atlas-discovery` worker → normalized inventory; `deploy/rook-ceph-lab/` + `scripts/deploy-remote.sh`.
+Live console shots (captured against a lab deployment):
 
-**Slice 2 — async write path:**
-- **Job engine** (`atlas-jobs`): SQLite-backed tokio worker, PDF §10.5 state machine.
-- `POST /volumes` (create Ceph-backed PVC), `DELETE`, `expand`, snapshots — all `202 + job id`.
-- `atlas-policy` intent→placement; idempotency keys; ownership bindings.
-- Real `GET /jobs`, `/snapshots`, `/policies`; snapshot **clone/restore** with a safe-delete guard.
-- **Verified**: `POST /volumes` → PVC Bound on `zyvor-rbd-prod` → snapshot → clone/restore.
-- Durable DB: SQLite backed by a Ceph PVC (survives pod restarts).
+| | | |
+|---|---|---|
+| ![Overview](docs/ux/00-overview.png) | ![Volumes](docs/ux/01-volumes.png) | ![Observatory](docs/ux/02-observatory.png) |
+| ![Ceph](docs/ux/03-ceph.png) | ![DataBridge](docs/ux/04-databridge.png) | ![Sign in](docs/ux/05-login.png) |
 
-**Slice 3 — RGW object storage + backups:**
-- `atlas-driver-rgw` S3 client; buckets via **ObjectBucketClaim** (`POST /buckets`); bucket quotas + stats.
-- `POST /backup-jobs`: RBD `export-diff` streamed to RGW (multipart) + verify; restore-from-data;
-  retention (keep-N + max-age); presigned downloads. **Verified** on real Ceph RGW.
+Full tour: [Gallery](https://zyvorai.github.io/atlas/gallery).
 
-**Slice 4 — edges, protection, multi-tenancy, observability:**
-- **gRPC edge** (`tonic`) alongside REST: `WatchJob` streaming, product-integration surface, RBAC.
-- **SSE** job progress; **monitor/alerts** worker (cluster/pool/OSD/capacity-forecast rules) + webhook notifier.
-- CephFS RWX; direct RBD (provision/clone/resize/flatten/snap/rollback/du); scheduled snapshots & backups;
-  per-tenant quotas + policy overrides; audit log; service-account JWTs.
-- **Metrics**: `/metrics` (Prometheus self-metrics), `/metrics/history` (persisted time-series),
-  `/metrics/forecast` (days-to-full), `/metrics/ceph`; `deploy/observability/` Prometheus + Grafana bundle.
-- **Ceph-native introspection**: `/ceph/status`, `/ceph/osd-tree`, `/ceph/osd-df`, `/ceph/df`.
+## Capabilities
 
-**Slice 5 — multi-backend + Zeus OS console:**
-- **Three backends** behind `StorageDriver`: Ceph + **NFS** + **ZFS** (all in `/backends`, filters, gauges).
-- `/backends/summary` + per-backend Prometheus gauges; `?backend=&kind=` filters on `/volumes` + `/pools`;
-  `/volumes.csv` export; unified activity feed (`/events`); `/readyz` deep-check.
-- **React/Vite console** (Apple shop shells — elevated boxes, SF type, swipe rails — embedded in the
-  gateway): every capability wired, HTTPS, branded login, a persistent collapsible sidebar,
-  **Observatory** (live visualizations), Ceph page, per-backend cards, and two themes —
-  **Carbon** (dark shop, default) and **Apple Lite** (light shop).
-- **Day-2 ops**: `deploy/rook-ceph-lab/{reclaim-space,resize-osd,setup-k3s-disk,teardown}.sh`
-  (Ceph capped to 400 GiB on `/dev/sdb1`; the freed tail becomes `/dev/sdb2` for the k3s data-dir).
+- **Intent → storage** — volumes, snapshots, clones, CephFS RWX, RGW buckets via REST + gRPC
+- **Pluggable drivers** — real Ceph first; NFS + ZFS; fake driver for local demo
+- **DataBridge** — cloud-to-edge DB migration (six engines, CDC, cutover) on Ceph
+- **Day-2** — alerts, maintenance, governance, quotas, upgrade preflight, DR scaffolding
+- **Console** — Carbon / Apple Lite shells, SF type, Apple Blue CTAs
 
-**DataBridge — cloud-to-edge database mobility:**
-- Migrate managed cloud databases (AWS RDS/Aurora, GCP Cloud SQL — PostgreSQL & MySQL) to open
-  engines at the edge (**CloudNativePG / Percona on Ceph RBD**), from one control plane.
-- Full pipeline — **discover → assess → provision → full-load → CDC (Debezium) → validate → cutover
-  → rollback** — as async jobs with a reconciler; admin-guarded cutover, rollback window.
-- **Verified end-to-end on two live Rook Ceph clusters**: a real Postgres → Ceph-backed edge Postgres
-  migration with live **CDC replication** (Debezium → Kafka → JDBC sink), driven through the deployed
-  gateway. Also **fake-first** — the whole pipeline runs with no cloud/k8s (`make run-databridge`).
-  Console: **DataBridge** section. See [docs/DATABRIDGE.md](docs/DATABRIDGE.md) +
-  [deploy/databridge/](deploy/databridge/README.md).
+Customer-facing feature guide: [docs/atlas-customer-feature-guide.md](docs/atlas-customer-feature-guide.md).
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/API.md](docs/API.md).
-
-## Quickstart (no Ceph, no cluster needed)
+## Quickstart
 
 ```bash
-# 1. Run the gateway with the fake Ceph driver
-make run                       # ATLAS_CEPH_DRIVER_MODE=fake on 127.0.0.1:5110
-
-# 2. Talk to it
-cargo run -p atlas-cli -- health
-cargo run -p atlas-cli -- discover      # populate inventory from the fake driver
-cargo run -p atlas-cli -- pools
-cargo run -p atlas-cli -- volumes
+make run
+# Console → http://127.0.0.1:5110
+cargo run -p atlas-cli -- --base-url http://127.0.0.1:5110 health
 ```
 
-Then open the **Storage Center** — an Apple shop–styled React console — at **http://127.0.0.1:5110/** (or
-`http://<node>:30511/` on the cluster). It's a React/Vite/Tailwind SPA (`crates/atlas-gateway/ui`)
-embedded in the gateway binary, with live inventory, capacity/health, job progress (SSE), alerts,
-metrics, tenants, and full write actions. Build it with `make ui` (or `make ui-dev` for hot reload).
+Deploy to a remote k3s host:
 
-Full local walkthrough: **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)**.
-
-## Documentation
-
-| Doc | What's in it |
-|---|---|
-| [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) | Build, run locally, `atlasctl`, run the tests |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Control-plane design, driver model, data model, request flow |
-| [docs/API.md](docs/API.md) | REST API reference with request/response examples |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Deploy to k3s, `deploy-remote.sh`, real Ceph mode |
-| [deploy/rook-ceph-lab/README.md](deploy/rook-ceph-lab/README.md) | Stand up Rook Ceph + KubeVirt/CDI |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | What's done, what's next (per the developer plan) |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Conventions, how to add a driver/endpoint |
-
-## Workspace layout
-
-```
-atlas/
-├── crates/
-│   ├── atlas-common/       # config, error type, tracing, id helpers
-│   ├── atlas-api-types/    # shared serde DTOs (the wire/domain contract)
-│   ├── atlas-driver-core/  # StorageDriver trait + DriverError + DriverRegistry
-│   ├── atlas-driver-ceph/  # ceph/rbd CLI wrapper (real) + FakeCephDriver
-│   ├── atlas-driver-nfs/   # NfsDriver (second backend; fixture-only MVP)
-│   ├── atlas-driver-zfs/   # ZfsDriver (third backend; fixture-only MVP)
-│   ├── atlas-driver-rgw/   # S3 client for RGW buckets/backups (rusty-s3 + reqwest)
-│   ├── atlas-driver-k8s/   # kube-rs read-only StorageClass/PVC/PV listing
-│   ├── atlas-jobs/         # async job engine (single-worker durable DB queue)
-│   ├── atlas-policy/       # intent → StorageClass + access/volume mode
-│   ├── atlas-monitor/      # discovery + alert-rule worker, Ceph mgr metrics scrape
-│   ├── atlas-inventory/    # SQLite read/upsert model + audit
-│   ├── atlas-discovery/    # discovery worker (driver → inventory)
-│   ├── atlas-databridge/   # cloud-to-edge DB + object migration control plane
-│   ├── atlas-gateway/      # axum server (bin: atlas-gateway) + tests
-│   └── atlas-cli/          # atlasctl REST client
-├── migrations/             # SQLite schema (0001_init.sql .. latest)
-├── deploy/
-│   ├── rook-ceph-lab/      # Rook Ceph + KubeVirt/CDI manifests + up.sh
-│   └── k8s/                # atlas-gateway Deployment/RBAC/Service (fake + real ceph)
-├── scripts/deploy-remote.sh
-├── scripts/deploy-ceph-gateway-remote.sh  # real Ceph gateway → remote k3s (NodePort 30511)
-├── Dockerfile              # gateway image (fake/k8s modes)
-└── Dockerfile.ceph         # gateway image + Ceph Squid client (real mode)
+```bash
+./scripts/deploy-remote.sh <host> <user>
+# UI → http://<host>:30510
 ```
 
-## Design authority
+| Track | Where |
+| --- | --- |
+| **Self-host from source** (AGPL, free for home) | This repo |
+| **Commercial license (ACL)** | [sales@zyvor.dev](mailto:sales@zyvor.dev) · [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md) |
+| **Docs site** | https://zyvorai.github.io/atlas/ |
 
-This implementation follows the developer plan
-`Zyvor_Ceph_Integration_Developer_Implementation_Plan.pdf` (v1.0 engineering draft). Section
-references (e.g. "PDF §10.2") throughout the code and docs point back to it.
+More: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) · [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Important boundaries
+
+What's free under AGPL vs. what needs a commercial license
+([full guide](docs/LICENSING.md)):
+
+| Use case | Allowed under AGPL? |
+| --- | --- |
+| Self-host for home or your own operations | Yes, free |
+| Modify for internal use | Yes, free |
+| Build and publish your own AGPL extensions | Yes, free |
+| Deploy modified Atlas as public SaaS without releasing changes | No — needs ACL |
+| Embed Atlas in a closed-source product | No — needs ACL |
+| White-label proprietary customizations without AGPL | No — needs ACL |
 
 ## License
 
-Proprietary — `LicenseRef-Zyvor-Proprietary`. Copyright (c) 2026 ZyvorAI Labs Private Limited.
+Dual-licensed:
+
+- **[AGPL-3.0](LICENSE)** — open source; free for home users and self-host under AGPL terms
+- **[Atlas Commercial License (ACL)](COMMERCIAL_LICENSE.md)** — proprietary integrations, freedom from AGPL obligations, support
+
+See [docs/LICENSING.md](docs/LICENSING.md). Contributions: [CLA.md](CLA.md) + [DCO.md](DCO.md) (`git commit -s`).

@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! `GET /protection-status` and `GET /volumes/{id}/protection` — pin the real route → inventory
 //! synthesis path. See `atlas_inventory::protection` for the verdict logic itself (unit-tested
 //! there); this file just proves the HTTP surface returns the expected shape.
@@ -58,7 +59,6 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
         oidc: None,
         rook_namespace: "rook-ceph".into(),
         rook_cluster_name: "rook-ceph".into(),
-        license_enforce: false,
         dr_dataplane_verified: false,
     };
     let state = build_state(

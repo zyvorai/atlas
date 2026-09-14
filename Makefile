@@ -1,6 +1,7 @@
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 .PHONY: dev build release test lint fmt fmt-check run run-databridge cli clean ui ui-dev \
-	features docker-smoke ci audit
+	features docker-smoke ci audit headers
 
 dev: lint test
 
@@ -15,6 +16,10 @@ test:
 
 lint:
 	cargo clippy --workspace --all-targets -- -D warnings
+
+# SPDX + copyright header gate (see scripts/check-license-headers.sh, CLA.md, DCO.md, NOTICE).
+headers:
+	./scripts/check-license-headers.sh
 
 # Supply-chain gate: known-vulnerable/yanked advisories, disallowed licenses, unknown sources
 # (deny.toml). Installs cargo-deny on first run if missing.
@@ -44,19 +49,17 @@ docker-smoke:
 	  $$RT build --target ui -t atlas-gateway-ceph:ui -f Dockerfile.ceph .
 
 # Local equivalent of the CI static gate (no Docker, no containers).
-ci: lint test audit features ui
+ci: headers lint test audit features ui
 
-# Run the gateway with the fake Ceph driver (no cluster required). License enforcement defaults
-# to on (see docs/LICENSING.md); local dev has no token yet, so disable it here rather than
-# make every contributor discover and set ATLAS_LICENSE_ENFORCE themselves.
+# Run the gateway with the fake Ceph driver (no cluster required).
 # Rebuilds the React UI first (same pattern as h2kvm- `web/Makefile`: frontend then backend embed).
 run: ui
-	ATLAS_CEPH_DRIVER_MODE=fake ATLAS_LICENSE_ENFORCE=false cargo run -p atlas-gateway
+	ATLAS_CEPH_DRIVER_MODE=fake cargo run -p atlas-gateway
 
 # Run the gateway for a DataBridge demo: fake Ceph + the reconciler ticking every 5s so fake CDC
 # lag drains and the migration pipeline runs end-to-end with no cloud/k8s. See docs/DATABRIDGE.md.
 run-databridge: ui
-	ATLAS_CEPH_DRIVER_MODE=fake ATLAS_DATABRIDGE_RECONCILE_SECS=5 ATLAS_LICENSE_ENFORCE=false cargo run -p atlas-gateway
+	ATLAS_CEPH_DRIVER_MODE=fake ATLAS_DATABRIDGE_RECONCILE_SECS=5 cargo run -p atlas-gateway
 
 # Build the React Storage Center UI into crates/atlas-gateway/ui/dist (embedded by the gateway).
 # Matches h2kvm- `web/Makefile` frontend target: npm ci + vite build.

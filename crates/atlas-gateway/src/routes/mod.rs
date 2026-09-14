@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! REST surface. Slice 1 read-only inventory/discovery (PDF §10.2) + slice 2 async write path
 //! (volume create/expand/delete, snapshots) — write ops return `202 Accepted` with a job id.
 
@@ -25,7 +26,6 @@ use axum::{
 };
 
 use crate::auth::auth_middleware;
-use crate::license::{license_middleware, license_status};
 use crate::state::AppState;
 
 use backends::*;
@@ -52,10 +52,6 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/oidc/status", get(oidc_status))
         .route("/auth/oidc/login", get(oidc_login))
         .route("/auth/oidc/callback", get(oidc_callback))
-        // Must stay reachable even when a trial/license has expired — see
-        // `license_middleware`, which only wraps `api` below, not this router — so an expired
-        // install can still show the operator *why* everything else is 402ing.
-        .route("/license/status", get(license_status))
         .with_state(state.clone());
 
     let api = Router::new()
@@ -248,14 +244,6 @@ pub fn router(state: AppState) -> Router {
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
-        ))
-        // Outermost: an expired/missing trial gates the whole product surface before a
-        // request even reaches auth — see `license_middleware`. `route_layer`s stack so the
-        // layer added last runs first; this must be added after `auth_middleware` to be
-        // checked before it, independent of whether the caller presents a valid token.
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            license_middleware,
         ))
         .with_state(state.clone());
 

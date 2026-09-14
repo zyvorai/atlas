@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Operator custom-resource builders for the edge database targets. Each module produces a `spec`
 //! JSON (applied via `atlas_driver_k8s::apply_cr`) and a readiness predicate over the CR `status`.
 

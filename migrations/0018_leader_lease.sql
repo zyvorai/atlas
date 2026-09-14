@@ -1,4 +1,5 @@
--- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+-- Copyright (c) 2026 ZyvorAI Labs Private Limited.
+-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 -- Day-2 HA: a DB-backed leader lease so the periodic workers (monitor, scheduler, reconciler, …) run
 -- on exactly one replica. On single-replica SQLite this instance always holds it (no behaviour
 -- change); the mechanism is what makes a future multi-replica / Postgres-backed deployment safe

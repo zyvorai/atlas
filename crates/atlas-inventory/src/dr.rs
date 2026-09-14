@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Cross-cluster DR state: mirroring peers + per-image mirror records (day-2 scaffolding). The real
 //! `rbd mirror` operations run as jobs; this is the control-plane catalog they update.
 

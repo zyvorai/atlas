@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! `GET /ceph/health-rollup` pins the real route → driver → classify() path against the fake
 //! driver's known fixture (1 OSD down, 8/289 PGs active+undersized+degraded, no active recovery).
 
@@ -57,7 +58,6 @@ async fn spawn() -> SocketAddr {
         oidc: None,
         rook_namespace: "rook-ceph".into(),
         rook_cluster_name: "rook-ceph".into(),
-        license_enforce: false,
         dr_dataplane_verified: false,
     };
     let state = build_state(

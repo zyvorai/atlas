@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Intent → placement resolution (PDF §12.3 default policies).
 //!
 //! Products request *intent* ("production", "database", ...) and Atlas decides the concrete

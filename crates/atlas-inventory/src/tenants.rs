@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Per-tenant storage quotas + live usage (PDF §14 multi-tenancy). Usage is computed from the live
 //! `storage_volumes` rows for the tenant, so it always reflects what is currently provisioned.
 

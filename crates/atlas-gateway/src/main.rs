@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Atlas gateway binary: REST + gRPC edges of the storage control plane.
 
 use std::net::SocketAddr;
@@ -29,7 +30,6 @@ async fn main() -> anyhow::Result<()> {
             "ATLAS_BOOTSTRAP_ADMIN_TOKEN is set — use it once to mint service-account JWTs, then remove it from the Secret"
         );
     }
-    config.warn_if_license_misconfigured();
 
     let bind_addr = config.bind_addr.clone();
     let grpc_addr = config.grpc_addr.clone();

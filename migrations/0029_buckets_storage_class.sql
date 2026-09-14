@@ -1,4 +1,5 @@
--- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+-- Copyright (c) 2026 ZyvorAI Labs Private Limited.
+-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 -- Track which StorageClass an OBC bucket was provisioned against, so a Rook CephObjectStore
 -- delete (DELETE /ceph/object-stores/{name}) can guard against buckets that still reference it —
 -- mirrors storage_volumes.storage_class_name's existing role in the pool/filesystem delete guards.

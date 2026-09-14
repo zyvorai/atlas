@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Collapses raw `ceph status`/`osd tree`/`osd df` JSON into a 5-value operator-facing severity
 //! (`ClusterHealthState`), so a top-nav badge or an ops dashboard doesn't have to parse Ceph's own
 //! vocabulary of health checks and PG-state strings. This is Atlas's own heuristic classification

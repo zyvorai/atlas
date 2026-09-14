@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Rook lifecycle routes: create/list/delete `CephBlockPool`/`CephFilesystem`/`CephObjectStore`
 //! CRs (+ their StorageClass) from the API instead of hand-edited YAML manifests. Mirrors
 //! `routes::object_store`'s bucket create/delete shape (async job, dependent-delete guard).

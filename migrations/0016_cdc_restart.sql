@@ -1,4 +1,5 @@
--- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+-- Copyright (c) 2026 ZyvorAI Labs Private Limited.
+-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 -- Day-2 DataBridge: CDC self-heal. Track how many times a stream's connectors have been restarted so
 -- the reconciler can auto-restart a stalled stream a bounded number of times before giving up (and
 -- letting the CDC-error alert fire).

@@ -1,3 +1,5 @@
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
 # Page-by-page guides
 
 Each guide follows: Purpose → When to use it → How to get there → Operate from the console (UX) → Related pages.

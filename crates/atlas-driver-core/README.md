@@ -1,4 +1,5 @@
-<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved. -->
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
 # atlas-driver-core
 
 The pluggable-backend contract. Everything downstream depends on this, not on a concrete backend.

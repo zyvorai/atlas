@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Per-volume "Protection Status" — synthesizes replication factor, last snapshot/backup, DR
 //! mirror state, and RPO/RTO target-vs-actual into one verdict, so an operator doesn't have to
 //! cross-reference the snapshots/backups/dr/schedules views by hand to answer "is this volume

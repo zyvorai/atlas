@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Regression guard for the cross-tenant read-isolation fix: a viewer-role JWT scoped to one
 //! tenant must never see another tenant's volumes/buckets via list, get, or CSV export, while
 //! admin stays cross-tenant by design. Seeds two tenants' worth of resources directly into
@@ -59,7 +60,6 @@ async fn spawn_auth(secret: &str) -> (SocketAddr, sqlx::SqlitePool) {
         oidc: None,
         rook_namespace: "rook-ceph".into(),
         rook_cluster_name: "rook-ceph".into(),
-        license_enforce: false,
         dr_dataplane_verified: false,
     };
     let state = build_state(

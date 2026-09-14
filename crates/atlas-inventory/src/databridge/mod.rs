@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! DataBridge inventory: cloud-to-edge database migration records.
 //! One module per resource, each following the `buckets.rs` insert/set/get/list/row_to pattern.
 

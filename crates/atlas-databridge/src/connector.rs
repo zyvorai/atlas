@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! The source-connector contract: discover a cloud/source database's schema so the pipeline can
 //! assess readiness, provision an edge target, and plan the load. Mirrors the `StorageDriver`
 //! trait split — the gateway/pipeline depend only on this trait, never on tokio-postgres/mysql.

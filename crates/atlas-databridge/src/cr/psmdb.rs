@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Percona Server for MongoDB (`PerconaServerMongoDB`) CR builder for the MongoDB edge target. Data
 //! lands on a Ceph RBD StorageClass. The edge is a **replica set** (`rs0`) so Debezium change streams
 //! / the oplog are available for CDC — a standalone mongod can't serve change streams.

@@ -1,3 +1,5 @@
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
 # Using the Dashboard
 
 Storage Center is the Atlas operator console on the gateway (`http://<host>:5110/`).

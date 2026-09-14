@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Day-2 volume lifecycle: orphan GC surfaces backups whose source volume is gone, and per-image
 //! QoS enqueues a throttle job. Fake driver — the QoS job fails without a real `rbd`, but the
 //! enqueue contract + validation are exercised; orphan detection is pure-DB and fully verified.
@@ -58,7 +59,6 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
         oidc: None,
         rook_namespace: "rook-ceph".into(),
         rook_cluster_name: "rook-ceph".into(),
-        license_enforce: false,
         dr_dataplane_verified: false,
     };
     let state = build_state(

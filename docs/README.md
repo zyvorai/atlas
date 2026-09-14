@@ -1,4 +1,5 @@
-<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved. -->
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
 # Atlas Documentation Index
 
 Start at the top-level [README](../README.md) for the overview and quickstart.
@@ -15,7 +16,9 @@ Start at the top-level [README](../README.md) for the overview and quickstart.
 - **[HA.md](HA.md)** — durable job queue, leader lease, Postgres cutover plan.
 - **[DATABRIDGE.md](DATABRIDGE.md)** — cloud-to-edge DB / object migration control plane.
 - **[ROADMAP.md](ROADMAP.md)** — what's shipped and what's deferred.
+- **[LICENSING.md](LICENSING.md)** — AGPL-3.0 vs Atlas Commercial License (ACL); SPDX / CLA / DCO.
 - **[../CONTRIBUTING.md](../CONTRIBUTING.md)** — conventions; how to add an endpoint / driver / migration.
+- **[../CLA.md](../CLA.md)** · **[../DCO.md](../DCO.md)** · **[../NOTICE](../NOTICE)** — contribution + attribution.
 
 ## Deploy assets
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** — end-to-end k3s deploy; version lockstep + pitfalls.

@@ -1,4 +1,5 @@
-<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved. -->
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
 # High availability foundation
 
 Atlas today runs as a **single replica** with SQLite on a ReadWriteOnce PVC. True multi-replica HA

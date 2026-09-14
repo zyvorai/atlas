@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Live MySQL / MariaDB source connector (RDS/Aurora/Cloud SQL or any MySQL-wire endpoint).
 //! Introspects the schema over a real `sqlx` connection so the pipeline can assess readiness for a
 //! real migration. MariaDB speaks the MySQL wire protocol, so one connector serves both — only the

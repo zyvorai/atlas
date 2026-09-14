@@ -1,68 +1,53 @@
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
 # Licensing
 
-Atlas evaluation uses a **signed trial token** (Ed25519 / EdDSA JWT) — the same design as
-Veyron and Aurora across the Zyvor product family. There is **no** server-side clock: expiry
-lives inside the token. Deleting local state cannot extend a trial.
+Atlas is **dual-licensed**:
 
-The gateway embeds only the **public** key (`atlas_license::LICENSE_PUBLIC_KEY_B64`). Zyvor
-sales holds the private key and issues `trial.token` files via `atlas-license-tool`.
+| Track | License | Cost |
+| --- | --- | --- |
+| **Open source / community** | [AGPL-3.0](../LICENSE) | Free |
+| **Commercial** | [Atlas Commercial License (ACL)](../COMMERCIAL_LICENSE.md) | See pricing below |
 
-## How the trial works
+SPDX expression used in source headers and Cargo metadata:
+`AGPL-3.0-only OR LicenseRef-Atlas-Commercial` (see [`LICENSES/`](../LICENSES/),
+[`NOTICE`](../NOTICE)).
 
-- Deployments run with a `trial.token` (or `ATLAS_TRIAL_TOKEN` / `ATLAS_LICENSE_KEY` env value)
-  set by whoever deployed them, typically 30 days.
-- While the token is valid, every feature works — nothing is crippled.
-- After `exp`, protected REST routes return **HTTP 402** until a renewed signed token is
-  installed. `/health`, `/livez`, `/readyz`, `/version`, `GET /license/status`,
-  `POST /auth/login`, and `/auth/oidc/*` stay reachable so an expired install can still show the
-  operator why everything else is gated, and so a fresh token can be applied without redeploying
-  code.
+Contributions require the [CLA](../CLA.md) and [DCO](../DCO.md) (`git commit -s`).
+Header checks: `make headers`.
+
+## Open source — AGPL-3.0 (free for home & self-host)
+
+You can use, modify, and self-host Atlas under the GNU Affero General Public License v3.0.
+
+- **Home users** and personal self-host: free under AGPL
+- **Internal operations** (your org only): free under AGPL
+- **Network copyleft:** if you modify Atlas and make it available over a network to users, you must offer those users the corresponding source under AGPL-3.0 — or buy an ACL
+
+Full text: [`LICENSE`](../LICENSE).
+
+### What AGPL allows (summary)
+
+| Use case | Allowed? |
+| --- | --- |
+| Self-host for home or your own operations | Yes, free |
+| Modify for internal use | Yes, free |
+| Build and publish your own AGPL extensions | Yes, free |
+| Deploy modified Atlas as public SaaS without releasing changes | No — needs ACL |
+| Embed Atlas in a closed-source product | No — needs ACL |
+| White-label proprietary customizations without AGPL | No — needs ACL |
+
+## Atlas Commercial License (ACL)
+
+For organizations that need freedom from AGPL obligations, proprietary integrations, warranties/indemnities, or ongoing support:
+
+| License Type | Price | Support & Updates | Best For |
+| --- | --- | --- | --- |
+| Annual License | $25,000/year | All upgrades & Business Support included | Continuous updates and support |
+| Monthly License | $2,500/month | All upgrades & Business Support included | Pilots and short-term deployments |
+| Major Version License | $25,000 (one-time) | No ongoing support | Stable single major version |
+| Minor Version License | $15,000 (one-time) | No ongoing support | Locked version deployments |
+
+Details: [`COMMERCIAL_LICENSE.md`](../COMMERCIAL_LICENSE.md).
 
 **Contact:** [sales@zyvor.dev](mailto:sales@zyvor.dev)
-
-## Apply a token
-
-| Path | How |
-|------|-----|
-| Env | `ATLAS_TRIAL_TOKEN=<jwt>` (or `ATLAS_LICENSE_KEY=<jwt>`) then restart |
-| File path | `ATLAS_TRIAL_TOKEN_FILE=/path/to/trial.token` |
-| Default file | `trial.token` next to the gateway's working directory |
-| Kubernetes | `secretKeyRef` into `ATLAS_TRIAL_TOKEN` — see `deploy/k8s/atlas-gateway.yaml`'s
-`atlas-license` Secret block (same pattern already used for `ATLAS_OIDC_CLIENT_SECRET`) |
-
-Status (always reachable, expired or not):
-
-```bash
-curl -s http://localhost:5110/api/atlas/v1/license/status
-```
-
-## Local development
-
-```bash
-ATLAS_LICENSE_ENFORCE=false   # skip the middleware entirely (make run / make run-databridge already set this)
-```
-
-`make run`/`make run-databridge` already export `ATLAS_LICENSE_ENFORCE=false` so local `no
-Ceph, no cluster needed` dev keeps working with zero setup. The code-level default when the env
-var is unset is `true` (enforced) — the same default Aurora ships.
-
-## Sales: minting tokens (private repo / sales tooling only)
-
-Do **not** ship `crates/atlas-license-tool` or `secrets/` in customer packages — both are
-already gitignored (`.gitignore`: `/secrets/`, `*.pkcs8`, `trial.token`).
-
-```bash
-cargo run -p atlas-license-tool -- keygen                                  # once; paste public key into crates/atlas-license/src/lib.rs
-cargo run -p atlas-license-tool -- issue --who "Acme Corp" --days 30 -o trial.token
-```
-
-Product claim: `atlas-trial` (tokens issued for Veyron/Aurora/Ragnarok will not unlock Atlas,
-and vice versa — every product embeds its own public key and rejects any other product's
-`product` claim).
-
-## Rotating the signing key
-
-Regenerate with `cargo run -p atlas-license-tool -- keygen`, replace
-`LICENSE_PUBLIC_KEY_B64` in `crates/atlas-license/src/lib.rs`, and reissue any trials/licenses
-still active — rotation invalidates every previously issued token immediately on the next
-gateway restart with the new binary.

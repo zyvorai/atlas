@@ -1,4 +1,5 @@
-<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved. -->
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
 # Atlas API Reference (v1)
 
 > Atlas also exposes a **gRPC edge** (`tonic`) on `ATLAS_GRPC_ADDR` (default `:5111`, NodePort 30512

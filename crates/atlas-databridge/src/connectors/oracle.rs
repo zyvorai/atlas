@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Live Oracle Database source connector (RDS for Oracle / on-prem / any OCI-reachable service).
 //! Introspects the schema over a real `oracle` (OCI) connection. Oracle is a *heterogeneous* source:
 //! it migrates onto a Postgres edge, seeded by Debezium's initial snapshot.

@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Safe `ceph`/`rbd` command wrappers.
 //!
 //! Security rule (PDF §17.3): pass arguments as an **array only**; never build a shell string.

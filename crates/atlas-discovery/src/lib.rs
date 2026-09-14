@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Discovery worker: run a driver's discovery pass and normalize it into the SQLite inventory
 //! (PDF §8.1). Emits a `storage.backend.discovered` log event on success.
 

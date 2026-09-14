@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Rook lifecycle jobs: create/delete a `CephBlockPool`/`CephFilesystem`/`CephObjectStore` CR plus
 //! its matching StorageClass, via the generic `apply_cr`/`delete_cr`/`apply_storage_class` k8s
 //! mechanism — the same one CloudNativePG/Percona/Strimzi CRs already go through

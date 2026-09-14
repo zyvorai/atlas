@@ -227,7 +227,6 @@ name = "atlas-common"
 version = "0.2.0"
 dependencies = [
  "anyhow",
- "atlas-license",
  "axum 0.8.9",
  "chrono",
  "dotenvy",
@@ -384,7 +383,6 @@ dependencies = [
  "atlas-driver-zfs",
  "atlas-inventory",
  "atlas-jobs",
- "atlas-license",
  "atlas-monitor",
  "atlas-policy",
  "axum 0.8.9",
@@ -450,31 +448,6 @@ dependencies = [
  "sqlx",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "atlas-license"
-version = "0.2.0"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "jsonwebtoken",
- "ring",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "atlas-license-tool"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "atlas-license",
- "base64 0.22.1",
- "chrono",
- "clap",
- "jsonwebtoken",
- "ring",
 ]
 
 [[package]]

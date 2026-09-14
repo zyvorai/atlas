@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Alert records (PDF §15.2). Alerts are keyed by a deterministic id (rule + resource) so the
 //! monitor upserts rather than duplicating on each tick.
 

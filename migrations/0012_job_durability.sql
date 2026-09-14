@@ -1,4 +1,5 @@
--- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+-- Copyright (c) 2026 ZyvorAI Labs Private Limited.
+-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 -- Day-2 durability: bounded retry-with-backoff for the async job engine. Recovery on restart
 -- (re-enqueue queued jobs, fail interrupted ones) uses the existing state column; these columns add
 -- opt-in retry accounting so a transient failure can be re-attempted instead of going terminal.

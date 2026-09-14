@@ -1,3 +1,5 @@
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
 # Atlas — Zyvor Storage Control Plane
 
 Atlas is the central storage control plane for the Zyvor product suite. Products (Zeus OS/v9s,
@@ -46,17 +48,10 @@ QoS), DataBridge CDC self-heal,
 upgrade pre-flight + rollback, and cross-cluster DR **scaffolding** (RBD-mirroring
 peers/mirrors/failover API + jobs).
 
-**Trial/licensing** (Ed25519-signed JWT, same design as `veyron::trial` + Aurora's
-`gtm_api.middleware.license`): `crates/atlas-license` (verify + status, product tag
-`atlas-trial`), `crates/atlas-license-tool` (sales-only `keygen`/`issue` CLI, never shipped to
-customers), gateway wiring in `crates/atlas-gateway/src/license.rs` (`license_middleware` gates
-the bearer-protected `api` router with 402 when expired; `GET /license/status` stays reachable
-in `public_api` alongside `/auth/login` and `/auth/oidc/*`). `Config::license_enforce` defaults
-to **true** (matching Aurora) — `make run`/`make run-databridge` explicitly set
-`ATLAS_LICENSE_ENFORCE=false` so local fake-Ceph dev keeps working with zero setup, and
-`deploy/k8s/atlas-gateway.yaml` currently does the same (no `atlas-license` Secret exists yet
-for that manifest — flip to `true`, or remove the override, once a real customer token is
-issued). See `docs/LICENSING.md`.
+**Dual-licensed** AGPL-3.0 (open source in this repo) + Atlas Commercial License (ACL) for
+closed-source / SaaS / white-label — see [`docs/LICENSING.md`](docs/LICENSING.md) and
+[`COMMERCIAL_LICENSE.md`](COMMERCIAL_LICENSE.md). Don't weaken or remove AGPL/ACL notices
+without an explicit human request. There is **no** runtime trial/JWT gate.
 
 Deferred: **real** RBD-mirroring/DR verification (needs a 2nd cluster; the API/jobs are scaffolded but
 the `rbd mirror` paths are unverified), per-product integrations beyond the gRPC surface.
@@ -82,7 +77,10 @@ the `rbd mirror` paths are unverified), per-product integrations beyond the gRPC
   the **real-Ceph** gateway `atlas-gateway-ceph` in `rook-ceph` (NodePort 30511). See `docs/DEPLOYMENT.md`.
 
 ## Conventions
-- Every source file begins with `// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.`
+- Every source file begins with a Zyvor copyright line plus
+  `SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial`
+  (enforced by `make headers` / CI). Don't weaken AGPL/ACL notices, [`CLA.md`](CLA.md),
+  [`DCO.md`](DCO.md), or [`NOTICE`](NOTICE) without an explicit human request.
 - Match the monorepo Rust stack: axum 0.8, `sqlx` SQLite, `thiserror` 2.0 + `anyhow`, `tracing`.
 - Ceph/rbd command wrappers use **arg-arrays only, never string concatenation**.
 

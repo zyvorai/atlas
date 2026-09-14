@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Zyvor DataBridge — cloud-to-edge database migration control plane.
 //!
 //! Layered on Atlas: connectors introspect cloud source databases (PostgreSQL/MySQL on AWS RDS/Aurora

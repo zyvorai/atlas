@@ -1,4 +1,5 @@
--- Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+-- Copyright (c) 2026 ZyvorAI Labs Private Limited.
+-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 -- Console users for username/password sign-in. Admins create operators/viewers with a role
 -- that maps to the existing JWT privilege levels (viewer=0, operator=1, admin=2).
 CREATE TABLE IF NOT EXISTS console_users (

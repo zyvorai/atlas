@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 //! Audit-log export to an external sink (SIEM webhook / generic HTTP collector) before retention
 //! pruning deletes rows. Without this, `storage_audit_logs` retention is silent data loss with no
 //! external record — exactly what a compliance review (e.g. APRA CPS 234) flags first. Mirrors

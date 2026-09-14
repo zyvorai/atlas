@@ -1,4 +1,5 @@
-# Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 # Supply-chain gate: `cargo deny check` (CI job + `make audit`). Scoped to what's actionable in
 # this workspace's size — a large dependency graph naturally carries duplicate transitive versions
 # and a handful of unmaintained leaf crates that aren't worth blocking every PR over, so only
@@ -52,8 +53,9 @@ allow = [
     "Zlib",
     "Unlicense",
     "BSL-1.0",
-    # Atlas's own crates (workspace Cargo.toml) — not a third-party license risk.
-    "LicenseRef-Zyvor-Proprietary",
+    # Atlas's own crates (workspace Cargo.toml) — dual AGPL + commercial ACL.
+    "AGPL-3.0-only",
+    "LicenseRef-Atlas-Commercial",
 ]
 confidence-threshold = 0.8
 

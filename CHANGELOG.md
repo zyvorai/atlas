@@ -1,3 +1,5 @@
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
 # Changelog
 
 All notable changes to Atlas will be documented in this file.
@@ -6,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 before `0.2.0` were not tracked here — see `git log` for that history.
 
 ## [Unreleased]
+
+### Changed — Dual license (AGPL-3.0 + ACL); remove trial JWT gate
+
+- Open-source under [AGPL-3.0](LICENSE); commercial track via
+  [Atlas Commercial License (ACL)](COMMERCIAL_LICENSE.md). See [docs/LICENSING.md](docs/LICENSING.md).
+- Removed Ed25519 JWT trial stack: `atlas-license`, `atlas-license-tool`, gateway
+  `license_middleware` / `GET /license/status`, `LicenseBanner`, deploy Secret wiring, and
+  `ATLAS_LICENSE_ENFORCE`. AGPL self-host is ungated (same model as Aurora).
+- Per-file `SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial` headers;
+  [`LICENSES/`](LICENSES/), [`NOTICE`](NOTICE), [`CLA.md`](CLA.md), [`DCO.md`](DCO.md);
+  `make headers` / CI license-header lint.
 
 ### Added — Relay product ownership
 
