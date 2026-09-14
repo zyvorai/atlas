@@ -38,10 +38,15 @@ jobs:
       # Supply-chain gate: known-vulnerable/yanked advisories, disallowed licenses, unknown
       # registries/git sources (deny.toml). Scoped to default features — what's actually shipped;
       # see deny.toml's [graph] comment for why the optional DataBridge connectors are excluded.
+      # cargo-deny-action defaults its own `arguments` input to `--all-features`, which pulls in
+      # the optional DataBridge connectors (mongodb/tiberius) that deny.toml's [graph] comment
+      # above says are deliberately excluded from this gate — override it back to the default
+      # feature set the rest of this job (and the shipped binary) actually builds.
       - name: Supply-chain audit (cargo-deny)
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check advisories bans licenses sources
+          arguments: --locked
       - name: Build
         run: cargo build --workspace
       # Optional DataBridge connectors / lag — compile-checked so feature gates don't rot.
