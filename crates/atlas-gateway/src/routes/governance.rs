@@ -182,6 +182,17 @@ pub(crate) async fn login(
         if !crate::auth::verify_password_hash(&body.password, &hash) {
             return Err(AppError::Auth("invalid username or password".into()));
         }
+        // Transparently upgrade legacy `sha256$...` hashes to Argon2 on successful login — no
+        // forced password reset, but the weak legacy format is retired the next time each user
+        // authenticates rather than persisting indefinitely.
+        if !hash.starts_with('$') {
+            let upgraded = crate::auth::hash_password(&body.password);
+            if let Err(e) =
+                atlas_inventory::users::update(&s.pool, user, None, Some(&upgraded), None).await
+            {
+                tracing::warn!("failed to upgrade legacy password hash for '{user}': {e}");
+            }
+        }
         return mint_login_response(&s, user, &role, &tenant_id, ttl_secs).await;
     }
 
