@@ -235,7 +235,7 @@ export function Tabs({ tabs, value, onChange }: { tabs: string[]; value: string;
 export function colorizeJson(raw: string): React.ReactNode[] {
   const parts: React.ReactNode[] = [];
   const re =
-    /("(?:\\.|[^"\\])*")\s*:|("(?:\\.|[^"\\])*")|(\btrue\b|\bfalse\b|\bnull\b)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|([{}\[\],:])|(\s+)|([^\s"{}[\],:]+)/g;
+    /("(?:\\.|[^"\\])*")\s*:|("(?:\\.|[^"\\])*")|(\btrue\b|\bfalse\b|\bnull\b)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|([{}[\],:])|(\s+)|([^\s"{}[\],:]+)/g;
   let m: RegExpExecArray | null;
   let i = 0;
   while ((m = re.exec(raw))) {

@@ -222,7 +222,7 @@ export function Login() {
     return () => {
       document.title = PRODUCT;
     };
-  }, []);
+  }, [loginDest.host]);
 
   const scrollToForm = () => {
     document.getElementById("login-sign-in")?.scrollIntoView({ behavior: "smooth", block: "start" });

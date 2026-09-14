@@ -3,6 +3,9 @@ sidebar_position: 1
 title: Architecture
 ---
 
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
+
 # Architecture
 
 Atlas is the **central storage control plane** for the Zyvor suite. Products call

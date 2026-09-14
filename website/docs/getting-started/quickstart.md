@@ -3,6 +3,9 @@ sidebar_position: 1
 title: Quickstart
 ---
 
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
+
 # Quickstart
 
 Run Atlas locally with the fake Ceph driver — no cluster required.

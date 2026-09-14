@@ -3,6 +3,9 @@ sidebar_position: 3
 title: Licensing
 ---
 
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
+
 # Licensing
 
 Atlas is **dual-licensed**:

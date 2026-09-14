@@ -1,3 +1,5 @@
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
 
 // Auto-generated from the docs/ folder structure: category order and labels
