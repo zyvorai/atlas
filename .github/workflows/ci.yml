@@ -19,9 +19,12 @@ jobs:
         with:
           components: rustfmt, clippy
       # The gRPC crates compile .proto at build time, so protoc must be present (mirrors the
-      # deployment Dockerfile). Without it clippy/test/build fail before any Rust runs.
-      - name: Install protoc + cmake
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake
+      # deployment Dockerfile). Without it clippy/test/build fail before any Rust runs. libcurl
+      # headers are needed by the kafka-lag feature's vendored librdkafka cmake build, which
+      # probes for curl unconditionally even with -DWITH_CURL=0 (macOS runners never hit this —
+      # curl.h ships with the system SDK there).
+      - name: Install protoc + cmake + libcurl
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake libcurl4-openssl-dev
       - uses: Swatinem/rust-cache@v2
       - name: License headers
         run: ./scripts/check-license-headers.sh
