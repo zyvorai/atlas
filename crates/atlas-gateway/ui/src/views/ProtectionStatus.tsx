@@ -1,11 +1,12 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 // Protection Status: per-volume synthesis of replication, last snapshot/backup, DR mirror state,
 // and RPO target-vs-actual into one verdict — GET /protection-status, GET /volumes/{id}/protection.
 import type { CSSProperties } from "react";
 import type { ClusterHealthState, VolumeProtectionStatus } from "../api/types";
 import { useProtectionStatus } from "../api/hooks";
 import { Badge } from "../ui/kit";
-import { PageHead } from "../ui/PageHead";
+import { ListPage } from "../ui/templates/ListPage";
 import { navCrumbs } from "../nav/routes";
 import { Table } from "../ui/Table";
 import { timeAgo } from "../lib/format";
@@ -52,17 +53,17 @@ export default function ProtectionStatus() {
   const headline = worstFirst.find((v) => counts[v] > 0);
 
   return (
-    <div className="at-stack">
-      <PageHead
-        crumbs={navCrumbs("protection")}
-        eyebrow="DATA PROTECTION"
-        title="Protection Status"
-        state={
-          all.length
-            ? `${all.length} volume${all.length === 1 ? "" : "s"} — ${headline ? `worst: ${counts[headline]} ${VERDICT_LABEL[headline].toLowerCase()}` : "all healthy"}.`
-            : "No volumes to protect yet."
-        }
-      />
+    <ListPage
+      className="at-stack"
+      crumbs={navCrumbs("protection")}
+      eyebrow="DATA PROTECTION"
+      title="Protection Status"
+      state={
+        all.length
+          ? `${all.length} volume${all.length === 1 ? "" : "s"} — ${headline ? `worst: ${counts[headline]} ${VERDICT_LABEL[headline].toLowerCase()}` : "all healthy"}.`
+          : "No volumes to protect yet."
+      }
+    >
 
       <div className="at-instrs" style={{ "--instr-cols": 5 } as CSSProperties}>
         {worstFirst.map((v) => (
@@ -117,6 +118,6 @@ export default function ProtectionStatus() {
           },
         ]}
       />
-    </div>
+    </ListPage>
   );
 }

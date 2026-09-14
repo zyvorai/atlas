@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 // Ceph — live cluster introspection: health checks, quorum/daemons, PG states, client I/O,
 // the CRUSH OSD tree, and per-pool df. Backed by /ceph/status, /ceph/osd-tree, /ceph/df.
 import { useState } from "react";
@@ -12,8 +13,8 @@ import {
   useCephStatus,
   usePools,
 } from "../api/hooks";
-import { Badge } from "../ui/kit";
-import { PageHead } from "../ui/PageHead";
+import { Badge, TerminalPane } from "../ui/kit";
+import { DashboardHero, DashboardModule } from "../ui/templates/DashboardHero";
 import { navCrumbs } from "../nav/routes";
 import { SwipeRail } from "../ui/SwipeRail";
 import { Table } from "../ui/Table";
@@ -97,24 +98,23 @@ export default function Ceph() {
   const inventoryPools = pools || [];
 
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("ceph")}
-        eyebrow="INFRASTRUCTURE · CEPH"
-        title="Ceph"
-        state={
-          health
-            ? `${rollup ? `${ROLLUP_LABEL[rollup.state] || rollup.state} — ${rollup.summary}. ` : ""}${health}${healthWhy ? ` — ${healthWhy}` : ""}${fullest ? ` · fullest OSD ${Math.round(fullest.utilization || 0)}%` : ""}.`
-            : "Waiting on ceph status…"
-        }
-        actions={
-          <button type="button" className="at-btn" onClick={() => nav("/cluster")}>
-            Cluster inventory
-          </button>
-        }
-      />
-
-      <SwipeRail label="Ceph instruments" className="at-mod">
+    <DashboardHero
+      crumbs={navCrumbs("ceph")}
+      eyebrow="INFRA · OPS CONSOLE"
+      title="Ceph"
+      state={
+        health
+          ? `${rollup ? `${ROLLUP_LABEL[rollup.state] || rollup.state} — ${rollup.summary}. ` : ""}${health}${healthWhy ? ` — ${healthWhy}` : ""}${fullest ? ` · fullest OSD ${Math.round(fullest.utilization || 0)}%` : ""}.`
+          : "Waiting on ceph status…"
+      }
+      actions={
+        <button type="button" className="at-btn" onClick={() => nav("/cluster")}>
+          Cluster inventory
+        </button>
+      }
+    >
+      <DashboardModule>
+        <SwipeRail label="Ceph instruments">
         <div className="at-instr">
           <div className="at-caption">Atlas rollup</div>
           <div className="at-val md">
@@ -165,10 +165,11 @@ export default function Ceph() {
             {bps(io?.write_bytes_sec)} write · {fmtSi(io?.read_op_per_sec)}/{fmtSi(io?.write_op_per_sec)} ops
           </div>
         </div>
-      </SwipeRail>
+        </SwipeRail>
+      </DashboardModule>
 
       {checks.length > 0 && (
-        <div className="at-mod">
+        <DashboardModule>
           <div className="at-panel">
             <div className="at-panel-bar">
               <span className="at-caption">Health checks</span>
@@ -182,10 +183,10 @@ export default function Ceph() {
               </div>
             ))}
           </div>
-        </div>
+        </DashboardModule>
       )}
 
-      <div className="at-mod">
+      <DashboardModule>
         <div className="at-panel">
           <div className="at-panel-bar">
             <span className="at-caption">Placement-group states</span>
@@ -219,9 +220,9 @@ export default function Ceph() {
             </div>
           </div>
         </div>
-      </div>
+      </DashboardModule>
 
-      <div className="at-mod">
+      <DashboardModule>
         <div className="at-panel">
           <div className="at-panel-bar">
             <span className="at-caption">CRUSH map · OSD tree</span>
@@ -230,7 +231,9 @@ export default function Ceph() {
               {nodes.filter((n) => n.type === "osd").length} OSDs
             </span>
           </div>
-          <div className="mono" style={{ padding: 16, fontSize: 12.5 }}>
+          <div style={{ padding: 12 }}>
+            <TerminalPane title="ceph osd tree" chrome>
+              <div className="mono" style={{ fontSize: 12.5, color: "#e5e5e5" }}>
             {roots.map((r) => {
               const rOpen = !collapsed.has(r.id);
               return (
@@ -245,13 +248,13 @@ export default function Ceph() {
                       padding: "6px 0",
                       background: "none",
                       border: "none",
-                      color: "var(--at-ink)",
+                      color: "#e5e5e5",
                       cursor: "pointer",
                       font: "inherit",
                     }}
                   >
-                    {rOpen ? <ChevronDown size={14} color="var(--at-ink-4)" /> : <ChevronRight size={14} color="var(--at-ink-4)" />}
-                    <span style={{ color: "var(--at-cyan)" }}>{r.type}</span> {r.name}
+                    {rOpen ? <ChevronDown size={14} color="#86868b" /> : <ChevronRight size={14} color="#86868b" />}
+                    <span className="term-key">{r.type}</span> {r.name}
                   </button>
                   {rOpen &&
                     (r.children || []).map((hid: number) => {
@@ -270,17 +273,17 @@ export default function Ceph() {
                               padding: "6px 0",
                               background: "none",
                               border: "none",
-                              color: "var(--at-ink)",
+                              color: "#e5e5e5",
                               cursor: "pointer",
                               font: "inherit",
                             }}
                           >
                             {hOpen ? (
-                              <ChevronDown size={13} color="var(--at-ink-4)" />
+                              <ChevronDown size={13} color="#86868b" />
                             ) : (
-                              <ChevronRight size={13} color="var(--at-ink-4)" />
+                              <ChevronRight size={13} color="#86868b" />
                             )}
-                            <span style={{ color: "var(--d3)" }}>host</span> {host.name}
+                            <span className="term-num">host</span> {host.name}
                           </button>
                           {hOpen && (
                             <div style={{ marginLeft: 24 }}>
@@ -302,7 +305,7 @@ export default function Ceph() {
                                       flexWrap: "wrap",
                                     }}
                                   >
-                                    <span style={{ width: 72, color: "var(--at-ink-3)" }}>{o.name}</span>
+                                    <span style={{ width: 72, color: "#a1a1a6" }}>{o.name}</span>
                                     <Badge kind={up ? "success" : "danger"} dot>
                                       {o.status}
                                     </Badge>
@@ -311,15 +314,15 @@ export default function Ceph() {
                                         <div className={`at-mini ${d.cls}`} style={{ width: 96 }}>
                                           <i style={{ width: depthWidth(pct) }} />
                                         </div>
-                                        <span className="mono" style={{ fontSize: 11, color: utilColor(pct) }}>
+                                        <span className="term-num" style={{ fontSize: 11 }}>
                                           {pct.toFixed(1)}%
                                         </span>
-                                        <span style={{ fontSize: 11, color: "var(--at-ink-4)" }}>
+                                        <span style={{ fontSize: 11, color: "#86868b" }}>
                                           {u.pgs} PGs · {u.device_class}
                                         </span>
                                       </>
                                     ) : (
-                                      <span style={{ fontSize: 11, color: "var(--at-ink-4)" }}>
+                                      <span style={{ fontSize: 11, color: "#86868b" }}>
                                         weight {(o.crush_weight ?? 0).toFixed?.(1) ?? o.crush_weight} · reweight {o.reweight}
                                       </span>
                                     )}
@@ -334,16 +337,14 @@ export default function Ceph() {
                 </div>
               );
             })}
-            {!nodes.length && <div style={{ color: "var(--at-ink-4)" }}>No OSD tree.</div>}
+            {!nodes.length && <div style={{ color: "#86868b" }}>No OSD tree.</div>}
+              </div>
+            </TerminalPane>
           </div>
         </div>
-      </div>
+      </DashboardModule>
 
-      <div className="at-mod">
-        <div className="at-modhead">
-          <span className="at-modtitle">Pool soundings</span>
-          <span className="at-modnote">from inventory · click for detail</span>
-        </div>
+      <DashboardModule title="Pool soundings" note="from inventory · click for detail">
         <div className="at-panel" style={{ marginBottom: 16 }}>
           {inventoryPools.slice(0, 8).map((p) => {
             const max = p.max_bytes || 0;
@@ -372,7 +373,7 @@ export default function Ceph() {
             <div style={{ padding: 20, color: "var(--at-ink-4)", fontSize: 13 }}>No inventory pools yet.</div>
           )}
         </div>
-      </div>
+      </DashboardModule>
 
       <Table
         soundings
@@ -388,6 +389,6 @@ export default function Ceph() {
           { h: "Max avail", f: (p: any) => fmtBytes(p.stats?.max_avail) },
         ]}
       />
-    </div>
+    </DashboardHero>
   );
 }

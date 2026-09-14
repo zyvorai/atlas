@@ -1,8 +1,9 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { useState } from "react";
 import { useAudit } from "../api/hooks";
 import { Badge } from "../ui/kit";
-import { PageHead } from "../ui/PageHead";
+import { ListPage } from "../ui/templates/ListPage";
 import { navCrumbs } from "../nav/routes";
 import { Table } from "../ui/Table";
 import { stateKind, timeAgo } from "../lib/format";
@@ -16,19 +17,18 @@ export default function Audit() {
   const { data } = useAudit(`?${qs.toString()}`);
   const n = data?.length || 0;
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("audit")}
-        eyebrow="GOVERNANCE · INDEX"
-        title="Audit"
-        state={
-          data
-            ? n
-              ? `${n} entr${n === 1 ? "y" : "ies"} — compliance trail of state-changing and sensitive actions.`
-              : "No audit entries match these filters."
-            : "Loading compliance trail…"
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("audit")}
+      eyebrow="GOVERNANCE · INDEX"
+      title="Audit"
+      state={
+        data
+          ? n
+            ? `${n} entr${n === 1 ? "y" : "ies"} — compliance trail of state-changing and sensitive actions.`
+            : "No audit entries match these filters."
+          : "Loading compliance trail…"
+      }
+    >
       <div className="at-chips">
         <input
           className="at-chip-field"
@@ -58,6 +58,6 @@ export default function Audit() {
           { h: "Status", f: (a) => <Badge kind={stateKind(a.status)}>{a.status}</Badge> },
         ]}
       />
-    </div>
+    </ListPage>
   );
 }

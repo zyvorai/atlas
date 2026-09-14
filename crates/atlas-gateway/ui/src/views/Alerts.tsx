@@ -1,10 +1,11 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { useState } from "react";
 import { PlayCircle } from "lucide-react";
 import { submit } from "../api/client";
 import { useAlerts, useInvalidate } from "../api/hooks";
 import { Badge, Button } from "../ui/kit";
-import { PageHead } from "../ui/PageHead";
+import { ListPage } from "../ui/templates/ListPage";
 import { navCrumbs } from "../nav/routes";
 import { Table } from "../ui/Table";
 import { confirmThen } from "../ui/confirm";
@@ -17,30 +18,29 @@ export default function Alerts() {
   const open = (data || []).filter((a) => a.state === "open").length;
   const crit = (data || []).filter((a) => a.severity === "critical").length;
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("alerts")}
-        eyebrow="OBSERVABILITY · LEDGER"
-        title="Alerts"
-        state={
-          data
-            ? crit
-              ? `${crit} critical · ${open} open — acknowledge or silence before capacity work.`
-              : open
-                ? `${open} open alert${open === 1 ? "" : "s"} across health, capacity, and recovery.`
-                : "No open alerts — estate quiet."
-            : "Loading alert ledger…"
-        }
-        actions={
-          <button
-            type="button"
-            className="at-btn"
-            onClick={() => submit("post", "/alerts/evaluate", null, "evaluated", () => inv("alerts")).catch(() => {})}
-          >
-            <PlayCircle size={14} /> Evaluate
-          </button>
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("alerts")}
+      eyebrow="OBSERVABILITY · LEDGER"
+      title="Alerts"
+      state={
+        data
+          ? crit
+            ? `${crit} critical · ${open} open — acknowledge or silence before capacity work.`
+            : open
+              ? `${open} open alert${open === 1 ? "" : "s"} across health, capacity, and recovery.`
+              : "No open alerts — estate quiet."
+          : "Loading alert ledger…"
+      }
+      actions={
+        <button
+          type="button"
+          className="at-btn"
+          onClick={() => submit("post", "/alerts/evaluate", null, "evaluated", () => inv("alerts")).catch(() => {})}
+        >
+          <PlayCircle size={14} /> Evaluate
+        </button>
+      }
+    >
       <div className="at-chips">
         {(["", "open", "resolved"] as const).map((s) => (
           <button key={s || "all"} type="button" className={`at-chip${state === s ? " on" : ""}`} onClick={() => setState(s)}>
@@ -81,6 +81,6 @@ export default function Alerts() {
           ) : null;
         }}
       />
-    </div>
+    </ListPage>
   );
 }

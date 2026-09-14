@@ -1,11 +1,12 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { Check, Circle, Loader2 } from "lucide-react";
 import { submitJob } from "../../api/client";
 import { usePlan, useSource, useInvalidate } from "../../api/hooks";
 import { Badge, Button } from "../../ui/kit";
-import { PageHead } from "../../ui/PageHead";
+import { DetailPage } from "../../ui/templates/DetailPage";
 import { SwipeRail } from "../../ui/SwipeRail";
 import { confirmThen } from "../../ui/confirm";
 import { planStateKind, planStateLabel } from "./Plans";
@@ -60,44 +61,44 @@ export default function PlanDetail() {
   };
 
   return (
-    <div className="at-stack">
-      <PageHead
-        crumbs={[
-          { label: "DataBridge", to: "/databridge/sources" },
-          { label: "Migration Plans", to: "/databridge/plans" },
-          { label: plan.name },
-        ]}
-        eyebrow="DATABRIDGE · DETAIL"
-        title={plan.name}
-        state={`Plan ${plan.id} · source ${source?.name || plan.source_id} · ${planStateLabel(plan.state)}${engVer ? ` · ${engVer.engine}` : ""}`}
-        actions={<div className="flex gap-2 items-center">
-          {engVer && (
-            <Badge kind={cdcLive && cutoverLive ? "success" : "warning"} title={engVer.note}>
-              CDC/cutover {cdcLive && cutoverLive ? "live" : "pending infra"}
-            </Badge>
-          )}
-          {plan.state === "cdc_streaming" && (
-            <>
-              <button type="button" className="at-btn" onClick={() => submitJob("post", `/databridge/plans/${plan.id}/cdc/stop`, null, "stop CDC", refresh).catch(() => {})}>Stop CDC</button>
-              <button type="button" className="at-btn" onClick={() => submitJob("post", `/databridge/plans/${plan.id}/cdc/restart`, null, "restart CDC", refresh).catch(() => {})}>Restart CDC</button>
-            </>
-          )}
-          {plan.state === "cutover_complete" && (
-            <>
-              {rollbackDeadline && <span className="at-sub" style={{ margin: 0 }}>Rollback available until {rollbackDeadline.toLocaleString()}</span>}
-              <button type="button" className="at-btn" style={{ color: "var(--at-fail)", borderColor: "rgba(255, 90, 110, 0.35)" }} onClick={() => confirmThen({
-                title: "Roll back this migration?",
-                message: rollbackDeadline
-                  ? `Reverts cutover and switches traffic back to the source database. Only available until ${rollbackDeadline.toLocaleString()}. This cannot be undone.`
-                  : "Reverts cutover and switches traffic back to the source database. This cannot be undone.",
-                confirmLabel: "Roll back",
-                danger: true,
-              }, () => submitJob("post", `/databridge/plans/${plan.id}/rollback`, null, "rollback", refresh))}>Rollback</button>
-            </>
-          )}
-          <Badge kind={planStateKind(plan.state)} dot>{planStateLabel(plan.state)}</Badge>
-        </div>}
-      />
+    <DetailPage
+      className="at-stack"
+      crumbs={[
+        { label: "DataBridge", to: "/databridge/sources" },
+        { label: "Migration Plans", to: "/databridge/plans" },
+        { label: plan.name },
+      ]}
+      eyebrow="DATABRIDGE · DETAIL"
+      title={plan.name}
+      state={`Plan ${plan.id} · source ${source?.name || plan.source_id} · ${planStateLabel(plan.state)}${engVer ? ` · ${engVer.engine}` : ""}`}
+      actions={<div className="flex gap-2 items-center">
+        {engVer && (
+          <Badge kind={cdcLive && cutoverLive ? "success" : "warning"} title={engVer.note}>
+            CDC/cutover {cdcLive && cutoverLive ? "live" : "pending infra"}
+          </Badge>
+        )}
+        {plan.state === "cdc_streaming" && (
+          <>
+            <button type="button" className="at-btn" onClick={() => submitJob("post", `/databridge/plans/${plan.id}/cdc/stop`, null, "stop CDC", refresh).catch(() => {})}>Stop CDC</button>
+            <button type="button" className="at-btn" onClick={() => submitJob("post", `/databridge/plans/${plan.id}/cdc/restart`, null, "restart CDC", refresh).catch(() => {})}>Restart CDC</button>
+          </>
+        )}
+        {plan.state === "cutover_complete" && (
+          <>
+            {rollbackDeadline && <span className="at-sub" style={{ margin: 0 }}>Rollback available until {rollbackDeadline.toLocaleString()}</span>}
+            <button type="button" className="at-btn" style={{ color: "var(--at-fail)", borderColor: "rgba(255, 90, 110, 0.35)" }} onClick={() => confirmThen({
+              title: "Roll back this migration?",
+              message: rollbackDeadline
+                ? `Reverts cutover and switches traffic back to the source database. Only available until ${rollbackDeadline.toLocaleString()}. This cannot be undone.`
+                : "Reverts cutover and switches traffic back to the source database. This cannot be undone.",
+              confirmLabel: "Roll back",
+              danger: true,
+            }, () => submitJob("post", `/databridge/plans/${plan.id}/rollback`, null, "rollback", refresh))}>Rollback</button>
+          </>
+        )}
+        <Badge kind={planStateKind(plan.state)} dot>{planStateLabel(plan.state)}</Badge>
+      </div>}
+    >
 
       <div className="at-panel">
         <div className="at-panel-bar">
@@ -218,6 +219,6 @@ export default function PlanDetail() {
           )}
         </div>
       )}
-    </div>
+    </DetailPage>
   );
 }

@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 // Client UI state (zustand): auth token, spotlight, and the live job feed.
 import { create } from "zustand";
 import type { JobRecord } from "../api/types";
@@ -18,7 +19,7 @@ interface TrackedJob {
   error?: string | null;
 }
 
-export type Theme = "carbon" | "apple-lite";
+export type Theme = "night" | "day";
 export type Density = "comfortable" | "compact";
 
 interface UiState {
@@ -37,6 +38,7 @@ interface UiState {
   setTheme: (t: Theme) => void;
   density: Density;
   setDensity: (d: Density) => void;
+  /** @deprecated Icon rail is always slim; kept for localStorage compat. */
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
   paused: boolean;
@@ -45,7 +47,7 @@ interface UiState {
   setSpotlight: (v: boolean) => void;
   launchPadOpen: boolean;
   setLaunchPad: (v: boolean) => void;
-  /** Live recents shared by sidebar + drawer (persisted). */
+  /** Live recents shared by drawer (persisted). */
   navRecents: NavRecent[];
   recordRecent: (id: string, label: string) => void;
   jobs: Record<string, TrackedJob>;
@@ -69,9 +71,17 @@ const initialRole: NavRole =
     ? savedRoleRaw
     : roleFromToken(savedToken);
 const initialRoleLevel = roleLevel(initialRole);
-const THEMES = new Set<Theme>(["carbon", "apple-lite"]);
+const THEMES = new Set<Theme>(["night", "day"]);
+const LEGACY_THEME: Record<string, Theme> = { carbon: "night", "apple-lite": "day" };
 const rawTheme = ls?.getItem("atlas.theme") || "";
-const savedTheme: Theme = THEMES.has(rawTheme as Theme) ? (rawTheme as Theme) : "carbon";
+const migratedTheme: Theme =
+  THEMES.has(rawTheme as Theme)
+    ? (rawTheme as Theme)
+    : LEGACY_THEME[rawTheme] ?? "night";
+if (rawTheme && rawTheme !== migratedTheme) {
+  ls?.setItem("atlas.theme", migratedTheme);
+}
+const savedTheme: Theme = migratedTheme;
 const savedDensity = (ls?.getItem("atlas.density") as Density) || "comfortable";
 const savedSidebarCollapsed = ls?.getItem("atlas.sidebar-collapsed") === "1";
 

@@ -1,9 +1,9 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
-import { useUi, type Density } from "../store/ui";
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+import { useUi, type Density, type Theme } from "../store/ui";
 import { THEME_OPTIONS } from "../lib/themes";
-import { PageHead } from "../ui/PageHead";
+import { SettingsPage, type SettingsBlock } from "../ui/templates/SettingsPage";
 import { navCrumbs } from "../nav/routes";
-import { cx } from "../lib/format";
 
 const DENSITY_OPTIONS: { id: Density; title: string; hint: string }[] = [
   { id: "comfortable", title: "Comfortable", hint: "Default spacing for charts and tables" },
@@ -16,64 +16,34 @@ export default function Settings() {
   const density = useUi((s) => s.density);
   const setDensity = useUi((s) => s.setDensity);
 
+  const blocks: SettingsBlock<Theme | Density>[] = [
+    {
+      label: "Shell theme",
+      hint: "Night is graphite (#0b0b0f) with electric blue. Day is classic light shop (#F5F5F7 + Apple Blue). Cosmic Orange is reserved for the brand mark only.",
+      value: theme,
+      onChange: (v) => setTheme(v as Theme),
+      options: THEME_OPTIONS,
+      ariaLabel: "Shell theme",
+    },
+    {
+      label: "Density",
+      hint: "Applies to tables and page padding in this console.",
+      value: density,
+      onChange: (v) => setDensity(v as Density),
+      options: DENSITY_OPTIONS,
+      ariaLabel: "Density",
+      columns: 2,
+    },
+  ];
+
   return (
-    <div className="at-stack">
-      <PageHead
-        crumbs={navCrumbs("settings")}
-        eyebrow="CONSOLE · APPEARANCE"
-        title="Settings"
-        state="Look & feel and density for this browser. Carbon is the dark shop default; Apple Lite is the light shop shell."
-      />
-
-      <div className="at-panel">
-        <div className="at-panel-bar">
-          <span className="at-caption">Appearance</span>
-        </div>
-        <div className="at-settings-body">
-          <div className="at-settings-block">
-            <div className="at-settings-label">Shell theme</div>
-            <p className="at-settings-hint">
-              Carbon is the dark Apple shop (black canvas + Apple Blue). Apple Lite is the classic light
-              shop (#F5F5F7 + Apple Blue). Cosmic Orange is reserved for the brand mark only.
-            </p>
-            <div className="at-choice-grid" role="radiogroup" aria-label="Shell theme">
-              {THEME_OPTIONS.map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={theme === opt.id}
-                  className={cx("at-choice", theme === opt.id && "on")}
-                  onClick={() => setTheme(opt.id)}
-                >
-                  <span className="at-choice-title">{opt.title}</span>
-                  <span className="at-choice-hint">{opt.hint}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="at-settings-block">
-            <div className="at-settings-label">Density</div>
-            <p className="at-settings-hint">Applies to tables and page padding in this console.</p>
-            <div className="at-choice-grid at-choice-grid-2" role="radiogroup" aria-label="Density">
-              {DENSITY_OPTIONS.map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={density === opt.id}
-                  className={cx("at-choice", density === opt.id && "on")}
-                  onClick={() => setDensity(opt.id)}
-                >
-                  <span className="at-choice-title">{opt.title}</span>
-                  <span className="at-choice-hint">{opt.hint}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <SettingsPage
+      crumbs={navCrumbs("settings")}
+      eyebrow="CONSOLE · APPEARANCE"
+      title="Settings"
+      state="Look & feel and density for this browser. Night is the dark graphite shell; Day is the light shop shell."
+      panelLabel="Appearance"
+      blocks={blocks}
+    />
   );
 }

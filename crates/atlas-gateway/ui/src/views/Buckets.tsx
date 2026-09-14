@@ -1,11 +1,12 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Plus, Upload } from "lucide-react";
 import { apiError, http, submitJob, toast } from "../api/client";
 import { useBuckets, useInvalidate } from "../api/hooks";
 import type { StorageBucket } from "../api/types";
 import { Badge, Button, FormModal, SlideOver } from "../ui/kit";
-import { PageHead } from "../ui/PageHead";
+import { ListPage } from "../ui/templates/ListPage";
 import { navCrumbs } from "../nav/routes";
 import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
@@ -20,22 +21,21 @@ export default function Buckets() {
   const n = data?.length || 0;
 
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("buckets")}
-        eyebrow="DATA PROTECTION · INDEX"
-        title="Buckets"
-        state={
-          n
-            ? `${n} RGW bucket${n === 1 ? "" : "s"} — quotas, stats, browse / upload / download.`
-            : "Object gateway unused. Create the first bucket to begin exports and backups."
-        }
-        actions={
-          <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
-            <Plus size={14} /> Bucket
-          </button>
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("buckets")}
+      eyebrow="DATA PROTECTION · INDEX"
+      title="Buckets"
+      state={
+        n
+          ? `${n} RGW bucket${n === 1 ? "" : "s"} — quotas, stats, browse / upload / download.`
+          : "Object gateway unused. Create the first bucket to begin exports and backups."
+      }
+      actions={
+        <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
+          <Plus size={14} /> Bucket
+        </button>
+      }
+    >
       <Table
         soundings
         panelTitle="Bucket index"
@@ -99,7 +99,7 @@ export default function Buckets() {
         }} />
 
       <ObjectBrowser bucket={objBucket} onClose={() => setObjBucket(null)} />
-    </div>
+    </ListPage>
   );
 }
 

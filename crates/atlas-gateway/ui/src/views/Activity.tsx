@@ -1,10 +1,11 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { useState } from "react";
 import { Activity as ActivityIcon, Camera, ClipboardList, Clock } from "lucide-react";
 import { useEvents } from "../api/hooks";
 import type { ActivityEvent } from "../api/types";
 import { Badge } from "../ui/kit";
-import { PageHead } from "../ui/PageHead";
+import { ListPage } from "../ui/templates/ListPage";
 import { navCrumbs } from "../nav/routes";
 import { stateKind, timeAgo } from "../lib/format";
 
@@ -22,19 +23,18 @@ export default function Activity() {
   ];
 
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("activity")}
-        eyebrow="OBSERVABILITY · INDEX"
-        title="Activity"
-        state={
-          data
-            ? rows.length
-              ? `${rows.length} event${rows.length === 1 ? "" : "s"} in the unified timeline.`
-              : "No events match this filter."
-            : "Loading unified timeline of jobs, audit, and alerts…"
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("activity")}
+      eyebrow="OBSERVABILITY · INDEX"
+      title="Activity"
+      state={
+        data
+          ? rows.length
+            ? `${rows.length} event${rows.length === 1 ? "" : "s"} in the unified timeline.`
+            : "No events match this filter."
+          : "Loading unified timeline of jobs, audit, and alerts…"
+      }
+    >
       <div className="at-chips">
         {filters.map((f) => (
           <button
@@ -56,9 +56,12 @@ export default function Activity() {
           </span>
         </div>
         {!data ? (
-          <div style={{ padding: 32, color: "var(--at-ink-4)", fontSize: 13 }}>Loading…</div>
+          <div className="at-loading">Loading timeline…</div>
         ) : rows.length === 0 ? (
-          <div style={{ padding: 36, textAlign: "center", color: "var(--at-ink-3)", fontSize: 13.5 }}>No activity.</div>
+          <div className="at-empty-box" style={{ margin: 16, boxShadow: "none" }}>
+            <div className="at-empty-title">No activity yet</div>
+            <p className="at-empty-copy">Jobs, audit events, and alerts will appear here as they happen.</p>
+          </div>
         ) : (
           <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {rows.map((e) => {
@@ -103,6 +106,6 @@ export default function Activity() {
           </ul>
         )}
       </div>
-    </div>
+    </ListPage>
   );
 }

@@ -1,10 +1,11 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { useEffect, useState } from "react";
 import { Plus, RefreshCw } from "lucide-react";
 import { apiError, http, submit, submitJob } from "../api/client";
 import { useInvalidate, usePools, useRbdImages, useVolumes } from "../api/hooks";
 import { Button, FormModal, SlideOver } from "../ui/kit";
-import { PageHead } from "../ui/PageHead";
+import { ListPage } from "../ui/templates/ListPage";
 import { navCrumbs } from "../nav/routes";
 import { confirmThen, del } from "../ui/confirm";
 import { Table } from "../ui/Table";
@@ -34,42 +35,41 @@ export default function Rbd() {
 
   const n = data?.images.length || 0;
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("rbd")}
-        eyebrow="STORAGE · INDEX"
-        title="RBD Images"
-        state={
-          n
-            ? `${n} raw image${n === 1 ? "" : "s"} in ${pool} — machina/libvirt & bare VMs (bypassing CSI).`
-            : `No images in ${pool}. Create one or switch pool.`
-        }
-        actions={
-          <>
-            <select className="field w-44" value={pool} onChange={(e) => setPool(e.target.value)}>
-              {rbdPools.length ? (
-                rbdPools.map((p) => (
-                  <option key={p.id} value={p.name}>
-                    {p.name}
-                  </option>
-                ))
-              ) : (
-                <option value={pool}>{pool}</option>
-              )}
-            </select>
-            <button
-              type="button"
-              className="at-btn"
-              onClick={() => submit("post", "/rbd-usage/refresh", null, "usage refresh", () => inv("volumes")).catch(() => {})}
-            >
-              <RefreshCw size={14} /> Refresh usage
-            </button>
-            <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
-              <Plus size={14} /> Image
-            </button>
-          </>
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("rbd")}
+      eyebrow="STORAGE · INDEX"
+      title="RBD Images"
+      state={
+        n
+          ? `${n} raw image${n === 1 ? "" : "s"} in ${pool} — machina/libvirt & bare VMs (bypassing CSI).`
+          : `No images in ${pool}. Create one or switch pool.`
+      }
+      actions={
+        <>
+          <select className="field w-44" value={pool} onChange={(e) => setPool(e.target.value)}>
+            {rbdPools.length ? (
+              rbdPools.map((p) => (
+                <option key={p.id} value={p.name}>
+                  {p.name}
+                </option>
+              ))
+            ) : (
+              <option value={pool}>{pool}</option>
+            )}
+          </select>
+          <button
+            type="button"
+            className="at-btn"
+            onClick={() => submit("post", "/rbd-usage/refresh", null, "usage refresh", () => inv("volumes")).catch(() => {})}
+          >
+            <RefreshCw size={14} /> Refresh usage
+          </button>
+          <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
+            <Plus size={14} /> Image
+          </button>
+        </>
+      }
+    >
       <Table
         soundings
         panelTitle={`Images · ${pool}`}
@@ -139,7 +139,7 @@ export default function Rbd() {
       })()}
 
       <RbdSnaps pool={pool} img={snapImg} onClose={() => setSnapImg(null)} />
-    </div>
+    </ListPage>
   );
 }
 

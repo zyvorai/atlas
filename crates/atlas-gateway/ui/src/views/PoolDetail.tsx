@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 // Pool Detail — Soundings archetype C (instruments → cross-section → seabed → ledger).
 import { useEffect, useMemo } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -6,7 +7,8 @@ import { useAlerts, useClusters, useOsds, usePools, useVolumes } from "../api/ho
 import { depth, depthWidth } from "../lib/depth";
 import { fmtBytes, fmtPct } from "../lib/format";
 import { sendPrompt } from "../lib/prompts";
-import { PageHead } from "../ui/PageHead";
+import { DetailPage, type DetailStat } from "../ui/templates/DetailPage";
+import { DashboardModule } from "../ui/templates/DashboardHero";
 
 export default function PoolDetail() {
   const { id = "" } = useParams();
@@ -94,105 +96,89 @@ export default function PoolDetail() {
 
   if (!pool && pools) {
     return (
-      <div>
-        <PageHead
-          crumbs={[
-            { label: "Storage", to: "/" },
-            { label: "Pools", to: "/ceph" },
-            { label: "Not found" },
-          ]}
-          eyebrow="POOL · DETAIL"
-          title="Pool not found"
-          state={stateLine}
-          actions={
-            <button type="button" className="at-btn" onClick={() => nav("/")}>
-              Command Deck
-            </button>
-          }
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <PageHead
+      <DetailPage
         crumbs={[
           { label: "Storage", to: "/" },
           { label: "Pools", to: "/ceph" },
-          { label: pool?.name || id },
+          { label: "Not found" },
         ]}
-        eyebrow={
-          <>
-            POOL · {cluster?.name || pool?.cluster_id || "…"}
-            {pool ? ` · ${pool.kind}` : ""}
-          </>
-        }
-        title={pool?.name || "Pool"}
+        eyebrow="POOL · DETAIL"
+        title="Pool not found"
         state={stateLine}
         actions={
-          <>
-            <button type="button" className="at-btn" onClick={() => nav("/")}>
-              Deck
-            </button>
-            <Link to="/volumes" className="at-btn">
-              Volumes
-            </Link>
-            <button
-              type="button"
-              className="at-btn primary"
-              onClick={() =>
-                sendPrompt(
-                  `Analyse pool ${pool?.name || id}: depth ${fmtPct(pct)}%, health ${pool?.health}, and recommend capacity actions.`,
-                )
-              }
-            >
-              Ask Atlas
-            </button>
-          </>
+          <button type="button" className="at-btn" onClick={() => nav("/")}>
+            Overview
+          </button>
         }
       />
+    );
+  }
 
-      <div className="at-instrs">
-        <div className="at-instr">
-          <div className="at-caption">Used</div>
-          <div className="at-val md">
-            {fmtBytes(used).replace(/ .*/, "")}
-            <span className="at-unit">{fmtBytes(used).split(" ").slice(-1)[0]}</span>
-          </div>
-          <div className="at-delta">{fmtPct(pct)}% of provisioned</div>
-        </div>
-        <div className="at-instr">
-          <div className="at-caption">Free</div>
-          <div className="at-val md">
-            {fmtBytes(free).replace(/ .*/, "")}
-            <span className="at-unit">{fmtBytes(free).split(" ").slice(-1)[0]}</span>
-          </div>
-          <div className="at-delta">{max ? `${fmtPct(100 - pct)}% remaining` : "capacity unknown"}</div>
-        </div>
-        <div className="at-instr">
-          <div className="at-caption">Health</div>
-          <div className="at-val md" style={{ textTransform: "uppercase" }}>
-            {pool?.health || "—"}
-          </div>
-          <div className="at-delta">cluster {cluster?.health || "—"}</div>
-        </div>
-        <div className="at-instr">
-          <div className="at-caption">Replica / class</div>
-          <div className="at-val md">{pool?.replica_size ?? "—"}</div>
-          <div className="at-delta mono" style={{ fontSize: 11 }}>
-            {pool?.device_class || pool?.kind || "—"}
-          </div>
-        </div>
-      </div>
+  const stats: DetailStat[] = [
+    {
+      label: "Used",
+      value: fmtBytes(used).replace(/ .*/, ""),
+      unit: fmtBytes(used).split(" ").slice(-1)[0],
+      delta: `${fmtPct(pct)}% of provisioned`,
+    },
+    {
+      label: "Free",
+      value: fmtBytes(free).replace(/ .*/, ""),
+      unit: fmtBytes(free).split(" ").slice(-1)[0],
+      delta: max ? `${fmtPct(100 - pct)}% remaining` : "capacity unknown",
+    },
+    {
+      label: "Health",
+      value: pool?.health || "—",
+      style: { textTransform: "uppercase" },
+      delta: `cluster ${cluster?.health || "—"}`,
+    },
+    {
+      label: "Replica / class",
+      value: pool?.replica_size ?? "—",
+      delta: <span className="mono" style={{ fontSize: 11 }}>{pool?.device_class || pool?.kind || "—"}</span>,
+    },
+  ];
 
-      <div className="at-mod">
-        <div className="at-modhead">
-          <span className="at-modtitle">Cross-section</span>
-          <span className="at-modnote">
-            {d.name} · {fmtPct(pct)}%
-          </span>
-        </div>
+  return (
+    <DetailPage
+      crumbs={[
+        { label: "Storage", to: "/" },
+        { label: "Pools", to: "/ceph" },
+        { label: pool?.name || id },
+      ]}
+      eyebrow={
+        <>
+          POOL · {cluster?.name || pool?.cluster_id || "…"}
+          {pool ? ` · ${pool.kind}` : ""}
+        </>
+      }
+      title={pool?.name || "Pool"}
+      state={stateLine}
+      actions={
+        <>
+          <button type="button" className="at-btn" onClick={() => nav("/")}>
+            Deck
+          </button>
+          <Link to="/volumes" className="at-btn">
+            Volumes
+          </Link>
+          <button
+            type="button"
+            className="at-btn primary"
+            onClick={() =>
+              sendPrompt(
+                `Analyse pool ${pool?.name || id}: depth ${fmtPct(pct)}%, health ${pool?.health}, and recommend capacity actions.`,
+              )
+            }
+          >
+            Ask Atlas
+          </button>
+        </>
+      }
+      stats={stats}
+    >
+      <DashboardModule title="Cross-section" note={`${d.name} · ${fmtPct(pct)}%`}>
         <div className="at-cross">
           <svg className="at-cross-svg" viewBox="0 0 800 140" preserveAspectRatio="none" aria-hidden>
             <defs>
@@ -203,8 +189,8 @@ export default function PoolDetail() {
             </defs>
             <path
               d="M0 28 C120 10, 200 40, 320 22 S520 8, 640 30 S760 20, 800 26 L800 140 L0 140 Z"
-              fill="rgba(16,28,37,.9)"
-              stroke="rgba(120,180,200,.18)"
+              fill="var(--at-ridge)"
+              stroke="var(--at-line-2)"
             />
             <path
               d={`M0 ${waterY + 40} C160 ${waterY + 20}, 320 ${waterY + 50}, 480 ${waterY + 28} S700 ${waterY + 36}, 800 ${waterY + 44} L800 140 L0 140 Z`}
@@ -227,16 +213,13 @@ export default function PoolDetail() {
             <i style={{ width: depthWidth(pct) }} />
           </div>
         </div>
-      </div>
+      </DashboardModule>
 
       <div className="at-2col">
-        <div className="at-mod">
-          <div className="at-modhead">
-            <span className="at-modtitle">Seabed</span>
-            <span className="at-modnote">
-              {poolVols.length ? `${poolVols.length} volumes` : `${(osds || []).length || "—"} OSD health tiles`}
-            </span>
-          </div>
+        <DashboardModule
+          title="Seabed"
+          note={poolVols.length ? `${poolVols.length} volumes` : `${(osds || []).length || "—"} OSD health tiles`}
+        >
           <div className="at-seabed">
             {seabed.map((c, i) => (
               <span key={i} className={`at-pg ${c.cls}`} title={c.title} />
@@ -247,12 +230,8 @@ export default function PoolDetail() {
               No volumes bound to this pool id yet — tiles show OSD health as a proxy.
             </div>
           ) : null}
-        </div>
-        <div className="at-mod">
-          <div className="at-modhead">
-            <span className="at-modtitle">Ledger</span>
-            <span className="at-modnote">alerts · soundings</span>
-          </div>
+        </DashboardModule>
+        <DashboardModule title="Ledger" note="alerts · soundings">
           <div className="at-ledger">
             {ledger.map((row, i) => (
               <div key={i} className="at-entry">
@@ -262,15 +241,11 @@ export default function PoolDetail() {
               </div>
             ))}
           </div>
-        </div>
+        </DashboardModule>
       </div>
 
       {poolVols.length > 0 && (
-        <div className="at-mod">
-          <div className="at-modhead">
-            <span className="at-modtitle">Volumes on this pool</span>
-            <span className="at-modnote">{poolVols.length}</span>
-          </div>
+        <DashboardModule title="Volumes on this pool" note={poolVols.length}>
           <div className="at-panel">
             <table className="at-tbl">
               <thead>
@@ -293,8 +268,8 @@ export default function PoolDetail() {
               </tbody>
             </table>
           </div>
-        </div>
+        </DashboardModule>
       )}
-    </div>
+    </DetailPage>
   );
 }

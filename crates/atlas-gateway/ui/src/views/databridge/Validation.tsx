@@ -1,10 +1,11 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useValidations } from "../../api/hooks";
 import type { ValidationRun } from "../../api/types";
 import { Badge, Button, SlideOver } from "../../ui/kit";
-import { PageHead } from "../../ui/PageHead";
+import { ListPage } from "../../ui/templates/ListPage";
 import { navCrumbs } from "../../nav/routes";
 import { Table } from "../../ui/Table";
 
@@ -15,19 +16,18 @@ export default function Validation() {
   const n = data?.length || 0;
   const failed = (data || []).filter((r) => r.state === "failed").length;
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("validation")}
-        eyebrow="DATABRIDGE · INDEX"
-        title="Validation"
-        state={
-          n
-            ? failed
-              ? `${n} run${n === 1 ? "" : "s"} · ${failed} failed — source vs edge before cutover.`
-              : `${n} validation run${n === 1 ? "" : "s"} — row counts, checksums, schema diff.`
-            : "No validation runs yet. Comparisons run before cutover."
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("validation")}
+      eyebrow="DATABRIDGE · INDEX"
+      title="Validation"
+      state={
+        n
+          ? failed
+            ? `${n} run${n === 1 ? "" : "s"} · ${failed} failed — source vs edge before cutover.`
+            : `${n} validation run${n === 1 ? "" : "s"} — row counts, checksums, schema diff.`
+          : "No validation runs yet. Comparisons run before cutover."
+      }
+    >
       <Table
         soundings
         panelTitle="Validation index"
@@ -59,6 +59,6 @@ export default function Validation() {
             ]} empty="No per-table results." />
         )}
       </SlideOver>
-    </div>
+    </ListPage>
   );
 }

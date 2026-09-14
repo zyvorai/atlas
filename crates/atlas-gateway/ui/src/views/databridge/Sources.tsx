@@ -1,11 +1,12 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { useState } from "react";
 import { Check, Plus, Search } from "lucide-react";
 import { submitJob, submit } from "../../api/client";
 import { useSources, useInvalidate } from "../../api/hooks";
 import type { MigrationSource } from "../../api/types";
 import { Badge, Button, FormModal, SlideOver } from "../../ui/kit";
-import { PageHead } from "../../ui/PageHead";
+import { ListPage } from "../../ui/templates/ListPage";
 import { navCrumbs } from "../../nav/routes";
 import { del } from "../../ui/confirm";
 import { Table } from "../../ui/Table";
@@ -33,22 +34,21 @@ export default function Sources() {
   const n = data?.length || 0;
 
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("cloud-databases")}
-        eyebrow="DATABRIDGE · INDEX"
-        title="Cloud Databases"
-        state={
-          n
-            ? `${n} source database${n === 1 ? "" : "s"} — discover schema before migrating.`
-            : "No sources yet. Register AWS RDS/Aurora or GCP Cloud SQL to begin."
-        }
-        actions={
-          <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
-            <Plus size={14} /> Register source
-          </button>
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("cloud-databases")}
+      eyebrow="DATABRIDGE · INDEX"
+      title="Cloud Databases"
+      state={
+        n
+          ? `${n} source database${n === 1 ? "" : "s"} — discover schema before migrating.`
+          : "No sources yet. Register AWS RDS/Aurora or GCP Cloud SQL to begin."
+      }
+      actions={
+        <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
+          <Plus size={14} /> Register source
+        </button>
+      }
+    >
       <Table
         soundings
         panelTitle="Source index"
@@ -134,7 +134,7 @@ export default function Sources() {
         }} />
 
       <SchemaBrowser source={detail} onClose={() => setDetail(null)} />
-    </div>
+    </ListPage>
   );
 }
 

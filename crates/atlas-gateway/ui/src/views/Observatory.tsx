@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 // Observatory — shop archetype D: charts inside elevated boxes (+ optional swipe lenses).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -15,7 +16,7 @@ import { history, onHistory, recordSummary, seed } from "../store/history";
 import { depth, depthWidth } from "../lib/depth";
 import { fmtBytes, fmtBytesOpt, fmtForecastFill, fmtPct, fmtSi } from "../lib/format";
 import { Echogram } from "../ui/Echogram";
-import { PageHead } from "../ui/PageHead";
+import { DashboardHero, DashboardModule } from "../ui/templates/DashboardHero";
 import { navCrumbs } from "../nav/routes";
 import { Spinner } from "../ui/kit";
 
@@ -31,6 +32,26 @@ const KC: Record<string, string> = {
 };
 const kc = (k: string) => KC[k] || KC.other;
 const bcol = (t: string) => (t === "nfs" ? "#34D399" : t === "zfs" ? "#FBBF24" : "#38BDF8");
+function canvasInk() {
+  const s = getComputedStyle(document.documentElement);
+  const v = (n: string, fb: string) => s.getPropertyValue(n).trim() || fb;
+  const day = document.documentElement.dataset.uiShell === "day" || document.documentElement.dataset.uiShell === "apple-lite";
+  return {
+    day,
+    ink: v("--at-ink", day ? "#1d1d1f" : "#eaf6ff"),
+    ink2: v("--at-ink-2", day ? "#424245" : "#8AA0BD"),
+    ink3: v("--at-ink-3", day ? "#6e6e73" : "#8AA0BD"),
+    ridge: v("--at-ridge", day ? "#f0f0f2" : "rgba(16,28,37,.9)"),
+    line: v("--at-line-2", day ? "rgba(0,0,0,0.12)" : "rgba(120,180,200,.2)"),
+    starHi: day ? "#6e6e73" : "#bfe0ff",
+    starLo: day ? "#a1a1a6" : "#7f9bc4",
+    orbit: day ? "rgba(0,0,0,0.08)" : "rgba(56,90,140,.16)",
+    core: day ? "rgba(0,0,0,0.12)" : "rgba(56,90,140,.28)",
+    label: day ? "#1d1d1f" : "#dff2ff",
+    cyan0: v("--d2", "#0071e3"),
+    cyan1: day ? "#0077ed" : "#2563EB",
+  };
+}
 function poolBackendMap(clusters: any[], backends: any[]) {
   const clById: Record<string, string> = {};
   (clusters || []).forEach((c) => (clById[c.id] = c.backend_id));
@@ -114,29 +135,30 @@ function Orbital({ data }: { data: any }) {
         cy = H / 2,
         half = Math.min(W, H) / 2;
       ctx.clearRect(0, 0, W, H);
+      const ink = canvasInk();
       for (const st of S) {
         const tw = red ? 0.7 : 0.45 + 0.55 * Math.abs(Math.sin(t * 0.001 + st.ph));
-        ctx.globalAlpha = (0.25 + 0.6 * st.z) * tw;
-        ctx.fillStyle = st.z > 0.85 ? "#bfe0ff" : "#7f9bc4";
+        ctx.globalAlpha = (0.25 + 0.6 * st.z) * tw * (ink.day ? 0.55 : 1);
+        ctx.fillStyle = st.z > 0.85 ? ink.starHi : ink.starLo;
         ctx.fillRect(st.x, st.y, st.z > 0.9 ? 1.6 : 1, st.z > 0.9 ? 1.6 : 1);
       }
       ctx.globalAlpha = 1;
       const orbit = half * 0.52;
-      ctx.strokeStyle = "rgba(56,90,140,.16)";
+      ctx.strokeStyle = ink.orbit;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.arc(cx, cy, orbit, 0, 6.283);
       ctx.stroke();
       const used = s.raw_capacity_bytes > 0 ? Math.min(1, Math.max(0, s.used_capacity_bytes / s.raw_capacity_bytes)) : 0;
       const coreR = half * 0.2;
-      ctx.strokeStyle = "rgba(56,90,140,.28)";
+      ctx.strokeStyle = ink.core;
       ctx.lineWidth = 7;
       ctx.beginPath();
       ctx.arc(cx, cy, coreR, 0, 6.283);
       ctx.stroke();
       const g = ctx.createLinearGradient(cx - coreR, cy - coreR, cx + coreR, cy + coreR);
-      g.addColorStop(0, "#38BDF8");
-      g.addColorStop(1, "#2563EB");
+      g.addColorStop(0, ink.cyan0);
+      g.addColorStop(1, ink.cyan1);
       ctx.strokeStyle = g;
       ctx.lineCap = "round";
       ctx.beginPath();
@@ -144,10 +166,10 @@ function Orbital({ data }: { data: any }) {
       ctx.stroke();
       ctx.lineCap = "butt";
       ctx.textAlign = "center";
-      ctx.fillStyle = "#eaf6ff";
+      ctx.fillStyle = ink.ink;
       ctx.font = "700 26px ui-monospace,Menlo,monospace";
       ctx.fillText(tb(s.raw_capacity_bytes), cx, cy - 2);
-      ctx.fillStyle = "#8AA0BD";
+      ctx.fillStyle = ink.ink3;
       ctx.font = "10px ui-monospace,Menlo,monospace";
       ctx.fillText("RAW · " + Math.round(used * 100) + "% ENGAGED", cx, cy + 18);
       const bs = backends || [];
@@ -163,7 +185,7 @@ function Orbital({ data }: { data: any }) {
         ctx.globalAlpha = 0.85;
         ctx.fill();
         ctx.globalAlpha = 1;
-        ctx.fillStyle = "#dff2ff";
+        ctx.fillStyle = ink.label;
         ctx.font = "600 10px ui-monospace,Menlo,monospace";
         ctx.fillText(B.backend_type.toUpperCase(), bx, by + r + 14);
         const mp = (pools || []).filter((p: any) => pb(p) === B.backend_type);
@@ -230,8 +252,9 @@ function Treemap({ data }: { data: any }) {
         w = Math.min(w, maxW);
         h = Math.max(28, Math.min(h, 90));
         rowH = Math.max(rowH, h);
-        ctx.fillStyle = "rgba(16,28,37,.9)";
-        ctx.strokeStyle = "rgba(120,180,200,.2)";
+        const ink = canvasInk();
+        ctx.fillStyle = ink.ridge;
+        ctx.strokeStyle = ink.line;
         ctx.fillRect(x, y, w, h);
         ctx.strokeRect(x, y, w, h);
         const fill = Math.min(1, it.used / it.max);
@@ -239,7 +262,7 @@ function Treemap({ data }: { data: any }) {
         ctx.globalAlpha = 0.55;
         ctx.fillRect(x, y + h * (1 - fill), w, h * fill);
         ctx.globalAlpha = 1;
-        ctx.fillStyle = "#eaf6ff";
+        ctx.fillStyle = ink.ink;
         ctx.font = "600 11px ui-monospace,Menlo,monospace";
         ctx.fillText(it.n.slice(0, 18), x + 6, y + 16);
         x += w + 6;
@@ -335,25 +358,23 @@ export default function Observatory() {
   }, [pools]);
 
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("observatory")}
-        eyebrow="TELEMETRY · ESTATE"
-        title="Observatory"
-        state={stateLine}
-        actions={
-          <>
-            <button type="button" className="at-btn" onClick={() => nav("/")}>
-              Command Deck
-            </button>
-            <button type="button" className="at-btn primary" onClick={() => nav("/alerts")}>
-              Alerts{alerts?.length ? ` · ${alerts.length}` : ""}
-            </button>
-          </>
-        }
-      />
-
-      <div className="at-mod">
+    <DashboardHero
+      crumbs={navCrumbs("observatory")}
+      eyebrow="TELEMETRY · ESTATE"
+      title="Observatory"
+      state={stateLine}
+      actions={
+        <>
+          <button type="button" className="at-btn" onClick={() => nav("/")}>
+            Overview
+          </button>
+          <button type="button" className="at-btn primary" onClick={() => nav("/alerts")}>
+            Alerts{alerts?.length ? ` · ${alerts.length}` : ""}
+          </button>
+        </>
+      }
+    >
+      <DashboardModule>
         <div className="at-panel" style={{ padding: "18px 20px 14px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 24, flexWrap: "wrap", marginBottom: 12 }}>
             <div>
@@ -386,14 +407,10 @@ export default function Observatory() {
           </div>
           <Echogram wide readOps={io?.read_ops_total || 0} writeOps={io?.write_ops_total || 0} hist={hist} />
         </div>
-      </div>
+      </DashboardModule>
 
       <div className="at-breakgrid">
-        <div className="at-mod" style={{ marginBottom: 0 }}>
-          <div className="at-modhead">
-            <span className="at-modtitle">Backends</span>
-            <span className="at-modnote">{backendRows.length} registered</span>
-          </div>
+        <DashboardModule title="Backends" note={`${backendRows.length} registered`} className="mb-0">
           <div className="at-panel">
             {!ready ? (
               <div style={{ padding: 24 }}>
@@ -424,13 +441,9 @@ export default function Observatory() {
               ))
             )}
           </div>
-        </div>
+        </DashboardModule>
 
-        <div className="at-mod" style={{ marginBottom: 0 }}>
-          <div className="at-modhead">
-            <span className="at-modtitle">Deepest pools</span>
-            <span className="at-modnote">sorted by depth</span>
-          </div>
+        <DashboardModule title="Deepest pools" note="sorted by depth" className="mb-0">
           <div className="at-panel">
             {poolRows.map((p) => (
               <button key={p.id} type="button" className="at-basin" onClick={() => nav(`/pools/${p.id}`)}>
@@ -453,14 +466,10 @@ export default function Observatory() {
               <div style={{ padding: 20, color: "var(--at-ink-4)", fontSize: 13 }}>No pools discovered.</div>
             )}
           </div>
-        </div>
+        </DashboardModule>
       </div>
 
-      <div className="at-mod">
-        <div className="at-modhead">
-          <span className="at-modtitle">Lenses</span>
-          <span className="at-modnote">optional canvases — one at a time</span>
-        </div>
+      <DashboardModule title="Lenses" note="optional canvases — one at a time">
         <div className="at-chip-row">
           {LENSES.map((t) => (
             <button
@@ -497,7 +506,7 @@ export default function Observatory() {
             )}
           </div>
         )}
-      </div>
-    </div>
+      </DashboardModule>
+    </DashboardHero>
   );
 }

@@ -1,10 +1,11 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { useEffect, useState } from "react";
 import { Copy, Trash2, UserPlus } from "lucide-react";
 import { apiError, http, toast } from "../api/client";
-import { Badge, Button, Field, Label, Select } from "../ui/kit";
+import { Badge, Button, Field, Label, Select, TerminalPane } from "../ui/kit";
 import { del } from "../ui/confirm";
-import { PageHead } from "../ui/PageHead";
+import { ListPage } from "../ui/templates/ListPage";
 import { navCrumbs } from "../nav/routes";
 import { Table } from "../ui/Table";
 
@@ -69,20 +70,19 @@ export default function Access() {
 
   const n = users?.length || 0;
   return (
-    <div className="at-stack">
-      <PageHead
-        crumbs={navCrumbs("access")}
-        eyebrow="GOVERNANCE · INDEX"
-        title="Access"
-        state={
-          usersErr
-            ? "Could not load console users — retry or check gateway auth."
-            : usersBusy && users === undefined
-              ? "Loading console users…"
-              : `${n} console user${n === 1 ? "" : "s"} — privilege levels and scoped service-account JWTs.`
-        }
-      />
-
+    <ListPage
+      crumbs={navCrumbs("access")}
+      eyebrow="GOVERNANCE · INDEX"
+      title="Access"
+      state={
+        usersErr
+          ? "Could not load console users — retry or check gateway auth."
+          : usersBusy && users === undefined
+            ? "Loading console users…"
+            : `${n} console user${n === 1 ? "" : "s"} — privilege levels and scoped service-account JWTs.`
+      }
+    >
+      <div className="at-stack">
       <div className="grid lg:grid-cols-2 gap-4">
         <div className="at-panel">
           <div className="at-panel-bar">
@@ -190,8 +190,7 @@ export default function Access() {
         panelExtra={
           <button
             type="button"
-            className="at-btn"
-            style={{ height: 28 }}
+            className="at-btn compact"
             disabled={usersBusy}
             onClick={() => void loadUsers()}
           >
@@ -260,7 +259,8 @@ export default function Access() {
                 ))}
               </Select>
               <button
-                className="btn btn-ghost btn-sm"
+                type="button"
+                className="at-btn compact"
                 title="Delete user"
                 onClick={() =>
                   del(`user ${u.username}`, async () => {
@@ -363,30 +363,23 @@ export default function Access() {
                   <Badge kind="neutral">exp: {result.expires_at}</Badge>
                 </div>
                 <div className="at-caption">Token</div>
-                <div
-                  className="mono text-xs break-all flex items-start gap-2"
-                  style={{
-                    padding: 10,
-                    background: "var(--at-ridge)",
-                    border: "1px solid var(--at-line)",
-                    borderRadius: "var(--r-ctl)",
-                  }}
-                >
-                  <span className="flex-1">{result.token}</span>
+                <TerminalPane title="jwt · bearer">
+                  <span className="term-str">{result.token}</span>
+                </TerminalPane>
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: -4 }}>
                   <button
                     type="button"
-                    className="at-btn"
-                    style={{ height: 28, flexShrink: 0 }}
+                    className="at-btn compact"
                     onClick={() => {
                       navigator.clipboard.writeText(result.token);
                       toast("copied", "ok");
                     }}
                   >
-                    <Copy size={13} />
+                    <Copy size={13} /> Copy
                   </button>
                 </div>
                 <div className="at-sub" style={{ margin: 0 }}>
-                  Send as <code className="mono">Authorization: Bearer &lt;token&gt;</code>, or paste
+                  Send as <code className="at-terminal-inline">Authorization: Bearer &lt;token&gt;</code>, or paste
                   it into the menu-bar key icon.
                 </div>
               </div>
@@ -396,6 +389,7 @@ export default function Access() {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </ListPage>
   );
 }

@@ -1,11 +1,12 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { submit } from "../../api/client";
 import { usePlans, useSources, useInvalidate } from "../../api/hooks";
 import { Badge, Button, FormModal } from "../../ui/kit";
-import { PageHead } from "../../ui/PageHead";
+import { ListPage } from "../../ui/templates/ListPage";
 import { navCrumbs } from "../../nav/routes";
 import { Table } from "../../ui/Table";
 
@@ -29,22 +30,21 @@ export default function Plans() {
   const n = data?.length || 0;
 
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("migration-plans")}
-        eyebrow="DATABRIDGE · INDEX"
-        title="Migration Plans"
-        state={
-          n
-            ? `${n} plan${n === 1 ? "" : "s"} — assess, provision, full-load, CDC, validate, cutover.`
-            : "No migration plans yet. Create one after registering a cloud source."
-        }
-        actions={
-          <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
-            <Plus size={14} /> New plan
-          </button>
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("migration-plans")}
+      eyebrow="DATABRIDGE · INDEX"
+      title="Migration Plans"
+      state={
+        n
+          ? `${n} plan${n === 1 ? "" : "s"} — assess, provision, full-load, CDC, validate, cutover.`
+          : "No migration plans yet. Create one after registering a cloud source."
+      }
+      actions={
+        <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
+          <Plus size={14} /> New plan
+        </button>
+      }
+    >
       <Table
         soundings
         panelTitle="Plan index"
@@ -75,6 +75,6 @@ export default function Plans() {
           },
         ]}
         onSubmit={(v) => submit("post", "/databridge/plans", { name: v.name, source_id: v.source_id }, "create plan", () => inv("db-plans"))} />
-    </div>
+    </ListPage>
   );
 }

@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 // Shop Deck — Apple shop archetype A (hero + swipe status tiles + elevated boxes).
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -9,8 +10,8 @@ import { depth, depthWidth } from "../lib/depth";
 import { sendPrompt } from "../lib/prompts";
 import { fmtBytes, fmtBytesOpt, fmtBytesParts, fmtForecastFill, fmtPct, fmtSi } from "../lib/format";
 import { Echogram } from "../ui/Echogram";
-import { PageHead } from "../ui/PageHead";
 import { SwipeRail } from "../ui/SwipeRail";
+import { DashboardHero, DashboardModule } from "../ui/templates/DashboardHero";
 
 function SoundingOrb({ pct }: { pct: number }) {
   const p = Math.max(0, Math.min(100, pct));
@@ -41,13 +42,13 @@ function SoundingOrb({ pct }: { pct: number }) {
         </linearGradient>
       </defs>
       <path d={ticks.join("")} stroke="var(--d2)" strokeWidth="1" fill="none" opacity=".28" />
-      <circle cx="110" cy="110" r="92" fill="none" stroke="rgba(120,180,200,.16)" />
-      <circle cx="110" cy="110" r="76" fill="rgba(16,28,37,.85)" stroke="rgba(120,180,200,.22)" />
+      <circle cx="110" cy="110" r="92" fill="none" stroke="var(--at-line-2)" />
+      <circle cx="110" cy="110" r="76" fill="var(--at-ridge)" stroke="var(--at-line-2)" />
       <g clipPath="url(#orbClip)">
         <rect x="0" y={waterY} width="220" height={220 - waterY} fill="url(#waterGrad)" />
         <line x1="0" y1={waterY} x2="220" y2={waterY} stroke="var(--d1)" strokeWidth="1.6" opacity=".95" />
       </g>
-      <circle cx="110" cy="110" r="84" fill="none" stroke="rgba(120,180,200,.12)" strokeWidth="3" />
+      <circle cx="110" cy="110" r="84" fill="none" stroke="var(--at-line)" strokeWidth="3" />
       <circle
         cx="110"
         cy="110"
@@ -156,10 +157,11 @@ export default function Overview() {
     }
     if (health === "warn" || health === "critical") {
       const tip = alerts?.[0]?.title;
+      const cls = health === "critical" ? "at-state-crit" : "at-state-warn";
       parts.push(
         tip
-          ? `Cluster reports <b>${health}</b> — ${tip}`
-          : `Cluster reports <b>${health}</b>`,
+          ? `Cluster reports <b class="${cls}">${health}</b> — ${tip}`
+          : `Cluster reports <b class="${cls}">${health}</b>`,
       );
     } else if (deepest && deepest.pct >= 60) {
       parts.push(
@@ -210,36 +212,23 @@ export default function Overview() {
   }, [alerts, deepest, deepestDepth, forecastLine]);
 
   return (
-    <div>
-      <PageHead
-        eyebrow={
-          <>
-            CLUSTER · {clusterName}
-            {hostCount ? ` · ${hostCount} host${hostCount === 1 ? "" : "s"}` : ""}
-          </>
-        }
-        title="Storage Center"
-        state={<span dangerouslySetInnerHTML={{ __html: stateLine }} />}
-        actions={
-          <>
-            <button
-              type="button"
-              className="at-btn"
-              onClick={() =>
-                sendPrompt(`Run a full capacity forecast for ${clusterName} and tell me which pool fills first.`)
-              }
-            >
-              Forecast fill
-            </button>
-            <button type="button" className="at-btn primary" onClick={() => nav("/volumes")}>
-              New volume
-            </button>
-          </>
-        }
-      />
-
+    <DashboardHero
+      eyebrow={
+        <>
+          CLUSTER · {clusterName}
+          {hostCount ? ` · ${hostCount} host${hostCount === 1 ? "" : "s"}` : ""}
+        </>
+      }
+      title="Overview"
+      state={<span dangerouslySetInnerHTML={{ __html: stateLine }} />}
+      actions={
+        <button type="button" className="at-btn primary" onClick={() => nav("/volumes")}>
+          New volume
+        </button>
+      }
+    >
       {/* Hero capacity module */}
-      <div className="at-mod">
+      <DashboardModule>
         <div className="at-sounding">
           <div className="at-sound-orb">
             <SoundingOrb pct={usedPct} />
@@ -310,15 +299,10 @@ export default function Overview() {
             <Echogram readOps={io?.read_ops_total || 0} writeOps={io?.write_ops_total || 0} hist={hist} />
           </div>
         </div>
-      </div>
+      </DashboardModule>
 
       {/* Swipe status strip */}
-      <div className="at-mod">
-        <div className="at-modhead">
-          <span className="at-modtitle">At a glance</span>
-          <span className="at-modrule" />
-          <span className="at-modnote">swipe</span>
-        </div>
+      <DashboardModule title="At a glance" note="swipe">
         <SwipeRail label="Inventory status">
           <button type="button" className="at-cell" onClick={() => nav("/volumes")}>
             <span className="at-cell-go">
@@ -409,15 +393,10 @@ export default function Overview() {
             </div>
           </button>
         </SwipeRail>
-      </div>
+      </DashboardModule>
 
       {/* Pool basins */}
-      <div className="at-mod">
-        <div className="at-modhead">
-          <span className="at-modtitle">Pool soundings</span>
-          <span className="at-modrule" />
-          <span className="at-modnote">{basinPools.length} pools · sorted by depth</span>
-        </div>
+      <DashboardModule title="Pool soundings" note={`${basinPools.length} pools · sorted by depth`}>
         <div className="at-panel">
           {basinPools.length === 0 && (
             <div className="at-empty-box" style={{ boxShadow: "none", border: "none" }}>
@@ -455,17 +434,10 @@ export default function Overview() {
             );
           })}
         </div>
-      </div>
+      </DashboardModule>
 
       <div className="at-2col">
-        <div className="at-mod">
-          <div className="at-modhead">
-            <span className="at-modtitle">Seabed</span>
-            <span className="at-modrule" />
-            <span className="at-modnote">
-              {osdTotal} OSDs · health tiles
-            </span>
-          </div>
+        <DashboardModule title="Seabed" note={`${osdTotal} OSDs · health tiles`}>
           <div className="at-panel">
             <div className="at-seabed">
               {seabedCells.map((c, i) => (
@@ -473,14 +445,9 @@ export default function Overview() {
               ))}
             </div>
           </div>
-        </div>
+        </DashboardModule>
 
-        <div className="at-mod">
-          <div className="at-modhead">
-            <span className="at-modtitle">Ledger</span>
-            <span className="at-modrule" />
-            <span className="at-modnote">alerts · soundings</span>
-          </div>
+        <DashboardModule title="Ledger" note="alerts · soundings">
           <div className="at-panel at-ledger">
             {ledger.length === 0 && (
               <div style={{ padding: 24, color: "var(--at-ink-4)", fontSize: 13 }}>No recent exceptions.</div>
@@ -493,16 +460,11 @@ export default function Overview() {
               </div>
             ))}
           </div>
-        </div>
+        </DashboardModule>
       </div>
 
       {/* Compact cluster row for operators who still want the table */}
-      <div className="at-mod">
-        <div className="at-modhead">
-          <span className="at-modtitle">Clusters</span>
-          <span className="at-modrule" />
-          <span className="at-modnote">{clusters?.length || 0} registered</span>
-        </div>
+      <DashboardModule title="Clusters" note={`${clusters?.length || 0} registered`}>
         <div className="at-panel">
           {(clusters || []).map((c) => (
             <button
@@ -530,7 +492,7 @@ export default function Overview() {
             <div style={{ padding: 24, color: "var(--at-ink-4)", fontSize: 13 }}>No clusters.</div>
           )}
         </div>
-      </div>
-    </div>
+      </DashboardModule>
+    </DashboardHero>
   );
 }

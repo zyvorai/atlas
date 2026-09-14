@@ -1,8 +1,9 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { useNavigate } from "react-router-dom";
 import { useCdcStreams } from "../../api/hooks";
 import { Badge } from "../../ui/kit";
-import { PageHead } from "../../ui/PageHead";
+import { ListPage } from "../../ui/templates/ListPage";
 import { navCrumbs } from "../../nav/routes";
 import { Table } from "../../ui/Table";
 import { fmtBytes, fmtSi } from "../../lib/format";
@@ -17,17 +18,16 @@ export default function Replication() {
   const n = data?.length || 0;
   const streaming = (data || []).filter((r) => r.state === "streaming").length;
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("replication")}
-        eyebrow="DATABRIDGE · INDEX"
-        title="Replication"
-        state={
-          n
-            ? `${n} CDC stream${n === 1 ? "" : "s"} · ${streaming} streaming — Debezium lag from cloud sources.`
-            : "No CDC streams — start CDC from a migration plan."
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("replication")}
+      eyebrow="DATABRIDGE · INDEX"
+      title="Replication"
+      state={
+        n
+          ? `${n} CDC stream${n === 1 ? "" : "s"} · ${streaming} streaming — Debezium lag from cloud sources.`
+          : "No CDC streams — start CDC from a migration plan."
+      }
+    >
       <Table
         soundings
         panelTitle="CDC stream index"
@@ -48,6 +48,6 @@ export default function Replication() {
           { h: "Events", f: (r) => fmtSi(r.events_total) },
         ]}
       />
-    </div>
+    </ListPage>
   );
 }

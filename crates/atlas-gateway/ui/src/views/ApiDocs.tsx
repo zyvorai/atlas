@@ -1,12 +1,12 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 /** In-console API surface map — curated from docs/API.md (not a full OpenAPI host). */
 import { Link } from "react-router-dom";
-import { PageHead } from "../ui/PageHead";
 import { navCrumbs } from "../nav/routes";
+import { TerminalPane, colorizeJson } from "../ui/kit";
+import { DocsPage, type DocsRow, type DocsSection } from "../ui/templates/DocsPage";
 
-type Endpoint = { method: string; path: string; note: string };
-
-const SECTIONS: { title: string; items: Endpoint[] }[] = [
+const SECTIONS: { title: string; items: DocsRow[] }[] = [
   {
     title: "Meta",
     items: [
@@ -78,7 +78,7 @@ const SECTIONS: { title: string; items: Endpoint[] }[] = [
   },
 ];
 
-const GRPC: Endpoint[] = [
+const GRPC: DocsRow[] = [
   { method: "RPC", path: "Health", note: "Liveness for the gRPC service" },
   { method: "RPC", path: "ListClusters", note: "Storage clusters" },
   { method: "RPC", path: "ListPools", note: "Pools" },
@@ -98,66 +98,39 @@ const GRPC: Endpoint[] = [
 ];
 
 export default function ApiDocs() {
+  const sections: DocsSection[] = [
+    {
+      title: "Conventions",
+      children: (
+        <>
+          <p>
+            Base path <code className="at-terminal-inline">/api/atlas/v1</code>. Auth:{" "}
+            <code className="at-terminal-inline">Authorization: Bearer &lt;JWT&gt;</code> when{" "}
+            <code className="at-terminal-inline">ATLAS_AUTH_REQUIRED=1</code>.
+          </p>
+          <TerminalPane title="error.json" chrome>
+            {colorizeJson(`{\n  "error": {\n    "code": "not_found",\n    "message": "volume missing"\n  }\n}`)}
+          </TerminalPane>
+          <p style={{ marginTop: 14 }}>
+            gRPC on <code className="at-terminal-inline">ATLAS_GRPC_ADDR</code> (default{" "}
+            <code className="at-terminal-inline">:5111</code>, lab NodePort <strong>30512</strong>) — service{" "}
+            <code className="at-terminal-inline">atlas.v1.AtlasStorage</code>. Product ownership: see{" "}
+            <Link to="/access">Access</Link> tokens and repo <code className="at-terminal-inline">docs/PRODUCTS.md</code>.
+          </p>
+        </>
+      ),
+    },
+    { title: "gRPC · AtlasStorage", rows: GRPC },
+    ...SECTIONS.map((sec) => ({ title: sec.title, rows: sec.items })),
+  ];
+
   return (
-    <div className="at-stack">
-      <PageHead
-        crumbs={navCrumbs("api-docs")}
-        eyebrow="CONSOLE · REFERENCE"
-        title="API Docs"
-        state="Curated Atlas REST + gRPC map for operators and product integrators. Full examples live in the repo docs/API.md."
-      />
-
-      <div className="at-panel">
-        <div className="at-panel-bar">
-          <span className="at-caption">Conventions</span>
-        </div>
-        <div className="at-docs-body">
-          <p>
-            Base path <code className="mono">/api/atlas/v1</code>. Errors:{" "}
-            <code className="mono">{`{ "error": { "code", "message" } }`}</code>. Auth:{" "}
-            <code className="mono">Authorization: Bearer &lt;JWT&gt;</code> when{" "}
-            <code className="mono">ATLAS_AUTH_REQUIRED=1</code>.
-          </p>
-          <p>
-            gRPC on <code className="mono">ATLAS_GRPC_ADDR</code> (default <code className="mono">:5111</code>,
-            lab NodePort <strong>30512</strong>) — service <code className="mono">atlas.v1.AtlasStorage</code>.
-            Product ownership: see <Link to="/access">Access</Link> tokens and repo{" "}
-            <code className="mono">docs/PRODUCTS.md</code>.
-          </p>
-        </div>
-      </div>
-
-      <div className="at-panel">
-        <div className="at-panel-bar">
-          <span className="at-caption">gRPC · AtlasStorage</span>
-        </div>
-        <div className="at-docs-table">
-          {GRPC.map((rpc) => (
-            <div key={rpc.path} className="at-docs-row">
-              <span className="at-docs-method">{rpc.method}</span>
-              <code className="at-docs-path mono">{rpc.path}</code>
-              <span className="at-docs-note">{rpc.note}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {SECTIONS.map((sec) => (
-        <div key={sec.title} className="at-panel">
-          <div className="at-panel-bar">
-            <span className="at-caption">{sec.title}</span>
-          </div>
-          <div className="at-docs-table">
-            {sec.items.map((ep) => (
-              <div key={`${ep.method}-${ep.path}`} className="at-docs-row">
-                <span className={`at-docs-method ${ep.method.toLowerCase()}`}>{ep.method}</span>
-                <code className="at-docs-path mono">{ep.path}</code>
-                <span className="at-docs-note">{ep.note}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
+    <DocsPage
+      crumbs={navCrumbs("api-docs")}
+      eyebrow="CONSOLE · REFERENCE"
+      title="API Docs"
+      state="Curated Atlas REST + gRPC map for operators and product integrators. Full examples live in the repo docs/API.md."
+      sections={sections}
+    />
   );
 }

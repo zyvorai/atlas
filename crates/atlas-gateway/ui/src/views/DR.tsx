@@ -1,10 +1,11 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 // Day-2 cross-cluster DR: mirroring peers, mirrored images, and failover (promote/demote).
 import { useState, type CSSProperties } from "react";
 import { submit, submitJob } from "../api/client";
 import { useDrMirrors, useDrPeers, useDrPreflight, useDrStatus, useInvalidate, useVolumes } from "../api/hooks";
 import { Badge, Button, Field, Label, Select } from "../ui/kit";
-import { PageHead } from "../ui/PageHead";
+import { DashboardHero } from "../ui/templates/DashboardHero";
 import { navCrumbs } from "../nav/routes";
 import { Table } from "../ui/Table";
 import { confirmThen } from "../ui/confirm";
@@ -28,17 +29,17 @@ export default function DR() {
   const blockVols = (volumes || []).filter((v) => v.state === "bound" || v.state === "ready" || !v.state);
 
   return (
-    <div className="at-stack">
-      <PageHead
-        crumbs={navCrumbs("dr")}
-        eyebrow="INFRASTRUCTURE · OPS"
-        title="Disaster Recovery"
-        state={
-          status
-            ? `${status.peers ?? 0} peer${(status.peers ?? 0) === 1 ? "" : "s"} · ${status.mirrors ?? 0} mirror${(status.mirrors ?? 0) === 1 ? "" : "s"} — control plane ${status.control_plane_ready ? "ready" : "incomplete"}; dataplane ${status.dataplane_verified || status.verified ? "verified" : "unverified (needs 2nd Ceph site)"}.`
-            : "Cross-cluster RBD mirroring & failover — control plane ready; live mirror needs a peer cluster."
-        }
-      />
+    <DashboardHero
+      className="at-stack"
+      crumbs={navCrumbs("dr")}
+      eyebrow="INFRASTRUCTURE · OPS"
+      title="Disaster Recovery"
+      state={
+        status
+          ? `${status.peers ?? 0} peer${(status.peers ?? 0) === 1 ? "" : "s"} · ${status.mirrors ?? 0} mirror${(status.mirrors ?? 0) === 1 ? "" : "s"} — control plane ${status.control_plane_ready ? "ready" : "incomplete"}; dataplane ${status.dataplane_verified || status.verified ? "verified" : "unverified (needs 2nd Ceph site)"}.`
+          : "Cross-cluster RBD mirroring & failover — control plane ready; live mirror needs a peer cluster."
+      }
+    >
 
       <div className="at-instrs" style={{ "--instr-cols": 6 } as CSSProperties}>
         <div className="at-instr">
@@ -294,6 +295,6 @@ export default function DR() {
           </div>
         )}
       />
-    </div>
+    </DashboardHero>
   );
 }

@@ -1,11 +1,12 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { http, submitJob, toast } from "../api/client";
 import { useBackups, useBuckets, useInvalidate, useVolumes } from "../api/hooks";
 import type { BackupRecord } from "../api/types";
 import { Badge, Button, FormModal } from "../ui/kit";
-import { PageHead } from "../ui/PageHead";
+import { ListPage } from "../ui/templates/ListPage";
 import { navCrumbs } from "../nav/routes";
 import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
@@ -37,22 +38,21 @@ export default function Backups() {
   const n = data?.length || 0;
 
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("backups")}
-        eyebrow="DATA PROTECTION · INDEX"
-        title="Backups"
-        state={
-          n
-            ? `${n} backup${n === 1 ? "" : "s"} to RGW — restore or presign a download.`
-            : "No backups yet. Export a PVC-backed volume to a bound bucket."
-        }
-        actions={
-          <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
-            <Plus size={14} /> Backup
-          </button>
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("backups")}
+      eyebrow="DATA PROTECTION · INDEX"
+      title="Backups"
+      state={
+        n
+          ? `${n} backup${n === 1 ? "" : "s"} to RGW — restore or presign a download.`
+          : "No backups yet. Export a PVC-backed volume to a bound bucket."
+      }
+      actions={
+        <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
+          <Plus size={14} /> Backup
+        </button>
+      }
+    >
       <Table
         soundings
         panelTitle="Backup index"
@@ -62,10 +62,10 @@ export default function Backups() {
               <span className="at-sub" style={{ margin: 0 }}>
                 {picked.size} selected
               </span>
-              <button type="button" className="at-btn" style={{ height: 28 }} onClick={bulkDelete}>
+              <button type="button" className="at-btn compact" onClick={bulkDelete}>
                 Delete selected
               </button>
-              <button type="button" className="at-btn" style={{ height: 28 }} onClick={() => setPicked(new Set())}>
+              <button type="button" className="at-btn compact" onClick={() => setPicked(new Set())}>
                 Clear
               </button>
             </>
@@ -203,6 +203,6 @@ export default function Backups() {
           }
         />
       )}
-    </div>
+    </ListPage>
   );
 }

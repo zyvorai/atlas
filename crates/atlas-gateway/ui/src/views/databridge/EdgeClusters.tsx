@@ -1,8 +1,9 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { Link, useNavigate } from "react-router-dom";
 import { useEdgeClusters } from "../../api/hooks";
 import { Badge } from "../../ui/kit";
-import { PageHead } from "../../ui/PageHead";
+import { ListPage } from "../../ui/templates/ListPage";
 import { navCrumbs } from "../../nav/routes";
 import { Table } from "../../ui/Table";
 import { fmtBytes, num } from "../../lib/format";
@@ -14,17 +15,16 @@ export default function EdgeClusters() {
   const { data } = useEdgeClusters();
   const n = data?.length || 0;
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("edge-clusters")}
-        eyebrow="DATABRIDGE · INDEX"
-        title="Edge DB Clusters"
-        state={
-          n
-            ? `${n} edge cluster${n === 1 ? "" : "s"} on Ceph RBD (CloudNativePG / MySQL operator).`
-            : "No edge clusters yet — provision one from a migration plan."
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("edge-clusters")}
+      eyebrow="DATABRIDGE · INDEX"
+      title="Edge DB Clusters"
+      state={
+        n
+          ? `${n} edge cluster${n === 1 ? "" : "s"} on Ceph RBD (CloudNativePG / MySQL operator).`
+          : "No edge clusters yet — provision one from a migration plan."
+      }
+    >
       <Table
         soundings
         panelTitle="Edge cluster index"
@@ -63,6 +63,6 @@ export default function EdgeClusters() {
           { h: "State", f: (r) => <Badge kind={kind(r.state)} dot>{r.state}</Badge> },
         ]}
       />
-    </div>
+    </ListPage>
   );
 }

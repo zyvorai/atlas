@@ -1,10 +1,11 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { useState } from "react";
 import { submit } from "../api/client";
 import { useInvalidate, useTenantPolicies, useTenants } from "../api/hooks";
 import type { TenantQuota } from "../api/types";
 import { Button, FormModal, SlideOver } from "../ui/kit";
-import { PageHead } from "../ui/PageHead";
+import { ListPage } from "../ui/templates/ListPage";
 import { navCrumbs } from "../nav/routes";
 import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
@@ -17,17 +18,16 @@ export default function Tenants() {
   const [drill, setDrill] = useState<TenantQuota | null>(null);
   const n = data?.length || 0;
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("tenants")}
-        eyebrow="GOVERNANCE · INDEX"
-        title="Tenants"
-        state={
-          n
-            ? `${n} tenant${n === 1 ? "" : "s"} — capacity quotas and intent→placement overrides.`
-            : "No tenants yet. Quotas and policy overrides appear once tenants register usage."
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("tenants")}
+      eyebrow="GOVERNANCE · INDEX"
+      title="Tenants"
+      state={
+        n
+          ? `${n} tenant${n === 1 ? "" : "s"} — capacity quotas and intent→placement overrides.`
+          : "No tenants yet. Quotas and policy overrides appear once tenants register usage."
+      }
+    >
       <Table
         soundings
         panelTitle="Tenant index"
@@ -58,7 +58,7 @@ export default function Tenants() {
           onSubmit={(v) => submit("put", `/tenants/${quota.tenant_id}/quota`, { max_bytes: +v.max_bytes, max_volumes: +v.max_volumes }, "quota set", () => inv("tenants"))} />
       )}
       <PolicyDrawer tenant={drill} onClose={() => setDrill(null)} />
-    </div>
+    </ListPage>
   );
 }
 

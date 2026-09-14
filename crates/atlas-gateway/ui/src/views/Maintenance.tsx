@@ -1,10 +1,11 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 // Day-2 maintenance: upgrade pre-flight, job-engine pause, backend cordon, orphan backups.
 import { AlertTriangle, CheckCircle2, PauseCircle, PlayCircle } from "lucide-react";
 import { submit } from "../api/client";
 import { useBackends, useInvalidate, useMaintenance, useOrphans, usePreflight } from "../api/hooks";
 import { Badge, Button } from "../ui/kit";
-import { PageHead } from "../ui/PageHead";
+import { DashboardHero } from "../ui/templates/DashboardHero";
 import { navCrumbs } from "../nav/routes";
 import { Table } from "../ui/Table";
 import { confirmThen } from "../ui/confirm";
@@ -19,21 +20,21 @@ export default function Maintenance() {
   const paused = !!maint?.paused;
 
   return (
-    <div className="at-stack">
-      <PageHead
-        crumbs={navCrumbs("maintenance")}
-        eyebrow="INFRASTRUCTURE · OPS"
-        title="Maintenance"
-        state={
-          pre
-            ? pre.ready
-              ? paused
-                ? "Upgrade ready · job engine paused — resume when maintenance completes."
-                : `Upgrade ready · job engine running · ${orphans?.count ?? 0} orphan backup${(orphans?.count ?? 0) === 1 ? "" : "s"}.`
-              : `Upgrade blocked — ${pre.blockers?.length || 0} pre-flight issue${(pre.blockers?.length || 0) === 1 ? "" : "s"}.`
-            : "Upgrade readiness, job-engine pause, backend cordon, and orphan cleanup."
-        }
-      />
+    <DashboardHero
+      className="at-stack"
+      crumbs={navCrumbs("maintenance")}
+      eyebrow="INFRASTRUCTURE · OPS"
+      title="Maintenance"
+      state={
+        pre
+          ? pre.ready
+            ? paused
+              ? "Upgrade ready · job engine paused — resume when maintenance completes."
+              : `Upgrade ready · job engine running · ${orphans?.count ?? 0} orphan backup${(orphans?.count ?? 0) === 1 ? "" : "s"}.`
+            : `Upgrade blocked — ${pre.blockers?.length || 0} pre-flight issue${(pre.blockers?.length || 0) === 1 ? "" : "s"}.`
+          : "Upgrade readiness, job-engine pause, backend cordon, and orphan cleanup."
+      }
+    >
 
       <div className="at-instrs">
         <div className="at-instr">
@@ -115,8 +116,7 @@ export default function Maintenance() {
           {paused ? (
             <button
               type="button"
-              className="at-btn primary"
-              style={{ height: 28 }}
+              className="at-btn primary compact"
               onClick={() => submit("post", "/maintenance", { paused: false }, "resumed", () => inv("maintenance")).catch(() => {})}
             >
               <PlayCircle size={14} /> Resume
@@ -124,8 +124,7 @@ export default function Maintenance() {
           ) : (
             <button
               type="button"
-              className="at-btn"
-              style={{ height: 28 }}
+              className="at-btn compact"
               onClick={() => confirmThen({ title: "Pause the job engine?", message: "New jobs will queue instead of running until you resume — quiesce the system only if you mean to.", confirmLabel: "Pause" }, () => submit("post", "/maintenance", { paused: true }, "paused", () => inv("maintenance")))}
             >
               <PauseCircle size={14} /> Pause
@@ -179,6 +178,6 @@ export default function Maintenance() {
           <Button size="sm" variant="danger" onClick={() => confirmThen({ title: "Delete orphan backup?", message: b.id, confirmLabel: "Delete", danger: true }, () => submit("delete", `/backups/${b.id}`, null, "backup deleted", () => inv("orphans")))}>Delete</Button>
         )}
       />
-    </div>
+    </DashboardHero>
   );
 }

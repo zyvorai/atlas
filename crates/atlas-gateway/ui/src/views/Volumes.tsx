@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Download, Plus, RefreshCw, SlidersHorizontal } from "lucide-react";
@@ -9,7 +10,7 @@ import { depth, depthWidth } from "../lib/depth";
 import { fmtBytes, gib, stateKind } from "../lib/format";
 import { del } from "../ui/confirm";
 import { Badge, Button, FormModal, SlideOver } from "../ui/kit";
-import { PageHead } from "../ui/PageHead";
+import { ListPage } from "../ui/templates/ListPage";
 import { navCrumbs } from "../nav/routes";
 
 const POLICIES = ["database", "production", "development", "shared", "ai"];
@@ -142,27 +143,25 @@ export default function Volumes() {
     setSort((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: 1 }));
 
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("volumes")}
-        eyebrow="STORAGE · INDEX"
-        title="Volumes"
-        state={stateLine}
-        actions={
-          <>
-            <button type="button" className="at-btn" onClick={refetch}>
-              <RefreshCw size={14} /> Refresh
-            </button>
-            <button type="button" className="at-btn" onClick={exportCsv}>
-              <Download size={14} /> Export CSV
-            </button>
-            <button type="button" className="at-btn primary" onClick={() => setCreateOpen(true)}>
-              <Plus size={14} /> Volume
-            </button>
-          </>
-        }
-      />
-
+    <ListPage
+      crumbs={navCrumbs("volumes")}
+      eyebrow="STORAGE · INDEX"
+      title="Volumes"
+      state={stateLine}
+      actions={
+        <>
+          <button type="button" className="at-btn" onClick={refetch}>
+            <RefreshCw size={14} /> Refresh
+          </button>
+          <button type="button" className="at-btn" onClick={exportCsv}>
+            <Download size={14} /> Export CSV
+          </button>
+          <button type="button" className="at-btn primary" onClick={() => setCreateOpen(true)}>
+            <Plus size={14} /> Volume
+          </button>
+        </>
+      }
+    >
       <div className="at-chips">
         <button type="button" className={`at-chip${!state ? " on" : ""}`} onClick={() => setState("")}>
           All <span className="n">{counts.total || "—"}</span>
@@ -181,8 +180,7 @@ export default function Volumes() {
         <div className="relative">
           <button
             type="button"
-            className="at-btn"
-            style={{ height: 28 }}
+            className="at-btn compact"
             aria-expanded={filtersOpen}
             aria-haspopup="menu"
             onClick={() => setFiltersOpen((v) => !v)}
@@ -277,10 +275,10 @@ export default function Volumes() {
               <span className="at-sub" style={{ margin: 0 }}>
                 {picked.size} selected
               </span>
-              <button type="button" className="at-btn" style={{ height: 28 }} onClick={bulkDelete}>
+              <button type="button" className="at-btn compact" onClick={bulkDelete}>
                 Delete selected
               </button>
-              <button type="button" className="at-btn" style={{ height: 28 }} onClick={() => setPicked(new Set())}>
+              <button type="button" className="at-btn compact" onClick={() => setPicked(new Set())}>
                 Clear
               </button>
             </>
@@ -527,7 +525,7 @@ export default function Volumes() {
       )}
 
       <VolumeDrawer vol={sel} onClose={() => setSel(null)} refetch={refetch} />
-    </div>
+    </ListPage>
   );
 }
 

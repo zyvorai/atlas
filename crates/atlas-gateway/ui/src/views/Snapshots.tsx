@@ -1,11 +1,12 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { submitJob } from "../api/client";
 import { useInvalidate, useSnapshots } from "../api/hooks";
 import type { StorageSnapshot } from "../api/types";
 import { Badge, Button, FormModal } from "../ui/kit";
-import { PageHead } from "../ui/PageHead";
+import { ListPage } from "../ui/templates/ListPage";
 import { navCrumbs } from "../nav/routes";
 import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
@@ -34,24 +35,23 @@ export default function Snapshots() {
     });
   const n = data?.length || 0;
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("snapshots")}
-        eyebrow="STORAGE · INDEX"
-        title="Snapshots"
-        state={
-          n
-            ? `${n} point-in-time ${n === 1 ? "copy" : "copies"} — clone or restore into new volumes.`
-            : "No point-in-time copies yet. Snapshot a volume from the Volumes index."
-        }
-        actions={
-          !n ? (
-            <button type="button" className="at-btn primary" onClick={() => nav("/volumes")}>
-              Volumes
-            </button>
-          ) : undefined
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("snapshots")}
+      eyebrow="STORAGE · INDEX"
+      title="Snapshots"
+      state={
+        n
+          ? `${n} point-in-time ${n === 1 ? "copy" : "copies"} — clone or restore into new volumes.`
+          : "No point-in-time copies yet. Snapshot a volume from the Volumes index."
+      }
+      actions={
+        !n ? (
+          <button type="button" className="at-btn primary" onClick={() => nav("/volumes")}>
+            Volumes
+          </button>
+        ) : undefined
+      }
+    >
       <Table
         soundings
         panelTitle="Snapshot index"
@@ -61,10 +61,10 @@ export default function Snapshots() {
               <span className="at-sub" style={{ margin: 0 }}>
                 {picked.size} selected
               </span>
-              <button type="button" className="at-btn" style={{ height: 28 }} onClick={bulkDelete}>
+              <button type="button" className="at-btn compact" onClick={bulkDelete}>
                 Delete selected
               </button>
-              <button type="button" className="at-btn" style={{ height: 28 }} onClick={() => setPicked(new Set())}>
+              <button type="button" className="at-btn compact" onClick={() => setPicked(new Set())}>
                 Clear
               </button>
             </>
@@ -136,6 +136,6 @@ export default function Snapshots() {
           }
         />
       )}
-    </div>
+    </ListPage>
   );
 }

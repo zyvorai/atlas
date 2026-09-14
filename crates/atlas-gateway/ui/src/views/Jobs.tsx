@@ -1,9 +1,10 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { useState } from "react";
 import { useJobs } from "../api/hooks";
 import { useUi } from "../store/ui";
-import { Badge, Copyable, SlideOver } from "../ui/kit";
-import { PageHead } from "../ui/PageHead";
+import { Badge, Copyable, SlideOver, TerminalPane, colorizeJson } from "../ui/kit";
+import { ListPage } from "../ui/templates/ListPage";
 import { navCrumbs } from "../nav/routes";
 import { Table } from "../ui/Table";
 import { stateKind, timeAgo } from "../lib/format";
@@ -25,21 +26,20 @@ export default function Jobs() {
   const n = data?.length || 0;
   const running = (data || []).filter((j) => j.state === "running" || j.state === "queued").length;
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("jobs")}
-        eyebrow="OBSERVABILITY · INDEX"
-        title="Jobs"
-        state={
-          live.length
-            ? `${live.length} live this session · ${n} recent — async ops via server-sent events.`
-            : running
-              ? `${running} in flight · ${n} recent on the job engine.`
-              : n
-                ? `${n} recent job${n === 1 ? "" : "s"} — click a row for result detail.`
-                : "No jobs yet. Provisioning and day-2 ops appear here as they run."
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("jobs")}
+      eyebrow="OBSERVE · TIMELINE"
+      title="Jobs"
+      state={
+        live.length
+          ? `${live.length} live this session · ${n} recent — open a row for Terminal result.`
+          : running
+            ? `${running} in flight · ${n} recent on the job engine.`
+            : n
+              ? `${n} recent job${n === 1 ? "" : "s"} — click a row for Terminal detail.`
+              : "No jobs yet. Provisioning and day-2 ops appear here as they run."
+      }
+    >
       {live.length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <Table
@@ -90,40 +90,17 @@ export default function Jobs() {
               </div>
             </div>
             {sel.error && (
-              <div className="at-panel">
-                <div className="at-panel-bar">
-                  <span className="at-caption" style={{ color: "var(--at-fail)" }}>Error</span>
-                </div>
-                <div
-                  className="mono text-xs text-danger"
-                  style={{ padding: 12, background: "var(--at-ridge)", whiteSpace: "pre-wrap" }}
-                >
-                  {sel.error}
-                </div>
-              </div>
+              <TerminalPane title="stderr" variant="error">
+                {sel.error}
+              </TerminalPane>
             )}
-            <div className="at-panel">
-              <div className="at-panel-bar">
-                <span className="at-caption">Result</span>
-              </div>
-              <pre
-                className="mono overflow-auto whitespace-pre-wrap"
-                style={{
-                  margin: 0,
-                  padding: 14,
-                  fontSize: 11,
-                  maxHeight: "50vh",
-                  background: "var(--at-ridge)",
-                  color: "var(--at-ink-2)",
-                }}
-              >
-                {sel.result ? JSON.stringify(sel.result, null, 2) : "—"}
-              </pre>
-            </div>
+            <TerminalPane title="result.json">
+              {sel.result ? colorizeJson(JSON.stringify(sel.result, null, 2)) : "—"}
+            </TerminalPane>
           </div>
         )}
       </SlideOver>
-    </div>
+    </ListPage>
   );
 }
 

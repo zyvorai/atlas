@@ -1,4 +1,5 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 // Compact read/light-write Centers: Policies, Backends, Kubernetes, Cluster, Metrics.
 import { useNavigate } from "react-router-dom";
 import { submit } from "../api/client";
@@ -16,7 +17,7 @@ import {
   useStorageClasses,
 } from "../api/hooks";
 import { Badge } from "../ui/kit";
-import { PageHead } from "../ui/PageHead";
+import { ListPage } from "../ui/templates/ListPage";
 import { navCrumbs } from "../nav/routes";
 import { Table } from "../ui/Table";
 import { depth, depthWidth } from "../lib/depth";
@@ -26,17 +27,16 @@ export function Policies() {
   const { data } = usePolicies();
   const n = data?.length || 0;
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("policies")}
-        eyebrow="GOVERNANCE · INDEX"
-        title="Policies"
-        state={
-          n
-            ? `${n} intent${n === 1 ? "" : "s"} in the built-in placement catalog (atlas-policy).`
-            : "Built-in intent → placement catalog (atlas-policy)."
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("policies")}
+      eyebrow="GOVERNANCE · INDEX"
+      title="Policies"
+      state={
+        n
+          ? `${n} intent${n === 1 ? "" : "s"} in the built-in placement catalog (atlas-policy).`
+          : "Built-in intent → placement catalog (atlas-policy)."
+      }
+    >
       <Table
         soundings
         panelTitle="Intent catalog"
@@ -51,7 +51,7 @@ export function Policies() {
           { h: "Description", f: (p) => <span style={{ color: "var(--at-ink-3)" }}>{p.description}</span> },
         ]}
       />
-    </div>
+    </ListPage>
   );
 }
 
@@ -68,30 +68,29 @@ export function Backends() {
   const inv = useInvalidate();
   const n = data?.length || 0;
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("backends")}
-        eyebrow="INFRASTRUCTURE · OPS"
-        title="Backends"
-        state={
-          n
-            ? `${n} registered backend${n === 1 ? "" : "s"} — discovery and capacity summary.`
-            : "No backends registered yet."
-        }
-        actions={
-          <button
-            type="button"
-            className="at-btn"
-            onClick={() =>
-              submit("post", "/backends/bkd_ceph_lab/discover", null, "discovery triggered", () => inv("clusters")).catch(
-                () => {},
-              )
-            }
-          >
-            Discover
-          </button>
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("backends")}
+      eyebrow="INFRASTRUCTURE · OPS"
+      title="Backends"
+      state={
+        n
+          ? `${n} registered backend${n === 1 ? "" : "s"} — discovery and capacity summary.`
+          : "No backends registered yet."
+      }
+      actions={
+        <button
+          type="button"
+          className="at-btn"
+          onClick={() =>
+            submit("post", "/backends/bkd_ceph_lab/discover", null, "discovery triggered", () => inv("clusters")).catch(
+              () => {},
+            )
+          }
+        >
+          Discover
+        </button>
+      }
+    >
 
       <div className="at-mod">
         <div className="at-modhead">
@@ -146,7 +145,7 @@ export function Backends() {
           { h: "Status", f: (b) => <Badge kind={b.status === "active" ? "success" : "neutral"}>{b.status}</Badge> },
         ]}
       />
-    </div>
+    </ListPage>
   );
 }
 
@@ -154,17 +153,16 @@ export function Kubernetes() {
   const { data: scs, isError } = useStorageClasses();
   const n = scs?.length || 0;
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("kubernetes")}
-        eyebrow="INFRASTRUCTURE · OPS"
-        title="Kubernetes"
-        state={
-          n
-            ? `${n} StorageClass${n === 1 ? "" : "es"} discovered from the cluster.`
-            : "No StorageClasses visible — check KUBECONFIG / RBAC."
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("kubernetes")}
+      eyebrow="INFRASTRUCTURE · OPS"
+      title="Kubernetes"
+      state={
+        n
+          ? `${n} StorageClass${n === 1 ? "" : "es"} discovered from the cluster.`
+          : "No StorageClasses visible — check KUBECONFIG / RBAC."
+      }
+    >
       <Table
         soundings
         panelTitle="StorageClasses"
@@ -183,7 +181,7 @@ export function Kubernetes() {
           },
         ]}
       />
-    </div>
+    </ListPage>
   );
 }
 
@@ -195,23 +193,21 @@ export function Cluster() {
   const { data: osds } = useOsds();
   const primary = clusters?.[0];
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("cluster")}
-        eyebrow="INFRASTRUCTURE · OPS"
-        title="Cluster"
-        state={
-          primary
-            ? `${primary.name} · health ${primary.health} · ${pools?.length || 0} pools · ${osds?.length || 0} OSDs.`
-            : "Waiting on cluster inventory…"
-        }
-        actions={
-          <button type="button" className="at-btn" onClick={() => nav("/ceph")}>
-            Ceph detail
-          </button>
-        }
-      />
-
+    <ListPage
+      crumbs={navCrumbs("cluster")}
+      eyebrow="INFRASTRUCTURE · OPS"
+      title="Cluster"
+      state={
+        primary
+          ? `${primary.name} · health ${primary.health} · ${pools?.length || 0} pools · ${osds?.length || 0} OSDs.`
+          : "Waiting on cluster inventory…"
+      }
+      actions={
+        <button type="button" className="at-btn" onClick={() => nav("/ceph")}>
+          Ceph detail
+        </button>
+      }
+    >
       <div className="at-instrs">
         <div className="at-instr">
           <div className="at-caption">Health</div>
@@ -289,7 +285,7 @@ export function Cluster() {
           ]}
         />
       </div>
-    </div>
+    </ListPage>
   );
 }
 
@@ -299,17 +295,16 @@ export function Metrics() {
   const n = data?.length || 0;
   const avg = osdDf?.summary?.average_utilization;
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("metrics")}
-        eyebrow="OBSERVABILITY · INDEX"
-        title="Metrics"
-        state={
-          n
-            ? `${n} Ceph metric sample${n === 1 ? "" : "s"}${avg != null ? ` · OSD avg ${avg.toFixed(1)}%` : ""}.`
-            : "Ceph-native metrics stream — waiting on samples."
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("metrics")}
+      eyebrow="OBSERVABILITY · INDEX"
+      title="Metrics"
+      state={
+        n
+          ? `${n} Ceph metric sample${n === 1 ? "" : "s"}${avg != null ? ` · OSD avg ${avg.toFixed(1)}%` : ""}.`
+          : "Ceph-native metrics stream — waiting on samples."
+      }
+    >
       <Table
         soundings
         panelTitle="Metric samples"
@@ -322,6 +317,6 @@ export function Metrics() {
           { h: "Labels", f: (m) => <span className="mono" style={{ color: "var(--at-ink-4)" }}>{JSON.stringify(m.labels || {})}</span> },
         ]}
       />
-    </div>
+    </ListPage>
   );
 }

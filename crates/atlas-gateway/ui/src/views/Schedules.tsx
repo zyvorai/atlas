@@ -1,10 +1,11 @@
-// Copyright (c) 2026 ZyvorAI Labs Private Limited. All rights reserved.
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { submit } from "../api/client";
 import { useBuckets, useInvalidate, useSchedules, useVolumes } from "../api/hooks";
 import { Badge, Button, FormModal } from "../ui/kit";
-import { PageHead } from "../ui/PageHead";
+import { ListPage } from "../ui/templates/ListPage";
 import { navCrumbs } from "../nav/routes";
 import { del } from "../ui/confirm";
 import { Table } from "../ui/Table";
@@ -18,22 +19,21 @@ export default function Schedules() {
   const [create, setCreate] = useState(false);
   const n = data?.length || 0;
   return (
-    <div>
-      <PageHead
-        crumbs={navCrumbs("schedules")}
-        eyebrow="DATA PROTECTION · INDEX"
-        title="Schedules"
-        state={
-          n
-            ? `${n} protection schedule${n === 1 ? "" : "s"} — periodic snapshots & backups for a volume.`
-            : "No schedules yet. Create one to automate snapshots or backups."
-        }
-        actions={
-          <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
-            <Plus size={14} /> Schedule
-          </button>
-        }
-      />
+    <ListPage
+      crumbs={navCrumbs("schedules")}
+      eyebrow="DATA PROTECTION · INDEX"
+      title="Schedules"
+      state={
+        n
+          ? `${n} protection schedule${n === 1 ? "" : "s"} — periodic snapshots & backups for a volume.`
+          : "No schedules yet. Create one to automate snapshots or backups."
+      }
+      actions={
+        <button type="button" className="at-btn primary" onClick={() => setCreate(true)}>
+          <Plus size={14} /> Schedule
+        </button>
+      }
+    >
       <Table
         soundings
         panelTitle="Schedule index"
@@ -82,6 +82,6 @@ export default function Schedules() {
           kind: v.kind, interval_secs: +v.interval_secs, keep: +v.keep,
           bucket_id: v.bucket_id || undefined, mode: v.mode,
         }, "schedule", () => inv("schedules"))} />
-    </div>
+    </ListPage>
   );
 }
