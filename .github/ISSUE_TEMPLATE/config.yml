@@ -1,0 +1,10 @@
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://zyvorai.github.io/atlas/
+    about: Check the docs site before filing — your question may already be answered there.
+  - name: Commercial support
+    url: mailto:sales@zyvor.dev
+    about: Questions about the Atlas Commercial License (ACL) or enterprise support.
