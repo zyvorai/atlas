@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/zyvorai/atlas/actions/workflows/ci.yml/badge.svg)](https://github.com/zyvorai/atlas/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.0-informational)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.0-informational)](CHANGELOG.md)
 [![Docs](https://img.shields.io/badge/docs-zyvorai.github.io%2Fatlas-blue)](https://zyvorai.github.io/atlas/)
 
 ![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)

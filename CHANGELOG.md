@@ -9,6 +9,8 @@ before `0.2.0` were not tracked here — see `git log` for that history.
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-09-14
+
 ### Changed — Dual license (AGPL-3.0 + ACL); remove trial JWT gate
 
 - Open-source under [AGPL-3.0](LICENSE); commercial track via
@@ -26,6 +28,44 @@ before `0.2.0` were not tracked here — see `git log` for that history.
   `resource_type=database`, `role=data_disk`). Relay keeps its Postgres ledger; Atlas provisions
   the data PVC and optional RGW backups. Implementation lives in the Relay repo
   (`docs/ATLAS_STORAGE.md`, `scripts/atlas-provision-relay-storage.sh`).
+
+### Added — Apple.com-style console redesign
+
+- Redesigned the React console (side rail, top nav, all 32 routes across 5 page templates) to a
+  light/dark Apple product-page aesthetic, layered on top of the existing "Soundings"
+  bathymetric UI identity. Verified live against the real-Ceph gateway.
+
+### Added — GitHub-native CI/CD and supply-chain hardening
+
+- Dependabot (cargo/npm ×2/github-actions/docker), CODEOWNERS, issue/PR templates, `SECURITY.md`.
+- CodeQL (JavaScript/TypeScript + Rust), `dependency-review` on PRs, OSSF Scorecard, PR-title
+  and PR-labeler checks.
+- `cargo-llvm-cov` / `vitest --coverage` as CI-artifact-only coverage (no external service).
+- `rust-toolchain.toml` + `.nvmrc` pin the Rust and Node versions CI already resolves to.
+- Every GitHub Action pinned to a commit SHA; every Docker base image pinned to a `sha256`
+  digest; `npm install -g npm@<exact>` in both Dockerfiles.
+- `docker-publish.yml` (GHCR push + keyless cosign signing + CycloneDX SBOM + Trivy scan) and
+  `release.yml` (CHANGELOG-driven GitHub Releases + cross-platform `atlasctl` binaries + UI dist
+  bundle), both gated on `v*` tags.
+- Branch protection on `main`: required status checks, admin bypass preserved.
+
+### Fixed — Security hardening
+
+- Legacy `sha256$...` password hashes now upgrade to Argon2 transparently on successful login.
+- Audit-log export refuses plaintext HTTP (loopback exempted for tests) — compliance-sensitive
+  data no longer leaves the process over an unencrypted connection even if misconfigured.
+- `cargo-deny` was silently scoped to `--all-features` by its GitHub Action's own default,
+  defeating `deny.toml`'s documented default-features-only intent; corrected.
+- Dependency bumps for known advisories surfaced once the above was fixed: `chacha20`, `h2`,
+  `rustls` (RUSTSEC-2026-0285, published mid-development — TLS 1.3 handshake messages accepted
+  across encryption level boundaries).
+
+### Changed — README, docs site, social card
+
+- Rewrote `README.md`: tech-stack badges, architecture diagram, "Why Atlas" comparison, Star
+  History chart, new hero social card (`docs/social/atlas-share-card.svg`/`.png`, hand-authored
+  from the project's own design tokens).
+- Removed `Co-Authored-By` trailers from the full git history.
 
 ## [0.2.0] — 2026-08-25
 
