@@ -13,7 +13,14 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { workspace = true }
-reqwest = { workspace = true }
+# atlasctl is the only crate cross-compiled for release (release.yml's binaries matrix, incl.
+# aarch64-unknown-linux-gnu) — the workspace default (native-tls, via openssl-sys) needs a
+# target-arch OpenSSL that the cross toolchain doesn't have. rustls-tls has no C dependency, so
+# it cross-compiles cleanly; scoped to just this crate (declared directly rather than inheriting
+# `workspace = true`, since a member can't turn default-features off through that path), not the
+# workspace default — the gateway's own HTTPS listener/outbound client elsewhere still use
+# native-tls unchanged.
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }

@@ -18,7 +18,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write # anchore/sbom-action attaches the SBOM to the tag's GitHub Release
       packages: write
       id-token: write # keyless cosign signing
       security-events: write # Trivy SARIF upload
@@ -78,7 +78,10 @@ jobs:
           retention-days: 90
 
       # Informational until a baseline is established, same posture as ci.yml's fmt check.
+      # if: always() so an unrelated earlier-step failure (e.g. the SBOM upload) can't silently
+      # skip this and leave the next step uploading a SARIF file that was never produced.
       - name: Scan image (Trivy)
+        if: always()
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         continue-on-error: true
         with:
