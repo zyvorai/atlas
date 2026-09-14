@@ -6,7 +6,11 @@ Stands up the storage fabric Atlas manages, on an existing Kubernetes/K3s cluste
 
 ## Prerequisites
 - A reachable cluster (`kubectl` context set).
-- **`helm`** (Rook ≥1.20 needs the companion `ceph-csi-drivers` chart or PVCs never bind).
+- **`helm`** — Rook ≥1.20's `operator.yaml` ships `Driver`/`OperatorConfig`/`CephConnection`
+  CRs (`csi.ceph.io/v1`) that only the `ceph-csi-operator` chart provides CRDs for (`up.sh`
+  installs it before the operator manifest — skipping it makes `kubectl apply -f operator.yaml`
+  fail outright, and *silently* stalls the CephCluster in `Progressing` if applied out of order).
+  The companion `ceph-csi-drivers` chart is what makes PVCs actually bind.
 - Empty block devices on the nodes for Ceph OSDs.
 - Version lockstep: **Rook v1.20.2** + **Ceph Squid `v19.2.3`** (Reef `v18.2.x` is rejected by Rook 1.20).
 
