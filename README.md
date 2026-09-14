@@ -5,12 +5,23 @@
 [![CI](https://github.com/zyvorai/atlas/actions/workflows/ci.yml/badge.svg)](https://github.com/zyvorai/atlas/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.2.0-informational)](CHANGELOG.md)
+[![Docs](https://img.shields.io/badge/docs-zyvorai.github.io%2Fatlas-blue)](https://zyvorai.github.io/atlas/)
+
+![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)
+![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-07405E?logo=sqlite&logoColor=white)
+![gRPC](https://img.shields.io/badge/gRPC-4285F4?logo=grpc&logoColor=white)
+![Ceph](https://img.shields.io/badge/Ceph-EF5C55?logo=ceph&logoColor=white)
 
 ![Atlas — Survey the cluster. Provision with intent. Operate day-2.](docs/social/atlas-share-card.png)
 
-**Central storage control plane** for the Zyvor suite. Products call stable Atlas APIs;
-Atlas maps intent to Ceph (and NFS/ZFS) through pluggable drivers — with an Apple Shop
-console for operators.
+**Storage, as a product.** Atlas is the **central storage control plane** for the Zyvor
+suite. Products call stable Atlas APIs; Atlas maps intent to Ceph (and NFS/ZFS) through
+pluggable drivers — with an Apple Shop console for operators.
+
+**3** storage backends · **6** database engines migratable via DataBridge · **80+** REST
+endpoints · **3** access surfaces (REST · gRPC · SSE)
 
 📖 **[Read the full docs](https://zyvorai.github.io/atlas/)** — quickstart, architecture, licensing.
 
@@ -18,40 +29,24 @@ console for operators.
 
 ## Contents
 
-- [Dashboard gallery](#dashboard-gallery)
-- [Capabilities](#capabilities)
-- [Quickstart](#quickstart)
-- [Important boundaries](#important-boundaries)
-- [License](#license)
+- [Quickstart](#-quickstart)
+- [Dashboard gallery](#-dashboard-gallery)
+- [Architecture at a glance](#-architecture-at-a-glance)
+- [Capabilities](#-capabilities)
+- [Why Atlas](#-why-atlas)
+- [Important boundaries](#-important-boundaries)
+- [License](#-license)
 
-## Dashboard gallery
-
-Live console shots (captured against a lab deployment):
-
-| | | |
-|---|---|---|
-| ![Overview](docs/ux/00-overview.png) | ![Volumes](docs/ux/01-volumes.png) | ![Observatory](docs/ux/02-observatory.png) |
-| ![Ceph](docs/ux/03-ceph.png) | ![DataBridge](docs/ux/04-databridge.png) | ![Sign in](docs/ux/05-login.png) |
-
-Full tour: [Gallery](https://zyvorai.github.io/atlas/gallery).
-
-## Capabilities
-
-- **Intent → storage** — volumes, snapshots, clones, CephFS RWX, RGW buckets via REST + gRPC
-- **Pluggable drivers** — real Ceph first; NFS + ZFS; fake driver for local demo
-- **DataBridge** — cloud-to-edge DB migration (six engines, CDC, cutover) on Ceph
-- **Day-2** — alerts, maintenance, governance, quotas, upgrade preflight, DR scaffolding
-- **Console** — Carbon / Apple Lite shells, SF type, Apple Blue CTAs
-
-Customer-facing feature guide: [docs/atlas-customer-feature-guide.md](docs/atlas-customer-feature-guide.md).
-
-## Quickstart
+## 🚀 Quickstart
 
 ```bash
 make run
 # Console → http://127.0.0.1:5110
 cargo run -p atlas-cli -- --base-url http://127.0.0.1:5110 health
 ```
+
+No Ceph cluster needed to try it — `make run` starts the gateway against a fake driver so
+you can click through the whole console immediately.
 
 Deploy to a remote k3s host:
 
@@ -68,7 +63,59 @@ Deploy to a remote k3s host:
 
 More: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) · [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Important boundaries
+## 🖥 Dashboard gallery
+
+Live console shots (captured against a lab deployment):
+
+| | | |
+|---|---|---|
+| ![Overview](docs/ux/00-overview.png) | ![Volumes](docs/ux/01-volumes.png) | ![Observatory](docs/ux/02-observatory.png) |
+| ![Ceph](docs/ux/03-ceph.png) | ![DataBridge](docs/ux/04-databridge.png) | ![Sign in](docs/ux/05-login.png) |
+
+Full tour: [Gallery](https://zyvorai.github.io/atlas/gallery).
+
+## 🗺 Architecture at a glance
+
+```mermaid
+flowchart LR
+  subgraph Products["Zyvor products"]
+    P1["Zeus OS / v9s"]
+    P2["Veyron"]
+    P3["HyperSDK · Aether · …"]
+  end
+  Products -- "REST · gRPC" --> Atlas["Atlas Gateway"]
+  Atlas --> Driver["StorageDriver trait"]
+  Driver --> Ceph[("Ceph\nRBD · CephFS · RGW")]
+  Driver --> NFS[("NFS")]
+  Driver --> ZFS[("ZFS")]
+  Atlas --> DataBridge["DataBridge"]
+  DataBridge --> Edge[("Edge DB on Ceph\nPostgres · MySQL · MariaDB\nOracle · SQL Server · MongoDB")]
+```
+
+Full write-up: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## 🧰 Capabilities
+
+- **Intent → storage** — volumes, snapshots, clones, CephFS RWX, RGW buckets via REST + gRPC
+- **Pluggable drivers** — real Ceph first; NFS + ZFS; fake driver for local demo
+- **DataBridge** — cloud-to-edge DB migration (six engines, CDC, cutover) on Ceph
+- **Day-2** — alerts, maintenance, governance, quotas, upgrade preflight, DR scaffolding
+- **Console** — Apple.com-style top-nav shell, SF type, Night/Day themes
+
+Customer-facing feature guide: [docs/atlas-customer-feature-guide.md](docs/atlas-customer-feature-guide.md).
+
+## ⚖ Why Atlas
+
+| | Atlas | Raw Ceph tooling | Rook alone |
+|---|---|---|---|
+| Intent-based API (not pool internals) | Yes | No | No |
+| One API across Ceph + NFS + ZFS | Yes | Ceph only | Ceph only |
+| Cloud-to-edge DB migration (DataBridge) | Yes | No | No |
+| Per-tenant quotas & governance | Yes | Partial | No |
+| Built-in operator console | Yes | Ceph Dashboard only | No |
+| Kubernetes-native provisioning | Yes (via drivers) | No | Yes |
+
+## 🔍 Important boundaries
 
 What's free under AGPL vs. what needs a commercial license
 ([full guide](docs/LICENSING.md)):
@@ -82,7 +129,11 @@ What's free under AGPL vs. what needs a commercial license
 | Embed Atlas in a closed-source product | No — needs ACL |
 | White-label proprietary customizations without AGPL | No — needs ACL |
 
-## License
+## 📈 Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=zyvorai/atlas&type=Date)](https://star-history.com/#zyvorai/atlas&Date)
+
+## 📄 License
 
 Dual-licensed:
 
