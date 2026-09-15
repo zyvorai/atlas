@@ -1,6 +1,14 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
 // SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+import { afterEach } from "vitest";
+import { cleanup } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
+
+// @testing-library/react's own auto-cleanup only registers itself when it finds a global
+// `afterEach` (i.e. vitest's `test.globals: true`), which this project's vite.config.ts doesn't
+// set — so without this, a render from one test stays mounted into the next `it` in the same
+// file, and any document-wide query (screen.getByLabelText, etc.) can silently match both.
+afterEach(() => cleanup());
 
 // jsdom doesn't implement scroll APIs; several views call them from effects on mount
 // (chapter navigation, scroll-to-top) purely for UX, so a no-op stub is enough to render.

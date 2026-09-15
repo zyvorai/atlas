@@ -44,6 +44,7 @@ export default function OpsAdvisor() {
   const [incidents, setIncidents] = useState<IncidentsResponse>();
   const [anomalies, setAnomalies] = useState<AnomaliesResponse>();
   const [sensitivity, setSensitivity] = useState("3.5");
+  const [refreshingAnomalies, setRefreshingAnomalies] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [capacityTib, setCapacityTib] = useState("1");
@@ -72,6 +73,23 @@ export default function OpsAdvisor() {
       setError(apiError(err));
     } finally {
       setLoading(false);
+    }
+  }
+
+  // The sensitivity chips only affect /ai/anomalies — re-fetch just that endpoint instead of the
+  // full analyze() (which would also needlessly redo the advisor + incidents calls). Only called
+  // once `result` exists (the panel that holds these chips is gated on it), so anomalies is
+  // already populated and there's a prior response to fall back to if this refresh fails.
+  async function changeSensitivity(value: string) {
+    setSensitivity(value);
+    setRefreshingAnomalies(true);
+    try {
+      const { data } = await http.get<AnomaliesResponse>(`/ai/anomalies?minutes=360&sensitivity=${value}`);
+      setAnomalies(data);
+    } catch (err) {
+      setError(apiError(err));
+    } finally {
+      setRefreshingAnomalies(false);
     }
   }
 
@@ -259,7 +277,8 @@ export default function OpsAdvisor() {
                     key={value}
                     type="button"
                     className={`at-chip${sensitivity === value ? " on" : ""}`}
-                    onClick={() => setSensitivity(value)}
+                    onClick={() => changeSensitivity(value)}
+                    disabled={refreshingAnomalies}
                     title="Lower values detect smaller deviations"
                   >
                     {value === "3" ? "Sensitive" : value === "3.5" ? "Balanced" : "Strict"}
