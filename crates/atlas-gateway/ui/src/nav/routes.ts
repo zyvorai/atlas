@@ -9,6 +9,7 @@ import {
   Archive,
   BadgeCheck,
   Bell,
+  BrainCircuit,
   BookOpen,
   Boxes,
   Camera,
@@ -47,6 +48,7 @@ import ProtectionStatus from "../views/ProtectionStatus";
 import Alerts from "../views/Alerts";
 import ActivityView from "../views/Activity";
 import Observatory from "../views/Observatory";
+import OpsAdvisor from "../views/OpsAdvisor";
 import Ceph from "../views/Ceph";
 import PoolDetail from "../views/PoolDetail";
 import Jobs from "../views/Jobs";
@@ -137,6 +139,7 @@ export const MODULES: NavModule[] = [
   { id: "validation", codename: "astraea", label: "Validation", path: "/databridge/validation", icon: BadgeCheck, section: "DATABRIDGE", minRole: "operator", element: Validation },
 
   { id: "observatory", codename: "orrery", label: "Observatory", path: "/observatory", icon: Orbit, section: "OBSERVABILITY", pinned: true, topPrimary: true, shortcut: "O", element: Observatory },
+  { id: "ops-advisor", codename: "metis", label: "Ops Advisor", path: "/ops-advisor", icon: BrainCircuit, section: "OBSERVABILITY", minRole: "operator", element: OpsAdvisor },
   { id: "activity", codename: "kairos", label: "Activity", path: "/activity", icon: Activity, section: "OBSERVABILITY", element: ActivityView },
   { id: "alerts", codename: "hermes", label: "Alerts", path: "/alerts", icon: Bell, section: "OBSERVABILITY", minRole: "operator", pinned: true, topPrimary: true, shortcut: "A", element: Alerts },
   { id: "metrics", codename: "helios", label: "Metrics", path: "/metrics-dashboard", icon: Gauge, section: "OBSERVABILITY", element: Metrics },

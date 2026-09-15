@@ -16,6 +16,8 @@ before `0.2.0` were not tracked here — see `git log` for that history.
 - Added an optional OpenAI-compatible summary provider with HTTPS enforcement, bounded context and
   output, prompt-injection resistance, deterministic fallback, operator RBAC, and audit logging.
 - Added local/provider mode documentation and unit plus REST/RBAC regression coverage.
+- Added a Storage Center **Ops Advisor** page with question presets, explicit local/auto/LLM
+  controls, risk visualization, evidence cards, and a prioritized non-executing runbook.
 
 ## [0.3.0] — 2026-09-14
 

@@ -5,6 +5,9 @@
 Atlas Ops Advisor turns current Atlas telemetry into an explainable risk score and a prioritized,
 read-only runbook. The endpoint never executes an action and does not require a model.
 
+Operators can use **Storage Center → Observability → Ops Advisor** to ask a focused question,
+choose local/automatic/LLM analysis, inspect evidence, and follow the prioritized runbook.
+
 ```bash
 curl -sS -X POST http://127.0.0.1:5110/api/atlas/v1/ai/advisor \
   -H 'Content-Type: application/json' \

@@ -127,6 +127,38 @@ export interface AlertRecord {
   silenced_until?: string | null;
 }
 
+export type AdvisorMode = "local" | "auto" | "llm";
+
+export interface AdvisorAction {
+  priority: number;
+  title: string;
+  rationale: string;
+  inspect: string;
+}
+
+export interface AdvisorEvidence {
+  capacity_used_percent: number;
+  days_to_full: number | null;
+  open_alerts: number;
+  critical_alerts: number;
+  warning_alerts: number;
+  failed_jobs_15m: number;
+  degraded_objects: number;
+  unfound_objects: number;
+  alert_titles: string[];
+}
+
+export interface AdvisorResponse {
+  mode: "local" | "local_fallback" | "llm";
+  risk_score: number;
+  risk_level: "low" | "moderate" | "high" | "critical";
+  summary: string;
+  evidence: AdvisorEvidence;
+  actions: AdvisorAction[];
+  warnings: string[];
+  can_execute: false;
+}
+
 export interface JobRecord {
   id: string;
   tenant_id: string;

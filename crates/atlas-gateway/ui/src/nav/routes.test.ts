@@ -18,6 +18,7 @@ describe("routes", () => {
     expect(activeModuleFromPath("/pools/pool-1")?.id).toBe("pool-detail");
     expect(activeModuleFromPath("/databridge/plans")?.id).toBe("migration-plans");
     expect(activeModuleFromPath("/databridge/plans/plan-9")?.id).toBe("plan-detail");
+    expect(activeModuleFromPath("/ops-advisor")?.id).toBe("ops-advisor");
   });
 
   it("modulesForRole hides operator and admin entries from viewers", () => {
@@ -25,6 +26,7 @@ describe("routes", () => {
     expect(viewerIds.has("overview")).toBe(true);
     expect(viewerIds.has("volumes")).toBe(false);
     expect(viewerIds.has("tenants")).toBe(false);
+    expect(viewerIds.has("ops-advisor")).toBe(false);
   });
 
   it("canModuleAccess respects minRole on detail routes", () => {
