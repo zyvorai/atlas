@@ -2,8 +2,8 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
 # Atlas observability bundle
 
-A self-contained **Prometheus + Grafana** stack that scrapes and visualizes the Atlas control
-plane. No Prometheus Operator / CRDs required — plain Deployments + a NodePort each.
+A self-contained **Prometheus + Grafana + Jaeger** stack for the Atlas control plane. No
+Prometheus Operator / CRDs required — plain Deployments + a NodePort each.
 
 ## What it scrapes
 - **`atlas-gateway-ceph:5110/metrics`** — Atlas's own operational gauges (`atlas_volumes`,
@@ -19,6 +19,8 @@ Then:
 - **Prometheus** → `http://<node>:30514` — check *Status → Targets*; `atlas-gateway` should be `UP`.
 - **Grafana** → `http://<node>:30515` (admin / `atlas`) → *Dashboards → Atlas → “Atlas Storage
   Control Plane”* — capacity gauge, resource counts, jobs-by-state, open alerts, Ceph client IOPS.
+- **Jaeger** → `http://<node>:30517` — empty until atlas-gateway runs with
+  `ATLAS_OTEL_EXPORTER_ENDPOINT=http://<node>:30516` (see `docs/TRACING.md`).
 
 ## Alerting rules (in `prometheus.yaml`)
 - `AtlasCapacityHigh` — used/raw > 85% for 5m.
@@ -32,4 +34,6 @@ evaluates into `storage_alerts`; the `atlas_alerts_open` gauge re-exports that c
 - `prometheus.yaml` — config + rules ConfigMap, Deployment, NodePort 30514.
 - `grafana.yaml` — datasource + dashboard provisioning, Deployment, NodePort 30515.
 - `atlas-overview.json` — the Grafana dashboard (loaded into a ConfigMap by `up.sh`).
+- `jaeger.yaml` — all-in-one Jaeger (OTLP/HTTP collector + query UI), NodePorts 30516/30517. See
+  `docs/TRACING.md`.
 - `up.sh` — apply everything + wait for rollout.

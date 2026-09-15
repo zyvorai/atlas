@@ -35,6 +35,7 @@ pub type RookPoolKinds = std::collections::HashMap<String, String>;
 /// this is what lets raw `rbd ls` images show up as real VM disks (namespace/PVC) in inventory.
 /// When `rook_pool_kinds` is provided, pools whose name matches a live Rook CR are reclassified
 /// with the precise kind instead of the driver's own name-heuristic guess.
+#[tracing::instrument(skip(pool, driver, rbd_owners, rook_pool_kinds), fields(backend_id = %driver.backend_id()))]
 pub async fn run_discovery(
     pool: &SqlitePool,
     driver: Arc<dyn StorageDriver>,

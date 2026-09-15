@@ -29,9 +29,13 @@ fi
 echo "==> Grafana (datasource + dashboard auto-provisioned)"
 kubectl apply -f grafana.yaml
 
+echo "==> Jaeger (OTLP trace collector + UI — see docs/TRACING.md)"
+kubectl apply -f jaeger.yaml
+
 echo "==> waiting for rollouts"
 kubectl -n "$NS" rollout status deploy/atlas-prometheus --timeout=180s
 kubectl -n "$NS" rollout status deploy/atlas-grafana --timeout=180s
+kubectl -n "$NS" rollout status deploy/atlas-jaeger --timeout=180s
 
 NODE_IP="$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')"
 cat <<EOF
@@ -40,4 +44,6 @@ Observability is up:
   Prometheus  http://${NODE_IP}:30514   (targets: Status -> Targets; atlas-gateway should be UP)
   Grafana     http://${NODE_IP}:30515   (admin / <secret atlas-grafana-admin>)
   admin password: ${GW_PASS}
+  Jaeger UI   http://${NODE_IP}:30517   (traces — only populated once atlas-gateway is run with
+                                          ATLAS_OTEL_EXPORTER_ENDPOINT=http://${NODE_IP}:30516)
 EOF

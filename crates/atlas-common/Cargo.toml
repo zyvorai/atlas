@@ -18,3 +18,12 @@ tracing-subscriber = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
 dotenvy = { workspace = true }
+# Distributed tracing (OTLP/HTTP exporter) — off unless ATLAS_OTEL_EXPORTER_ENDPOINT is set (see
+# init_tracing()). trace-only: no metrics/logs pipeline, that's a separate, larger effort.
+opentelemetry = "0.32"
+opentelemetry_sdk = { version = "0.32", features = ["rt-tokio"] }
+# reqwest-blocking-client (not reqwest-client): the batch span processor flushes from its own
+# dedicated OS thread, not inside the Tokio runtime, so the exporter's HTTP calls must be
+# synchronous — verified live: reqwest-client's async client panics there ("no reactor running").
+opentelemetry-otlp = { version = "0.32", default-features = false, features = ["http-proto", "reqwest-blocking-client", "trace"] }
+tracing-opentelemetry = "0.33"

@@ -153,10 +153,12 @@ secretsBackend:
     tokenSecretKey: token
     secretPath: "secret/data/atlas/gateway-auth"
 
-# Distributed tracing (OpenTelemetry OTLP exporter) — off by default; see docs/TRACING.md.
+# Distributed tracing (OpenTelemetry OTLP/HTTP exporter) — off by default; see docs/TRACING.md.
+# Port 4318 (OTLP/HTTP), not 4317 (OTLP/gRPC, which this doesn't use) — just the collector's base
+# URL, Atlas appends /v1/traces itself.
 tracing:
   enabled: false
-  otlpEndpoint: "http://otel-collector.zyvor-system.svc:4317"
+  otlpEndpoint: "http://otel-collector.zyvor-system.svc:4318"
   sampleRatio: "1.0"
 
 nfs:

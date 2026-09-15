@@ -259,6 +259,7 @@ pub(crate) struct AdvisorResponse {
 /// Shared advisor computation behind both `POST /ai/advisor` and the `ops_advisor` MCP tool
 /// (`crates/atlas-gateway/src/mcp.rs`) — one code path for role-check, evidence gathering,
 /// scoring, optional-provider summary, and audit recording, so the MCP edge can't drift from REST.
+#[tracing::instrument(skip(s, question), fields(actor = %actor.id))]
 pub(crate) async fn compute_advisor(
     s: &AppState,
     actor: &Actor,

@@ -15,6 +15,7 @@ use sqlx::SqlitePool;
 
 use crate::spec::JobSpec;
 
+#[tracing::instrument(skip(pool, k8s, spec), fields(tenant_id = %tenant_id))]
 pub(crate) async fn dispatch(
     pool: &SqlitePool,
     k8s: &Option<Arc<K8sDriver>>,
