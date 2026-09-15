@@ -92,6 +92,7 @@ const config: Config = {
           items: [
             {label: 'Quickstart', to: '/docs/getting-started/quickstart'},
             {label: 'Architecture', to: '/docs/core-concepts/architecture'},
+            {label: 'API Reference', to: '/docs/api-reference'},
             {label: 'Licensing', to: '/docs/licensing'},
           ],
         },
