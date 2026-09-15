@@ -24,6 +24,7 @@ use crate::{auth::Actor, state::AppState};
 const MAX_QUESTION_CHARS: usize = 512;
 const MAX_ALERTS: usize = 20;
 const MAX_MODEL_SUMMARY_CHARS: usize = 2_000;
+const MAX_TELEMETRY_AGE_MINUTES: i64 = 15;
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -196,6 +197,11 @@ pub(crate) struct AnomaliesResponse {
     generated_at: String,
     window_minutes: i64,
     sample_count: usize,
+    /// "fresh" | "stale" | "unavailable" — see `anomaly_freshness`. Detection is paused (empty
+    /// `anomalies`, a warning explaining why) whenever this isn't "fresh", so an old spike is
+    /// never presented as a current incident just because nothing newer has been sampled since.
+    telemetry_status: &'static str,
+    latest_sample_age_minutes: Option<i64>,
     sensitivity: f64,
     model: &'static str,
     anomalies: Vec<MetricAnomaly>,
@@ -408,20 +414,27 @@ pub(crate) async fn compute_anomalies(
         ));
     }
     let history = atlas_inventory::metrics::history(&s.pool, minutes).await?;
-    let mut anomalies = detect_anomalies(&history, sensitivity);
-    anomalies.sort_by(|a, b| b.score.total_cmp(&a.score));
-    let warnings = if history.len() < 5 {
-        vec![format!(
-            "At least 5 samples are required; {} available",
-            history.len()
-        )]
+    let now = chrono::Utc::now();
+    let (telemetry_status, latest_sample_age_minutes, mut warnings) =
+        anomaly_freshness(&history, now);
+    let mut anomalies = if telemetry_status == "fresh" && history.len() >= 5 {
+        detect_anomalies(&history, sensitivity)
     } else {
         Vec::new()
     };
+    anomalies.sort_by(|a, b| b.score.total_cmp(&a.score));
+    if history.len() < 5 {
+        warnings.push(format!(
+            "At least 5 samples are required; {} available",
+            history.len()
+        ));
+    }
     Ok(AnomaliesResponse {
-        generated_at: chrono::Utc::now().to_rfc3339(),
+        generated_at: now.to_rfc3339(),
         window_minutes: minutes,
         sample_count: history.len(),
+        telemetry_status,
+        latest_sample_age_minutes,
         sensitivity,
         model: "robust_median_mad_v1",
         anomalies,
@@ -814,6 +827,55 @@ fn median(values: &[f64]) -> f64 {
     } else {
         sorted[middle]
     }
+}
+
+/// Whether `history`'s most recent sample is fresh enough to trust for anomaly detection.
+/// `("fresh"|"stale"|"unavailable", age_minutes, warnings)` — detection is skipped (empty
+/// `anomalies`) for anything but `"fresh"`, so a spike from stale/missing telemetry is never
+/// presented as a current incident just because nothing newer has been sampled since.
+fn anomaly_freshness(
+    history: &[Value],
+    now: chrono::DateTime<chrono::Utc>,
+) -> (&'static str, Option<i64>, Vec<String>) {
+    let Some(last) = history.last() else {
+        return (
+            "unavailable",
+            None,
+            vec!["No telemetry samples are available; anomaly detection is paused".into()],
+        );
+    };
+    let Some(sample_time) = last
+        .get("ts")
+        .and_then(Value::as_str)
+        .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
+    else {
+        return (
+            "unavailable",
+            None,
+            vec!["Latest telemetry timestamp is missing or invalid; anomaly detection is paused"
+                .into()],
+        );
+    };
+    let age_seconds = now.signed_duration_since(sample_time).num_seconds();
+    if age_seconds < -60 {
+        return (
+            "unavailable",
+            None,
+            vec!["Latest telemetry timestamp is in the future; anomaly detection is paused".into()],
+        );
+    }
+    let age = age_seconds.max(0).div_euclid(60);
+    if age_seconds > MAX_TELEMETRY_AGE_MINUTES * 60 {
+        return (
+            "stale",
+            Some(age),
+            vec![format!(
+                "Latest telemetry is {age} minutes old (limit: {MAX_TELEMETRY_AGE_MINUTES}); \
+                 anomaly detection is paused"
+            )],
+        );
+    }
+    ("fresh", Some(age), Vec::new())
 }
 
 fn normalized_series(history: &[Value], spec: MetricSpec) -> Vec<f64> {
@@ -1339,6 +1401,25 @@ mod tests {
             "jobs_running": jobs,
             "alerts_open": alerts,
         })
+    }
+
+    #[test]
+    fn anomaly_freshness_pauses_stale_and_invalid_samples() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-09-15T12:00:00Z")
+            .expect("valid time")
+            .with_timezone(&chrono::Utc);
+        let fresh = vec![json!({ "ts": "2026-09-15T11:45:00Z" })];
+        assert_eq!(anomaly_freshness(&fresh, now).0, "fresh");
+        assert_eq!(anomaly_freshness(&fresh, now).1, Some(15));
+        let stale = vec![json!({ "ts": "2026-09-15T11:44:00Z" })];
+        assert_eq!(anomaly_freshness(&stale, now).0, "stale");
+        assert_eq!(anomaly_freshness(&stale, now).1, Some(16));
+        assert_eq!(anomaly_freshness(&[json!({})], now).0, "unavailable");
+        assert_eq!(anomaly_freshness(&[], now).0, "unavailable");
+        assert_eq!(
+            anomaly_freshness(&[json!({ "ts": "2026-09-15T12:02:00Z" })], now).0,
+            "unavailable"
+        );
     }
 
     #[test]

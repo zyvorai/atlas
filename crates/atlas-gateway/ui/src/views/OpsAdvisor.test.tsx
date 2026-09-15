@@ -16,7 +16,8 @@ const ADVISOR = {
 };
 const INCIDENTS = { generated_at: "now", count: 0, incidents: [], can_execute: false };
 const anomalies = (sensitivity: number) => ({
-  generated_at: "now", window_minutes: 360, sample_count: 10, sensitivity,
+  generated_at: "now", window_minutes: 360, sample_count: 10,
+  telemetry_status: "fresh" as const, latest_sample_age_minutes: 2, sensitivity,
   model: "robust_median_mad_v1", anomalies: [], warnings: [], can_execute: false,
 });
 

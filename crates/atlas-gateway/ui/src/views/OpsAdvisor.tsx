@@ -286,8 +286,8 @@ export default function OpsAdvisor() {
                 ))}
               </div>
               <span className="grow" />
-              <Badge kind={anomalies?.anomalies.length ? "warning" : "success"}>
-                {anomalies?.anomalies.length ?? 0} detected
+              <Badge kind={anomalies && anomalies.telemetry_status !== "fresh" ? "warning" : anomalies?.anomalies.length ? "warning" : "success"}>
+                {anomalies && anomalies.telemetry_status !== "fresh" ? "Detection paused" : `${anomalies?.anomalies.length ?? 0} detected`}
               </Badge>
             </div>
             {anomalies?.warnings.map((warning) => (
@@ -318,7 +318,9 @@ export default function OpsAdvisor() {
             {anomalies ? (
               <div className="at-list-row">
                 <span className="at-sub" style={{ margin: 0 }}>
-                  {anomalies.sample_count} samples · median/MAD baseline · sensitivity {anomalies.sensitivity}
+                  {anomalies.sample_count} samples · {anomalies.telemetry_status} telemetry
+                  {anomalies.latest_sample_age_minutes != null ? ` · latest ${anomalies.latest_sample_age_minutes} min ago` : ""}
+                  {` · median/MAD baseline · sensitivity ${anomalies.sensitivity}`}
                 </span>
               </div>
             ) : null}

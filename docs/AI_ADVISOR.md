@@ -84,5 +84,8 @@ analysis. Each result exposes its current value, baseline, MAD, percentage chang
 severity, explanation, and a read-only inspection endpoint.
 
 The query accepts a 15-minute to 14-day window and sensitivity from 2–10. Lower sensitivity finds
-smaller deviations. At least five history samples are required; Atlas returns a warning rather
+smaller deviations. Atlas also reports `telemetry_status` (`fresh`, `stale`, or `unavailable`) and
+`latest_sample_age_minutes`. Detection is paused with a warning when the latest sample is over
+15 minutes old, its timestamp is invalid, or telemetry is unavailable; old spikes are never
+presented as current incidents. At least five history samples are required; Atlas returns a warning rather
 than inventing a result when the baseline is insufficient.
