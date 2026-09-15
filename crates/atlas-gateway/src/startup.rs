@@ -13,8 +13,8 @@ use atlas_common::Config;
 use atlas_driver_ceph::{FakeCephDriver, RealCephDriver};
 use atlas_driver_core::{DriverRegistry, StorageDriver};
 use atlas_driver_k8s::K8sDriver;
-use atlas_driver_nfs::NfsDriver;
-use atlas_driver_zfs::ZfsDriver;
+use atlas_driver_nfs::{FakeNfsDriver, RealNfsDriver};
+use atlas_driver_zfs::{FakeZfsDriver, RealZfsDriver};
 
 use crate::state::AppState;
 
@@ -170,7 +170,14 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
         } else {
             config.nfs_exports.clone()
         };
-        let nfs: Arc<dyn StorageDriver> = Arc::new(NfsDriver::new(NFS_BACKEND_ID, server, exports));
+        let nfs: Arc<dyn StorageDriver> = match config.nfs_driver_mode {
+            atlas_common::config::DriverMode::Real => {
+                Arc::new(RealNfsDriver::new(NFS_BACKEND_ID, server, exports))
+            }
+            atlas_common::config::DriverMode::Fake => {
+                Arc::new(FakeNfsDriver::new(NFS_BACKEND_ID, server, exports))
+            }
+        };
         let nfs_backend = StorageBackend {
             id: NFS_BACKEND_ID.into(),
             name: "zyvor-nfs".into(),
@@ -208,7 +215,14 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
         } else {
             config.zfs_pools.clone()
         };
-        let zfs: Arc<dyn StorageDriver> = Arc::new(ZfsDriver::new(ZFS_BACKEND_ID, host, zpools));
+        let zfs: Arc<dyn StorageDriver> = match config.zfs_driver_mode {
+            atlas_common::config::DriverMode::Real => {
+                Arc::new(RealZfsDriver::new(ZFS_BACKEND_ID, host, zpools))
+            }
+            atlas_common::config::DriverMode::Fake => {
+                Arc::new(FakeZfsDriver::new(ZFS_BACKEND_ID, host, zpools))
+            }
+        };
         let zfs_backend = StorageBackend {
             id: ZFS_BACKEND_ID.into(),
             name: "zyvor-zfs".into(),

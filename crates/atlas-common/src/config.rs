@@ -29,6 +29,31 @@ impl CephDriverMode {
     }
 }
 
+/// Which NFS/ZFS driver implementation the gateway wires up — same `Real`/`Fake` shape as
+/// `CephDriverMode`, shared across both backends since neither has anything Ceph-specific about
+/// the choice (kept as a separate type from `CephDriverMode` since the two aren't
+/// interchangeable — a `CephDriverMode` accidentally passed where an NFS/ZFS mode was meant
+/// wouldn't be a compile error otherwise).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DriverMode {
+    /// Shell out to real commands (`showmount`/`df` for NFS, `zpool`/`zfs` for ZFS) against a
+    /// real, reachable target. Errors (unreachable, command missing) surface as real errors —
+    /// never a fabricated fallback value.
+    Real,
+    /// Serve canned fixtures (local dev / tests without real NFS/ZFS infra) — the historical MVP
+    /// behavior, still the default so existing deployments/demos are unaffected.
+    Fake,
+}
+
+impl DriverMode {
+    fn from_env_str(s: &str) -> Self {
+        match s.trim().to_lowercase().as_str() {
+            "real" => DriverMode::Real,
+            _ => DriverMode::Fake,
+        }
+    }
+}
+
 /// OIDC/SSO login configuration. Only built when `ATLAS_OIDC_ISSUER_URL`, `_CLIENT_ID`, and
 /// `_REDIRECT_URL` are all set — absence disables the feature entirely (no route exposed, no
 /// "Sign in with SSO" button), mirroring how `ceph_prometheus_url`/`alert_webhook_url` auto-gate.
@@ -137,12 +162,18 @@ pub struct Config {
     pub nfs_server: Option<String>,
     /// Comma-separated NFS export paths (defaults to demo exports when enabled without any).
     pub nfs_exports: Vec<String>,
+    /// `Fake` (default) serves canned fixtures; `Real` shells out to `showmount`/`df` against
+    /// `nfs_server`. See `DriverMode`.
+    pub nfs_driver_mode: DriverMode,
     /// Register a third ZFS backend (demonstrates the pluggable-driver architecture scaling).
     pub zfs_enable: bool,
     /// ZFS host for the ZFS backend (defaults to a demo host when enabled without one).
     pub zfs_host: Option<String>,
     /// Comma-separated zpool names (defaults to demo zpools when enabled without any).
     pub zfs_pools: Vec<String>,
+    /// `Fake` (default) serves canned fixtures; `Real` shells out to local `zpool`/`zfs` commands
+    /// (assumes the gateway runs on/near the ZFS host — no remote/SSH support). See `DriverMode`.
+    pub zfs_driver_mode: DriverMode,
     /// OIDC/SSO login (`None` = feature disabled — no unauthenticated OIDC routes are mounted).
     pub oidc: Option<OidcConfig>,
     /// Kubernetes namespace the Rook operator/CephCluster runs in — used when reading Rook's own
@@ -320,6 +351,9 @@ impl Config {
                         .collect()
                 })
                 .unwrap_or_default(),
+            nfs_driver_mode: DriverMode::from_env_str(
+                &std::env::var("ATLAS_NFS_DRIVER_MODE").unwrap_or_else(|_| "fake".into()),
+            ),
             zfs_enable: matches!(
                 std::env::var("ATLAS_ZFS_ENABLE")
                     .unwrap_or_default()
@@ -340,6 +374,9 @@ impl Config {
                         .collect()
                 })
                 .unwrap_or_default(),
+            zfs_driver_mode: DriverMode::from_env_str(
+                &std::env::var("ATLAS_ZFS_DRIVER_MODE").unwrap_or_else(|_| "fake".into()),
+            ),
             oidc: oidc_from_env(),
             rook_namespace: std::env::var("ATLAS_ROOK_NAMESPACE")
                 .ok()
@@ -432,9 +469,11 @@ impl Default for Config {
             nfs_enable: false,
             nfs_server: None,
             nfs_exports: Vec::new(),
+            nfs_driver_mode: DriverMode::Fake,
             zfs_enable: false,
             zfs_host: None,
             zfs_pools: Vec::new(),
+            zfs_driver_mode: DriverMode::Fake,
             oidc: None,
             rook_namespace: "rook-ceph".into(),
             rook_cluster_name: "rook-ceph".into(),

@@ -125,12 +125,16 @@ pub(crate) async fn create_backend(
                 .clone()
                 .filter(|t| !t.is_empty())
                 .unwrap_or_else(|| vec!["/exports/vmstore".into(), "/exports/backups".into()]);
-            (
-                "active",
-                Some(std::sync::Arc::new(atlas_driver_nfs::NfsDriver::new(
-                    &id, server, exports,
-                ))),
-            )
+            let driver: std::sync::Arc<dyn atlas_driver_core::StorageDriver> =
+                match s.config.nfs_driver_mode {
+                    atlas_common::config::DriverMode::Real => std::sync::Arc::new(
+                        atlas_driver_nfs::RealNfsDriver::new(&id, server, exports),
+                    ),
+                    atlas_common::config::DriverMode::Fake => std::sync::Arc::new(
+                        atlas_driver_nfs::FakeNfsDriver::new(&id, server, exports),
+                    ),
+                };
+            ("active", Some(driver))
         }
         BackendType::Zfs => {
             let host = body
@@ -142,12 +146,16 @@ pub(crate) async fn create_backend(
                 .clone()
                 .filter(|t| !t.is_empty())
                 .unwrap_or_else(|| vec!["tank".into(), "vault".into()]);
-            (
-                "active",
-                Some(std::sync::Arc::new(atlas_driver_zfs::ZfsDriver::new(
-                    &id, host, pools,
-                ))),
-            )
+            let driver: std::sync::Arc<dyn atlas_driver_core::StorageDriver> =
+                match s.config.zfs_driver_mode {
+                    atlas_common::config::DriverMode::Real => std::sync::Arc::new(
+                        atlas_driver_zfs::RealZfsDriver::new(&id, host, pools),
+                    ),
+                    atlas_common::config::DriverMode::Fake => std::sync::Arc::new(
+                        atlas_driver_zfs::FakeZfsDriver::new(&id, host, pools),
+                    ),
+                };
+            ("active", Some(driver))
         }
         _ => ("pending", None),
     };

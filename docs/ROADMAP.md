@@ -595,13 +595,24 @@ runbook; summary:
   and cutover stages haven't been run against the Kafka/Debezium stack yet. SQL Server and
   Oracle are verified through discovery only. Cutover itself (for any engine except Postgres)
   hasn't been driven live yet.
-- **NFS/ZFS drivers are fixture-only**: `POST /backends {backend_type: "nfs"|"zfs", server, ...}`
-  does instantiate a live driver instance and run it through discovery immediately (verified
-  live) — but `atlas-driver-nfs`/`atlas-driver-zfs` are explicitly MVP/architecture-proof drivers
-  (see their crate-level doc comments) that never actually connect to the given server: they
-  always report the same deterministic capacity fixture (8 TB / 30% used) regardless of the
-  address, rather than running `showmount`/`df` or `zpool list`/`zfs list`. Only the Ceph driver
-  talks to real infrastructure today.
+- ✅ **NFS/ZFS drivers now have a real mode, not just fixtures**: `ATLAS_NFS_DRIVER_MODE`/
+  `ATLAS_ZFS_DRIVER_MODE` (`fake`, the default — unchanged demo/test behavior — or `real`; Helm
+  chart: `nfs.driverMode`/`zfs.driverMode`) select `RealNfsDriver`/`RealZfsDriver`
+  (`atlas-driver-nfs`/`atlas-driver-zfs`), mirroring `CephDriverMode`'s existing Fake/Real split.
+  Real NFS runs `showmount -e <server>` (an RPC, no mount performed) to prove the server is
+  actually reachable and get its real export list — a configured export the server doesn't have
+  is dropped, never fabricated; per-export capacity comes from `df` on the export's mount point
+  *when it happens to already be locally mounted* (checked via `/proc/mounts`), `None` otherwise
+  (NFS has no standard remote capacity-without-mounting RPC — reporting "unknown" beats reporting
+  a wrong number). Real ZFS runs `zpool list -Hp`/`zfs list -Hp` **locally**, on whatever host the
+  gateway process itself runs on — ZFS has no remote query protocol the way Ceph's `ceph`/`rbd`
+  CLI does, so a genuinely remote ZFS host (SSH, a vendor API) isn't supported yet; a configured
+  zpool that isn't actually locally importable is dropped, never fabricated. Both real drivers
+  propagate a real error (never a silent fake-data fallback) when the target is unreachable —
+  proven by new tests asserting exactly that. Both gateway images need the respective client
+  tools on `PATH` (`nfs-common`/`showmount` for NFS, `zfsutils-linux`/`zpool`+`zfs` for ZFS) —
+  neither is bundled by default; the Fake drivers remain the zero-dependency default for
+  demos/tests/CI.
 - Pool `kind` is name-heuristic when no k8s driver/Rook CRs are available (non-Rook Ceph). On a
   Rook-managed cluster it's now overridden with an exact classification read from live
   `CephBlockPool`/`CephFilesystem`/`CephObjectStore` CRs (see the Rook CRD read integration entry
