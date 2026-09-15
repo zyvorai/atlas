@@ -21,19 +21,29 @@ running on Postgres in the same binary.
 | **Query portability cleanup** | All ~250 `sqlx::query` call sites across `atlas-inventory`/`atlas-jobs`/`atlas-monitor`/`atlas-gateway`/`atlas-databridge` (the DataBridge control-plane tables, not customer source-DB connections) use `$N` placeholders (both backends' drivers accept these identically — confirmed live, `sqlx::Any` does zero placeholder rewriting itself). `strftime('now', ...)` (~80 sites) replaced with a Rust-bound `chrono` timestamp via `now_rfc3339()`; `INSERT OR IGNORE` → `ON CONFLICT DO NOTHING`; SQLite's `COLLATE NOCASE` → `lower(x) = lower($N)` (with a matching expression index in both migration directories); SQLite's 2-argument scalar `MAX(a, b)` (Postgres's `MAX()` is aggregate-only) → `CASE WHEN a > b THEN a ELSE b END`. |
 | **State backup** | `spawn_state_backup` branches on backend: SQLite keeps `VACUUM INTO`; Postgres shells out to `pg_dump --format=custom` (mirrors the existing pattern of shelling out to the `ceph`/`rbd` CLI — the gateway image needs `pg_dump` on `PATH` when `ATLAS_DATABASE_URL` is a Postgres URL). |
 | **Live-verified against a real Postgres** | `crates/atlas-inventory/tests/postgres_live.rs` (`#[ignore]`, needs `DATABASE_URL`) exercises connect+migrate+schema parity, the job-claim/reclaim/retry state machine in `jobs.rs` (where the `MAX(a,b)` bug was actually found), and `users.rs`'s case-insensitive username lookup — not just that the code compiles against Postgres. Run via `./scripts/smoke-postgres-ha.sh --migrate`. |
+| **Helm chart `database.kind`** | `deploy/helm/atlas/values.yaml`'s new `database.kind: sqlite\|postgres` (+ `database.existingSecret`/`secretKey`) switches `templates/deployment.yaml`/`pvc.yaml` between the default single-replica shape (local PVC, `Recreate`) and a Postgres-backed one (`ATLAS_DATABASE_URL` from a Secret, no PVC rendered, `RollingUpdate`, `replicaCount` free to raise). See `deploy/helm/atlas/README.md`'s "Multi-replica (Postgres-backed) deployment". |
 
-Remaining for a full multi-replica cutover (Phases C/D — not yet done):
+Remaining for a full multi-replica cutover (Phase C, plus one Phase D item):
 
 1. A parameterized test-spawn helper so the ~200 existing `atlas-gateway` integration tests run
    against both backends in CI (a `postgres:16` service container), not just this crate's own
    live-Postgres tests.
 2. `deploy/postgres-lab/` gets a real smoke test beyond connect+migrate (apply migrations, then
    exercise real read/write flows).
-3. Move rate limiting from the in-process `HashMap` to DB-backed fixed-window counters (now
-   trivial given the unified `AnyPool` — no new infra like Redis needed).
-4. `deploy/helm/atlas/values.yaml` gets `database.kind`/`database.url` fields; `replicaCount`
-   unpins from `1` and `Recreate`→`RollingUpdate` once `database.kind: postgres`.
-5. Ceph CLI/local `/etc/ceph` credentials — **already not blocking**: the real-Ceph Deployment
+3. **DB-backed rate limiting — blocked on a real architectural constraint, not just unstarted
+   work.** `RateLimiter::allow()` (`crates/atlas-gateway/src/state.rs`) is called from two places:
+   the REST `axum` middleware (`auth.rs`, already `async`, an `AnyPool` query would be easy there)
+   and the gRPC `tonic::Interceptor` closure (`grpc.rs`), whose trait signature is **synchronous**
+   (`fn call(&mut self, req) -> Result<Request<()>, Status>`, no `.await`). Blocking that closure on
+   an async DB query risks deadlocking the Tokio runtime it's invoked from, or at minimum serializes
+   every gRPC call behind a blocking DB round-trip. A real fix needs either a tonic interceptor
+   redesign (there's no drop-in async variant of the closure-based API used here) or a
+   write-behind/cached-count approach that tolerates being slightly stale across replicas — worth
+   scoping as its own `/plan`, not a mechanical follow-on to this migration. Until then, per-pod
+   in-process rate limiting means `replicaCount` pods each get their own independent
+   `ATLAS_RATE_LIMIT_RPM` budget rather than sharing one cluster-wide window — an acceptable,
+   documented gap for a first multi-replica cutover, not a correctness bug.
+4. Ceph CLI/local `/etc/ceph` credentials — **already not blocking**: the real-Ceph Deployment
    renders `/etc/ceph` per-pod via its own `initContainer` (see the Helm chart), so this item from
    an earlier version of this doc no longer applies.
 
@@ -51,11 +61,13 @@ Remaining for a full multi-replica cutover (Phases C/D — not yet done):
 
 ## What still blocks multi-replica
 
-1. **SQLite + RWO PVC** — cannot mount on two pods; Deployments use `strategy: Recreate`. This is
-   the only remaining *structural* blocker — swap `ATLAS_DATABASE_URL` for a real Postgres and the
-   query layer itself is ready (see "Live-verified" above).
-2. **In-process rate limiter** — per-pod fixed windows (`ATLAS_RATE_LIMIT_RPM`); item 3 above.
-3. **Helm chart** doesn't yet expose a Postgres `database.kind`; item 4 above.
+1. **SQLite + RWO PVC on the default install** — the chart still defaults to `database.kind:
+   sqlite`. Set `database.kind: postgres` (see `deploy/helm/atlas/README.md`) to lift this — the
+   query layer itself is ready (see "Live-verified" above) and the chart now renders
+   `RollingUpdate` + no PVC in that mode.
+2. **In-process rate limiter** — per-pod fixed windows (`ATLAS_RATE_LIMIT_RPM`), not shared across
+   replicas. Blocked on a real constraint (the gRPC `tonic::Interceptor` is synchronous), not just
+   unstarted work — see item 3 above for the detail.
 
 ## PostgreSQL cutover
 

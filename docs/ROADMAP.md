@@ -483,7 +483,16 @@ runbook; summary:
   username lookup. `scripts/check-migrations-parity.sh` (new CI gate) prevents `migrations-postgres/`
   drifting behind `migrations/` again, the way it silently did twice before. See `docs/HA.md`,
   which this closes most of — remaining: a dual-backend CI job running the full `atlas-gateway`
-  suite against both backends, DB-backed rate limiting, and Helm chart `database.kind` wiring.
+  suite against both backends, and DB-backed rate limiting (found to be blocked on a real
+  constraint — the gRPC `tonic::Interceptor` closure is synchronous — not just unstarted work; see
+  `docs/HA.md`'s detail).
+- ✅ **Helm chart: Postgres-backed multi-replica deployment** — `deploy/helm/atlas/values.yaml`'s
+  new `database.kind: sqlite|postgres` (+ `database.existingSecret`/`secretKey`, never an inlined
+  URL) switches `templates/deployment.yaml`/`pvc.yaml` between the existing single-replica shape
+  (local `ReadWriteOnce` PVC, `Recreate` rollout) and a Postgres-backed one (`ATLAS_DATABASE_URL`
+  from a Secret, no PVC rendered at all, `RollingUpdate`, `replicaCount` free to raise above `1`).
+  Both render paths verified with `helm lint` + `helm template`/`helm install --dry-run`. See
+  `deploy/helm/atlas/README.md`'s "Multi-replica (Postgres-backed) deployment".
 - ✅ **Supply-chain audit gate**: `cargo deny check` (CI job + `make audit`, `deny.toml`) — known-
   vulnerable/yanked advisories, disallowed licenses, unknown registries/git sources. Scoped to
   default features (what's actually shipped); the optional DataBridge connectors are compile-
