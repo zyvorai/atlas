@@ -234,3 +234,45 @@ async fn jobs_module_round_trip_against_real_postgres() {
 
     pool.close().await;
 }
+
+/// Exercises `crates/atlas-inventory/src/rate_limit.rs`'s `SUM(count)` cluster-total query against
+/// real Postgres specifically — `count`/`window_minute` were deliberately kept plain `INTEGER`
+/// (not `BIGINT`) so `SUM()` returns Postgres `BIGINT` rather than `NUMERIC` (which `sqlx::Any`
+/// can't decode at all — the exact bug migration 0032/0033 had to fix elsewhere in this session).
+/// This proves that design choice actually holds, rather than just asserting it in a comment.
+#[tokio::test]
+#[ignore]
+async fn rate_limit_cluster_totals_against_real_postgres() {
+    let url = lab_database_url();
+    let pool = atlas_inventory::connect(&url)
+        .await
+        .expect("connect should open a real connection to the lab Postgres");
+    atlas_inventory::migrate(&pool, &url)
+        .await
+        .expect("migrate should apply migrations-postgres/ cleanly");
+
+    let window = 999_999_001i64; // far in the future, never collides with a real window
+    sqlx::query("DELETE FROM rate_limit_counters WHERE window_minute = $1")
+        .bind(window)
+        .execute(&pool)
+        .await
+        .expect("pre-test cleanup should run on Postgres");
+
+    atlas_inventory::rate_limit::upsert_replica_count(&pool, "pg_live_actor", window, "r-a", 40)
+        .await
+        .expect("upsert_replica_count should run on Postgres");
+    atlas_inventory::rate_limit::upsert_replica_count(&pool, "pg_live_actor", window, "r-b", 35)
+        .await
+        .expect("upsert_replica_count should run on Postgres");
+
+    let totals = atlas_inventory::rate_limit::cluster_totals(&pool, window)
+        .await
+        .expect("cluster_totals (SUM over plain INTEGER) should decode fine on Postgres");
+    let total = totals
+        .iter()
+        .find(|(a, _)| a == "pg_live_actor")
+        .map(|(_, n)| *n);
+    assert_eq!(total, Some(75), "40 (r-a) + 35 (r-b)");
+
+    pool.close().await;
+}

@@ -282,6 +282,10 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
+    let rate_limit_sync_secs: u64 = std::env::var("ATLAS_RATE_LIMIT_SYNC_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(2);
     // OIDC/SSO: discover the issuer now (once) if configured; `None` on any failure just means
     // no "Sign in with SSO" button, not a failed startup.
     let oidc = crate::state::build_oidc_runtime(&config).await;
@@ -383,6 +387,20 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
 
     // Audit retention: prune audit rows older than ATLAS_AUDIT_RETENTION_DAYS (0 = keep forever).
     spawn_audit_retention(state.pool.clone());
+
+    // Cross-replica rate-limit sync (day-2 HA governance): see RateLimiter's own doc comment in
+    // state.rs. No-ops when rate limiting itself is off (rpm == 0) or ATLAS_RATE_LIMIT_SYNC_SECS=0.
+    let replica_id = format!(
+        "{}-{}",
+        std::env::var("HOSTNAME").unwrap_or_else(|_| "gateway".into()),
+        std::process::id()
+    );
+    crate::state::spawn_rate_limit_sync(
+        state.pool.clone(),
+        state.rate.clone(),
+        replica_id,
+        rate_limit_sync_secs,
+    );
 
     Ok(state)
 }

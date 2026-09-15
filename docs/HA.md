@@ -24,26 +24,14 @@ running on Postgres in the same binary.
 | **Helm chart `database.kind`** | `deploy/helm/atlas/values.yaml`'s new `database.kind: sqlite\|postgres` (+ `database.existingSecret`/`secretKey`) switches `templates/deployment.yaml`/`pvc.yaml` between the default single-replica shape (local PVC, `Recreate`) and a Postgres-backed one (`ATLAS_DATABASE_URL` from a Secret, no PVC rendered, `RollingUpdate`, `replicaCount` free to raise). See `deploy/helm/atlas/README.md`'s "Multi-replica (Postgres-backed) deployment". |
 | **Dual-backend CI (`postgres-test` job)** | `crates/atlas-gateway/tests/common/mod.rs`'s `fresh_database_url()` makes every existing integration test backend-agnostic: unchanged by default (a throwaway SQLite temp file, same as before), or — when `ATLAS_TEST_DATABASE_URL` is set to an admin Postgres connection string — a freshly `CREATE DATABASE`'d Postgres database per test (real per-test isolation, not a shared/schema-scoped DB). `.github/workflows/ci.yml`'s `postgres-test` job runs the full ~200-test `atlas-gateway` suite a second time against a `postgres:16` service container this way, plus `atlas-inventory`'s `postgres_live.rs` tests. This is what actually found the four bugs below — they were real, previously undiscovered schema/query gaps, not migration-process risk. |
 | **Postgres schema bugs found and fixed by the above** | (1) Byte-capacity/size columns (`storage_clusters.*_capacity_bytes`, `storage_pools`/`storage_osds`/`storage_volumes`'s `*_bytes`, `storage_tenant_quotas.max_bytes`, `metrics_history`'s capacity columns, DataBridge's `size_bytes`/`lag_bytes`/`bytes_total`/`bytes_done`) were declared Postgres `INTEGER` (4 bytes, ~2.1GB max) instead of `BIGINT` (8 bytes) — SQLite's `INTEGER` is *always* 8 bytes regardless of the declared name, so this only ever existed on the Postgres side (migration `0032_bigint_capacity_columns.sql`). (2) `SUM(bigint)` returns Postgres `NUMERIC`, which `sqlx::Any` can't decode at all — every `SUM(...)` over a now-`BIGINT` column needed an explicit `CAST(... AS BIGINT)` (`tenants::usage`, `backend_breakdown`, `metrics_summary`). (3) `REAL` columns (`storage_metrics.value`, `metrics_history`'s IO-rate columns, `object_migrations.throughput_mbps`) had the same always-vs-sometimes-8-byte gap as (1) — Postgres `REAL` is 4-byte `float4`, SQLite's is always 8-byte, and the Rust side binds `f64` throughout (migration `0033_double_precision_real_columns.sql`, widening to `DOUBLE PRECISION`). (4) SQLite's JSON1 functions (`json_extract()`, `json_set()`) have no Postgres equivalent whose query *text* is identical on both backends (Postgres's `->>`/`jsonb_set` use a different path syntax entirely) — `set_volume_qos`, `list_policy_drift`, and `protection::policy_targets_by_volume` were rewritten to pull the raw JSON text column and do the read/merge in Rust instead, matching the date-math pattern used everywhere else in this migration. |
+| **Cross-replica rate limiting** | Resolves the architectural constraint below (kept for the historical reasoning): `RateLimiter::allow()` (`crates/atlas-gateway/src/state.rs`) stays exactly as synchronous and DB-free as before — still safe to call from the gRPC path's synchronous `tonic::Interceptor` — but is now cluster-aware via a *separate* periodic background task, `spawn_rate_limit_sync` (started from `startup.rs`, `ATLAS_RATE_LIMIT_SYNC_SECS`, default `2`), which writes this replica's own current-window counts to a new `rate_limit_counters` table (migration `0034`, `atlas_inventory::rate_limit`) and reads back each actor's cluster-wide total, flagging anyone already over budget so `allow()` denies them immediately even if this replica's own local count hasn't hit `rpm` yet. `window_minute`/`count` were deliberately kept plain `INTEGER` (not `BIGINT`) since both are guaranteed small — sidesteps the `SUM(bigint)`→`NUMERIC` decode issue above entirely, live-verified on real Postgres rather than just reasoned about. Eventually consistent within one sync interval — a real, documented tradeoff for a governance/abuse-prevention control, not a hard security boundary; harmless on a single SQLite replica (finds only its own counts, confirms what the local check already knew). |
 
-Remaining for a full multi-replica cutover (one Phase C item, one Phase D item):
+Remaining for a full multi-replica cutover (one Phase C item):
 
 1. `deploy/postgres-lab/` gets a real smoke test beyond connect+migrate (apply migrations, then
    exercise real read/write flows) — lower priority now that CI's `postgres-test` job exercises the
    full query layer against a real Postgres on every push/PR.
-2. **DB-backed rate limiting — blocked on a real architectural constraint, not just unstarted
-   work.** `RateLimiter::allow()` (`crates/atlas-gateway/src/state.rs`) is called from two places:
-   the REST `axum` middleware (`auth.rs`, already `async`, an `AnyPool` query would be easy there)
-   and the gRPC `tonic::Interceptor` closure (`grpc.rs`), whose trait signature is **synchronous**
-   (`fn call(&mut self, req) -> Result<Request<()>, Status>`, no `.await`). Blocking that closure on
-   an async DB query risks deadlocking the Tokio runtime it's invoked from, or at minimum serializes
-   every gRPC call behind a blocking DB round-trip. A real fix needs either a tonic interceptor
-   redesign (there's no drop-in async variant of the closure-based API used here) or a
-   write-behind/cached-count approach that tolerates being slightly stale across replicas — worth
-   scoping as its own `/plan`, not a mechanical follow-on to this migration. Until then, per-pod
-   in-process rate limiting means `replicaCount` pods each get their own independent
-   `ATLAS_RATE_LIMIT_RPM` budget rather than sharing one cluster-wide window — an acceptable,
-   documented gap for a first multi-replica cutover, not a correctness bug.
-3. Ceph CLI/local `/etc/ceph` credentials — **already not blocking**: the real-Ceph Deployment
+2. Ceph CLI/local `/etc/ceph` credentials — **already not blocking**: the real-Ceph Deployment
    renders `/etc/ceph` per-pod via its own `initContainer` (see the Helm chart), so this item from
    an earlier version of this doc no longer applies.
 
@@ -65,9 +53,9 @@ Remaining for a full multi-replica cutover (one Phase C item, one Phase D item):
    sqlite`. Set `database.kind: postgres` (see `deploy/helm/atlas/README.md`) to lift this — the
    query layer itself is ready (see "Live-verified" above) and the chart now renders
    `RollingUpdate` + no PVC in that mode.
-2. **In-process rate limiter** — per-pod fixed windows (`ATLAS_RATE_LIMIT_RPM`), not shared across
-   replicas. Blocked on a real constraint (the gRPC `tonic::Interceptor` is synchronous), not just
-   unstarted work — see item 3 above for the detail.
+
+Nothing else on this list — cross-replica rate limiting (see "Cross-replica rate limiting" above)
+was the last code-level gap.
 
 ## PostgreSQL cutover
 
@@ -96,3 +84,5 @@ ATLAS_DATABASE_URL="postgres://atlas:<password>@<host>:<port>/atlas" cargo run -
 | `ATLAS_JOB_POLL_SECS` | `2` | Durable queue poll interval (`0` disables; tests use `0`) |
 | `ATLAS_JOB_STALE_SECS` | `900` | Reclaim stale `running` locks (`0` disables) |
 | `ATLAS_STATE_BACKUP_SECS` | `0` (disabled) | Periodic self-state backup interval; snapshot mechanism (`VACUUM INTO` vs `pg_dump`) auto-selected by backend |
+| `ATLAS_RATE_LIMIT_RPM` | `0` (disabled) | Per-actor requests/min; `allow()` stays in-process/sync regardless of backend |
+| `ATLAS_RATE_LIMIT_SYNC_SECS` | `2` | Cross-replica rate-limit sync interval (`0` disables cross-replica awareness; local-only limiting still applies) |

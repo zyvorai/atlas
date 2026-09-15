@@ -63,11 +63,11 @@ itself; point it at a real managed/HA instance (RDS, CloudNativePG, Patroni-mana
 `deploy/postgres-lab/` for a throwaway lab one. With `database.kind: postgres` the PVC is not
 rendered at all and the rollout strategy becomes `RollingUpdate`.
 
-## Not parameterized (yet)
-
-DB-backed rate limiting: `rateLimitRpm` is still enforced per-pod (an in-process `HashMap`), so
-each replica gets its own independent window rather than sharing one cluster-wide budget across
-`replicaCount` pods — see `docs/HA.md`'s remaining items.
+`rateLimitRpm` is cluster-wide-aware when `database.kind: postgres` and `replicaCount > 1`: each
+pod's rate limiter stays fast and in-process for the actual allow/deny decision, but a background
+task periodically syncs counts through the database so replicas converge on one shared budget
+(eventually consistent within `ATLAS_RATE_LIMIT_SYNC_SECS`, default `2`s — see `docs/HA.md`). Not a
+separate chart value; it rides `database.kind` automatically.
 
 ## Verifying a render before installing
 
