@@ -10,17 +10,31 @@ Design authority: `Zyvor_Ceph_Integration_Developer_Implementation_Plan.pdf` (v1
 
 ## Current state (slices 1–5 done; verified on real Rook Ceph)
 Implemented:
-- `atlas-*` cargo workspace, SQLite (`sqlx`), axum 0.8 REST + `tonic` gRPC; async **job engine**.
-- **Three backends** behind `StorageDriver`: real Ceph (`ceph`/`rbd` CLI) + **NFS** + **ZFS**,
-  plus a fake Ceph driver and a live K8s driver. Discovery worker → SQLite inventory.
+- `atlas-*` cargo workspace, query layer on `sqlx::Any` (`AnyPool`) — SQLite (default, zero-dependency)
+  or Postgres (`ATLAS_DATABASE_URL=postgres://...`, HA/multi-replica) selected by URL scheme at
+  startup, same SQL/migrations tree logic against both (`migrations/` SQLite,
+  `migrations-postgres/` Postgres dialect) — axum 0.8 REST + `tonic` gRPC; async **job engine**.
+- **Three backends** behind `StorageDriver`, each with a `fake`/`real` `DriverMode` (fixture-only
+  by default, zero external dependency): Ceph (`ceph`/`rbd` CLI), **NFS** (`showmount`/`df`), and
+  **ZFS** (local `zpool`/`zfs list`) — plus a live K8s driver. Real drivers never fabricate data;
+  they propagate a real error when the target is unreachable. Discovery worker → inventory.
 - Write path: volumes (PVC + direct RBD), snapshots/clone/restore, CephFS RWX, RGW buckets + backups
   (`export-diff`→S3, retention, presigned), scheduled snapshots/backups, per-tenant quotas + policies.
 - Observability: monitor/alerts + webhook, `/metrics` (Prometheus self), `/metrics/{history,forecast,ceph}`,
-  Ceph-native `/ceph/{status,osd-tree,osd-df,df}`, unified `/events`, `/readyz`; `deploy/observability/`.
-- **React console** embedded in the gateway (HTTPS, login, Observatory, Ceph page).
+  Ceph-native `/ceph/{status,osd-tree,osd-df,df}`, unified `/events`, `/readyz`, OpenTelemetry
+  tracing (`docs/TRACING.md`); `deploy/observability/`.
+- **AI Ops Advisor** (`docs/AI_ADVISOR.md`): explainable, read-only (`can_execute: false`) risk
+  scoring and runbook (`/api/atlas/v1/ai/advisor`, local/auto/LLM modes), correlated incidents
+  (`/ai/incidents`, optional LLM-narrated root-cause summary), what-if capacity planning
+  (`/ai/what-if`), and median/MAD-based anomaly detection (`/ai/anomalies`) that pauses itself
+  rather than scoring on stale/missing telemetry (>15 min old). All four are also exposed as MCP
+  tools (`crates/atlas-gateway/src/mcp.rs`, `mcp` feature) for agent-driven ops.
+- **React console** embedded in the gateway (HTTPS, login, Observatory, Ceph page, Ops Advisor).
   UI identity: **Soundings** bathymetric system — see `docs/ATLAS_UI_CONTRACT.md`
   and `crates/atlas-gateway/ui/src/atlas-soundings.css`.
-- `deploy/rook-ceph-lab/` (single-node overlay + day-2 ops scripts) + `deploy/k8s/` ceph deployment.
+- `deploy/rook-ceph-lab/` (single-node overlay + day-2 ops scripts), `deploy/k8s/` ceph deployment,
+  `deploy/postgres-lab/`, and a Helm chart (`deploy/helm/atlas/`, `database.kind: sqlite|postgres`)
+  for production rollout.
 - **DataBridge** (`atlas-databridge`): cloud-to-edge DB migration control plane. **Six source engines**
   — Postgres, MySQL, MariaDB (homogeneous → CNPG/Percona) + Oracle, SQL Server (heterogeneous → Postgres
   edge, seeded by Debezium's initial snapshot) + MongoDB (homogeneous document → Percona Server for
@@ -40,12 +54,14 @@ Implemented:
   See `docs/DATABRIDGE.md` + `deploy/databridge/`.
 
 Day-2 operations added (slices, all fake-first tested): control-plane durability (job recovery, graceful
-shutdown, self-state backup, deep readyz/livez), alerting maturity (ack/silence + job/CDC/quota rules),
-cluster-ops & maintenance (OSD ops, backend cordon, worker pause, job cancellation), governance
-(token revocation, rate limiting, optional OIDC/SSO login alongside local username/password —
-verified live against a throwaway Dex instance, `deploy/dex-lab/`), volume lifecycle (orphan GC,
-QoS), DataBridge CDC self-heal,
-upgrade pre-flight + rollback, and cross-cluster DR **scaffolding** (RBD-mirroring
+shutdown, self-state backup, deep readyz/livez), alerting maturity (ack/silence + job/CDC/quota rules,
+native alerting sinks), cluster-ops & maintenance (OSD ops, backend cordon, worker pause, job
+cancellation), governance (token revocation, rate limiting — DB-backed and cross-replica-aware once
+on Postgres, still per-pod on SQLite, `docs/HA.md` — optional OIDC/SSO login alongside local
+username/password, verified live against a throwaway Dex instance, `deploy/dex-lab/`; optional
+Vault-backed secrets resolution at startup, `docs/SECRETS.md`), volume lifecycle (orphan GC,
+QoS), DataBridge CDC self-heal, upgrade pre-flight + rollback, k6 load/performance testing
+(read-path + write-path), and cross-cluster DR **scaffolding** (RBD-mirroring
 peers/mirrors/failover API + jobs).
 
 **Dual-licensed** AGPL-3.0 (open source in this repo) + Atlas Commercial License (ACL) for
@@ -61,17 +77,25 @@ the `rbd mirror` paths are unverified), per-product integrations beyond the gRPC
 - `crates/atlas-api-types` — shared serde DTOs.
 - `crates/atlas-driver-core` — `StorageDriver` trait + `DriverError` + `DriverRegistry`.
 - `crates/atlas-driver-ceph` — `ceph`/`rbd` CLI wrappers + `FakeCephDriver`.
-- `crates/atlas-driver-nfs` — `NfsDriver` (second backend; exports→pools, shares→filesystem volumes).
-- `crates/atlas-driver-zfs` — `ZfsDriver` (third backend; zpools→pools, datasets→filesystem volumes).
+- `crates/atlas-driver-nfs` — `FakeNfsDriver`/`RealNfsDriver` (second backend; exports→pools,
+  shares→filesystem volumes).
+- `crates/atlas-driver-zfs` — `FakeZfsDriver`/`RealZfsDriver` (third backend; zpools→pools,
+  datasets→filesystem volumes).
 - `crates/atlas-databridge` — DataBridge: source connectors, assessment, CNPG/Percona CR builders,
   pipeline stages, reconciler (cloud-to-edge DB migration; `migrations/0011`, `/api/atlas/v1/databridge/*`).
 - `crates/atlas-driver-k8s` — `kube-rs` read-only StorageClass/PVC/PV listing.
-- `crates/atlas-inventory` — SQLite read/upsert model.
+- `crates/atlas-inventory` — read/upsert model against `sqlx::AnyPool` (SQLite or Postgres); also
+  DB-backed rate-limit counters (`rate_limit.rs`).
 - `crates/atlas-discovery` — discovery worker.
-- `crates/atlas-gateway` — axum server (bin `atlas-gateway`).
+- `crates/atlas-gateway` — axum server (bin `atlas-gateway`); `routes/ai.rs` (Ops Advisor/incidents/
+  anomalies/what-if), `mcp.rs` (MCP tool exposure, `mcp` feature).
 - `crates/atlas-cli` — `atlasctl` REST client.
-- `migrations/` — SQLite schema.
+- `migrations/` — SQLite schema; `migrations-postgres/` — the Postgres-dialect equivalent (CI fails
+  if the two drift to different highest migration numbers).
 - `deploy/rook-ceph-lab/` — lab manifests + `up.sh` (`--single-node`; Rook v1.20.2 + Squid + CSI drivers).
+- `deploy/postgres-lab/` — throwaway Postgres for HA query-layer testing/dev.
+- `deploy/helm/atlas/` — production Helm chart (`database.kind: sqlite|postgres`, driver modes,
+  rate limiting, tracing, secrets).
 - `scripts/deploy-remote.sh <host> <user>` — build (`Dockerfile`) + deploy the fake/k8s gateway to `zyvor-system`.
 - `scripts/deploy-ceph-gateway-remote.sh <host> [user]` — build (`Dockerfile.ceph`, Squid client) + roll out
   the **real-Ceph** gateway `atlas-gateway-ceph` in `rook-ceph` (NodePort 30511). See `docs/DEPLOYMENT.md`.
@@ -81,7 +105,8 @@ the `rbd mirror` paths are unverified), per-product integrations beyond the gRPC
   `SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial`
   (enforced by `make headers` / CI). Don't weaken AGPL/ACL notices, [`CLA.md`](CLA.md),
   [`DCO.md`](DCO.md), or [`NOTICE`](NOTICE) without an explicit human request.
-- Match the monorepo Rust stack: axum 0.8, `sqlx` SQLite, `thiserror` 2.0 + `anyhow`, `tracing`.
+- Match the monorepo Rust stack: axum 0.8, `sqlx::Any` (SQLite/Postgres, `$N` placeholders — no
+  dialect-specific SQL in app code), `thiserror` 2.0 + `anyhow`, `tracing`.
 - Ceph/rbd command wrappers use **arg-arrays only, never string concatenation**.
 
 ## Run locally (no Ceph, no cluster needed)

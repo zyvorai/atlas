@@ -637,6 +637,9 @@ connect and call:
 | `list_alerts` | `GET /alerts` |
 | `metrics_summary` | `GET /metrics/summary` |
 | `ops_advisor` | `POST /ai/advisor` (local mode only — never triggers an outbound LLM call) |
+| `list_incidents` | `GET /ai/incidents` (local mode only, same rationale as `ops_advisor`) |
+| `detect_anomalies` | `GET /ai/anomalies` — pauses itself (`telemetry_status: "stale"/"unavailable"`, empty results) rather than scoring on telemetry older than 15 minutes or missing/invalid timestamps |
+| `what_if_capacity` | `POST /ai/what-if` |
 
 No write/action tools are exposed — same `can_execute: false` advisory-only posture as the Ops
 Advisor (see `docs/AI_ADVISOR.md`). Use the REST/gRPC API above for anything that mutates storage.

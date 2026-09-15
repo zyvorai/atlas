@@ -285,6 +285,33 @@ runbook; summary:
   the real lab; the underlying `rbd mirror` data-plane still needs a second Ceph cluster to be
   production-verified — see [DR.md](DR.md).
 
+## ✅ AI Ops Advisor — explainable analysis, incident correlation, MCP tools
+
+Deterministic, read-only (`can_execute: false`) analysis layered on existing inventory/telemetry —
+no model required for the default path. See [AI_ADVISOR.md](AI_ADVISOR.md).
+
+- **Ops Advisor** (`POST /ai/advisor`): bounded risk score + level, evidence (capacity, 14-day
+  forecast, recovery counters, open alerts, recent failures), and a prioritized read-only runbook.
+  `local`/`auto`/`llm` modes — an optional OpenAI-compatible provider (`ATLAS_AI_BASE_URL`) may
+  rewrite only the executive summary; Atlas always computes and retains the score/evidence/actions.
+- **Incident correlation** (`GET /ai/incidents`): groups related open alerts + recent job failures
+  into families (data safety, capacity, Ceph recovery, replication, job engine, availability,
+  unclassified) with a bounded confidence score and a likely-cause explanation; optional
+  LLM-narrated root-cause summary (`mode`, still `local` by default) on top of the same
+  deterministic grouping.
+- **What-if capacity planning** (`POST /ai/what-if`): projects risk/utilization/days-to-full under
+  hypothetical added capacity, growth rate, and alert/recovery-resolved assumptions, without
+  mutating inventory.
+- **Explainable anomaly detection** (`GET /ai/anomalies`): median/MAD-based detector over capacity
+  growth, read/write byte/op deltas, concurrent jobs, and open alerts — resistant to older spikes
+  contaminating the baseline. ✅ **Pauses itself rather than scoring on bad telemetry**: returns
+  `telemetry_status: "stale"` (>15 min old) or `"unavailable"` (missing/invalid/future-dated
+  timestamp, or no samples at all) with `anomalies: []` and an explanatory warning instead of
+  presenting a stale spike as a current incident.
+- **MCP tool exposure** (`crates/atlas-gateway/src/mcp.rs`, `mcp` feature): `ops_advisor`,
+  `list_incidents`, `detect_anomalies`, `what_if_capacity` alongside the read-only inventory tools
+  — same advisory-only posture, no write/action tools. See [API.md](API.md#mcp-model-context-protocol).
+
 ## ⏭ Slice 3+ — Enterprise & product integration
 - Product integrations: Veyron (VM datastores), Hyper2KVM (direct-to-RBD migration), GuestKit
   (read-only snapshot inspection), PacketWolf (VM→OSD network/storage RCA), Ragnarok (AI storage
