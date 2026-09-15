@@ -161,3 +161,24 @@ jobs:
           tags: atlas-gateway:ceph
           cache-from: type=gha,scope=ceph
           cache-to: type=gha,mode=max,scope=ceph
+      # TEMPORARY (remove before merge): timing probe for gap-analysis Tier 2 "arm64 images" —
+      # this Dockerfile is the worst case for QEMU-emulated cross-build cost (full release build,
+      # heavy C deps: librdkafka via cmake, ODPI-C, tiberius). push:false, no registry side effects.
+      - uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3
+      - name: TEMP PROBE — Build Dockerfile (full image) for linux/arm64 via QEMU
+        run: |
+          date -u +"probe start: %H:%M:%S UTC"
+        shell: bash
+      - name: Build Dockerfile (full image) linux/arm64
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/arm64
+          push: false
+          tags: atlas-gateway:arm64-probe
+          cache-from: type=gha,scope=arm64-probe
+          cache-to: type=gha,mode=max,scope=arm64-probe
+      - name: TEMP PROBE — done
+        run: date -u +"probe end: %H:%M:%S UTC"
+        shell: bash
