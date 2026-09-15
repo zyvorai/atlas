@@ -35,7 +35,7 @@ export default function Rbd() {
     }
   }, [modal, pool]);
 
-  const n = data?.images.length || 0;
+  const n = data?.images?.length || 0;
   return (
     <ListPage
       crumbs={navCrumbs("rbd")}
