@@ -14,6 +14,13 @@ use serde_json::{json, Value};
 mod common;
 
 async fn spawn() -> SocketAddr {
+    spawn_with(atlas_common::config::DriverMode::Fake, atlas_common::config::DriverMode::Fake).await
+}
+
+async fn spawn_with(
+    nfs_driver_mode: atlas_common::config::DriverMode,
+    zfs_driver_mode: atlas_common::config::DriverMode,
+) -> SocketAddr {
     let database_url = common::fresh_database_url("backends").await;
     let config = Config {
         bind_addr: "127.0.0.1:0".into(),
@@ -45,9 +52,11 @@ async fn spawn() -> SocketAddr {
         nfs_enable: false,
         nfs_server: None,
         nfs_exports: Vec::new(),
+        nfs_driver_mode,
         zfs_enable: false,
         zfs_host: None,
         zfs_pools: Vec::new(),
+        zfs_driver_mode,
         oidc: None,
         rook_namespace: "rook-ceph".into(),
         rook_cluster_name: "rook-ceph".into(),
@@ -110,4 +119,56 @@ async fn post_backend_registers_live_nfs_driver() {
         "the live NFS backend should have discovered an export pool: {pools}"
     );
     assert!(!bid.is_empty());
+}
+
+/// With `nfs_driver_mode: Real` and an unreachable server, the live NFS driver's discovery fails
+/// (no `showmount` response) — the backend row still ends up `active` (discovery failure is
+/// logged, not surfaced to the caller — pre-existing `create_backend` behavior, unchanged here),
+/// but critically **no pool is ever reported**, proving the real driver never falls back to
+/// fabricated fixture data the way `spawn()`'s default fake mode intentionally always does.
+#[tokio::test]
+async fn post_backend_with_real_nfs_driver_never_fabricates_a_pool_when_unreachable() {
+    let base = format!(
+        "http://{}/api/atlas/v1",
+        spawn_with(
+            atlas_common::config::DriverMode::Real,
+            atlas_common::config::DriverMode::Fake,
+        )
+        .await
+    );
+    let c = reqwest::Client::new();
+
+    let created: Value = c
+        .post(format!("{base}/backends"))
+        .json(&json!({
+            "name": "unreachable-nfs",
+            "backend_type": "nfs",
+            "server": "nfs01.invalid.example.invalid",
+            "targets": ["/exports/data"]
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let bid = created["id"].as_str().unwrap().to_string();
+    assert!(!bid.is_empty());
+
+    let pools: Value = c
+        .get(format!("{base}/pools"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(
+        !pools
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["kind"] == "nfs_export"),
+        "an unreachable real NFS server must never produce a fabricated pool: {pools}"
+    );
 }

@@ -232,6 +232,8 @@ spec:
               value: {{ .Values.nfs.server | quote }}
             - name: ATLAS_NFS_EXPORTS
               value: {{ .Values.nfs.exports | quote }}
+            - name: ATLAS_NFS_DRIVER_MODE
+              value: {{ .Values.nfs.driverMode | default "fake" | quote }}
             {{- end }}
             {{- if .Values.zfs.enabled }}
             - name: ATLAS_ZFS_ENABLE
@@ -240,6 +242,8 @@ spec:
               value: {{ .Values.zfs.host | quote }}
             - name: ATLAS_ZFS_POOLS
               value: {{ .Values.zfs.pools | quote }}
+            - name: ATLAS_ZFS_DRIVER_MODE
+              value: {{ .Values.zfs.driverMode | default "fake" | quote }}
             {{- end }}
             {{- if .Values.service.https.enabled }}
             - name: ATLAS_HTTPS_ADDR

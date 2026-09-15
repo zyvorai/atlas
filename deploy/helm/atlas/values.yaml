@@ -179,11 +179,21 @@ nfs:
   enabled: false
   server: ""
   exports: ""
+  # "fake" (default) reports deterministic capacity fixtures — safe with no real NFS server.
+  # "real" shells out to `showmount -e`/`df` against `server` — the gateway image needs NFS
+  # client tools (`nfs-common` on Debian/Ubuntu) on PATH. See docs/ROADMAP.md's NFS/ZFS entry.
+  driverMode: fake
 
 zfs:
   enabled: false
   host: ""
   pools: ""
+  # "fake" (default) reports deterministic capacity fixtures. "real" shells out to `zpool`/`zfs`
+  # — locally, on whatever host the gateway pod itself runs on (ZFS has no remote query protocol;
+  # `host` above is cosmetic only in real mode). The gateway image needs `zfsutils-linux` (or
+  # equivalent) on PATH, and the pod needs to actually be co-located with the zpools (e.g. a
+  # hostPath-mounted /dev or a privileged DaemonSet), which this chart does not set up for you.
+  driverMode: fake
 
 nodeSelector: {}
 tolerations: []
