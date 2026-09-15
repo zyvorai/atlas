@@ -24,6 +24,13 @@ before `0.2.0` were not tracked here — see `git log` for that history.
   alert-resolution, and recovery-completion scenarios without changing live inventory.
 - Added `GET /ai/anomalies` with model-free median/MAD detection for capacity, I/O, job, and alert
   surges; the console exposes explainable scores and adjustable sensitivity.
+- `GET /ai/anomalies` now reports `telemetry_status` (`fresh`/`stale`/`unavailable`) and
+  `latest_sample_age_minutes`, pausing detection with a warning when the latest sample is over
+  15 minutes old or missing/invalid — an old spike is never presented as a current incident.
+- Added `list_incidents`, `detect_anomalies`, and `what_if_capacity` MCP tools alongside
+  `ops_advisor`, sharing one code path with their REST counterparts so the MCP edge can't drift;
+  `GET /ai/incidents` also gained an opt-in `?mode=` narrative (local by default) reusing the
+  advisor's existing OpenAI-compatible provider.
 
 ## [0.3.0] — 2026-09-14
 

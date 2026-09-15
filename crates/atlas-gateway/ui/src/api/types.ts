@@ -221,6 +221,8 @@ export interface AnomaliesResponse {
   generated_at: string;
   window_minutes: number;
   sample_count: number;
+  telemetry_status: "fresh" | "stale" | "unavailable";
+  latest_sample_age_minutes: number | null;
   sensitivity: number;
   model: "robust_median_mad_v1";
   anomalies: MetricAnomaly[];
