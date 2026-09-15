@@ -27,7 +27,7 @@ const MAX_MODEL_SUMMARY_CHARS: usize = 2_000;
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-enum AdvisorMode {
+pub(crate) enum AdvisorMode {
     /// Use the provider when configured; otherwise use the deterministic local advisor.
     #[default]
     Auto,
@@ -256,14 +256,17 @@ pub(crate) struct AdvisorResponse {
     can_execute: bool,
 }
 
-/// `POST /ai/advisor` — synthesize an explainable storage posture and a prioritized runbook.
-pub(crate) async fn ai_advisor(
-    State(s): State<AppState>,
-    Extension(actor): Extension<Actor>,
-    Json(req): Json<AdvisorRequest>,
-) -> AppResult<Json<AdvisorResponse>> {
-    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
-    if req.question.chars().count() > MAX_QUESTION_CHARS {
+/// Shared advisor computation behind both `POST /ai/advisor` and the `ops_advisor` MCP tool
+/// (`crates/atlas-gateway/src/mcp.rs`) — one code path for role-check, evidence gathering,
+/// scoring, optional-provider summary, and audit recording, so the MCP edge can't drift from REST.
+pub(crate) async fn compute_advisor(
+    s: &AppState,
+    actor: &Actor,
+    question: &str,
+    mode: AdvisorMode,
+) -> AppResult<AdvisorResponse> {
+    crate::auth::require_role(s.config.auth_required, actor, crate::auth::ROLE_OPERATOR)?;
+    if question.chars().count() > MAX_QUESTION_CHARS {
         return Err(AppError::Validation(format!(
             "question must be at most {MAX_QUESTION_CHARS} characters"
         )));
@@ -278,18 +281,18 @@ pub(crate) async fn ai_advisor(
     let (risk_score, mut actions) = assess(&evidence);
     actions.sort_by_key(|a| a.priority);
     let risk_level = risk_level(risk_score);
-    let local_summary = local_summary(risk_level, &evidence, &req.question);
+    let local_summary = local_summary(risk_level, &evidence, question);
     let mut warnings = Vec::new();
 
-    let (mode, summary) = match req.mode {
+    let (mode_str, summary) = match mode {
         AdvisorMode::Local => ("local", local_summary),
         AdvisorMode::Auto | AdvisorMode::Llm => match ProviderConfig::from_env() {
             Some(provider) => match provider
-                .summarize(&req.question, risk_score, risk_level, &evidence, &actions)
+                .summarize(question, risk_score, risk_level, &evidence, &actions)
                 .await
             {
                 Ok(summary) => ("llm", summary),
-                Err(err) if req.mode == AdvisorMode::Auto => {
+                Err(err) if mode == AdvisorMode::Auto => {
                     tracing::warn!("AI provider unavailable; using local advisor: {err}");
                     warnings
                         .push("AI provider unavailable; deterministic analysis returned".into());
@@ -299,7 +302,7 @@ pub(crate) async fn ai_advisor(
                     return Err(AppError::Unavailable(format!("AI provider failed: {err}")))
                 }
             },
-            None if req.mode == AdvisorMode::Llm => {
+            None if mode == AdvisorMode::Llm => {
                 return Err(AppError::Unavailable(
                     "LLM mode requires ATLAS_AI_BASE_URL and ATLAS_AI_MODEL".into(),
                 ))
@@ -317,12 +320,12 @@ pub(crate) async fn ai_advisor(
         "global",
         "success",
         None,
-        Some(json!({ "mode": mode, "risk_score": risk_score })),
+        Some(json!({ "mode": mode_str, "risk_score": risk_score })),
     )
     .await;
 
-    Ok(Json(AdvisorResponse {
-        mode,
+    Ok(AdvisorResponse {
+        mode: mode_str,
         risk_score,
         risk_level,
         summary,
@@ -330,7 +333,18 @@ pub(crate) async fn ai_advisor(
         actions,
         warnings,
         can_execute: false,
-    }))
+    })
+}
+
+/// `POST /ai/advisor` — synthesize an explainable storage posture and a prioritized runbook.
+pub(crate) async fn ai_advisor(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Json(req): Json<AdvisorRequest>,
+) -> AppResult<Json<AdvisorResponse>> {
+    Ok(Json(
+        compute_advisor(&s, &actor, &req.question, req.mode).await?,
+    ))
 }
 
 /// `GET /ai/anomalies` — robust local anomaly detection over persisted Atlas metrics. Uses a

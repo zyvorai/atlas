@@ -85,6 +85,13 @@ jobs:
           done
           echo "=== combined (no kafka-lag — long link) ==="
           cargo check -p atlas-databridge --features sqlserver,mongodb,azure-blob,oracle
+      # Unlike the DataBridge connectors above, `rmcp` is pure-Rust with no native-lib gate, so its
+      # own test suite can run in CI, not just a compile check.
+      - name: Check MCP feature
+        run: |
+          set -euo pipefail
+          cargo check -p atlas-gateway --features mcp
+          cargo test -p atlas-gateway --features mcp --test mcp
 
   ui:
     runs-on: ubuntu-latest

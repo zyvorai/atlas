@@ -1,0 +1,236 @@
+// Copyright (c) 2026 ZyvorAI Labs Private Limited.
+// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+//! Integration tests for the MCP server (`crates/atlas-gateway/src/mcp.rs`), mirroring the
+//! `spawn`/`spawn_auth` pattern used by the other gateway integration tests (fake driver,
+//! throwaway SQLite file, ephemeral port).
+#![cfg(feature = "mcp")]
+
+use std::net::SocketAddr;
+
+use atlas_common::config::CephDriverMode;
+use atlas_common::Config;
+use atlas_gateway::routes;
+use atlas_gateway::startup::{build_state, BuildOptions};
+
+static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+async fn spawn(auth_required: bool, secret: &str) -> (SocketAddr, sqlx::SqlitePool) {
+    let db = format!(
+        "{}/atlas-mcp-test-{}-{}.db",
+        std::env::temp_dir().display(),
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+    );
+    let _ = std::fs::remove_file(&db);
+    let config = Config {
+        bind_addr: "127.0.0.1:0".into(),
+        grpc_addr: "127.0.0.1:0".into(),
+        database_url: format!("sqlite://{db}?mode=rwc"),
+        ceph_driver_mode: CephDriverMode::Fake,
+        kubeconfig_path: None,
+        jwt_secret: secret.into(),
+        jwt_secret_previous: None,
+        auth_required,
+        bootstrap_admin_token: None,
+        admin_username: "admin".into(),
+        admin_password: "Admin@321".into(),
+        monitor_interval_secs: 0,
+        ceph_prometheus_url: None,
+        alert_webhook_url: None,
+        backup_keep: 0,
+        backup_max_age_secs: 0,
+        rgw_public_endpoint: None,
+        snapshot_tick_secs: 0,
+        databridge_reconcile_secs: 0,
+        job_poll_secs: 0,
+        job_stale_secs: 0,
+        https_addr: None,
+        tls_cert_path: None,
+        tls_key_path: None,
+        tls_self_signed: false,
+        disable_http: false,
+        nfs_enable: false,
+        nfs_server: None,
+        nfs_exports: Vec::new(),
+        zfs_enable: false,
+        zfs_host: None,
+        zfs_pools: Vec::new(),
+        oidc: None,
+        rook_namespace: "rook-ceph".into(),
+        rook_cluster_name: "rook-ceph".into(),
+        dr_dataplane_verified: false,
+    };
+    let state = build_state(
+        config,
+        BuildOptions {
+            enable_k8s: false,
+            initial_discovery: true,
+            enable_monitor: false,
+        },
+    )
+    .await
+    .unwrap();
+    let pool = state.pool.clone();
+    let app = routes::router(state);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    (addr, pool)
+}
+
+/// No Bearer token against `/mcp` with auth enabled is rejected the same way `/metrics` is today
+/// — the MCP endpoint rides the same `auth_middleware` layer, so this doesn't even need to speak
+/// MCP: any request should be turned away before it reaches the MCP service.
+#[tokio::test]
+async fn mcp_endpoint_requires_auth() {
+    let (addr, _pool) = spawn(true, "mcp-test-secret-at-least-32-bytes!!").await;
+    let resp = reqwest::Client::new()
+        .post(format!("http://{addr}/api/atlas/v1/mcp"))
+        .header("content-type", "application/json")
+        .body("{}")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::UNAUTHORIZED);
+}
+
+/// End-to-end MCP client test: connect, list tools, call `list_clusters` and `ops_advisor`
+/// against the fake driver's seeded fixtures, using `rmcp`'s own client so the test exercises the
+/// real wire protocol rather than a hand-rolled JSON-RPC body.
+#[tokio::test]
+async fn mcp_client_can_list_clusters_and_run_advisor() {
+    use rmcp::model::CallToolRequestParams;
+    use rmcp::transport::StreamableHttpClientTransport;
+    use rmcp::ServiceExt;
+
+    let secret = "mcp-test-secret-at-least-32-bytes!!";
+    let (addr, _pool) = spawn(true, secret).await;
+    let (token, _, _) =
+        atlas_gateway::auth::mint_token(secret, "hermes", "operator", "global", 3600).unwrap();
+
+    let http_client = reqwest_mcp_client::Client::builder()
+        .default_headers({
+            let mut headers = reqwest_mcp_client::header::HeaderMap::new();
+            headers.insert(
+                reqwest_mcp_client::header::AUTHORIZATION,
+                format!("Bearer {token}").parse().unwrap(),
+            );
+            headers
+        })
+        .build()
+        .unwrap();
+    let transport = StreamableHttpClientTransport::with_client(
+        http_client,
+        rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig::with_uri(
+            format!("http://{addr}/api/atlas/v1/mcp"),
+        ),
+    );
+    let client = ().serve(transport).await.unwrap();
+
+    let tools = client.list_tools(Default::default()).await.unwrap();
+    let names: Vec<_> = tools.tools.iter().map(|t| t.name.as_ref()).collect();
+    assert!(names.contains(&"list_clusters"), "tools: {names:?}");
+    assert!(names.contains(&"ops_advisor"), "tools: {names:?}");
+
+    let clusters = client
+        .call_tool(CallToolRequestParams::new("list_clusters"))
+        .await
+        .unwrap();
+    assert_eq!(clusters.is_error, Some(false));
+
+    let advisor = client
+        .call_tool(
+            CallToolRequestParams::new("ops_advisor").with_arguments(
+                serde_json::json!({ "question": "what needs attention?" })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(advisor.is_error, Some(false));
+
+    client.cancel().await.unwrap();
+}
+
+/// A non-admin actor's `list_volumes` MCP call is tenant-scoped the same as the REST equivalent
+/// (mirrors `tests/tenant_isolation.rs`'s pattern for the REST edge).
+#[tokio::test]
+async fn mcp_list_volumes_is_tenant_scoped() {
+    use rmcp::model::CallToolRequestParams;
+    use rmcp::transport::StreamableHttpClientTransport;
+    use rmcp::ServiceExt;
+
+    let secret = "mcp-test-secret-at-least-32-bytes!!";
+    let (addr, pool) = spawn(true, secret).await;
+
+    let vol_a = atlas_api_types::StorageVolume {
+        id: "vol_tenant_a".into(),
+        cluster_id: None,
+        pool_id: None,
+        name: "a-vol".into(),
+        kind: atlas_api_types::VolumeKind::Block,
+        backend_native_id: Some("rbd:pool/vol_tenant_a".into()),
+        size_bytes: 1073741824,
+        used_bytes: None,
+        state: "bound".into(),
+        health: atlas_api_types::Health::Ok,
+        kubernetes_namespace: Some("default".into()),
+        pvc_name: Some("a-vol".into()),
+        storage_class_name: Some("zyvor-rbd-prod".into()),
+    };
+    let vol_b = atlas_api_types::StorageVolume {
+        id: "vol_tenant_b".into(),
+        name: "b-vol".into(),
+        pvc_name: Some("b-vol".into()),
+        backend_native_id: Some("rbd:pool/vol_tenant_b".into()),
+        ..vol_a.clone()
+    };
+    atlas_inventory::upsert_volume(&pool, "bkd_ceph_lab", "tenant-a", &vol_a, None)
+        .await
+        .unwrap();
+    atlas_inventory::upsert_volume(&pool, "bkd_ceph_lab", "tenant-b", &vol_b, None)
+        .await
+        .unwrap();
+
+    let (viewer_a, _, _) =
+        atlas_gateway::auth::mint_token(secret, "alice", "viewer", "tenant-a", 3600).unwrap();
+
+    let http_client = reqwest_mcp_client::Client::builder()
+        .default_headers({
+            let mut headers = reqwest_mcp_client::header::HeaderMap::new();
+            headers.insert(
+                reqwest_mcp_client::header::AUTHORIZATION,
+                format!("Bearer {viewer_a}").parse().unwrap(),
+            );
+            headers
+        })
+        .build()
+        .unwrap();
+    let transport = StreamableHttpClientTransport::with_client(
+        http_client,
+        rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig::with_uri(
+            format!("http://{addr}/api/atlas/v1/mcp"),
+        ),
+    );
+    let client = ().serve(transport).await.unwrap();
+
+    let result = client
+        .call_tool(CallToolRequestParams::new("list_volumes"))
+        .await
+        .unwrap();
+    assert_eq!(result.is_error, Some(false));
+    let text = result
+        .content
+        .first()
+        .and_then(|c| c.as_text())
+        .map(|t| t.text.clone())
+        .unwrap_or_default();
+    assert!(text.contains("vol_tenant_a"), "expected tenant-a's volume in: {text}");
+    assert!(!text.contains("vol_tenant_b"), "leaked tenant-b's volume: {text}");
+
+    client.cancel().await.unwrap();
+}

@@ -1,0 +1,70 @@
+<!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
+# Connecting Hermes Agent to Atlas
+
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) is a self-improving AI agent CLI/
+gateway by Nous Research. Atlas doesn't bundle it — install it yourself following its own
+[quick-install instructions](https://github.com/NousResearch/hermes-agent#quick-install). This
+page only covers pointing Hermes's MCP client at Atlas's MCP server (`docs/API.md`'s "MCP"
+section) so it can use Atlas's inventory/advisor tools during an on-call or ops session.
+
+## 1. Build the gateway with MCP support
+
+MCP support is a default-off Cargo feature:
+
+```bash
+cargo build --release -p atlas-gateway --features mcp
+# or for local dev:
+cargo run -p atlas-gateway --features mcp
+```
+
+## 2. Mint a scoped token for Hermes
+
+`POST /auth/tokens` requires an admin token. Mint an **operator**-role token for Hermes to use day
+to day — none of the exposed MCP tools need admin, and `ops_advisor` specifically requires operator
+or higher:
+
+```bash
+curl -sS -X POST http://127.0.0.1:5110/api/atlas/v1/auth/tokens \
+  -H "Authorization: Bearer <ADMIN_JWT>" \
+  -H 'Content-Type: application/json' \
+  -d '{"subject":"hermes-agent","role":"operator","ttl_secs":7776000}'
+# 201 → { "token": "<jwt>", "jti": "jti_...", ... }
+```
+
+`ttl_secs` above is the 90-day maximum; pick something shorter if this token will live in a config
+file you don't want to worry about. Revoke it any time with `POST /auth/tokens/{jti}/revoke`
+(`docs/API.md`'s "Token revocation & rate limiting" section) — this doesn't affect any other token.
+
+## 3. Point Hermes at Atlas
+
+Add Atlas as a remote MCP server in Hermes's own config (`~/.hermes/config.yaml`):
+
+```yaml
+mcp_servers:
+  atlas:
+    url: "http://127.0.0.1:5110/api/atlas/v1/mcp"
+    headers:
+      Authorization: "Bearer <the token from step 2>"
+```
+
+For an HTTPS deployment, use the gateway's `ATLAS_HTTPS_ADDR` host/port instead.
+
+## What Hermes can do through this
+
+| Tool | What it returns |
+|---|---|
+| `list_clusters` | Storage clusters with capacity/health |
+| `cluster_health` | Detailed health for one cluster |
+| `list_backends` | Registered backends with a capacity/health summary |
+| `list_pools` | Storage pools, filterable by backend/kind |
+| `list_volumes` | Volumes, filterable by state/backend/kind — scoped to Hermes's own tenant |
+| `list_alerts` | Open/resolved alerts from the monitor worker |
+| `metrics_summary` | Aggregate capacity across clusters |
+| `ops_advisor` | The Ops Advisor's risk score, evidence, and prioritized runbook |
+
+**Every tool here is read-only/advisory.** None of them create, delete, expand, cordon, or
+otherwise mutate anything in Atlas — the same `can_execute: false` boundary the Ops Advisor itself
+enforces (`docs/AI_ADVISOR.md`). Hermes can *observe* Atlas's state and get advisory analysis
+through this connection; acting on that analysis (resizing a volume, cordoning a backend, etc.)
+still means using `atlasctl` or the REST API directly, with a human in the loop.

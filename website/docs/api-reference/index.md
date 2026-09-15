@@ -625,6 +625,33 @@ namespace?, storage_class?, replicated_size?, gateway_port?, gateway_instances?}
 > then the CR sits `Terminating` (harmless; nothing can provision against it once the StorageClass
 > is gone).
 
+## MCP (Model Context Protocol)
+
+Built with the `mcp` Cargo feature (default-off — `cargo build -p atlas-gateway --features mcp`),
+Atlas exposes a read-only/advisory MCP server at `POST /api/atlas/v1/mcp` (streamable-HTTP
+transport), behind the same bearer-JWT `auth_middleware` as the rest of this API — no separate
+port or auth mechanism. Any MCP host (e.g.
+[Hermes Agent](https://github.com/zyvorai/atlas/blob/main/docs/HERMES_AGENT.md), Claude) can
+connect and call:
+
+| Tool | Mirrors |
+|---|---|
+| `list_clusters` | `GET /clusters` |
+| `cluster_health` | `GET /clusters/{id}/health` |
+| `list_backends` | `GET /backends/summary` |
+| `list_pools` | `GET /pools` |
+| `list_volumes` | `GET /volumes` (tenant-scoped for non-admin callers, same as REST) |
+| `list_alerts` | `GET /alerts` |
+| `metrics_summary` | `GET /metrics/summary` |
+| `ops_advisor` | `POST /ai/advisor` (local mode only — never triggers an outbound LLM call) |
+
+No write/action tools are exposed — same `can_execute: false` advisory-only posture as the Ops
+Advisor (see
+[docs/AI_ADVISOR.md](https://github.com/zyvorai/atlas/blob/main/docs/AI_ADVISOR.md)). Use the
+REST/gRPC API above for anything that mutates storage. See
+[docs/HERMES_AGENT.md](https://github.com/zyvorai/atlas/blob/main/docs/HERMES_AGENT.md) for a
+concrete client setup walkthrough (token minting + `~/.hermes/config.yaml`).
+
 ## HTTP status codes
 
 | Code | Meaning |

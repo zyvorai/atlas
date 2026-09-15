@@ -3,7 +3,9 @@
 //! REST surface. Slice 1 read-only inventory/discovery (PDF §10.2) + slice 2 async write path
 //! (volume create/expand/delete, snapshots) — write ops return `202 Accepted` with a job id.
 
-mod ai;
+// pub(crate): `ai::compute_advisor`/`ai::AdvisorMode` are reused by the `ops_advisor` MCP tool
+// (crates/atlas-gateway/src/mcp.rs), gated behind the `mcp` feature.
+pub(crate) mod ai;
 mod backends;
 mod databridge;
 mod day2;
@@ -267,7 +269,15 @@ pub fn router(state: AppState) -> Router {
         .route("/audit.csv", get(export_audit_csv))
         .route("/events", get(list_events))
         .route("/chargeback", get(chargeback))
-        .route("/policy-drift", get(policy_drift))
+        .route("/policy-drift", get(policy_drift));
+
+    // Nested (not a separate listener like the gRPC edge): MCP-over-streamable-HTTP is plain
+    // HTTP, so it rides the same axum Router, TLS listener, and `auth_middleware` bearer-JWT gate
+    // as the rest of the API — see crates/atlas-gateway/src/mcp.rs.
+    #[cfg(feature = "mcp")]
+    let api = api.nest_service("/mcp", crate::mcp::router(state.clone()));
+
+    let api = api
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
