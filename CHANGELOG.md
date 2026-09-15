@@ -9,6 +9,28 @@ before `0.2.0` were not tracked here — see `git log` for that history.
 
 ## [Unreleased]
 
+### Added — NFS/ZFS real driver mode
+
+- Added `RealNfsDriver`/`RealZfsDriver` alongside the existing fixture-only drivers, selected per
+  backend via `ATLAS_NFS_DRIVER_MODE`/`ATLAS_ZFS_DRIVER_MODE` (`fake`, unchanged default, or
+  `real`) — mirrors the existing `ATLAS_CEPH_DRIVER_MODE` Fake/Real split.
+- Real NFS runs `showmount -e` to confirm the server is reachable and get its real export list; a
+  configured export the server doesn't have is dropped, never fabricated. Per-export capacity comes
+  from `df` when the export is already locally mounted, `None` otherwise.
+- Real ZFS runs `zpool list -Hp`/`zfs list -Hp` locally on the gateway's own host (no remote/SSH
+  support yet); a zpool that isn't actually locally importable is dropped, never fabricated.
+- Both real drivers propagate a real error, never a silent fake-data fallback, when the target is
+  unreachable. Helm chart gained `nfs.driverMode`/`zfs.driverMode` (default `fake`).
+
+### Added — Cross-replica rate limiting
+
+- `RateLimiter::allow()` stays synchronous and database-free (still safe to call from the gRPC
+  path's `tonic::Interceptor`); cluster awareness now comes from a separate periodic background
+  task (`ATLAS_RATE_LIMIT_SYNC_SECS`, default 2s) that syncs each replica's per-window count
+  through a new `rate_limit_counters` table. An actor already over budget cluster-wide is denied on
+  the next local check, even if that replica's own count hasn't hit the limit yet — eventually
+  consistent within one sync interval. No effect on a single-replica SQLite deployment.
+
 ### Added — Atlas Ops Advisor
 
 - Added `POST /api/atlas/v1/ai/advisor`: explainable risk scoring and prioritized, read-only
