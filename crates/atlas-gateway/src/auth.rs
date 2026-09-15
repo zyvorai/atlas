@@ -428,4 +428,38 @@ mod tests {
         );
         assert!(result.is_err());
     }
+
+    #[test]
+    fn decode_token_rejects_forged_string_exp() {
+        // Regression guard for GHSA-h395-gr6q-cpjc: jsonwebtoken <10.3 treated a claim that
+        // failed to parse (e.g. exp sent as a string instead of a number) the same as the claim
+        // being entirely absent, silently skipping validate_exp for it — UNLESS the claim was
+        // also listed in required_spec_claims, in which case "failed to parse" correctly counts
+        // as "not present" and the token is rejected. We rely on exactly that: "exp" is in
+        // Validation::new()'s required_spec_claims by default and this code never clears it, so
+        // decode_token should already reject a forged never-expiring token — verify that stays
+        // true after the 9->10 upgrade rather than trusting the reasoning alone.
+        #[derive(serde::Serialize)]
+        struct ForgedClaims<'a> {
+            sub: &'a str,
+            role: &'a str,
+            exp: &'a str, // malformed: should be a number
+        }
+        let secret = "forged-exp-secret-32-bytes-or-more!";
+        let forged = encode(
+            &Header::default(),
+            &ForgedClaims {
+                sub: "attacker",
+                role: "admin",
+                exp: "99999999999", // "never expires", if the bypass worked
+            },
+            &EncodingKey::from_secret(secret.as_bytes()),
+        )
+        .unwrap();
+        let result = decode_token(&forged, secret, None);
+        assert!(
+            result.is_err(),
+            "a token with a malformed exp claim must be rejected, not silently accepted"
+        );
+    }
 }
