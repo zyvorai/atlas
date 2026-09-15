@@ -44,6 +44,78 @@ impl Default for BuildOptions {
     }
 }
 
+/// When `ATLAS_SECRETS_BACKEND=vault` (default `env` — a no-op), fetch `jwt-secret`,
+/// `admin-password`, and (if OIDC is configured) `oidc-client-secret` from a HashiCorp Vault KV v2
+/// path and overwrite the corresponding `Config` fields, so they never need to sit in a plain env
+/// var / K8s Secret at all. Reuses the same key names `deploy/k8s/atlas-auth-secret.example.yaml`
+/// already uses, so the same Vault secret can back either a plain K8s Secret sync (`deploy/
+/// vault-lab/`, via External Secrets Operator) or this direct path — operators choose one, not
+/// both. `ATLAS_VAULT_ADDR`/`_TOKEN`/`_SECRET_PATH` are kept out of `Config` (only read here, once,
+/// at startup) so they don't touch every test's `Config` literal — same rationale as
+/// `ATLAS_STATE_BACKUP_*` in `spawn_state_backup` below. Called *before* `validate_for_start()` in
+/// `main.rs` so a Vault-sourced strong secret doesn't get rejected as looking like the dev default.
+///
+/// Token auth only (`X-Vault-Token`) — the simplest, most universal Vault auth method. AppRole/
+/// Kubernetes auth would be more production-grade but are a larger follow-up, not this first slice.
+/// See `docs/SECRETS.md`.
+pub async fn resolve_vault_secrets(config: &mut Config) -> Result<()> {
+    let backend = std::env::var("ATLAS_SECRETS_BACKEND").unwrap_or_default();
+    if !backend.trim().eq_ignore_ascii_case("vault") {
+        return Ok(());
+    }
+    let addr = std::env::var("ATLAS_VAULT_ADDR")
+        .map_err(|_| anyhow::anyhow!("ATLAS_SECRETS_BACKEND=vault requires ATLAS_VAULT_ADDR"))?;
+    let token = std::env::var("ATLAS_VAULT_TOKEN")
+        .map_err(|_| anyhow::anyhow!("ATLAS_SECRETS_BACKEND=vault requires ATLAS_VAULT_TOKEN"))?;
+    let path = std::env::var("ATLAS_VAULT_SECRET_PATH").map_err(|_| {
+        anyhow::anyhow!("ATLAS_SECRETS_BACKEND=vault requires ATLAS_VAULT_SECRET_PATH")
+    })?;
+
+    let url = format!(
+        "{}/v1/{}",
+        addr.trim_end_matches('/'),
+        path.trim_start_matches('/')
+    );
+    let resp = reqwest::Client::new()
+        .get(&url)
+        .header("X-Vault-Token", &token)
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .with_context(|| format!("vault request to {url} failed"))?;
+    if !resp.status().is_success() {
+        anyhow::bail!("vault returned HTTP {} for {url}", resp.status());
+    }
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .with_context(|| format!("vault response from {url} was not valid JSON"))?;
+    // KV v2 wraps the secret's own fields under data.data (the outer "data" is the response
+    // envelope, the inner one is the KV v2 secret version's payload).
+    let data = body.pointer("/data/data").ok_or_else(|| {
+        anyhow::anyhow!("vault response from {url} has no data.data — is this a KV v2 path?")
+    })?;
+
+    let mut resolved = Vec::new();
+    if let Some(v) = data.get("jwt-secret").and_then(|v| v.as_str()) {
+        config.jwt_secret = v.to_string();
+        resolved.push("jwt-secret");
+    }
+    if let Some(v) = data.get("admin-password").and_then(|v| v.as_str()) {
+        config.admin_password = v.to_string();
+        resolved.push("admin-password");
+    }
+    if let (Some(oidc), Some(v)) = (
+        config.oidc.as_mut(),
+        data.get("oidc-client-secret").and_then(|v| v.as_str()),
+    ) {
+        oidc.client_secret = v.to_string();
+        resolved.push("oidc-client-secret");
+    }
+    tracing::info!(keys = ?resolved, %url, "resolved secrets from Vault");
+    Ok(())
+}
+
 /// Build fully-wired application state from config.
 pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState> {
     let pool = atlas_inventory::connect(&config.database_url).await?;

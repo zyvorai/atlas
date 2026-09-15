@@ -5,7 +5,7 @@
 use std::net::SocketAddr;
 
 use atlas_common::Config;
-use atlas_gateway::startup::{build_state, BuildOptions};
+use atlas_gateway::startup::{build_state, resolve_vault_secrets, BuildOptions};
 use atlas_gateway::{grpc, routes};
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
@@ -15,7 +15,12 @@ use tracing::info;
 async fn main() -> anyhow::Result<()> {
     atlas_common::init_tracing();
 
-    let config = Config::from_env();
+    let mut config = Config::from_env();
+    // Before validate_for_start(): a Vault-sourced strong secret must not be checked against the
+    // pre-resolution (possibly still dev-default) value.
+    if let Err(e) = resolve_vault_secrets(&mut config).await {
+        anyhow::bail!("failed to resolve secrets from Vault: {e:#}");
+    }
     if let Err(msg) = config.validate_for_start() {
         anyhow::bail!("{msg}");
     }
