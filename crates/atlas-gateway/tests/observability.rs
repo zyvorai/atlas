@@ -270,6 +270,88 @@ async fn ai_advisor_requires_operator_when_auth_is_enabled() {
     assert_eq!(allowed.status(), 200);
 }
 
+/// Related alerts are grouped into one explainable incident instead of producing alert fatigue.
+#[tokio::test]
+async fn ai_incidents_correlates_related_alerts() {
+    let (addr, pool) = spawn_with(Opts {
+        initial_discovery: true,
+        ..Default::default()
+    })
+    .await;
+    for (id, source, title, severity) in [
+        ("cap-1", "capacity", "Pool near full", "warning"),
+        ("cap-2", "forecast", "Capacity forecast at risk", "critical"),
+    ] {
+        atlas_inventory::alerts::upsert_open(
+            &pool,
+            id,
+            severity,
+            source,
+            "pool",
+            "pool-a",
+            title,
+            title,
+            &serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+    }
+
+    let body: Value = client()
+        .get(format!("http://{addr}/api/atlas/v1/ai/incidents"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(body["can_execute"], false);
+    let capacity = body["incidents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|incident| incident["category"] == "capacity")
+        .expect("capacity incident");
+    assert_eq!(capacity["severity"], "critical");
+    assert_eq!(capacity["signals"].as_array().unwrap().len(), 2);
+}
+
+/// What-if planning projects risk without mutating the fake-driver inventory.
+#[tokio::test]
+async fn ai_what_if_projects_capacity_and_validates_inputs() {
+    let base = format!("http://{}/api/atlas/v1", spawn().await);
+    let c = client();
+    let body: Value = c
+        .post(format!("{base}/ai/what-if"))
+        .json(&serde_json::json!({
+            "add_capacity_bytes": 1_099_511_627_776_i64,
+            "horizon_days": 90,
+            "projected_growth_bytes_per_day": 1_073_741_824_i64,
+            "assume_alerts_resolved": true,
+            "assume_recovery_complete": true
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(body["horizon_days"], 90);
+    assert_eq!(body["can_execute"], false);
+    assert!(body["baseline"]["risk_score"].as_u64().is_some());
+    assert!(body["projected"]["capacity_used_percent"]
+        .as_f64()
+        .is_some());
+
+    let invalid = c
+        .post(format!("{base}/ai/what-if"))
+        .json(&serde_json::json!({ "add_capacity_bytes": -1, "horizon_days": 0 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), 400);
+}
+
 /// `/readyz` is a deep check: it probes the actual driver (not a hardcoded ok) and reports worker
 /// heartbeats; `/livez` is the shallow always-alive signal; `/version` names the service.
 #[tokio::test]

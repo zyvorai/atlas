@@ -37,3 +37,32 @@ use HTTPS. Plain HTTP is permitted only for a loopback model endpoint.
 When authentication is enabled, the endpoint requires an operator-or-higher token and records an
 `ai.advisor` audit event. Questions are capped at 512 characters, model output at 2,000 characters,
 and only aggregate telemetry plus at most 20 alert titles is sent to the provider.
+
+## Incident correlation
+
+`GET /api/atlas/v1/ai/incidents` groups related open alerts and recent job failures into incident
+families: data safety, capacity, Ceph recovery, replication, job engine, availability, or
+unclassified. Each incident includes the contributing signals, highest severity, a bounded
+correlation-confidence score, a likely-cause explanation, and read-only inspection endpoints.
+
+This is deterministic correlation rather than a claim of statistical causation. It reduces alert
+fatigue while keeping every contributing signal visible to the operator.
+
+## What-if capacity planning
+
+`POST /api/atlas/v1/ai/what-if` projects risk without mutating inventory:
+
+```json
+{
+  "add_capacity_bytes": 1099511627776,
+  "horizon_days": 90,
+  "projected_growth_bytes_per_day": 10737418240,
+  "assume_alerts_resolved": false,
+  "assume_recovery_complete": false
+}
+```
+
+The response compares baseline and projected risk, capacity utilization, days-to-full, remaining
+actions, and explicit assumptions. Horizons are limited to 1–365 days, added capacity to 1 EiB,
+and growth must be finite and non-negative. The endpoint records an `ai.what_if` audit event and
+always returns `can_execute: false`.

@@ -4,7 +4,10 @@
 //! mutates storage. An optional OpenAI-compatible provider can rewrite only the executive summary;
 //! Atlas remains the source of truth for risk, evidence, and recommended actions.
 
-use std::time::Duration;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::Duration,
+};
 
 use atlas_api_types::AlertRecord;
 use atlas_common::{AppError, AppResult};
@@ -61,6 +64,71 @@ struct AdvisorEvidence {
     alert_titles: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct IncidentSignal {
+    source: String,
+    severity: String,
+    title: String,
+    resource_type: String,
+    resource_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct CorrelatedIncident {
+    id: String,
+    category: String,
+    severity: String,
+    confidence: f64,
+    title: String,
+    likely_cause: String,
+    signals: Vec<IncidentSignal>,
+    inspect: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct IncidentsResponse {
+    generated_at: String,
+    count: usize,
+    incidents: Vec<CorrelatedIncident>,
+    can_execute: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct WhatIfRequest {
+    #[serde(default)]
+    add_capacity_bytes: i64,
+    #[serde(default = "default_horizon_days")]
+    horizon_days: u16,
+    projected_growth_bytes_per_day: Option<f64>,
+    #[serde(default)]
+    assume_alerts_resolved: bool,
+    #[serde(default)]
+    assume_recovery_complete: bool,
+}
+
+fn default_horizon_days() -> u16 {
+    30
+}
+
+#[derive(Debug, Serialize)]
+struct RiskProjection {
+    risk_score: u8,
+    risk_level: &'static str,
+    capacity_used_percent: f64,
+    days_to_full: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct WhatIfResponse {
+    horizon_days: u16,
+    baseline: RiskProjection,
+    projected: RiskProjection,
+    risk_delta: i16,
+    actions: Vec<AdvisorAction>,
+    assumptions: Vec<String>,
+    can_execute: bool,
+}
+
 #[derive(Debug, Serialize)]
 pub(crate) struct AdvisorResponse {
     mode: &'static str,
@@ -90,14 +158,7 @@ pub(crate) async fn ai_advisor(
     let metrics = atlas_inventory::metrics_summary(&s.pool).await?;
     let forecast = atlas_inventory::metrics::forecast(&s.pool, 20_160).await?;
     let alerts = atlas_inventory::alerts::list(&s.pool, Some("open")).await?;
-    let failed_jobs_15m = sqlx::query(
-        "SELECT COUNT(*) AS n FROM storage_jobs WHERE state='failed' AND updated_at >= \
-         strftime('%Y-%m-%dT%H:%M:%fZ','now','-15 minutes')",
-    )
-    .fetch_one(&s.pool)
-    .await
-    .map_err(anyhow::Error::from)?
-    .get::<i64, _>("n");
+    let failed_jobs_15m = recent_failed_jobs(&s.pool).await?;
 
     let evidence = build_evidence(&metrics, &forecast, &alerts, failed_jobs_15m);
     let (risk_score, mut actions) = assess(&evidence);
@@ -156,6 +217,324 @@ pub(crate) async fn ai_advisor(
         warnings,
         can_execute: false,
     }))
+}
+
+/// `GET /ai/incidents` — correlate related open alerts and failures into explainable incidents.
+pub(crate) async fn ai_incidents(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+) -> AppResult<Json<IncidentsResponse>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    let alerts = atlas_inventory::alerts::list(&s.pool, Some("open")).await?;
+    let failed_jobs_15m = recent_failed_jobs(&s.pool).await?;
+    let incidents = correlate_incidents(&alerts, failed_jobs_15m);
+    Ok(Json(IncidentsResponse {
+        generated_at: chrono::Utc::now().to_rfc3339(),
+        count: incidents.len(),
+        incidents,
+        can_execute: false,
+    }))
+}
+
+/// `POST /ai/what-if` — project posture after capacity/growth/recovery assumptions, without
+/// changing inventory or executing any action.
+pub(crate) async fn ai_what_if(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Json(req): Json<WhatIfRequest>,
+) -> AppResult<Json<WhatIfResponse>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    validate_what_if(&req)?;
+
+    let metrics = atlas_inventory::metrics_summary(&s.pool).await?;
+    let forecast = atlas_inventory::metrics::forecast(&s.pool, 20_160).await?;
+    let alerts = atlas_inventory::alerts::list(&s.pool, Some("open")).await?;
+    let failed_jobs = recent_failed_jobs(&s.pool).await?;
+    let baseline_evidence = build_evidence(&metrics, &forecast, &alerts, failed_jobs);
+    let (baseline_score, _) = assess(&baseline_evidence);
+    let (projected_evidence, assumptions) =
+        project_evidence(&metrics, &forecast, &baseline_evidence, &req);
+    let (projected_score, mut actions) = assess(&projected_evidence);
+    actions.sort_by_key(|a| a.priority);
+
+    let response = WhatIfResponse {
+        horizon_days: req.horizon_days,
+        baseline: projection(baseline_score, &baseline_evidence),
+        projected: projection(projected_score, &projected_evidence),
+        risk_delta: projected_score as i16 - baseline_score as i16,
+        actions,
+        assumptions,
+        can_execute: false,
+    };
+    let _ = atlas_inventory::audit::record(
+        &s.pool,
+        Some(&actor.tenant_id),
+        &actor.id,
+        "ai.what_if",
+        "cluster",
+        "global",
+        "success",
+        Some(json!({
+            "add_capacity_bytes": req.add_capacity_bytes,
+            "horizon_days": req.horizon_days,
+            "projected_growth_bytes_per_day": req.projected_growth_bytes_per_day,
+            "assume_alerts_resolved": req.assume_alerts_resolved,
+            "assume_recovery_complete": req.assume_recovery_complete,
+        })),
+        Some(json!({
+            "baseline_risk": baseline_score,
+            "projected_risk": projected_score,
+        })),
+    )
+    .await;
+    Ok(Json(response))
+}
+
+async fn recent_failed_jobs(pool: &sqlx::SqlitePool) -> AppResult<i64> {
+    let row = sqlx::query(
+        "SELECT COUNT(*) AS n FROM storage_jobs WHERE state='failed' AND updated_at >= \
+         strftime('%Y-%m-%dT%H:%M:%fZ','now','-15 minutes')",
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|e| AppError::Database(e.to_string()))?
+    .get::<i64, _>("n");
+    Ok(row)
+}
+
+fn incident_category(alert: &AlertRecord) -> &'static str {
+    let text = format!(
+        "{} {} {} {}",
+        alert.source, alert.title, alert.description, alert.resource_type
+    )
+    .to_ascii_lowercase();
+    if ["unfound", "data loss", "corrupt"]
+        .iter()
+        .any(|needle| text.contains(needle))
+    {
+        "data_safety"
+    } else if ["capacity", "near full", "full ratio", "quota"]
+        .iter()
+        .any(|needle| text.contains(needle))
+    {
+        "capacity"
+    } else if ["recovery", "degraded", "backfill", "misplaced", "osd"]
+        .iter()
+        .any(|needle| text.contains(needle))
+    {
+        "recovery"
+    } else if ["cdc", "replication", "lag", "databridge"]
+        .iter()
+        .any(|needle| text.contains(needle))
+    {
+        "replication"
+    } else if ["job", "failed", "failure"]
+        .iter()
+        .any(|needle| text.contains(needle))
+    {
+        "jobs"
+    } else if ["unhealthy", "health", "down", "unavailable"]
+        .iter()
+        .any(|needle| text.contains(needle))
+    {
+        "availability"
+    } else {
+        "other"
+    }
+}
+
+fn category_details(category: &str) -> (&'static str, &'static str, &'static str) {
+    match category {
+        "data_safety" => (
+            "Potential data-safety incident",
+            "Unfound or corruption signals indicate that redundancy may no longer guarantee recovery.",
+            "/api/atlas/v1/ceph/health-rollup",
+        ),
+        "capacity" => (
+            "Capacity pressure",
+            "Growth, quota, or near-full signals are converging on insufficient free capacity.",
+            "/api/atlas/v1/metrics/forecast",
+        ),
+        "recovery" => (
+            "Ceph recovery pressure",
+            "OSD or placement-group disruption is driving degraded, misplaced, or backfill activity.",
+            "/api/atlas/v1/ceph/status",
+        ),
+        "replication" => (
+            "Replication pipeline degradation",
+            "CDC lag or connector health is preventing the edge copy from converging.",
+            "/api/atlas/v1/databridge/cdc-streams",
+        ),
+        "jobs" => (
+            "Control-plane job failures",
+            "One or more recent operations failed and may share a backend or dependency fault.",
+            "/api/atlas/v1/jobs",
+        ),
+        "availability" => (
+            "Storage availability degradation",
+            "Cluster health or component-down signals indicate reduced service availability.",
+            "/api/atlas/v1/clusters",
+        ),
+        _ => (
+            "Unclassified operational signals",
+            "The signals do not yet match a known Atlas incident pattern and require operator review.",
+            "/api/atlas/v1/alerts?state=open",
+        ),
+    }
+}
+
+fn severity_rank(severity: &str) -> u8 {
+    match severity.to_ascii_lowercase().as_str() {
+        "critical" => 3,
+        "warning" => 2,
+        _ => 1,
+    }
+}
+
+fn correlate_incidents(alerts: &[AlertRecord], failed_jobs_15m: i64) -> Vec<CorrelatedIncident> {
+    let mut groups: BTreeMap<&str, Vec<IncidentSignal>> = BTreeMap::new();
+    for alert in alerts {
+        groups
+            .entry(incident_category(alert))
+            .or_default()
+            .push(IncidentSignal {
+                source: alert.source.clone(),
+                severity: alert.severity.clone(),
+                title: alert.title.clone(),
+                resource_type: alert.resource_type.clone(),
+                resource_id: alert.resource_id.clone(),
+            });
+    }
+    if failed_jobs_15m > 0 && !groups.contains_key("jobs") {
+        groups.entry("jobs").or_default().push(IncidentSignal {
+            source: "job_engine".into(),
+            severity: "warning".into(),
+            title: format!("{failed_jobs_15m} jobs failed in 15 minutes"),
+            resource_type: "job".into(),
+            resource_id: "recent".into(),
+        });
+    }
+
+    let mut incidents: Vec<_> = groups
+        .into_iter()
+        .map(|(category, signals)| {
+            let (title, likely_cause, default_inspect) = category_details(category);
+            let severity = signals
+                .iter()
+                .max_by_key(|signal| severity_rank(&signal.severity))
+                .map(|signal| signal.severity.to_ascii_lowercase())
+                .unwrap_or_else(|| "info".into());
+            let sources: BTreeSet<_> = signals.iter().map(|s| s.source.as_str()).collect();
+            let confidence = (0.5
+                + signals.len().min(4) as f64 * 0.08
+                + sources.len().saturating_sub(1).min(2) as f64 * 0.08)
+                .min(0.94);
+            let mut inspect = vec![default_inspect.to_string()];
+            if signals.iter().any(|s| s.resource_type == "alert") {
+                inspect.push("/api/atlas/v1/alerts?state=open".into());
+            }
+            CorrelatedIncident {
+                id: format!("inc_{category}"),
+                category: category.into(),
+                severity,
+                confidence: (confidence * 100.0).round() / 100.0,
+                title: title.into(),
+                likely_cause: likely_cause.into(),
+                signals,
+                inspect,
+            }
+        })
+        .collect();
+    incidents.sort_by(|a, b| {
+        severity_rank(&b.severity)
+            .cmp(&severity_rank(&a.severity))
+            .then_with(|| b.confidence.total_cmp(&a.confidence))
+    });
+    incidents
+}
+
+const MAX_ADDED_CAPACITY_BYTES: i64 = 1_i64 << 60;
+
+fn validate_what_if(req: &WhatIfRequest) -> AppResult<()> {
+    if !(1..=365).contains(&req.horizon_days) {
+        return Err(AppError::Validation(
+            "horizon_days must be between 1 and 365".into(),
+        ));
+    }
+    if !(0..=MAX_ADDED_CAPACITY_BYTES).contains(&req.add_capacity_bytes) {
+        return Err(AppError::Validation(
+            "add_capacity_bytes must be between 0 and 1 EiB".into(),
+        ));
+    }
+    if req
+        .projected_growth_bytes_per_day
+        .is_some_and(|growth| !growth.is_finite() || growth < 0.0)
+    {
+        return Err(AppError::Validation(
+            "projected_growth_bytes_per_day must be a finite non-negative number".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn project_evidence(
+    metrics: &Value,
+    forecast: &Value,
+    baseline: &AdvisorEvidence,
+    req: &WhatIfRequest,
+) -> (AdvisorEvidence, Vec<String>) {
+    let raw = number(metrics, &["raw_capacity_bytes"]);
+    let used = number(metrics, &["used_capacity_bytes"]);
+    let observed_growth = number(forecast, &["growth_bytes_per_day"]).max(0.0);
+    let growth = req
+        .projected_growth_bytes_per_day
+        .unwrap_or(observed_growth);
+    let projected_raw = raw + req.add_capacity_bytes as f64;
+    let projected_used = used + growth * f64::from(req.horizon_days);
+    let used_pct = if projected_raw > 0.0 {
+        (projected_used / projected_raw * 100.0).clamp(0.0, 100.0)
+    } else {
+        0.0
+    };
+    let days_to_full = if growth > 1_048_576.0 {
+        Some(((projected_raw - projected_used).max(0.0) / growth * 10.0).round() / 10.0)
+    } else {
+        None
+    };
+    let mut projected = baseline.clone();
+    projected.capacity_used_percent = (used_pct * 10.0).round() / 10.0;
+    projected.days_to_full = days_to_full;
+    if req.assume_alerts_resolved {
+        projected.open_alerts = 0;
+        projected.critical_alerts = 0;
+        projected.warning_alerts = 0;
+        projected.alert_titles.clear();
+    }
+    if req.assume_recovery_complete {
+        projected.degraded_objects = 0.0;
+        projected.unfound_objects = 0.0;
+    }
+    let mut assumptions = vec![
+        format!("Projection horizon: {} days", req.horizon_days),
+        format!("Added capacity: {} bytes", req.add_capacity_bytes),
+        format!("Daily growth: {:.0} bytes", growth),
+    ];
+    if req.assume_alerts_resolved {
+        assumptions.push("All current alerts are assumed resolved".into());
+    }
+    if req.assume_recovery_complete {
+        assumptions.push("Current degraded and unfound object signals are assumed cleared".into());
+    }
+    (projected, assumptions)
+}
+
+fn projection(score: u8, evidence: &AdvisorEvidence) -> RiskProjection {
+    RiskProjection {
+        risk_score: score,
+        risk_level: risk_level(score),
+        capacity_used_percent: evidence.capacity_used_percent,
+        days_to_full: evidence.days_to_full,
+    }
 }
 
 fn number(value: &Value, path: &[&str]) -> f64 {
@@ -409,6 +788,25 @@ impl ProviderConfig {
 mod tests {
     use super::*;
 
+    fn alert(title: &str, severity: &str, source: &str) -> AlertRecord {
+        AlertRecord {
+            id: format!("alert_{}", title.replace(' ', "_")),
+            severity: severity.into(),
+            source: source.into(),
+            resource_type: "pool".into(),
+            resource_id: "pool-a".into(),
+            title: title.into(),
+            description: title.into(),
+            evidence: Value::Null,
+            state: "open".into(),
+            created_at: None,
+            resolved_at: None,
+            acknowledged_at: None,
+            acknowledged_by: None,
+            silenced_until: None,
+        }
+    }
+
     fn evidence() -> AdvisorEvidence {
         AdvisorEvidence {
             capacity_used_percent: 42.0,
@@ -449,26 +847,76 @@ mod tests {
     #[test]
     fn evidence_is_bounded_and_counts_severity_case_insensitively() {
         let alerts: Vec<AlertRecord> = (0..25)
-            .map(|i| AlertRecord {
-                id: format!("a{i}"),
-                severity: if i == 0 { "CRITICAL" } else { "warning" }.into(),
-                source: "test".into(),
-                resource_type: "pool".into(),
-                resource_id: "p".into(),
-                title: format!("alert {i}"),
-                description: "test".into(),
-                evidence: Value::Null,
-                state: "open".into(),
-                created_at: None,
-                resolved_at: None,
-                acknowledged_at: None,
-                acknowledged_by: None,
-                silenced_until: None,
+            .map(|i| {
+                alert(
+                    &format!("alert {i}"),
+                    if i == 0 { "CRITICAL" } else { "warning" },
+                    "test",
+                )
             })
             .collect();
         let e = build_evidence(&json!({}), &json!({}), &alerts, 0);
         assert_eq!(e.critical_alerts, 1);
         assert_eq!(e.warning_alerts, 24);
         assert_eq!(e.alert_titles.len(), MAX_ALERTS);
+    }
+
+    #[test]
+    fn correlates_related_signals_and_orders_critical_first() {
+        let alerts = vec![
+            alert("pool near full", "warning", "capacity"),
+            alert("capacity forecast at risk", "critical", "forecast"),
+            alert("OSD down and degraded", "warning", "ceph"),
+        ];
+        let incidents = correlate_incidents(&alerts, 2);
+        assert_eq!(incidents.len(), 3);
+        assert_eq!(incidents[0].category, "capacity");
+        assert_eq!(incidents[0].severity, "critical");
+        assert_eq!(incidents[0].signals.len(), 2);
+        assert!(incidents.iter().any(|i| i.category == "jobs"));
+        assert!(incidents.iter().all(|i| i.confidence <= 0.94));
+    }
+
+    #[test]
+    fn what_if_validation_rejects_unsafe_ranges() {
+        let invalid_horizon = WhatIfRequest {
+            add_capacity_bytes: 0,
+            horizon_days: 0,
+            projected_growth_bytes_per_day: None,
+            assume_alerts_resolved: false,
+            assume_recovery_complete: false,
+        };
+        assert!(validate_what_if(&invalid_horizon).is_err());
+        let invalid_capacity = WhatIfRequest {
+            add_capacity_bytes: -1,
+            horizon_days: 30,
+            ..invalid_horizon
+        };
+        assert!(validate_what_if(&invalid_capacity).is_err());
+    }
+
+    #[test]
+    fn added_capacity_reduces_projected_pressure() {
+        let baseline = AdvisorEvidence {
+            capacity_used_percent: 90.0,
+            days_to_full: Some(5.0),
+            ..evidence()
+        };
+        let metrics = json!({
+            "raw_capacity_bytes": 1000.0,
+            "used_capacity_bytes": 900.0,
+        });
+        let forecast = json!({ "growth_bytes_per_day": 10.0 });
+        let request = WhatIfRequest {
+            add_capacity_bytes: 1000,
+            horizon_days: 10,
+            projected_growth_bytes_per_day: Some(10.0),
+            assume_alerts_resolved: false,
+            assume_recovery_complete: false,
+        };
+        let (projected, _) = project_evidence(&metrics, &forecast, &baseline, &request);
+        assert_eq!(projected.capacity_used_percent, 50.0);
+        assert_eq!(projected.days_to_full, None); // growth below the 1 MiB/day noise floor
+        assert!(assess(&projected).0 < assess(&baseline).0);
     }
 }

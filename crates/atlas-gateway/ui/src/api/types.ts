@@ -159,6 +159,49 @@ export interface AdvisorResponse {
   can_execute: false;
 }
 
+export interface IncidentSignal {
+  source: string;
+  severity: string;
+  title: string;
+  resource_type: string;
+  resource_id: string;
+}
+
+export interface CorrelatedIncident {
+  id: string;
+  category: string;
+  severity: string;
+  confidence: number;
+  title: string;
+  likely_cause: string;
+  signals: IncidentSignal[];
+  inspect: string[];
+}
+
+export interface IncidentsResponse {
+  generated_at: string;
+  count: number;
+  incidents: CorrelatedIncident[];
+  can_execute: false;
+}
+
+export interface RiskProjection {
+  risk_score: number;
+  risk_level: "low" | "moderate" | "high" | "critical";
+  capacity_used_percent: number;
+  days_to_full: number | null;
+}
+
+export interface WhatIfResponse {
+  horizon_days: number;
+  baseline: RiskProjection;
+  projected: RiskProjection;
+  risk_delta: number;
+  actions: AdvisorAction[];
+  assumptions: string[];
+  can_execute: false;
+}
+
 export interface JobRecord {
   id: string;
   tenant_id: string;

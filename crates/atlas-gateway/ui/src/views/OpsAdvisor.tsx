@@ -4,6 +4,7 @@
 import { useState, type FormEvent } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   BrainCircuit,
   CheckCircle2,
   Eye,
@@ -13,7 +14,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { apiError, http } from "../api/client";
-import type { AdvisorMode, AdvisorResponse } from "../api/types";
+import type { AdvisorMode, AdvisorResponse, IncidentsResponse, WhatIfResponse } from "../api/types";
 import { navCrumbs } from "../nav/routes";
 import { Badge, Button, RadialGauge } from "../ui/kit";
 import { DashboardHero } from "../ui/templates/DashboardHero";
@@ -40,20 +41,53 @@ export default function OpsAdvisor() {
   const [question, setQuestion] = useState(PROMPTS[0]);
   const [mode, setMode] = useState<AdvisorMode>("local");
   const [result, setResult] = useState<AdvisorResponse>();
+  const [incidents, setIncidents] = useState<IncidentsResponse>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [capacityTib, setCapacityTib] = useState("1");
+  const [growthGib, setGrowthGib] = useState("10");
+  const [horizon, setHorizon] = useState("90");
+  const [clearAlerts, setClearAlerts] = useState(false);
+  const [clearRecovery, setClearRecovery] = useState(false);
+  const [simulation, setSimulation] = useState<WhatIfResponse>();
+  const [simulating, setSimulating] = useState(false);
+  const [simulationError, setSimulationError] = useState("");
 
   async function analyze(e?: FormEvent) {
     e?.preventDefault();
     setLoading(true);
     setError("");
     try {
-      const { data } = await http.post<AdvisorResponse>("/ai/advisor", { question, mode });
-      setResult(data);
+      const [advisor, correlated] = await Promise.all([
+        http.post<AdvisorResponse>("/ai/advisor", { question, mode }),
+        http.get<IncidentsResponse>("/ai/incidents"),
+      ]);
+      setResult(advisor.data);
+      setIncidents(correlated.data);
     } catch (err) {
       setError(apiError(err));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function simulate(e: FormEvent) {
+    e.preventDefault();
+    setSimulating(true);
+    setSimulationError("");
+    try {
+      const { data } = await http.post<WhatIfResponse>("/ai/what-if", {
+        add_capacity_bytes: Math.round(Number(capacityTib || 0) * 2 ** 40),
+        horizon_days: Number(horizon),
+        projected_growth_bytes_per_day: Math.round(Number(growthGib || 0) * 2 ** 30),
+        assume_alerts_resolved: clearAlerts,
+        assume_recovery_complete: clearRecovery,
+      });
+      setSimulation(data);
+    } catch (err) {
+      setSimulationError(apiError(err));
+    } finally {
+      setSimulating(false);
     }
   }
 
@@ -178,6 +212,40 @@ export default function OpsAdvisor() {
             </div>
           </div>
 
+          <div className="at-panel">
+            <div className="at-panel-bar">
+              <span className="at-caption">Correlated incidents</span>
+              <span className="grow" />
+              <Badge kind={incidents?.count ? "warning" : "success"}>{incidents?.count ?? 0} active</Badge>
+            </div>
+            {incidents?.incidents.length ? incidents.incidents.map((incident) => (
+              <div className="at-list-row" key={incident.id} style={{ alignItems: "flex-start" }}>
+                <Badge kind={incident.severity === "critical" ? "danger" : incident.severity === "warning" ? "warning" : "neutral"} dot>
+                  {incident.severity}
+                </Badge>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <strong>{incident.title}</strong>
+                    <Badge kind="info">{Math.round(incident.confidence * 100)}% correlation</Badge>
+                    <span className="mono" style={{ fontSize: 11 }}>{incident.category.replaceAll("_", " ")}</span>
+                  </div>
+                  <p className="at-sub" style={{ margin: "5px 0 8px" }}>{incident.likely_cause}</p>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {incident.signals.map((signal) => (
+                      <Badge key={`${signal.source}-${signal.resource_id}-${signal.title}`} kind="neutral">
+                        {signal.source} · {signal.title}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )) : (
+              <div className="at-list-row" style={{ color: "var(--at-ok)" }}>
+                <CheckCircle2 size={17} aria-hidden /> No related active signals were found.
+              </div>
+            )}
+          </div>
+
           <div className="at-instrs">
             <div className="at-instr">
               <div className="at-caption">Capacity used</div>
@@ -221,6 +289,67 @@ export default function OpsAdvisor() {
               </div>
             ))}
           </div>
+
+          <form className="at-panel" onSubmit={simulate}>
+            <div className="at-panel-bar">
+              <span className="at-caption">What-if capacity simulator</span>
+              <span className="grow" />
+              <Badge kind="info">no inventory changes</Badge>
+            </div>
+            <div style={{ padding: 18, display: "grid", gap: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
+                <label>
+                  <span className="at-caption">Capacity to add · TiB</span>
+                  <input className="field" type="number" min="0" step="0.1" value={capacityTib} onChange={(e) => setCapacityTib(e.target.value)} style={{ width: "100%", marginTop: 6 }} />
+                </label>
+                <label>
+                  <span className="at-caption">Daily growth · GiB</span>
+                  <input className="field" type="number" min="0" step="0.1" value={growthGib} onChange={(e) => setGrowthGib(e.target.value)} style={{ width: "100%", marginTop: 6 }} />
+                </label>
+                <label>
+                  <span className="at-caption">Horizon · days</span>
+                  <input className="field" type="number" min="1" max="365" value={horizon} onChange={(e) => setHorizon(e.target.value)} style={{ width: "100%", marginTop: 6 }} />
+                </label>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13 }}>
+                  <input type="checkbox" checked={clearAlerts} onChange={(e) => setClearAlerts(e.target.checked)} /> Assume alerts resolved
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13 }}>
+                  <input type="checkbox" checked={clearRecovery} onChange={(e) => setClearRecovery(e.target.checked)} /> Assume recovery complete
+                </label>
+                <span className="grow" />
+                <Button type="submit" icon={Sparkles} loading={simulating}>Simulate</Button>
+              </div>
+              {simulationError ? <div role="alert" style={{ color: "var(--at-fail)" }}>{simulationError}</div> : null}
+              {simulation ? (
+                <div style={{ display: "grid", gap: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 22, flexWrap: "wrap" }}>
+                    <div style={{ textAlign: "center" }}>
+                      <div className="at-caption">Baseline</div>
+                      <div className="at-val md">{simulation.baseline.risk_score}</div>
+                      <Badge kind={riskKind(simulation.baseline.risk_level)}>{simulation.baseline.risk_level}</Badge>
+                    </div>
+                    <ArrowRight size={24} style={{ color: simulation.risk_delta < 0 ? "var(--at-ok)" : "var(--at-warn)" }} aria-hidden />
+                    <div style={{ textAlign: "center" }}>
+                      <div className="at-caption">Projected · {simulation.horizon_days}d</div>
+                      <div className="at-val md">{simulation.projected.risk_score}</div>
+                      <Badge kind={riskKind(simulation.projected.risk_level)}>{simulation.projected.risk_level}</Badge>
+                    </div>
+                    <Badge kind={simulation.risk_delta < 0 ? "success" : simulation.risk_delta > 0 ? "warning" : "neutral"}>
+                      {simulation.risk_delta > 0 ? "+" : ""}{simulation.risk_delta} risk
+                    </Badge>
+                  </div>
+                  <div className="at-list-row">
+                    <span className="at-sub" style={{ margin: 0 }}>
+                      Projected utilization <strong>{simulation.projected.capacity_used_percent.toFixed(1)}%</strong>
+                      {simulation.projected.days_to_full == null ? " · no meaningful fill date" : ` · ${simulation.projected.days_to_full.toFixed(1)} days to full`}
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </form>
 
           <div className="at-panel">
             <div className="at-panel-bar"><span className="at-caption">Safety boundary</span></div>

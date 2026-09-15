@@ -18,6 +18,10 @@ before `0.2.0` were not tracked here — see `git log` for that history.
 - Added local/provider mode documentation and unit plus REST/RBAC regression coverage.
 - Added a Storage Center **Ops Advisor** page with question presets, explicit local/auto/LLM
   controls, risk visualization, evidence cards, and a prioritized non-executing runbook.
+- Added `GET /ai/incidents` to correlate related alerts and recent failures into explainable
+  incident families with bounded confidence and visible source signals.
+- Added `POST /ai/what-if` plus console controls to compare baseline risk with capacity, growth,
+  alert-resolution, and recovery-completion scenarios without changing live inventory.
 
 ## [0.3.0] — 2026-09-14
 

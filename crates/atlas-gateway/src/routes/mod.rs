@@ -58,6 +58,8 @@ pub fn router(state: AppState) -> Router {
 
     let api = Router::new()
         .route("/ai/advisor", post(ai_advisor))
+        .route("/ai/incidents", get(ai_incidents))
+        .route("/ai/what-if", post(ai_what_if))
         .route("/backends", get(list_backends).post(create_backend))
         .route("/backends/summary", get(backends_summary))
         .route("/backends/{id}", delete(delete_backend))
