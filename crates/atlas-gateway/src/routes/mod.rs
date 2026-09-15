@@ -3,6 +3,7 @@
 //! REST surface. Slice 1 read-only inventory/discovery (PDF §10.2) + slice 2 async write path
 //! (volume create/expand/delete, snapshots) — write ops return `202 Accepted` with a job id.
 
+mod ai;
 mod backends;
 mod databridge;
 mod day2;
@@ -28,6 +29,7 @@ use axum::{
 use crate::auth::auth_middleware;
 use crate::state::AppState;
 
+use ai::*;
 use backends::*;
 use databridge::*;
 use day2::*;
@@ -55,6 +57,7 @@ pub fn router(state: AppState) -> Router {
         .with_state(state.clone());
 
     let api = Router::new()
+        .route("/ai/advisor", post(ai_advisor))
         .route("/backends", get(list_backends).post(create_backend))
         .route("/backends/summary", get(backends_summary))
         .route("/backends/{id}", delete(delete_backend))

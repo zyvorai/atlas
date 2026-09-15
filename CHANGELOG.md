@@ -9,6 +9,14 @@ before `0.2.0` were not tracked here — see `git log` for that history.
 
 ## [Unreleased]
 
+### Added — Atlas Ops Advisor
+
+- Added `POST /api/atlas/v1/ai/advisor`: explainable risk scoring and prioritized, read-only
+  runbooks from Atlas capacity, forecasts, recovery telemetry, alerts, and recent job failures.
+- Added an optional OpenAI-compatible summary provider with HTTPS enforcement, bounded context and
+  output, prompt-injection resistance, deterministic fallback, operator RBAC, and audit logging.
+- Added local/provider mode documentation and unit plus REST/RBAC regression coverage.
+
 ## [0.3.0] — 2026-09-14
 
 ### Changed — Dual license (AGPL-3.0 + ACL); remove trial JWT gate

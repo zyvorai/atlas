@@ -208,6 +208,68 @@ async fn json_metrics_endpoints_ok() {
     assert_eq!(summary["pools"], 3);
 }
 
+/// The Ops Advisor works without a model and exposes only explainable, read-only recommendations.
+#[tokio::test]
+async fn ai_advisor_local_mode_is_safe_and_explainable() {
+    let base = format!("http://{}/api/atlas/v1", spawn().await);
+    let r = client()
+        .post(format!("{base}/ai/advisor"))
+        .json(&serde_json::json!({
+            "question": "What should the storage team handle first?",
+            "mode": "local"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let body: Value = r.json().await.unwrap();
+    assert_eq!(body["mode"], "local");
+    assert_eq!(body["can_execute"], false);
+    assert!(body["risk_score"].as_u64().is_some());
+    assert!(body["evidence"].is_object());
+    let actions = body["actions"].as_array().expect("advisor actions");
+    assert!(!actions.is_empty());
+    assert!(actions.iter().all(|a| a["inspect"]
+        .as_str()
+        .is_some_and(|path| path.starts_with("/api/atlas/v1/"))));
+}
+
+/// Cluster-wide telemetry must not be exported or summarized for a read-only viewer.
+#[tokio::test]
+async fn ai_advisor_requires_operator_when_auth_is_enabled() {
+    let secret = "obs-test-secret-key-at-least-32-bytes!";
+    let (addr, _) = spawn_with(Opts {
+        auth_required: true,
+        initial_discovery: true,
+        ..Default::default()
+    })
+    .await;
+    let url = format!("http://{addr}/api/atlas/v1/ai/advisor");
+    let c = client();
+    let (viewer, _, _) =
+        atlas_gateway::auth::mint_token(secret, "viewer", "viewer", "global", 600).unwrap();
+    let (operator, _, _) =
+        atlas_gateway::auth::mint_token(secret, "operator", "operator", "global", 600).unwrap();
+
+    let denied = c
+        .post(&url)
+        .bearer_auth(viewer)
+        .json(&serde_json::json!({ "mode": "local" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), 403);
+
+    let allowed = c
+        .post(&url)
+        .bearer_auth(operator)
+        .json(&serde_json::json!({ "mode": "local" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(allowed.status(), 200);
+}
+
 /// `/readyz` is a deep check: it probes the actual driver (not a hardcoded ok) and reports worker
 /// heartbeats; `/livez` is the shallow always-alive signal; `/version` names the service.
 #[tokio::test]

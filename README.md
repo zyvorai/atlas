@@ -100,6 +100,7 @@ Full write-up: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Pluggable drivers** — real Ceph first; NFS + ZFS; fake driver for local demo
 - **DataBridge** — cloud-to-edge DB migration (six engines, CDC, cutover) on Ceph
 - **Day-2** — alerts, maintenance, governance, quotas, upgrade preflight, DR scaffolding
+- **Ops Advisor** — explainable AI-assisted risk scoring and prioritized, read-only runbooks
 - **Console** — Apple.com-style top-nav shell, SF type, Night/Day themes
 
 Customer-facing feature guide: [docs/atlas-customer-feature-guide.md](docs/atlas-customer-feature-guide.md).
