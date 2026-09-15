@@ -11,6 +11,12 @@
 # separately in CI but intentionally excluded here: `tiberius` (sqlserver) currently pulls in an
 # unmaintained/vulnerable rustls 0.21-era chain (RUSTSEC-2025-0134, RUSTSEC-2026-0098/0099/0104)
 # that the default build never links — see docs/ROADMAP.md's known-limitations for the tracked fix.
+# Same story for `azure_core`/`azure_storage*` (azure-blob): pinned to the legacy 0.21.x line
+# (GHSA-cq8v-f236-94qc, `rand` 0.7.3 via `http-types`) — the only newer release is a 1.x beta
+# rewrite with a different API, not a drop-in bump. Re-checked 2026-09-15: still no non-breaking
+# upgrade path for either chain (`cargo info tiberius`/`azure_core` show no newer compatible
+# release); GitHub's own Dependabot alerts for these (independent of this gate, since it scans
+# Cargo.lock regardless of feature-gating) are dismissed with the same rationale.
 
 [advisories]
 version = 2
