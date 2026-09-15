@@ -3,7 +3,8 @@
 # Contributing to Atlas
 
 Atlas is dual-licensed (AGPL-3.0 + commercial ACL). Larger changes are reviewed with
-that in mind — see [`docs/LICENSING.md`](docs/LICENSING.md).
+that in mind — see [`docs/LICENSING.md`](docs/LICENSING.md). All participation is governed by
+the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Conventions
 

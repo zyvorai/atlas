@@ -141,4 +141,5 @@ Dual-licensed:
 - **[AGPL-3.0](LICENSE)** — open source; free for home users and self-host under AGPL terms
 - **[Atlas Commercial License (ACL)](COMMERCIAL_LICENSE.md)** — proprietary integrations, freedom from AGPL obligations, support
 
-See [docs/LICENSING.md](docs/LICENSING.md). Contributions: [CLA.md](CLA.md) + [DCO.md](DCO.md) (`git commit -s`).
+See [docs/LICENSING.md](docs/LICENSING.md). Contributions: [CLA.md](CLA.md) + [DCO.md](DCO.md) (`git commit -s`),
+governed by our [Code of Conduct](CODE_OF_CONDUCT.md).
