@@ -253,3 +253,94 @@ async fn resize_down_and_migrate() {
         400
     );
 }
+
+/// `/volumes/{id}/schedule` + `/schedules` + `/schedules/{id}`: create, list, and delete a
+/// protection schedule end-to-end. A PVC-backed volume is required (see the comment on
+/// `create_schedule` — a raw non-PVC volume would create a schedule whose timer advances forever
+/// with no job ever enqueued), so the fixture volume sets `pvc_name`.
+#[tokio::test]
+async fn schedule_create_list_delete() {
+    let (addr, pool) = spawn().await;
+    let base = format!("http://{addr}/api/atlas/v1");
+    let c = reqwest::Client::new();
+
+    sqlx::query(
+        "INSERT INTO storage_volumes (id, tenant_id, backend_id, name, kind, size_bytes, state, pvc_name)
+         VALUES ('vol_sched', 't', 'bkd_ceph_lab', 'sched-src', 'block', 1073741824, 'bound', 'pvc-sched-src')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Create: valid body → 201, echoing the volume/interval/kind.
+    let created = c
+        .post(format!("{base}/volumes/vol_sched/schedule"))
+        .json(&json!({ "interval_secs": 3600, "keep": 3 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(created.status(), 201);
+    let sched: Value = created.json().await.unwrap();
+    assert_eq!(sched["volume_id"], "vol_sched");
+    assert_eq!(sched["kind"], "snapshot");
+    let sched_id = sched["id"].as_str().unwrap().to_string();
+
+    // Validation: interval_secs <= 0 → 400; unknown kind → 400; unknown volume → 404.
+    assert_eq!(
+        c.post(format!("{base}/volumes/vol_sched/schedule"))
+            .json(&json!({ "interval_secs": 0 }))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        400
+    );
+    assert_eq!(
+        c.post(format!("{base}/volumes/vol_sched/schedule"))
+            .json(&json!({ "interval_secs": 3600, "kind": "bogus" }))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        400
+    );
+    assert_eq!(
+        c.post(format!("{base}/volumes/does-not-exist/schedule"))
+            .json(&json!({ "interval_secs": 3600 }))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
+
+    // List: filtered by volume_id, the created schedule comes back.
+    let listed: Value = c
+        .get(format!("{base}/schedules?volume_id=vol_sched"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let items = listed.as_array().unwrap();
+    assert!(items.iter().any(|s| s["id"] == sched_id));
+
+    // Delete: known id → 200; repeat delete of the same id → 404 (already gone).
+    assert_eq!(
+        c.delete(format!("{base}/schedules/{sched_id}"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    assert_eq!(
+        c.delete(format!("{base}/schedules/{sched_id}"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
+}

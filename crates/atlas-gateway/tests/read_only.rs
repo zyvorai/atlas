@@ -622,6 +622,31 @@ async fn storage_classes_without_cluster_returns_502() {
 }
 
 #[tokio::test]
+async fn kubernetes_pvcs_without_cluster_returns_502() {
+    // Same "no live driver" contract as /storage-classes: degrade to 502, don't panic.
+    let (addr, _pool) = spawn().await;
+    let base = format!("http://{addr}");
+    let resp = client()
+        .get(format!("{base}/api/atlas/v1/kubernetes/pvcs"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::BAD_GATEWAY);
+}
+
+#[tokio::test]
+async fn kubernetes_pvs_without_cluster_returns_502() {
+    let (addr, _pool) = spawn().await;
+    let base = format!("http://{addr}");
+    let resp = client()
+        .get(format!("{base}/api/atlas/v1/kubernetes/pvs"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::BAD_GATEWAY);
+}
+
+#[tokio::test]
 async fn policies_are_listed() {
     let (addr, _pool) = spawn().await;
     let base = format!("http://{addr}");
