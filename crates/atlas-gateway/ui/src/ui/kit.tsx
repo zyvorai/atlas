@@ -411,6 +411,8 @@ export function FormModal({
       const init: Record<string, string> = {};
       const initFields = typeof fieldsProp === "function" ? fieldsProp({}) : fieldsProp;
       initFields.forEach((f) => (init[f.name] = f.value ?? (f.options ? f.options[0]?.value ?? "" : "")));
+      // Re-seed the form's values each time it opens — reset-on-open, not a sync loop.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setVals(init);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -421,6 +423,8 @@ export function FormModal({
   // selected even though the bound value doesn't match any of them — silently submitting the wrong
   // (empty) value. Re-sync any select's stored value to a real option whenever the options change.
   useEffect(() => {
+    // See the comment above: re-syncs a select's stored value once its real options arrive.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setVals((s) => {
       let changed = false;
       const next = { ...s };

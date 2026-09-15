@@ -28,6 +28,8 @@ export default function Rbd() {
   const [cloneSnaps, setCloneSnaps] = useState<string[] | null>(null);
   useEffect(() => {
     if (modal?.kind === "clone") {
+      // Clear stale snapshots from a previous clone dialog before fetching the current one's.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCloneSnaps(null);
       http.get(`/rbd-images/${pool}/${modal.img}/snapshots`).then((r) => setCloneSnaps(r.data.snapshots || [])).catch(() => setCloneSnaps([]));
     }

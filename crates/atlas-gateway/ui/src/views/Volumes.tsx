@@ -77,6 +77,8 @@ export default function Volumes() {
     if (f && vols) {
       const v = vols.find((x) => x.id === f);
       if (v) {
+        // Deep-link support: open the volume named by ?focus=<id>, then strip it from the URL.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setSel(v);
         setParams({}, { replace: true });
       }
@@ -98,8 +100,8 @@ export default function Volumes() {
     if (!vols) return undefined;
     const dir = sort.dir;
     return [...vols].sort((a, b) => {
-      let ka: string | number = "";
-      let kb: string | number = "";
+      let ka: string | number;
+      let kb: string | number;
       switch (sort.key) {
         case "size":
           ka = a.size_bytes;

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
 // SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 // Observatory — shop archetype D: charts inside elevated boxes (+ optional swipe lenses).
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   useAlerts,
@@ -108,8 +108,14 @@ function useCanvas(run: (ctx: CanvasRenderingContext2D, api: { w(): number; h():
 }
 
 function Orbital({ data }: { data: any }) {
+  // Mirrors the latest `data` into a ref so the animation loop below (started once by
+  // useCanvas, not re-created per render) can always read current data without needing it in
+  // a dependency array. Writing ref.current during render is disallowed; useLayoutEffect keeps
+  // it fresh before the next paint instead.
   const ref = useRef(data);
-  ref.current = data;
+  useLayoutEffect(() => {
+    ref.current = data;
+  }, [data]);
   const { box, cv } = useCanvas((ctx, api) => {
     const stars = () => {
       const n = Math.round((api.w() * api.h()) / 13000);

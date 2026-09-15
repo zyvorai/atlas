@@ -205,6 +205,8 @@ export function Login() {
     const remembered = localStorage.getItem(REMEMBER_FLAG_KEY) === "true";
     const savedUser = localStorage.getItem(REMEMBER_USER_KEY);
     if (remembered && savedUser) {
+      // Restore a remembered login from localStorage on mount — one-time hydration, not a loop.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUsername(savedUser);
       setRemember(true);
     }

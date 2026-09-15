@@ -233,6 +233,9 @@ function MenuBar({
   const togglePaused = useUi((s) => s.togglePaused);
   const [draft, setDraft] = useState(token);
   useEffect(() => {
+    // Re-seed the editable draft from the real token each time the editor opens — intentional
+    // reset-on-open, not a state sync loop.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (tokenOpen) setDraft(token);
   }, [tokenOpen, token]);
   const nav = useNavigate();
@@ -586,17 +589,23 @@ function Spotlight({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [sel, setSel] = useState(0);
   const [resources, setResources] = useState<SpotItem[]>([]);
   useEffect(() => {
+    // Clear the search + selection each time the palette opens — reset-on-open, not a loop.
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setQ("");
       setSel(0);
     }
   }, [open]);
   useEffect(() => {
+    // Selection index must snap back to the top result whenever the query changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSel(0);
   }, [q]);
   useEffect(() => {
     if (!open) return;
     if (roleLevel < ROLE_OPERATOR) {
+      // Below-operator roles never see resource results — clear rather than leave stale data.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResources([]);
       return;
     }

@@ -65,6 +65,9 @@ export default function Access() {
   };
 
   useEffect(() => {
+    // Kick off the initial load on mount; loadUsers sets its own busy/error flags synchronously
+    // before the first await, which is what's flagged here — standard fetch-on-mount pattern.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadUsers();
   }, []);
 

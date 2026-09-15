@@ -65,6 +65,8 @@ export function Table<T>({
   const [stuck, setStuck] = useState(false);
   useEffect(() => {
     if (rows) {
+      // Data arrived — clear the "stuck loading" flag armed by the timeout below.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStuck(false);
       return;
     }
