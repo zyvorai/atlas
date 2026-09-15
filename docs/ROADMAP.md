@@ -613,6 +613,25 @@ runbook; summary:
   tools on `PATH` (`nfs-common`/`showmount` for NFS, `zfsutils-linux`/`zpool`+`zfs` for ZFS) —
   neither is bundled by default; the Fake drivers remain the zero-dependency default for
   demos/tests/CI.
+- ✅ **Cross-replica rate limiting — resolves the gRPC-interceptor-is-synchronous blocker that had
+  this scoped as its own follow-up, not a mechanical fix.** `RateLimiter::allow()`
+  (`crates/atlas-gateway/src/state.rs`) stays exactly as synchronous and database-free as before —
+  still safe to call from the gRPC path's synchronous `tonic::Interceptor`, no risk of blocking the
+  Tokio runtime — because the DB awareness moved entirely into a *separate* periodic background
+  task, `spawn_rate_limit_sync` (`ATLAS_RATE_LIMIT_SYNC_SECS`, default `2`s), the only thing that
+  ever touches the new `rate_limit_counters` table (migration `0034`,
+  `atlas_inventory::rate_limit`). Each replica writes its own current-window count and reads back
+  every actor's cluster-wide total; an actor already over budget cluster-wide is flagged and denied
+  on the *next* local `allow()` call immediately, even if that replica's own local count hasn't hit
+  `rpm` yet — eventually consistent within one sync interval, the standard, documented tradeoff for
+  a governance/abuse-prevention control rather than a hard security boundary. `window_minute`/
+  `count` were deliberately kept plain `INTEGER` (not `BIGINT`, unlike this session's earlier
+  capacity-column fixes) since both are guaranteed small, which also sidesteps the `SUM(bigint)`→
+  `NUMERIC`-decode issue entirely — live-verified against real Postgres, not just reasoned about.
+  The actual `allow()`/cluster-flag interaction is covered by fast, deterministic unit tests (no
+  timing-based multi-process simulation needed); harmless on a single SQLite replica (the sync task
+  runs, finds only its own counts, confirms what the local check already knew). Helm's
+  `rateLimitRpm` picks this up automatically once `database.kind: postgres` — no new chart value.
 - Pool `kind` is name-heuristic when no k8s driver/Rook CRs are available (non-Rook Ceph). On a
   Rook-managed cluster it's now overridden with an exact classification read from live
   `CephBlockPool`/`CephFilesystem`/`CephObjectStore` CRs (see the Rook CRD read integration entry

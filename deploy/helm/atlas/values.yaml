@@ -103,6 +103,8 @@ auth:
   adminPassword: ""
   bootstrapAdminToken: ""
 
+# Per-actor requests/min (0 disables). Cluster-wide-aware automatically when database.kind:
+# postgres and replicaCount > 1 — see README.md's rate-limiting note.
 rateLimitRpm: 600
 logLevel: "info,atlas_gateway=debug"
 
