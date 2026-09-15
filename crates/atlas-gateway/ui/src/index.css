@@ -4,12 +4,14 @@
  * Design foundation vendored from Zeus OS (v9s) — tokens + tahoe/zeus component classes.
  */
 
-@import "./zyvor-premium-login.css";
-@import "./atlas-soundings.css";
+@import './zyvor-premium-login.css' layer(base);
+@import './atlas-soundings.css' layer(base);
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+/* Tailwind v4 is CSS-first by default and won't read tailwind.config.js on its own — this
+ * bridges to it so the existing JS-based theme (colors, fonts, radii) keeps working unchanged
+ * rather than needing every token rewritten into @theme syntax right now. */
+@config '../tailwind.config.js';
 
 @layer base {
   :root {

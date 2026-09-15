@@ -241,7 +241,7 @@ export default function Access() {
           ) : (
             <div className="flex gap-1 items-center justify-end">
               <Select
-                className="!w-auto text-xs py-1"
+                className="w-auto! text-xs py-1"
                 value={u.role}
                 onChange={async (e) => {
                   try {

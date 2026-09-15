@@ -21,7 +21,7 @@ export function Toaster() {
   }, []);
   return (
     // Clears page edge.
-    <div className="fixed right-4 bottom-4 z-[60] flex flex-col gap-2 w-[300px]">
+    <div className="fixed right-4 bottom-4 z-60 flex flex-col gap-2 w-[300px]">
       {items.map((t) => (
         <div
           key={t.id}

@@ -312,7 +312,7 @@ export function SlideOver({
         style={{ width, maxWidth: "92vw" }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="at-slideover-bar sticky top-0 z-[1]">
+        <div className="at-slideover-bar sticky top-0 z-1">
           <div className="at-caption grow" style={{ flex: 1, color: "var(--at-ink)", fontSize: 13 }}>
             {title}
           </div>
