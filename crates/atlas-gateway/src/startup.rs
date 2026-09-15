@@ -256,6 +256,11 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
             is_leader.clone(),
             state.k8s.clone(),
             state.config.rook_namespace.clone(),
+            pagerduty_from_env(),
+            opsgenie_from_env(),
+            std::env::var("ATLAS_SLACK_WEBHOOK_URL")
+                .ok()
+                .filter(|s| !s.trim().is_empty()),
         );
         // Protection-schedule worker: periodic snapshots + retention (shares the job engine).
         atlas_jobs::spawn_scheduler(
@@ -325,6 +330,26 @@ fn spawn_leader_election(
             }
         }
     });
+}
+
+/// Native PagerDuty alerting sink (`ATLAS_PAGERDUTY_ROUTING_KEY`) — `None` disables it. Kept out
+/// of `Config` so it doesn't touch every test's `Config` literal (same pattern as
+/// `ATLAS_STATE_BACKUP_*`/`ATLAS_AUDIT_EXPORT_URL` above).
+fn pagerduty_from_env() -> Option<atlas_monitor::PagerDutyConfig> {
+    let routing_key = std::env::var("ATLAS_PAGERDUTY_ROUTING_KEY")
+        .ok()
+        .filter(|s| !s.trim().is_empty())?;
+    Some(atlas_monitor::PagerDutyConfig { routing_key })
+}
+
+/// Native Opsgenie alerting sink (`ATLAS_OPSGENIE_API_KEY`, optional `ATLAS_OPSGENIE_REGION` —
+/// "us" default or "eu") — `None` disables it. Same out-of-`Config` rationale as above.
+fn opsgenie_from_env() -> Option<atlas_monitor::OpsgenieConfig> {
+    let api_key = std::env::var("ATLAS_OPSGENIE_API_KEY")
+        .ok()
+        .filter(|s| !s.trim().is_empty())?;
+    let region = std::env::var("ATLAS_OPSGENIE_REGION").unwrap_or_else(|_| "us".into());
+    Some(atlas_monitor::OpsgenieConfig { api_key, region })
 }
 
 /// Periodically prune audit rows older than `ATLAS_AUDIT_RETENTION_DAYS` (day-2 governance). Runs

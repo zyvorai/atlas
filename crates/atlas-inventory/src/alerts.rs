@@ -149,7 +149,7 @@ fn select(tail: &str) -> String {
     )
 }
 
-fn row_to_alert(r: sqlx::sqlite::SqliteRow) -> AlertRecord {
+pub(crate) fn row_to_alert(r: sqlx::sqlite::SqliteRow) -> AlertRecord {
     let evidence: serde_json::Value = serde_json::from_str(r.get::<String, _>("evidence").as_str())
         .unwrap_or(serde_json::Value::Null);
     AlertRecord {

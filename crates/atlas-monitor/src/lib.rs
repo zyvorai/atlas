@@ -20,6 +20,8 @@ pub mod audit_export;
 pub mod notify;
 pub mod prometheus;
 
+pub use notify::{OpsgenieConfig, PagerDutyConfig};
+
 /// Pool utilization thresholds (PDF §15.2).
 const POOL_WARN: f64 = 0.75;
 const POOL_CRITICAL: f64 = 0.85;
@@ -40,6 +42,9 @@ pub fn spawn(
     is_leader: Arc<std::sync::atomic::AtomicBool>,
     k8s: Option<Arc<atlas_driver_k8s::K8sDriver>>,
     rook_namespace: String,
+    pagerduty: Option<PagerDutyConfig>,
+    opsgenie: Option<OpsgenieConfig>,
+    slack_webhook_url: Option<String>,
 ) {
     if interval_secs == 0 {
         tracing::info!("monitor disabled (interval = 0)");
@@ -105,13 +110,35 @@ pub fn spawn(
                     Err(e) => tracing::warn!("prometheus scrape failed: {e:#}"),
                 }
             }
-            // Push newly-fired alerts to the webhook (after evaluate + scrape so it sees this
-            // tick's alerts). Evaluate runs again next tick, so a failed post retries then.
+            // Push newly-fired alerts to every configured sink (after evaluate + scrape so they
+            // see this tick's alerts). Evaluate runs again next tick, so a failed post retries
+            // then. Sinks are independent — a deployment can run several at once.
             if let Some(url) = &webhook_url {
                 match notify::dispatch(&pool, url).await {
                     Ok(n) if n > 0 => tracing::info!("pushed {n} alert notification(s)"),
                     Ok(_) => {}
                     Err(e) => tracing::warn!("alert notify failed: {e:#}"),
+                }
+            }
+            if let Some(cfg) = &pagerduty {
+                match notify::pagerduty::dispatch(&pool, cfg).await {
+                    Ok((0, 0)) => {}
+                    Ok((t, r)) => tracing::info!("pagerduty: {t} triggered, {r} resolved"),
+                    Err(e) => tracing::warn!("pagerduty dispatch failed: {e:#}"),
+                }
+            }
+            if let Some(cfg) = &opsgenie {
+                match notify::opsgenie::dispatch(&pool, cfg).await {
+                    Ok((0, 0)) => {}
+                    Ok((t, r)) => tracing::info!("opsgenie: {t} triggered, {r} resolved"),
+                    Err(e) => tracing::warn!("opsgenie dispatch failed: {e:#}"),
+                }
+            }
+            if let Some(url) = &slack_webhook_url {
+                match notify::slack::dispatch(&pool, url).await {
+                    Ok((0, 0)) => {}
+                    Ok((t, r)) => tracing::info!("slack: {t} triggered, {r} resolved"),
+                    Err(e) => tracing::warn!("slack dispatch failed: {e:#}"),
                 }
             }
         }

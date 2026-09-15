@@ -463,6 +463,7 @@ dependencies = [
  "atlas-driver-core",
  "atlas-driver-k8s",
  "atlas-inventory",
+ "axum 0.8.9",
  "prometheus-parse",
  "reqwest 0.12.28",
  "serde_json",
