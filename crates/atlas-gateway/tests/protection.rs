@@ -5,7 +5,6 @@
 //! there); this file just proves the HTTP surface returns the expected shape.
 
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use atlas_common::config::CephDriverMode;
 use atlas_common::Config;
@@ -13,20 +12,14 @@ use atlas_gateway::routes;
 use atlas_gateway::startup::{build_state, BuildOptions};
 use serde_json::Value;
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
+mod common;
 
-async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
-    let db = format!(
-        "{}/atlas-protection-route-{}-{}.db",
-        std::env::temp_dir().display(),
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::SeqCst),
-    );
-    let _ = std::fs::remove_file(&db);
+async fn spawn() -> (SocketAddr, sqlx::AnyPool) {
+    let database_url = common::fresh_database_url("protection").await;
     let config = Config {
         bind_addr: "127.0.0.1:0".into(),
         grpc_addr: "127.0.0.1:0".into(),
-        database_url: format!("sqlite://{db}?mode=rwc"),
+        database_url,
         ceph_driver_mode: CephDriverMode::Fake,
         kubeconfig_path: None,
         jwt_secret: "protection-test-secret-at-least-32-bytes!!".into(),

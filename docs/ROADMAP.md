@@ -464,6 +464,59 @@ runbook; summary:
   SQLite-only query layer (`SqlitePool` used throughout `atlas-inventory`) is unchanged and still
   the explicitly out-of-scope larger effort — see `deploy/postgres-lab/README.md` and the
   known-limitations note below.
+- ✅ **Query layer ported off SQLite-only `SqlitePool`/`?` onto `sqlx::AnyPool`/`$N`** — closes the
+  gap the bullet above deliberately left open. Resolves `docs/HA.md`'s previously-open "dual query
+  modules vs `sqlx::Any`" architecture question in favor of `sqlx::Any`, made viable by first
+  eliminating every genuinely SQLite-specific construct across all ~250 `sqlx::query` call sites in
+  `atlas-inventory`/`atlas-jobs`/`atlas-monitor`/`atlas-gateway`/`atlas-databridge`: `?` →
+  `$N` placeholders (verified live that `sqlx::Any` does zero placeholder rewriting itself, so both
+  backends' concrete drivers now receive identical query text); `strftime('now', ...)` (~80 sites)
+  → a Rust-bound `chrono` timestamp; `INSERT OR IGNORE` → `ON CONFLICT DO NOTHING`; `COLLATE
+  NOCASE` → `lower(x) = lower($N)` (with a new expression index in both migration directories);
+  and a real portability bug caught along the way — SQLite's 2-argument scalar `MAX(a, b)` (used in
+  the job engine's `mark_running`/`try_claim`/`reclaim_stale_running`) has no Postgres equivalent
+  (`MAX()` there is aggregate-only) — rewritten to `CASE WHEN a > b THEN a ELSE b END`. The
+  `atlas-inventory` `postgres` Cargo feature is gone; Postgres support is unconditional.
+  `crates/atlas-inventory/tests/postgres_live.rs` now proves the query layer itself on a real
+  Postgres — not just connect+migrate — exercising the job-claim/reclaim/retry state machine (where
+  the `MAX(a,b)` bug was actually found) and the `COLLATE NOCASE` rewrite's case-insensitive
+  username lookup. `scripts/check-migrations-parity.sh` (new CI gate) prevents `migrations-postgres/`
+  drifting behind `migrations/` again, the way it silently did twice before. See `docs/HA.md`,
+  which this closes most of — remaining at the time: a dual-backend CI job (closed by the next
+  bullet) and DB-backed rate limiting (found to be blocked on a real constraint — the gRPC
+  `tonic::Interceptor` closure is synchronous — not just unstarted work; see `docs/HA.md`'s
+  detail).
+- ✅ **Dual-backend CI proves the query layer, not just the connection** — new `postgres-test` job
+  in `.github/workflows/ci.yml` runs the full ~200-test `atlas-gateway` integration suite a second
+  time against a real `postgres:16` service container (plus `atlas-inventory`'s `postgres_live.rs`
+  tests), via a new `crates/atlas-gateway/tests/common/mod.rs` shared helper: every test's
+  database setup goes through one `fresh_database_url()` call that's a throwaway SQLite temp file
+  by default (unchanged from before) or, when `ATLAS_TEST_DATABASE_URL` is set, a freshly
+  `CREATE DATABASE`'d Postgres database per test — same per-test isolation guarantee, different
+  backend, zero changes to any of the ~200 existing test bodies/assertions. This is exactly the
+  "run the existing suite against both backends" idea `docs/HA.md` had flagged as still open, and
+  it did its job immediately: running it for the first time surfaced four real, previously
+  undiscovered Postgres schema/query bugs, none of them caught by "does it compile" or by SQLite
+  alone —
+  (1) several byte-capacity columns declared Postgres `INTEGER` (4 bytes, ~2.1GB max) instead of
+  `BIGINT`, since SQLite's own `INTEGER` is *always* 8 bytes regardless of the declared name
+  (fixed in migration `0032`);
+  (2) `SUM(bigint)` returns Postgres `NUMERIC`, which `sqlx::Any` can't decode at all, requiring an
+  explicit `CAST(... AS BIGINT)` at three call sites;
+  (3) the equivalent gap for floats — `REAL` columns bound to Rust `f64` needed widening to
+  `DOUBLE PRECISION` (migration `0033`);
+  (4) SQLite's JSON1 functions (`json_extract`/`json_set`) have no Postgres equivalent whose query
+  *text* is identical on both backends, so the three call sites using them were rewritten to pull
+  raw JSON text and do the read/merge in Rust instead, matching this migration's established
+  date-math pattern. All four are now covered by the live suite going forward. See `docs/HA.md`'s
+  "Landed" table for the full detail.
+- ✅ **Helm chart: Postgres-backed multi-replica deployment** — `deploy/helm/atlas/values.yaml`'s
+  new `database.kind: sqlite|postgres` (+ `database.existingSecret`/`secretKey`, never an inlined
+  URL) switches `templates/deployment.yaml`/`pvc.yaml` between the existing single-replica shape
+  (local `ReadWriteOnce` PVC, `Recreate` rollout) and a Postgres-backed one (`ATLAS_DATABASE_URL`
+  from a Secret, no PVC rendered at all, `RollingUpdate`, `replicaCount` free to raise above `1`).
+  Both render paths verified with `helm lint` + `helm template`/`helm install --dry-run`. See
+  `deploy/helm/atlas/README.md`'s "Multi-replica (Postgres-backed) deployment".
 - ✅ **Supply-chain audit gate**: `cargo deny check` (CI job + `make audit`, `deny.toml`) — known-
   vulnerable/yanked advisories, disallowed licenses, unknown registries/git sources. Scoped to
   default features (what's actually shipped); the optional DataBridge connectors are compile-
@@ -523,12 +576,12 @@ runbook; summary:
   destructive-audit-pruning-with-no-export, and rate-limiting/self-state-backup-off-by-default
   from that audit are already fixed above — both `deploy/k8s/atlas-gateway*.yaml` now ship
   `ATLAS_RATE_LIMIT_RPM=600` and a working `ATLAS_STATE_BACKUP_*` block against a dedicated RGW
-  user/bucket): the gateway is single-replica with a `Recreate` rollout (planned downtime per
-  deploy — SQLite's query layer has no Postgres port yet; the connection/migration scaffolding
-  behind the disabled `postgres` feature is now verified against a real Postgres
-  (`deploy/postgres-lab/`), but that only proves connect+migrate work, not that Atlas can run its
-  reads/writes against Postgres — porting the query layer is still a separate, larger, deferred
-  effort); OIDC/SSO is only verified against a throwaway Dex instance, not a real enterprise IdP.
+  user/bucket): the gateway is still single-replica with a `Recreate` rollout (planned downtime per
+  deploy) — but this is now purely a *deployment* gap, not a code one: the query layer itself runs
+  on Postgres (verified live, see the ✅ bullet above), so what's left is deploying a real HA
+  Postgres, DB-backed rate limiting (currently per-pod in-process), and Helm chart wiring
+  (`database.kind`), all tracked in `docs/HA.md`; OIDC/SSO is only verified against a throwaway Dex
+  instance, not a real enterprise IdP.
   The audit-log SIEM export and secrets-manager integration *patterns* are now both verified
   against real (lab) infra (`deploy/siem-lab/`, `deploy/vault-lab/` — see below); a real deployment
   still needs the bank's actual SIEM/Vault swapped in for the lab ones. None of these block a

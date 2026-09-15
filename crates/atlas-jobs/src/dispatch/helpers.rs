@@ -6,7 +6,7 @@ use std::time::Duration;
 use anyhow::{anyhow, Context, Result};
 use atlas_api_types::{Health, StorageVolume, VolumeKind};
 use atlas_driver_k8s::{K8sDriver, PvcCreateSpec};
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 
 use crate::spec::OwnerRef;
 
@@ -76,7 +76,7 @@ pub(crate) async fn read_backup_manifest(
 /// snapshot. Shared by clone/restore and backup-restore. Returns the PVC phase.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn provision_from_snapshot(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     k8s: &K8sDriver,
     tenant_id: &str,
     backend_id: &str,

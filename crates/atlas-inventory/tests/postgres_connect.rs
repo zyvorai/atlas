@@ -1,32 +1,32 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
 // SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
-//! Phase-1 HA smoke: connect + migrate against Postgres when `DATABASE_URL` is set.
+//! Phase-1 HA smoke: `connect`/`migrate` dispatch on URL scheme, and work against real Postgres
+//! when `DATABASE_URL` is set.
 //!
 //! ```bash
 //! # optional lab DB:
 //! docker compose -f deploy/postgres/docker-compose.yml up -d
 //! DATABASE_URL=postgres://atlas:atlas@127.0.0.1:5432/atlas \
-//!   cargo test -p atlas-inventory --features postgres --test postgres_connect -- --ignored
+//!   cargo test -p atlas-inventory --test postgres_connect -- --ignored
 //! ```
 //!
 //! Without Docker / `DATABASE_URL`, the ignored test is skipped; default `cargo test` still
-//! checks that the SQLite `connect` path rejects postgres URLs.
+//! checks the scheme-detection helper `connect`/`migrate` dispatch on.
 
-#![cfg(feature = "postgres")]
+use atlas_inventory::{connect, is_postgres_url, migrate};
 
-use atlas_inventory::{connect, connect_postgres, migrate_postgres};
-
-#[tokio::test]
-async fn sqlite_connect_still_rejects_postgres_url() {
-    let err = connect("postgres://atlas:atlas@127.0.0.1:5432/atlas")
-        .await
-        .unwrap_err()
-        .to_string();
-    assert!(err.contains("docs/HA.md"), "{err}");
-    assert!(
-        err.contains("postgres") || err.contains("PostgreSQL"),
-        "{err}"
-    );
+#[test]
+fn is_postgres_url_detects_scheme() {
+    assert!(is_postgres_url(
+        "postgres://atlas:atlas@127.0.0.1:5432/atlas"
+    ));
+    assert!(is_postgres_url(
+        "postgresql://atlas:atlas@127.0.0.1:5432/atlas"
+    ));
+    assert!(is_postgres_url(
+        "POSTGRES://atlas:atlas@127.0.0.1:5432/atlas"
+    ));
+    assert!(!is_postgres_url("sqlite:///tmp/atlas.db?mode=rwc"));
 }
 
 #[tokio::test]
@@ -35,12 +35,12 @@ async fn connect_and_migrate_postgres() {
     let url = std::env::var("DATABASE_URL")
         .or_else(|_| std::env::var("ATLAS_DATABASE_URL"))
         .expect("DATABASE_URL or ATLAS_DATABASE_URL must be set for this ignored test");
-    let pool = connect_postgres(&url)
+    let pool = connect(&url)
         .await
-        .unwrap_or_else(|e| panic!("connect_postgres failed: {e}"));
-    migrate_postgres(&pool)
+        .unwrap_or_else(|e| panic!("connect failed: {e}"));
+    migrate(&pool, &url)
         .await
-        .unwrap_or_else(|e| panic!("migrate_postgres failed: {e}"));
+        .unwrap_or_else(|e| panic!("migrate failed: {e}"));
     let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM storage_backends")
         .fetch_one(&pool)
         .await

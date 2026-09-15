@@ -4,20 +4,19 @@
 //! next boot the job engine recovers — an interrupted `running` job is failed-safe and any `queued`
 //! job is re-enqueued. Driven through `build_state` (the real startup path) against the fake driver.
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use atlas_common::config::CephDriverMode;
 use atlas_common::Config;
 use atlas_gateway::startup::{build_state, BuildOptions};
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
+mod common;
 
-fn config_for(db: &str) -> Config {
+fn config_for(database_url: &str) -> Config {
     Config {
         bind_addr: "127.0.0.1:0".into(),
         grpc_addr: "127.0.0.1:0".into(),
-        database_url: format!("sqlite://{db}?mode=rwc"),
+        database_url: database_url.to_string(),
         ceph_driver_mode: CephDriverMode::Fake,
         kubeconfig_path: None,
         jwt_secret: "dur-test-secret-key-at-least-32-bytes!".into(),
@@ -54,9 +53,9 @@ fn config_for(db: &str) -> Config {
     }
 }
 
-async fn boot(db: &str) -> atlas_gateway::state::AppState {
+async fn boot(database_url: &str) -> atlas_gateway::state::AppState {
     build_state(
-        config_for(db),
+        config_for(database_url),
         BuildOptions {
             enable_k8s: false,
             initial_discovery: false,
@@ -70,18 +69,12 @@ async fn boot(db: &str) -> atlas_gateway::state::AppState {
 /// A `running` job that was interrupted by a restart is reset to `failed` (never stuck) on next boot.
 #[tokio::test]
 async fn interrupted_running_job_is_recovered_on_restart() {
-    let db = format!(
-        "{}/atlas-durability-{}-{}.db",
-        std::env::temp_dir().display(),
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::SeqCst),
-    );
-    let _ = std::fs::remove_file(&db);
+    let database_url = common::fresh_database_url("durability").await;
 
     // First boot: a job is mid-flight (running) when the process "crashes". Seed it directly in the
     // `running` state (not via insert_job's `pending`→`running`, whose brief `pending` window the
     // boot-recovery could otherwise grab and re-run — we want to observe the fail-safe path only).
-    let s1 = boot(&db).await;
+    let s1 = boot(&database_url).await;
     sqlx::query(
         "INSERT INTO storage_jobs (id, tenant_id, job_type, state, requested_by, request)
          VALUES ('j_stuck', 't', 'volume.create', 'running', 'tester', '{}')",
@@ -92,7 +85,7 @@ async fn interrupted_running_job_is_recovered_on_restart() {
     drop(s1); // simulate the crash / rollout
 
     // Second boot on the same DB: JobEngine::start runs recovery.
-    let s2 = boot(&db).await;
+    let s2 = boot(&database_url).await;
     let mut last = String::new();
     for _ in 0..40 {
         if let Some(j) = atlas_inventory::jobs::get_job(&s2.pool, "j_stuck")

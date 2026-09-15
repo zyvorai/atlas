@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
 use anyhow::Result;
 use atlas_driver_k8s::K8sDriver;
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 use std::sync::Arc;
 
 use crate::spec::JobSpec;
 
 pub(crate) async fn dispatch_databridge(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     k8s: &Option<Arc<K8sDriver>>,
     spec: JobSpec,
 ) -> Result<serde_json::Value> {

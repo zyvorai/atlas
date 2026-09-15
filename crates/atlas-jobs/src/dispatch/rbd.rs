@@ -3,7 +3,7 @@
 use anyhow::{Context, Result};
 use atlas_api_types::{Health, StorageVolume, VolumeKind};
 use atlas_driver_k8s::K8sDriver;
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 use std::sync::Arc;
 
 use crate::spec::JobSpec;
@@ -22,7 +22,7 @@ fn is_fake_ceph_mode() -> bool {
 }
 
 pub(crate) async fn dispatch_rbd(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     _k8s: &Option<Arc<K8sDriver>>,
     tenant_id: &str,
     spec: JobSpec,

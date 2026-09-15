@@ -10,20 +10,16 @@ use atlas_common::Config;
 use atlas_gateway::routes;
 use atlas_gateway::startup::{build_state, BuildOptions};
 
-/// Spin up the gateway on an ephemeral port with the fake driver and a throwaway SQLite file.
-async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
-    let db = format!(
-        "{}/atlas-test-{}-{}.db",
-        std::env::temp_dir().display(),
-        std::process::id(),
-        NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-    );
-    let _ = std::fs::remove_file(&db);
+mod common;
+
+/// Spin up the gateway on an ephemeral port with the fake driver and a throwaway database.
+async fn spawn() -> (SocketAddr, sqlx::AnyPool) {
+    let database_url = common::fresh_database_url("read-only").await;
 
     let config = Config {
         bind_addr: "127.0.0.1:0".into(),
         grpc_addr: "127.0.0.1:0".into(),
-        database_url: format!("sqlite://{db}?mode=rwc"),
+        database_url,
         ceph_driver_mode: CephDriverMode::Fake,
         kubeconfig_path: None,
         jwt_secret: "test-secret".into(),
@@ -79,8 +75,6 @@ async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
     });
     (addr, pool)
 }
-
-static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Minted service-account tokens enforce RBAC end-to-end: an admin issues scoped tokens; an
 /// operator token can create a volume, a viewer token cannot, and no token is rejected.
@@ -167,7 +161,7 @@ fn client() -> reqwest::Client {
 }
 
 /// Insert a minimal source volume so snapshots can FK-reference it.
-async fn seed_volume(pool: &sqlx::SqlitePool, id: &str, name: &str) {
+async fn seed_volume(pool: &sqlx::AnyPool, id: &str, name: &str) {
     let v = atlas_api_types::StorageVolume {
         id: id.into(),
         cluster_id: None,
@@ -190,17 +184,11 @@ async fn seed_volume(pool: &sqlx::SqlitePool, id: &str, name: &str) {
 
 /// Spawn a gateway with auth enabled and the given JWT secret; returns its base URL.
 async fn spawn_auth(secret: &str) -> String {
-    let db = format!(
-        "{}/atlas-rbac-{}-{}.db",
-        std::env::temp_dir().display(),
-        std::process::id(),
-        NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-    );
-    let _ = std::fs::remove_file(&db);
+    let database_url = common::fresh_database_url("read-only-rbac").await;
     let config = Config {
         bind_addr: "127.0.0.1:0".into(),
         grpc_addr: "127.0.0.1:0".into(),
-        database_url: format!("sqlite://{db}?mode=rwc"),
+        database_url,
         ceph_driver_mode: CephDriverMode::Fake,
         kubeconfig_path: None,
         jwt_secret: secret.into(),

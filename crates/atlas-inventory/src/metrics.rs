@@ -6,11 +6,13 @@ use std::collections::BTreeMap;
 
 use anyhow::Result;
 use atlas_api_types::MetricSample;
-use sqlx::{Row, SqlitePool};
+use sqlx::{AnyPool, Row};
+
+use crate::now_rfc3339;
 
 /// Upsert the latest value for a metric (name + label set).
 pub async fn upsert(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     name: &str,
     labels: &BTreeMap<String, String>,
     value: f64,
@@ -18,23 +20,24 @@ pub async fn upsert(
     let labels_json = serde_json::to_string(labels).unwrap_or_else(|_| "{}".into());
     sqlx::query(
         "INSERT INTO storage_metrics (name, labels, value, updated_at)
-         VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+         VALUES ($1, $2, $3, $4)
          ON CONFLICT(name, labels) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
     )
     .bind(name)
     .bind(labels_json)
     .bind(value)
+    .bind(now_rfc3339(chrono::Utc::now()))
     .execute(pool)
     .await?;
     Ok(())
 }
 
 /// List stored metrics, optionally filtered by a name prefix.
-pub async fn list(pool: &SqlitePool, name_prefix: Option<&str>) -> Result<Vec<MetricSample>> {
+pub async fn list(pool: &AnyPool, name_prefix: Option<&str>) -> Result<Vec<MetricSample>> {
     let rows =
         match name_prefix {
             Some(p) => sqlx::query(
-                "SELECT name, labels, value FROM storage_metrics WHERE name LIKE ? ORDER BY name",
+                "SELECT name, labels, value FROM storage_metrics WHERE name LIKE $1 ORDER BY name",
             )
             .bind(format!("{p}%"))
             .fetch_all(pool)
@@ -62,7 +65,7 @@ pub async fn list(pool: &SqlitePool, name_prefix: Option<&str>) -> Result<Vec<Me
 /// Append one time-series row derived from a `metrics_summary()` value plus live counters.
 /// Cheap (one INSERT) — called on the sampler tick so trends persist across restarts/reloads.
 pub async fn record_history(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     summary: &serde_json::Value,
     jobs_running: i64,
     alerts_open: i64,
@@ -74,11 +77,15 @@ pub async fn record_history(
             .and_then(|v| v.as_f64())
             .unwrap_or(0.0)
     };
+    // `ts` is left to the schema's own DEFAULT (both migrations/ and migrations-postgres/ define
+    // an equivalent "now" default for it — see the mapping convention in migrations/0001_init.sql)
+    // rather than bound here, unlike the other ~80 `strftime('now', ...)` sites this migration
+    // touched: those appeared explicitly in query text, this one never did.
     sqlx::query(
         "INSERT INTO metrics_history
            (raw_capacity_bytes, used_capacity_bytes, volumes, snapshots,
             read_bytes, write_bytes, read_ops, write_ops, jobs_running, alerts_open)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
     )
     .bind(i("raw_capacity_bytes"))
     .bind(i("used_capacity_bytes"))
@@ -96,26 +103,26 @@ pub async fn record_history(
 }
 
 /// Delete samples older than `keep_hours` (called after each insert to bound table growth).
-pub async fn prune_history(pool: &SqlitePool, keep_hours: i64) -> Result<u64> {
-    let r = sqlx::query(
-        "DELETE FROM metrics_history WHERE ts < strftime('%Y-%m-%dT%H:%M:%fZ','now', ? || ' hours')",
-    )
-    .bind(format!("-{keep_hours}"))
-    .execute(pool)
-    .await?;
+pub async fn prune_history(pool: &AnyPool, keep_hours: i64) -> Result<u64> {
+    let cutoff = now_rfc3339(chrono::Utc::now() - chrono::Duration::hours(keep_hours));
+    let r = sqlx::query("DELETE FROM metrics_history WHERE ts < $1")
+        .bind(cutoff)
+        .execute(pool)
+        .await?;
     Ok(r.rows_affected())
 }
 
 /// Time-series samples from the last `minutes`, oldest first (for the Overview trend charts).
-pub async fn history(pool: &SqlitePool, minutes: i64) -> Result<Vec<serde_json::Value>> {
+pub async fn history(pool: &AnyPool, minutes: i64) -> Result<Vec<serde_json::Value>> {
+    let cutoff = now_rfc3339(chrono::Utc::now() - chrono::Duration::minutes(minutes));
     let rows = sqlx::query(
         "SELECT ts, raw_capacity_bytes, used_capacity_bytes, volumes, snapshots,
                 read_bytes, write_bytes, read_ops, write_ops, jobs_running, alerts_open
          FROM metrics_history
-         WHERE ts >= strftime('%Y-%m-%dT%H:%M:%fZ','now', ? || ' minutes')
+         WHERE ts >= $1
          ORDER BY ts ASC",
     )
-    .bind(format!("-{minutes}"))
+    .bind(cutoff)
     .fetch_all(pool)
     .await?;
     Ok(rows
@@ -140,17 +147,26 @@ pub async fn history(pool: &SqlitePool, minutes: i64) -> Result<Vec<serde_json::
 
 /// Least-squares projection of days-until-full from persisted `used_capacity_bytes` history.
 /// Returns `days_to_full: null` when usage is flat/shrinking or there aren't ≥2 samples.
-pub async fn forecast(pool: &SqlitePool, minutes: i64) -> Result<serde_json::Value> {
+pub async fn forecast(pool: &AnyPool, minutes: i64) -> Result<serde_json::Value> {
+    let cutoff = now_rfc3339(chrono::Utc::now() - chrono::Duration::minutes(minutes));
+    // `ts` comes back as the stored RFC3339 string and is parsed into a Unix-epoch offset in Rust
+    // (rather than `CAST(strftime('%s', ts) AS INTEGER)` server-side) — one fewer place date math
+    // needs a Postgres-dialect equivalent (`EXTRACT(EPOCH FROM ts::timestamptz)`).
     let rows = sqlx::query(
-        "SELECT CAST(strftime('%s', ts) AS INTEGER) AS t,
-                used_capacity_bytes AS used, raw_capacity_bytes AS raw
+        "SELECT ts, used_capacity_bytes AS used, raw_capacity_bytes AS raw
          FROM metrics_history
-         WHERE ts >= strftime('%Y-%m-%dT%H:%M:%fZ','now', ? || ' minutes')
+         WHERE ts >= $1
          ORDER BY ts ASC",
     )
-    .bind(format!("-{minutes}"))
+    .bind(cutoff)
     .fetch_all(pool)
     .await?;
+
+    let epoch_secs = |ts: &str| -> i64 {
+        chrono::DateTime::parse_from_rfc3339(ts)
+            .map(|d| d.timestamp())
+            .unwrap_or(0)
+    };
 
     let n = rows.len();
     let used_now = rows.last().map(|r| r.get::<i64, _>("used")).unwrap_or(0);
@@ -158,10 +174,10 @@ pub async fn forecast(pool: &SqlitePool, minutes: i64) -> Result<serde_json::Val
 
     // Slope of used-bytes over time (bytes/second) via ordinary least squares.
     let slope_per_sec = if n >= 2 {
-        let t0 = rows[0].get::<i64, _>("t") as f64;
+        let t0 = epoch_secs(&rows[0].get::<String, _>("ts")) as f64;
         let xs: Vec<f64> = rows
             .iter()
-            .map(|r| r.get::<i64, _>("t") as f64 - t0)
+            .map(|r| epoch_secs(&r.get::<String, _>("ts")) as f64 - t0)
             .collect();
         let ys: Vec<f64> = rows
             .iter()
@@ -202,9 +218,9 @@ pub async fn forecast(pool: &SqlitePool, minutes: i64) -> Result<serde_json::Val
 }
 
 /// The maximum value of a metric across all its label sets (e.g. worst OSD latency).
-pub async fn max_value(pool: &SqlitePool, name: &str) -> Result<Option<f64>> {
+pub async fn max_value(pool: &AnyPool, name: &str) -> Result<Option<f64>> {
     Ok(
-        sqlx::query_scalar("SELECT MAX(value) FROM storage_metrics WHERE name = ?")
+        sqlx::query_scalar("SELECT MAX(value) FROM storage_metrics WHERE name = $1")
             .bind(name)
             .fetch_one(pool)
             .await?,
@@ -212,9 +228,9 @@ pub async fn max_value(pool: &SqlitePool, name: &str) -> Result<Option<f64>> {
 }
 
 /// Sum the latest values across all label sets of a metric (0.0 if the metric is absent).
-pub async fn sum_value(pool: &SqlitePool, name: &str) -> Result<f64> {
+pub async fn sum_value(pool: &AnyPool, name: &str) -> Result<f64> {
     let v: Option<f64> =
-        sqlx::query_scalar("SELECT SUM(value) FROM storage_metrics WHERE name = ?")
+        sqlx::query_scalar("SELECT SUM(value) FROM storage_metrics WHERE name = $1")
             .bind(name)
             .fetch_one(pool)
             .await?;

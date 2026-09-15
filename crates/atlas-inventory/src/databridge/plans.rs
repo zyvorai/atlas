@@ -4,10 +4,10 @@
 
 use anyhow::Result;
 use atlas_api_types::MigrationPlan;
-use sqlx::{Row, SqlitePool};
+use sqlx::{AnyPool, Row};
 
 pub async fn insert_plan(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     tenant_id: &str,
     name: &str,
@@ -16,7 +16,7 @@ pub async fn insert_plan(
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO migration_plans (id, tenant_id, name, source_id, rollback_window_secs, state)
-         VALUES (?, ?, ?, ?, ?, 'draft')",
+         VALUES ($1, $2, $3, $4, $5, 'draft')",
     )
     .bind(id)
     .bind(tenant_id)
@@ -28,8 +28,8 @@ pub async fn insert_plan(
     Ok(())
 }
 
-pub async fn set_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
-    sqlx::query("UPDATE migration_plans SET state=? WHERE id=?")
+pub async fn set_state(pool: &AnyPool, id: &str, state: &str) -> Result<()> {
+    sqlx::query("UPDATE migration_plans SET state=$1 WHERE id=$2")
         .bind(state)
         .bind(id)
         .execute(pool)
@@ -44,12 +44,12 @@ pub async fn set_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
 /// with this atomic `UPDATE ... WHERE state=...` — only the first to land wins, the second sees
 /// `false` and bails instead of duplicating a real cutover/rollback against the source database.
 pub async fn try_transition(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     from_state: &str,
     to_state: &str,
 ) -> Result<bool> {
-    let res = sqlx::query("UPDATE migration_plans SET state=? WHERE id=? AND state=?")
+    let res = sqlx::query("UPDATE migration_plans SET state=$1 WHERE id=$2 AND state=$3")
         .bind(to_state)
         .bind(id)
         .bind(from_state)
@@ -59,13 +59,13 @@ pub async fn try_transition(
 }
 
 pub async fn set_assessment(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     readiness_score: i64,
     assessment: &serde_json::Value,
 ) -> Result<()> {
     sqlx::query(
-        "UPDATE migration_plans SET readiness_score=?, assessment=?, state='assessed' WHERE id=?",
+        "UPDATE migration_plans SET readiness_score=$1, assessment=$2, state='assessed' WHERE id=$3",
     )
     .bind(readiness_score)
     .bind(assessment.to_string())
@@ -75,8 +75,8 @@ pub async fn set_assessment(
     Ok(())
 }
 
-pub async fn set_edge_cluster(pool: &SqlitePool, id: &str, edge_cluster_id: &str) -> Result<()> {
-    sqlx::query("UPDATE migration_plans SET edge_cluster_id=? WHERE id=?")
+pub async fn set_edge_cluster(pool: &AnyPool, id: &str, edge_cluster_id: &str) -> Result<()> {
+    sqlx::query("UPDATE migration_plans SET edge_cluster_id=$1 WHERE id=$2")
         .bind(edge_cluster_id)
         .bind(id)
         .execute(pool)
@@ -84,8 +84,8 @@ pub async fn set_edge_cluster(pool: &SqlitePool, id: &str, edge_cluster_id: &str
     Ok(())
 }
 
-pub async fn set_cdc_stream(pool: &SqlitePool, id: &str, cdc_stream_id: &str) -> Result<()> {
-    sqlx::query("UPDATE migration_plans SET cdc_stream_id=? WHERE id=?")
+pub async fn set_cdc_stream(pool: &AnyPool, id: &str, cdc_stream_id: &str) -> Result<()> {
+    sqlx::query("UPDATE migration_plans SET cdc_stream_id=$1 WHERE id=$2")
         .bind(cdc_stream_id)
         .bind(id)
         .execute(pool)
@@ -93,8 +93,8 @@ pub async fn set_cdc_stream(pool: &SqlitePool, id: &str, cdc_stream_id: &str) ->
     Ok(())
 }
 
-pub async fn set_cutover_at(pool: &SqlitePool, id: &str, at: &str) -> Result<()> {
-    sqlx::query("UPDATE migration_plans SET cutover_at=? WHERE id=?")
+pub async fn set_cutover_at(pool: &AnyPool, id: &str, at: &str) -> Result<()> {
+    sqlx::query("UPDATE migration_plans SET cutover_at=$1 WHERE id=$2")
         .bind(at)
         .bind(id)
         .execute(pool)
@@ -102,23 +102,23 @@ pub async fn set_cutover_at(pool: &SqlitePool, id: &str, at: &str) -> Result<()>
     Ok(())
 }
 
-pub async fn delete_plan_row(pool: &SqlitePool, id: &str) -> Result<()> {
-    sqlx::query("DELETE FROM migration_plans WHERE id=?")
+pub async fn delete_plan_row(pool: &AnyPool, id: &str) -> Result<()> {
+    sqlx::query("DELETE FROM migration_plans WHERE id=$1")
         .bind(id)
         .execute(pool)
         .await?;
     Ok(())
 }
 
-pub async fn get_plan(pool: &SqlitePool, id: &str) -> Result<Option<MigrationPlan>> {
-    let row = sqlx::query(&select("WHERE id = ?"))
+pub async fn get_plan(pool: &AnyPool, id: &str) -> Result<Option<MigrationPlan>> {
+    let row = sqlx::query(&select("WHERE id = $1"))
         .bind(id)
         .fetch_optional(pool)
         .await?;
     Ok(row.map(row_to_plan))
 }
 
-pub async fn list_plans(pool: &SqlitePool) -> Result<Vec<MigrationPlan>> {
+pub async fn list_plans(pool: &AnyPool) -> Result<Vec<MigrationPlan>> {
     let rows = sqlx::query(&select("ORDER BY created_at DESC"))
         .fetch_all(pool)
         .await?;
@@ -126,8 +126,8 @@ pub async fn list_plans(pool: &SqlitePool) -> Result<Vec<MigrationPlan>> {
 }
 
 /// Plans in a given pipeline state — used by the reconciler to advance in-flight work.
-pub async fn list_by_state(pool: &SqlitePool, state: &str) -> Result<Vec<MigrationPlan>> {
-    let rows = sqlx::query(&select("WHERE state = ? ORDER BY created_at DESC"))
+pub async fn list_by_state(pool: &AnyPool, state: &str) -> Result<Vec<MigrationPlan>> {
+    let rows = sqlx::query(&select("WHERE state = $1 ORDER BY created_at DESC"))
         .bind(state)
         .fetch_all(pool)
         .await?;
@@ -136,8 +136,8 @@ pub async fn list_by_state(pool: &SqlitePool, state: &str) -> Result<Vec<Migrati
 
 /// Plans referencing a source — used to block deleting a source out from under a live migration
 /// (the FK is `ON DELETE CASCADE`, so an unguarded delete silently destroys the plan's history).
-pub async fn list_for_source(pool: &SqlitePool, source_id: &str) -> Result<Vec<MigrationPlan>> {
-    let rows = sqlx::query(&select("WHERE source_id = ? ORDER BY created_at DESC"))
+pub async fn list_for_source(pool: &AnyPool, source_id: &str) -> Result<Vec<MigrationPlan>> {
+    let rows = sqlx::query(&select("WHERE source_id = $1 ORDER BY created_at DESC"))
         .bind(source_id)
         .fetch_all(pool)
         .await?;
@@ -152,7 +152,7 @@ fn select(tail: &str) -> String {
     )
 }
 
-fn row_to_plan(r: sqlx::sqlite::SqliteRow) -> MigrationPlan {
+fn row_to_plan(r: sqlx::any::AnyRow) -> MigrationPlan {
     let assessment: String = r.get("assessment");
     MigrationPlan {
         id: r.get("id"),

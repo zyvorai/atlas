@@ -5,7 +5,6 @@
 //! (the OSD job fails without a real `ceph`, but the enqueue contract + validation are exercised).
 
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use atlas_common::config::CephDriverMode;
@@ -14,21 +13,16 @@ use atlas_gateway::routes;
 use atlas_gateway::startup::{build_state, BuildOptions};
 use serde_json::{json, Value};
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
+mod common;
+
 const CEPH: &str = "bkd_ceph_lab";
 
 async fn spawn() -> SocketAddr {
-    let db = format!(
-        "{}/atlas-maint-{}-{}.db",
-        std::env::temp_dir().display(),
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::SeqCst),
-    );
-    let _ = std::fs::remove_file(&db);
+    let database_url = common::fresh_database_url("maintenance").await;
     let config = Config {
         bind_addr: "127.0.0.1:0".into(),
         grpc_addr: "127.0.0.1:0".into(),
-        database_url: format!("sqlite://{db}?mode=rwc"),
+        database_url,
         ceph_driver_mode: CephDriverMode::Fake,
         kubeconfig_path: None,
         jwt_secret: "maint-test-secret-key-at-least-32-byte".into(),

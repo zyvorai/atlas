@@ -1,0 +1,9 @@
+-- Copyright (c) 2026 ZyvorAI Labs Private Limited.
+-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+-- No-op on SQLite: this migration's Postgres counterpart
+-- (migrations-postgres/0032_bigint_capacity_columns.sql) widens several byte-count/capacity
+-- columns from Postgres-dialect INTEGER (4 bytes) to BIGINT (8 bytes) — a bug that only ever
+-- existed on the Postgres side. SQLite's own INTEGER column type is already a dynamically-typed
+-- 8-byte signed integer regardless of the declared name, so there is nothing to widen here. This
+-- empty file exists only so scripts/check-migrations-parity.sh's migration-number lockstep check
+-- (both directories must define the same numbered migrations) stays satisfied.

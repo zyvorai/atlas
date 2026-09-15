@@ -4,11 +4,11 @@
 
 use anyhow::Result;
 use atlas_api_types::BackupRecord;
-use sqlx::{Row, SqlitePool};
+use sqlx::{AnyPool, Row};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn insert_backup(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     tenant_id: &str,
     volume_id: &str,
@@ -20,7 +20,7 @@ pub async fn insert_backup(
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO storage_backups (id, tenant_id, volume_id, snapshot_id, bucket_id, object_key, format, state, manifest)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)",
     )
     .bind(id)
     .bind(tenant_id)
@@ -36,14 +36,14 @@ pub async fn insert_backup(
 }
 
 pub async fn set_state(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     state: &str,
     checksum: Option<&str>,
     format: Option<&str>,
 ) -> Result<()> {
     sqlx::query(
-        "UPDATE storage_backups SET state=?, checksum=COALESCE(?, checksum), format=COALESCE(?, format) WHERE id=?",
+        "UPDATE storage_backups SET state=$1, checksum=COALESCE($2, checksum), format=COALESCE($3, format) WHERE id=$4",
     )
     .bind(state)
     .bind(checksum)
@@ -54,8 +54,8 @@ pub async fn set_state(
     Ok(())
 }
 
-pub async fn delete_backup_row(pool: &SqlitePool, id: &str) -> Result<()> {
-    sqlx::query("DELETE FROM storage_backups WHERE id=?")
+pub async fn delete_backup_row(pool: &AnyPool, id: &str) -> Result<()> {
+    sqlx::query("DELETE FROM storage_backups WHERE id=$1")
         .bind(id)
         .execute(pool)
         .await?;
@@ -63,27 +63,27 @@ pub async fn delete_backup_row(pool: &SqlitePool, id: &str) -> Result<()> {
 }
 
 /// Count backups referencing a bucket (blocks bucket deletion while non-empty).
-pub async fn count_for_bucket(pool: &SqlitePool, bucket_id: &str) -> Result<i64> {
+pub async fn count_for_bucket(pool: &AnyPool, bucket_id: &str) -> Result<i64> {
     Ok(
-        sqlx::query_scalar("SELECT COUNT(*) FROM storage_backups WHERE bucket_id=?")
+        sqlx::query_scalar("SELECT COUNT(*) FROM storage_backups WHERE bucket_id=$1")
             .bind(bucket_id)
             .fetch_one(pool)
             .await?,
     )
 }
 
-pub async fn get_backup(pool: &SqlitePool, id: &str) -> Result<Option<BackupRecord>> {
-    let row = sqlx::query(&select("WHERE id = ?"))
+pub async fn get_backup(pool: &AnyPool, id: &str) -> Result<Option<BackupRecord>> {
+    let row = sqlx::query(&select("WHERE id = $1"))
         .bind(id)
         .fetch_optional(pool)
         .await?;
     Ok(row.map(row_to_backup))
 }
 
-pub async fn list_backups(pool: &SqlitePool, volume_id: Option<&str>) -> Result<Vec<BackupRecord>> {
+pub async fn list_backups(pool: &AnyPool, volume_id: Option<&str>) -> Result<Vec<BackupRecord>> {
     let rows = match volume_id {
         Some(v) => {
-            sqlx::query(&select("WHERE volume_id = ? ORDER BY created_at DESC"))
+            sqlx::query(&select("WHERE volume_id = $1 ORDER BY created_at DESC"))
                 .bind(v)
                 .fetch_all(pool)
                 .await?
@@ -100,7 +100,7 @@ pub async fn list_backups(pool: &SqlitePool, volume_id: Option<&str>) -> Result<
 /// Backups whose source volume no longer exists — orphans. `storage_backups.volume_id` has no FK
 /// (unlike snapshots, which cascade), so deleting a volume leaves its backups dangling in the
 /// catalog. Day-2 hygiene surfaces these so an operator can reclaim them.
-pub async fn list_orphans(pool: &SqlitePool) -> Result<Vec<BackupRecord>> {
+pub async fn list_orphans(pool: &AnyPool) -> Result<Vec<BackupRecord>> {
     let rows = sqlx::query(&select(
         "WHERE NOT EXISTS (SELECT 1 FROM storage_volumes v WHERE v.id = storage_backups.volume_id) \
          ORDER BY created_at DESC",
@@ -113,12 +113,12 @@ pub async fn list_orphans(pool: &SqlitePool) -> Result<Vec<BackupRecord>> {
 /// List completed backups (`verified`/`completed`) for a volume created strictly before `cutoff`
 /// (RFC3339 UTC, DB format `YYYY-MM-DDTHH:MM:SS.mmmZ`), oldest first — used by age-based retention.
 pub async fn list_older_than(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     volume_id: &str,
     cutoff: &str,
 ) -> Result<Vec<BackupRecord>> {
     let rows = sqlx::query(&select(
-        "WHERE volume_id = ? AND state IN ('verified', 'completed') AND created_at < ? \
+        "WHERE volume_id = $1 AND state IN ('verified', 'completed') AND created_at < $2 \
          ORDER BY created_at ASC",
     ))
     .bind(volume_id)
@@ -131,7 +131,7 @@ pub async fn list_older_than(
 /// The most recent backup per volume, in one query — used by `protection::list_protection_status`
 /// so a bank-scale fleet doesn't pay one query per volume.
 pub async fn latest_by_volume(
-    pool: &SqlitePool,
+    pool: &AnyPool,
 ) -> Result<std::collections::HashMap<String, BackupRecord>> {
     let rows = sqlx::query(
         "SELECT b.id, b.tenant_id, b.volume_id, b.snapshot_id, b.bucket_id, b.object_key, \
@@ -157,7 +157,7 @@ fn select(tail: &str) -> String {
     )
 }
 
-fn row_to_backup(r: sqlx::sqlite::SqliteRow) -> BackupRecord {
+fn row_to_backup(r: sqlx::any::AnyRow) -> BackupRecord {
     BackupRecord {
         id: r.get("id"),
         tenant_id: r.get("tenant_id"),

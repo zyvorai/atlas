@@ -16,9 +16,23 @@ image:
   pullPolicy: IfNotPresent
 
 replicaCount: 1
-# Atlas is single-replica today (SQLite behind a ReadWriteOnce PVC; see docs/ROADMAP.md's "Known
-# limitations" — Postgres-backed HA is a separate, larger, deferred effort). Do not raise
-# replicaCount above 1; the Recreate rollout strategy below assumes exactly one pod at a time.
+# Only raise this above 1 when database.kind is "postgres" (see below) — with the default
+# database.kind: sqlite, the DB lives on a ReadWriteOnce PVC that only one pod can mount, and the
+# Recreate rollout strategy in templates/deployment.yaml assumes exactly one pod at a time.
+
+database:
+  # "sqlite" (default, single-replica — a local file on the PVC below) or "postgres" (multi-
+  # replica-capable — see docs/HA.md). The query layer itself runs identically on either backend
+  # (sqlx::AnyPool, chosen by ATLAS_DATABASE_URL's scheme); this only changes what gets deployed.
+  kind: sqlite
+  # Only used when kind: postgres — an existing Secret holding the full connection URL
+  # (postgres://user:pass@host:port/db) under `secretKey`. Never inline the URL here (see
+  # auth.createSecret's comment above for the same "store references, never values" convention).
+  # Point this at a real HA Postgres (RDS, CloudNativePG, Patroni-managed, etc.) — this chart does
+  # not stand up Postgres itself; see deploy/k8s/atlas-postgres.yaml for a CloudNativePG sketch and
+  # deploy/postgres-lab/ for a throwaway lab instance.
+  existingSecret: ""
+  secretKey: database-url
 
 resources:
   requests:

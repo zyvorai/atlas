@@ -460,11 +460,13 @@ pub(crate) async fn ai_what_if(
     Ok(Json(response))
 }
 
-async fn recent_failed_jobs(pool: &sqlx::SqlitePool) -> AppResult<i64> {
+async fn recent_failed_jobs(pool: &sqlx::AnyPool) -> AppResult<i64> {
+    let since =
+        atlas_inventory::now_rfc3339(chrono::Utc::now() - chrono::Duration::minutes(15));
     let row = sqlx::query(
-        "SELECT COUNT(*) AS n FROM storage_jobs WHERE state='failed' AND updated_at >= \
-         strftime('%Y-%m-%dT%H:%M:%fZ','now','-15 minutes')",
+        "SELECT COUNT(*) AS n FROM storage_jobs WHERE state='failed' AND updated_at >= $1",
     )
+    .bind(since)
     .fetch_one(pool)
     .await
     .map_err(|e| AppError::Database(e.to_string()))?

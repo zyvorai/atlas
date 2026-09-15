@@ -10,7 +10,7 @@ use std::time::Duration;
 use anyhow::Result;
 use atlas_api_types::AlertRecord;
 use serde_json::json;
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 
 const SINK: &str = "slack";
 
@@ -24,7 +24,7 @@ fn emoji(a: &AlertRecord) -> &'static str {
 
 /// Post trigger messages for not-yet-notified open alerts and resolve messages for ones whose
 /// Atlas alert has since cleared. Returns `(triggered, resolved)`.
-pub async fn dispatch(pool: &SqlitePool, webhook_url: &str) -> Result<(usize, usize)> {
+pub async fn dispatch(pool: &AnyPool, webhook_url: &str) -> Result<(usize, usize)> {
     let client = reqwest::Client::new();
     let mut triggered = 0;
     for a in atlas_inventory::alert_notifications::pending_triggers(pool, SINK).await? {

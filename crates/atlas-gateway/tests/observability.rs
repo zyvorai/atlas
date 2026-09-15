@@ -6,7 +6,6 @@
 //! through discovery → inventory → REST. No Ceph, no Kubernetes.
 
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use atlas_common::config::CephDriverMode;
 use atlas_common::Config;
@@ -14,7 +13,7 @@ use atlas_gateway::routes;
 use atlas_gateway::startup::{build_state, BuildOptions};
 use serde_json::Value;
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
+mod common;
 
 /// Knobs for the handful of variations the tests need.
 #[derive(Default, Clone, Copy)]
@@ -24,11 +23,11 @@ struct Opts {
     extra_backends: bool, // enable the NFS + ZFS drivers
 }
 
-fn base_config(db: &str, o: Opts) -> Config {
+fn base_config(database_url: String, o: Opts) -> Config {
     Config {
         bind_addr: "127.0.0.1:0".into(),
         grpc_addr: "127.0.0.1:0".into(),
-        database_url: format!("sqlite://{db}?mode=rwc"),
+        database_url,
         ceph_driver_mode: CephDriverMode::Fake,
         kubeconfig_path: None,
         jwt_secret: "obs-test-secret-key-at-least-32-bytes!".into(),
@@ -65,16 +64,10 @@ fn base_config(db: &str, o: Opts) -> Config {
     }
 }
 
-async fn spawn_with(o: Opts) -> (SocketAddr, sqlx::SqlitePool) {
-    let db = format!(
-        "{}/atlas-obs-{}-{}.db",
-        std::env::temp_dir().display(),
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::SeqCst),
-    );
-    let _ = std::fs::remove_file(&db);
+async fn spawn_with(o: Opts) -> (SocketAddr, sqlx::AnyPool) {
+    let database_url = common::fresh_database_url("observability").await;
     let state = build_state(
-        base_config(&db, o),
+        base_config(database_url, o),
         BuildOptions {
             enable_k8s: false,
             initial_discovery: o.initial_discovery,
@@ -360,14 +353,17 @@ async fn ai_anomalies_detects_a_write_spike() {
     let mib = 1_048_576_i64;
     for (index, writes) in [0, mib, mib * 2, mib * 3, mib * 20].into_iter().enumerate() {
         let minutes_ago = 5 - index as i64;
+        let ts = atlas_inventory::now_rfc3339(
+            chrono::Utc::now() - chrono::Duration::minutes(minutes_ago),
+        );
         sqlx::query(
             "INSERT INTO metrics_history
              (ts, raw_capacity_bytes, used_capacity_bytes, volumes, snapshots, read_bytes,
               write_bytes, read_ops, write_ops, jobs_running, alerts_open)
-             VALUES (strftime('%Y-%m-%dT%H:%M:%fZ','now', ?), 1000000000, 100000000,
-                     1, 0, 0, ?, 0, ?, 1, 0)",
+             VALUES ($1, 1000000000, 100000000,
+                     1, 0, 0, $2, 0, $3, 1, 0)",
         )
-        .bind(format!("-{minutes_ago} minutes"))
+        .bind(ts)
         .bind(writes as f64)
         .bind(writes as f64)
         .execute(&pool)

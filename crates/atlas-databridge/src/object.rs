@@ -18,7 +18,7 @@ use anyhow::{Context, Result};
 use atlas_driver_rgw::{S3Target, MIN_PART_SIZE};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 use std::collections::HashMap;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
@@ -421,7 +421,7 @@ async fn resolve_creds(
 /// copy (persisting progress) → verify → finalize. Invoked by the job engine's
 /// `JobSpec::ObjectMigrate` arm. Errors are recorded on the record as `failed`.
 pub async fn run_migration(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     k8s: Option<std::sync::Arc<atlas_driver_k8s::K8sDriver>>,
     id: &str,
 ) -> Result<()> {
@@ -451,7 +451,7 @@ pub async fn run_migration(
 }
 
 async fn run_migration_inner(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     k8s: Option<std::sync::Arc<atlas_driver_k8s::K8sDriver>>,
     rec: &atlas_api_types::ObjectMigration,
 ) -> Result<bool> {

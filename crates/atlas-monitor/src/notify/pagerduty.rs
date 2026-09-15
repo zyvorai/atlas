@@ -9,7 +9,7 @@ use std::time::Duration;
 use anyhow::Result;
 use atlas_api_types::AlertRecord;
 use serde_json::json;
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 
 use super::PagerDutyConfig;
 
@@ -26,14 +26,14 @@ fn severity(a: &AlertRecord) -> &'static str {
 
 /// Trigger incidents for not-yet-notified open alerts and resolve ones whose Atlas alert has
 /// since cleared. Returns `(triggered, resolved)`. Failures are logged and retried next tick.
-pub async fn dispatch(pool: &SqlitePool, cfg: &PagerDutyConfig) -> Result<(usize, usize)> {
+pub async fn dispatch(pool: &AnyPool, cfg: &PagerDutyConfig) -> Result<(usize, usize)> {
     dispatch_to(pool, cfg, ENQUEUE_URL).await
 }
 
 /// Same as [`dispatch`], but posting to `enqueue_url` instead of PagerDuty's real endpoint —
 /// exposed for tests to point at a local mock server.
 pub async fn dispatch_to(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     cfg: &PagerDutyConfig,
     enqueue_url: &str,
 ) -> Result<(usize, usize)> {

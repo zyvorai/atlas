@@ -9,11 +9,17 @@ metadata:
     {{- include "atlas.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  {{- if eq .Values.database.kind "postgres" }}
+  # RollingUpdate: with database.kind: postgres there's no local PVC to fight over, so a new pod
+  # can come up before the old one terminates — zero-downtime deploys.
+  strategy:
+    type: RollingUpdate
+  {{- else }}
   # Recreate (not RollingUpdate): the SQLite PVC is ReadWriteOnce, so the old pod must release it
-  # before the new one mounts it. See values.yaml's replicaCount comment — this is a single-
-  # replica deployment until the Postgres-backed HA port lands (docs/ROADMAP.md).
+  # before the new one mounts it. Set database.kind: postgres to switch to RollingUpdate.
   strategy:
     type: Recreate
+  {{- end }}
   selector:
     matchLabels:
       app: {{ include "atlas.fullname" . }}
@@ -91,8 +97,16 @@ spec:
             - name: ATLAS_GRPC_ADDR
               value: "0.0.0.0:{{ .Values.service.grpc.port }}"
             {{- end }}
+            {{- if eq .Values.database.kind "postgres" }}
+            - name: ATLAS_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.secretKey }}
+            {{- else }}
             - name: ATLAS_DATABASE_URL
               value: "sqlite:///var/lib/atlas/atlas.db?mode=rwc"
+            {{- end }}
             - name: ATLAS_CEPH_DRIVER_MODE
               value: {{ .Values.ceph.enabled | ternary "real" "fake" | quote }}
             - name: ATLAS_AUTH_REQUIRED
@@ -269,8 +283,10 @@ spec:
               mountPath: /etc/ceph
               readOnly: true
             {{- end }}
+            {{- if ne .Values.database.kind "postgres" }}
             - name: data
               mountPath: /var/lib/atlas
+            {{- end }}
             {{- if .Values.service.https.enabled }}
             - name: tls
               mountPath: /etc/atlas-tls
@@ -281,9 +297,11 @@ spec:
         - name: ceph-config
           emptyDir: {}
         {{- end }}
+        {{- if ne .Values.database.kind "postgres" }}
         - name: data
           persistentVolumeClaim:
             claimName: {{ include "atlas.fullname" . }}-data
+        {{- end }}
         {{- if .Values.service.https.enabled }}
         - name: tls
           secret:

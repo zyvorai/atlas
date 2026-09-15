@@ -4,10 +4,10 @@
 
 use anyhow::Result;
 use atlas_api_types::ValidationRun;
-use sqlx::{Row, SqlitePool};
+use sqlx::{AnyPool, Row};
 
 pub async fn insert_validation(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     tenant_id: &str,
     plan_id: &str,
@@ -15,7 +15,7 @@ pub async fn insert_validation(
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO validation_runs (id, tenant_id, plan_id, kind, state)
-         VALUES (?, ?, ?, ?, 'running')",
+         VALUES ($1, $2, $3, $4, 'running')",
     )
     .bind(id)
     .bind(tenant_id)
@@ -28,7 +28,7 @@ pub async fn insert_validation(
 
 /// Record the outcome and flip to passed/failed.
 pub async fn set_result(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     passed: bool,
     tables_total: i64,
@@ -37,34 +37,32 @@ pub async fn set_result(
 ) -> Result<()> {
     let state = if passed { "passed" } else { "failed" };
     sqlx::query(
-        "UPDATE validation_runs SET state=?, tables_total=?, tables_mismatched=?, summary=?,
-         completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+        "UPDATE validation_runs SET state=$1, tables_total=$2, tables_mismatched=$3, summary=$4,
+         completed_at=$5 WHERE id=$6",
     )
     .bind(state)
     .bind(tables_total)
     .bind(tables_mismatched)
     .bind(summary.to_string())
+    .bind(crate::now_rfc3339(chrono::Utc::now()))
     .bind(id)
     .execute(pool)
     .await?;
     Ok(())
 }
 
-pub async fn get_validation(pool: &SqlitePool, id: &str) -> Result<Option<ValidationRun>> {
-    let row = sqlx::query(&select("WHERE id = ?"))
+pub async fn get_validation(pool: &AnyPool, id: &str) -> Result<Option<ValidationRun>> {
+    let row = sqlx::query(&select("WHERE id = $1"))
         .bind(id)
         .fetch_optional(pool)
         .await?;
     Ok(row.map(row_to_validation))
 }
 
-pub async fn list_validations(
-    pool: &SqlitePool,
-    plan_id: Option<&str>,
-) -> Result<Vec<ValidationRun>> {
+pub async fn list_validations(pool: &AnyPool, plan_id: Option<&str>) -> Result<Vec<ValidationRun>> {
     let rows = match plan_id {
         Some(pid) => {
-            sqlx::query(&select("WHERE plan_id = ? ORDER BY created_at DESC"))
+            sqlx::query(&select("WHERE plan_id = $1 ORDER BY created_at DESC"))
                 .bind(pid)
                 .fetch_all(pool)
                 .await?
@@ -79,8 +77,8 @@ pub async fn list_validations(
 }
 
 /// Validations in a given state — used by the reconciler to watch running validation Jobs.
-pub async fn list_by_state(pool: &SqlitePool, state: &str) -> Result<Vec<ValidationRun>> {
-    let rows = sqlx::query(&select("WHERE state = ? ORDER BY created_at DESC"))
+pub async fn list_by_state(pool: &AnyPool, state: &str) -> Result<Vec<ValidationRun>> {
+    let rows = sqlx::query(&select("WHERE state = $1 ORDER BY created_at DESC"))
         .bind(state)
         .fetch_all(pool)
         .await?;
@@ -88,9 +86,9 @@ pub async fn list_by_state(pool: &SqlitePool, state: &str) -> Result<Vec<Validat
 }
 
 /// The most recent validation for a plan — used by the cutover guard.
-pub async fn latest_for_plan(pool: &SqlitePool, plan_id: &str) -> Result<Option<ValidationRun>> {
+pub async fn latest_for_plan(pool: &AnyPool, plan_id: &str) -> Result<Option<ValidationRun>> {
     let row = sqlx::query(&select(
-        "WHERE plan_id = ? ORDER BY created_at DESC LIMIT 1",
+        "WHERE plan_id = $1 ORDER BY created_at DESC LIMIT 1",
     ))
     .bind(plan_id)
     .fetch_optional(pool)
@@ -106,7 +104,7 @@ fn select(tail: &str) -> String {
     )
 }
 
-fn row_to_validation(r: sqlx::sqlite::SqliteRow) -> ValidationRun {
+fn row_to_validation(r: sqlx::any::AnyRow) -> ValidationRun {
     let summary: String = r.get("summary");
     ValidationRun {
         id: r.get("id"),

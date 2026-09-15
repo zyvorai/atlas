@@ -3,7 +3,7 @@
 use anyhow::{anyhow, Context, Result};
 use atlas_api_types::{Health, StorageVolume, VolumeKind};
 use atlas_driver_k8s::{K8sDriver, PvcCreateSpec};
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 use std::sync::Arc;
 
 use super::helpers::{
@@ -13,7 +13,7 @@ use super::helpers::{
 use crate::spec::JobSpec;
 
 pub(crate) async fn dispatch_object(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     k8s: &Option<Arc<K8sDriver>>,
     tenant_id: &str,
     spec: JobSpec,

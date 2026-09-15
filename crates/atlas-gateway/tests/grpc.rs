@@ -9,18 +9,15 @@ use atlas_gateway::proto::atlas_storage_client::AtlasStorageClient;
 use atlas_gateway::proto::{CreateVolumeRequest, Empty, HealthRequest};
 use atlas_gateway::startup::{build_state, BuildOptions};
 
+mod common;
+
 #[tokio::test]
 async fn grpc_edge_health_create_and_list() {
-    let db = format!(
-        "{}/atlas-grpc-test-{}.db",
-        std::env::temp_dir().display(),
-        std::process::id()
-    );
-    let _ = std::fs::remove_file(&db);
+    let database_url = common::fresh_database_url("grpc-edge").await;
     let config = Config {
         bind_addr: "127.0.0.1:0".into(),
         grpc_addr: "127.0.0.1:0".into(),
-        database_url: format!("sqlite://{db}?mode=rwc"),
+        database_url,
         ceph_driver_mode: CephDriverMode::Fake,
         kubeconfig_path: None,
         jwt_secret: "test".into(),
@@ -129,17 +126,12 @@ async fn grpc_enforces_jwt_when_auth_required() {
     use jsonwebtoken::{encode, EncodingKey, Header};
     use tonic::Request;
 
-    let db = format!(
-        "{}/atlas-grpc-auth-{}.db",
-        std::env::temp_dir().display(),
-        std::process::id()
-    );
-    let _ = std::fs::remove_file(&db);
+    let database_url = common::fresh_database_url("grpc-auth").await;
     let secret = "grpc-test-secret";
     let config = Config {
         bind_addr: "127.0.0.1:0".into(),
         grpc_addr: "127.0.0.1:0".into(),
-        database_url: format!("sqlite://{db}?mode=rwc"),
+        database_url,
         ceph_driver_mode: CephDriverMode::Fake,
         kubeconfig_path: None,
         jwt_secret: secret.into(),

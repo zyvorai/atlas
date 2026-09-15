@@ -4,11 +4,13 @@
 
 use anyhow::Result;
 use atlas_api_types::JobRecord;
-use sqlx::{Row, SqlitePool};
+use sqlx::{AnyPool, Row};
+
+use crate::now_rfc3339;
 
 /// Insert a new job in the `pending` state. Returns the job id.
 pub async fn insert_job(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     tenant_id: &str,
     job_type: &str,
@@ -18,7 +20,7 @@ pub async fn insert_job(
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO storage_jobs (id, tenant_id, job_type, state, requested_by, request, idempotency_key)
-         VALUES (?, ?, ?, 'pending', ?, ?, ?)",
+         VALUES ($1, $2, $3, 'pending', $4, $5, $6)",
     )
     .bind(id)
     .bind(tenant_id)
@@ -32,9 +34,9 @@ pub async fn insert_job(
 }
 
 /// Return an existing job for an idempotency key, if any (PDF §17.4).
-pub async fn find_by_idempotency(pool: &SqlitePool, key: &str) -> Result<Option<JobRecord>> {
+pub async fn find_by_idempotency(pool: &AnyPool, key: &str) -> Result<Option<JobRecord>> {
     let row = sqlx::query(&job_select(
-        "WHERE idempotency_key = ? ORDER BY created_at DESC LIMIT 1",
+        "WHERE idempotency_key = $1 ORDER BY created_at DESC LIMIT 1",
     ))
     .bind(key)
     .fetch_optional(pool)
@@ -42,21 +44,21 @@ pub async fn find_by_idempotency(pool: &SqlitePool, key: &str) -> Result<Option<
     Ok(row.map(row_to_job))
 }
 
-pub async fn get_job(pool: &SqlitePool, id: &str) -> Result<Option<JobRecord>> {
-    let row = sqlx::query(&job_select("WHERE id = ?"))
+pub async fn get_job(pool: &AnyPool, id: &str) -> Result<Option<JobRecord>> {
+    let row = sqlx::query(&job_select("WHERE id = $1"))
         .bind(id)
         .fetch_optional(pool)
         .await?;
     Ok(row.map(row_to_job))
 }
 
-pub async fn list_jobs(pool: &SqlitePool, limit: i64) -> Result<Vec<JobRecord>> {
+pub async fn list_jobs(pool: &AnyPool, limit: i64) -> Result<Vec<JobRecord>> {
     list_jobs_filtered(pool, None, limit).await
 }
 
 /// List jobs newest-first, optionally filtered by `state`, capped at `limit`.
 pub async fn list_jobs_filtered(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     state: Option<&str>,
     limit: i64,
 ) -> Result<Vec<JobRecord>> {
@@ -64,7 +66,7 @@ pub async fn list_jobs_filtered(
     let rows = match state {
         Some(s) if !s.is_empty() => {
             sqlx::query(&job_select(
-                "WHERE state = ? ORDER BY created_at DESC LIMIT ?",
+                "WHERE state = $1 ORDER BY created_at DESC LIMIT $2",
             ))
             .bind(s)
             .bind(limit)
@@ -72,7 +74,7 @@ pub async fn list_jobs_filtered(
             .await?
         }
         _ => {
-            sqlx::query(&job_select("ORDER BY created_at DESC LIMIT ?"))
+            sqlx::query(&job_select("ORDER BY created_at DESC LIMIT $1"))
                 .bind(limit)
                 .fetch_all(pool)
                 .await?
@@ -81,9 +83,8 @@ pub async fn list_jobs_filtered(
     Ok(rows.into_iter().map(row_to_job).collect())
 }
 
-/// Move a job to `running` and stamp `started_at`.
 /// Count jobs grouped by state (for the Prometheus self-metrics endpoint).
-pub async fn count_by_state(pool: &SqlitePool) -> Result<Vec<(String, i64)>> {
+pub async fn count_by_state(pool: &AnyPool) -> Result<Vec<(String, i64)>> {
     let rows = sqlx::query("SELECT state, COUNT(*) AS n FROM storage_jobs GROUP BY state")
         .fetch_all(pool)
         .await?;
@@ -93,13 +94,21 @@ pub async fn count_by_state(pool: &SqlitePool) -> Result<Vec<(String, i64)>> {
         .collect())
 }
 
-pub async fn mark_running(pool: &SqlitePool, id: &str) -> Result<()> {
+/// Move a job to `running` and stamp `started_at`.
+pub async fn mark_running(pool: &AnyPool, id: &str) -> Result<()> {
+    let now = now_rfc3339(chrono::Utc::now());
     sqlx::query(
-        "UPDATE storage_jobs SET state='running', progress_percent=MAX(progress_percent,5),
-         started_at=COALESCE(started_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-         locked_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
-         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+        // `CASE WHEN ... THEN ... ELSE ... END`, not `MAX(progress_percent, 5)` — SQLite's `max()`
+        // is overloaded as a 2-arg scalar function, but Postgres's `MAX()` is aggregate-only
+        // (`SELECT MAX(3,5)` errors: "function max(integer, integer) does not exist" — verified
+        // live). `CASE WHEN` is portable on both.
+        "UPDATE storage_jobs SET state='running',
+         progress_percent=(CASE WHEN progress_percent > 5 THEN progress_percent ELSE 5 END),
+         started_at=COALESCE(started_at, $1),
+         locked_at=$1,
+         updated_at=$1 WHERE id=$2",
     )
+    .bind(now)
     .bind(id)
     .execute(pool)
     .await?;
@@ -107,27 +116,28 @@ pub async fn mark_running(pool: &SqlitePool, id: &str) -> Result<()> {
 }
 
 /// Update state + progress mid-flight (e.g. `verifying`, 50%).
-pub async fn set_state(pool: &SqlitePool, id: &str, state: &str, progress: i64) -> Result<()> {
-    sqlx::query(
-        "UPDATE storage_jobs SET state=?, progress_percent=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
-    )
-    .bind(state)
-    .bind(progress)
-    .bind(id)
-    .execute(pool)
-    .await?;
+pub async fn set_state(pool: &AnyPool, id: &str, state: &str, progress: i64) -> Result<()> {
+    sqlx::query("UPDATE storage_jobs SET state=$1, progress_percent=$2, updated_at=$3 WHERE id=$4")
+        .bind(state)
+        .bind(progress)
+        .bind(now_rfc3339(chrono::Utc::now()))
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
 /// Terminal success: state `succeeded`, 100%, store result.
-pub async fn mark_succeeded(pool: &SqlitePool, id: &str, result: &serde_json::Value) -> Result<()> {
+pub async fn mark_succeeded(pool: &AnyPool, id: &str, result: &serde_json::Value) -> Result<()> {
+    let now = now_rfc3339(chrono::Utc::now());
     sqlx::query(
-        "UPDATE storage_jobs SET state='succeeded', progress_percent=100, result=?,
+        "UPDATE storage_jobs SET state='succeeded', progress_percent=100, result=$1,
          locked_by=NULL, locked_at=NULL, error=NULL,
-         completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
-         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+         completed_at=$2,
+         updated_at=$2 WHERE id=$3",
     )
     .bind(result.to_string())
+    .bind(now)
     .bind(id)
     .execute(pool)
     .await?;
@@ -135,13 +145,15 @@ pub async fn mark_succeeded(pool: &SqlitePool, id: &str, result: &serde_json::Va
 }
 
 /// Terminal failure: state `failed`, store error message.
-pub async fn mark_failed(pool: &SqlitePool, id: &str, error: &str) -> Result<()> {
+pub async fn mark_failed(pool: &AnyPool, id: &str, error: &str) -> Result<()> {
+    let now = now_rfc3339(chrono::Utc::now());
     sqlx::query(
-        "UPDATE storage_jobs SET state='failed', error=?, locked_by=NULL, locked_at=NULL,
-         completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
-         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+        "UPDATE storage_jobs SET state='failed', error=$1, locked_by=NULL, locked_at=NULL,
+         completed_at=$2,
+         updated_at=$2 WHERE id=$3",
     )
     .bind(error)
+    .bind(now)
     .bind(id)
     .execute(pool)
     .await?;
@@ -152,13 +164,15 @@ pub async fn mark_failed(pool: &SqlitePool, id: &str, error: &str) -> Result<()>
 /// up. A job already `running` can't be cancelled this way (see `JobEngine::cancel_job`, which
 /// signals the in-process worker directly instead). Returns `false` if the job doesn't exist or is
 /// no longer in one of those states.
-pub async fn cancel_if_queued(pool: &SqlitePool, id: &str) -> Result<bool> {
+pub async fn cancel_if_queued(pool: &AnyPool, id: &str) -> Result<bool> {
+    let now = now_rfc3339(chrono::Utc::now());
     let res = sqlx::query(
         "UPDATE storage_jobs SET state='failed', error='cancelled by operator', locked_by=NULL,
-         locked_at=NULL, completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
-         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
-         WHERE id=? AND state IN ('pending','queued')",
+         locked_at=NULL, completed_at=$1,
+         updated_at=$1
+         WHERE id=$2 AND state IN ('pending','queued')",
     )
+    .bind(now)
     .bind(id)
     .execute(pool)
     .await?;
@@ -167,11 +181,14 @@ pub async fn cancel_if_queued(pool: &SqlitePool, id: &str) -> Result<bool> {
 
 /// Job ids currently in any of `states`, oldest first — used by boot recovery to re-enqueue work the
 /// in-memory channel lost across a restart.
-pub async fn ids_by_states(pool: &SqlitePool, states: &[&str]) -> Result<Vec<String>> {
+pub async fn ids_by_states(pool: &AnyPool, states: &[&str]) -> Result<Vec<String>> {
     if states.is_empty() {
         return Ok(vec![]);
     }
-    let placeholders = states.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let placeholders = (1..=states.len())
+        .map(|i| format!("${i}"))
+        .collect::<Vec<_>>()
+        .join(",");
     let sql = format!(
         "SELECT id FROM storage_jobs WHERE state IN ({placeholders}) ORDER BY created_at ASC"
     );
@@ -185,15 +202,16 @@ pub async fn ids_by_states(pool: &SqlitePool, states: &[&str]) -> Result<Vec<Str
 
 /// Due `queued`/`pending` job ids whose `next_attempt_at` is null or already reached. Honors retry
 /// backoff so a boot/poller does not fire a job early. Oldest first, capped at `limit`.
-pub async fn due_ids(pool: &SqlitePool, limit: i64) -> Result<Vec<String>> {
+pub async fn due_ids(pool: &AnyPool, limit: i64) -> Result<Vec<String>> {
     let rows = sqlx::query(
         "SELECT id FROM storage_jobs
          WHERE state IN ('queued', 'pending')
            AND (next_attempt_at IS NULL
-                OR next_attempt_at <= strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                OR next_attempt_at <= $1)
          ORDER BY created_at ASC
-         LIMIT ?",
+         LIMIT $2",
     )
+    .bind(now_rfc3339(chrono::Utc::now()))
     .bind(limit.max(1))
     .fetch_all(pool)
     .await?;
@@ -203,17 +221,20 @@ pub async fn due_ids(pool: &SqlitePool, limit: i64) -> Result<Vec<String>> {
 /// Atomically claim a due job for `worker_id`: transitions `queued`/`pending` → `running` and
 /// stamps `locked_by`/`locked_at`. Returns `true` if this caller won the claim (so two workers /
 /// a channel wake + poller race cannot double-execute).
-pub async fn try_claim(pool: &SqlitePool, id: &str, worker_id: &str) -> Result<bool> {
+pub async fn try_claim(pool: &AnyPool, id: &str, worker_id: &str) -> Result<bool> {
+    let now = now_rfc3339(chrono::Utc::now());
     let res = sqlx::query(
-        "UPDATE storage_jobs SET state='running', progress_percent=MAX(progress_percent,5),
-         locked_by=?, locked_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
-         started_at=COALESCE(started_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
-         WHERE id=? AND state IN ('queued', 'pending')
+        "UPDATE storage_jobs SET state='running',
+         progress_percent=(CASE WHEN progress_percent > 5 THEN progress_percent ELSE 5 END),
+         locked_by=$1, locked_at=$2,
+         started_at=COALESCE(started_at, $2),
+         updated_at=$2
+         WHERE id=$3 AND state IN ('queued', 'pending')
            AND (next_attempt_at IS NULL
-                OR next_attempt_at <= strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+                OR next_attempt_at <= $2)",
     )
     .bind(worker_id)
+    .bind(now)
     .bind(id)
     .execute(pool)
     .await?;
@@ -222,20 +243,26 @@ pub async fn try_claim(pool: &SqlitePool, id: &str, worker_id: &str) -> Result<b
 
 /// Re-queue `running` jobs whose lock/update is older than `stale_secs` (worker died without boot
 /// recovery). Clears the lock and stamps an error note. Returns how many were reclaimed.
-pub async fn reclaim_stale_running(pool: &SqlitePool, stale_secs: i64) -> Result<u64> {
+pub async fn reclaim_stale_running(pool: &AnyPool, stale_secs: i64) -> Result<u64> {
     if stale_secs <= 0 {
         return Ok(0);
     }
+    let cutoff = now_rfc3339(chrono::Utc::now() - chrono::Duration::seconds(stale_secs));
+    let now = now_rfc3339(chrono::Utc::now());
     let res = sqlx::query(
+        // Same scalar-MAX portability issue as mark_running/try_claim: a 2-value `CASE WHEN` in
+        // place of `MAX(a, b)`.
         "UPDATE storage_jobs SET state='queued', locked_by=NULL, locked_at=NULL,
          error=COALESCE(error, 'reclaimed: stale running lock'),
          next_attempt_at=NULL,
-         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+         updated_at=$1
          WHERE state='running'
-           AND MAX(COALESCE(locked_at, updated_at, started_at, created_at), updated_at)
-               < strftime('%Y-%m-%dT%H:%M:%fZ','now', ?)",
+           AND (CASE WHEN COALESCE(locked_at, updated_at, started_at, created_at) > updated_at
+                THEN COALESCE(locked_at, updated_at, started_at, created_at) ELSE updated_at END)
+               < $2",
     )
-    .bind(format!("-{} seconds", stale_secs))
+    .bind(now)
+    .bind(cutoff)
     .execute(pool)
     .await?;
     Ok(res.rows_affected())
@@ -243,21 +270,23 @@ pub async fn reclaim_stale_running(pool: &SqlitePool, stale_secs: i64) -> Result
 
 /// Fail every job stuck in `running` (a crash/restart left it mid-flight; the side effects may be
 /// partial, so we fail-safe rather than blindly re-run). Returns how many were reset.
-pub async fn fail_running(pool: &SqlitePool, error: &str) -> Result<u64> {
+pub async fn fail_running(pool: &AnyPool, error: &str) -> Result<u64> {
+    let now = now_rfc3339(chrono::Utc::now());
     let res = sqlx::query(
-        "UPDATE storage_jobs SET state='failed', error=?, locked_by=NULL, locked_at=NULL,
-         completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
-         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE state='running'",
+        "UPDATE storage_jobs SET state='failed', error=$1, locked_by=NULL, locked_at=NULL,
+         completed_at=$2,
+         updated_at=$2 WHERE state='running'",
     )
     .bind(error)
+    .bind(now)
     .execute(pool)
     .await?;
     Ok(res.rows_affected())
 }
 
 /// A job's retry accounting: `(retry_count, max_retries)`.
-pub async fn retry_budget(pool: &SqlitePool, id: &str) -> Result<(i64, i64)> {
-    let row = sqlx::query("SELECT retry_count, max_retries FROM storage_jobs WHERE id=?")
+pub async fn retry_budget(pool: &AnyPool, id: &str) -> Result<(i64, i64)> {
+    let row = sqlx::query("SELECT retry_count, max_retries FROM storage_jobs WHERE id=$1")
         .bind(id)
         .fetch_one(pool)
         .await?;
@@ -265,8 +294,8 @@ pub async fn retry_budget(pool: &SqlitePool, id: &str) -> Result<(i64, i64)> {
 }
 
 /// Set a job's retry budget (called at enqueue for retryable job types).
-pub async fn set_max_retries(pool: &SqlitePool, id: &str, max_retries: i64) -> Result<()> {
-    sqlx::query("UPDATE storage_jobs SET max_retries=? WHERE id=?")
+pub async fn set_max_retries(pool: &AnyPool, id: &str, max_retries: i64) -> Result<()> {
+    sqlx::query("UPDATE storage_jobs SET max_retries=$1 WHERE id=$2")
         .bind(max_retries)
         .bind(id)
         .execute(pool)
@@ -274,16 +303,18 @@ pub async fn set_max_retries(pool: &SqlitePool, id: &str, max_retries: i64) -> R
     Ok(())
 }
 
-/// Record a retry: bump the count, requeue the job, and stamp when the next attempt is due.
-/// `delay_modifier` is a SQLite datetime modifier applied to `now` (e.g. `"+4 seconds"`).
-pub async fn bump_retry(pool: &SqlitePool, id: &str, delay_modifier: &str) -> Result<()> {
+/// Record a retry: bump the count, requeue the job, and stamp when the next attempt is due
+/// (`delay_secs` seconds from now).
+pub async fn bump_retry(pool: &AnyPool, id: &str, delay_secs: i64) -> Result<()> {
+    let now = chrono::Utc::now();
     sqlx::query(
         "UPDATE storage_jobs SET state='queued', retry_count=retry_count+1,
          locked_by=NULL, locked_at=NULL,
-         next_attempt_at=strftime('%Y-%m-%dT%H:%M:%fZ','now', ?),
-         error=NULL, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+         next_attempt_at=$1,
+         error=NULL, updated_at=$2 WHERE id=$3",
     )
-    .bind(delay_modifier)
+    .bind(now_rfc3339(now + chrono::Duration::seconds(delay_secs)))
+    .bind(now_rfc3339(now))
     .bind(id)
     .execute(pool)
     .await?;
@@ -297,7 +328,7 @@ fn job_select(tail: &str) -> String {
     )
 }
 
-fn row_to_job(r: sqlx::sqlite::SqliteRow) -> JobRecord {
+fn row_to_job(r: sqlx::any::AnyRow) -> JobRecord {
     let result: serde_json::Value = serde_json::from_str(
         r.get::<Option<String>, _>("result")
             .unwrap_or_else(|| "{}".into())

@@ -9,7 +9,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 
 /// Metric names we keep from the Ceph exporter.
 const WHITELIST: &[&str] = &[
@@ -48,7 +48,7 @@ const LATENCY_CRITICAL_MS: f64 = 1000.0;
 
 /// Scrape the given `/metrics` URL, upsert whitelisted samples, and evaluate the latency alert.
 /// Returns the number of samples stored.
-pub async fn scrape(pool: &SqlitePool, url: &str) -> Result<usize> {
+pub async fn scrape(pool: &AnyPool, url: &str) -> Result<usize> {
     let body = reqwest::Client::new()
         .get(url)
         .send()
@@ -87,7 +87,7 @@ pub async fn scrape(pool: &SqlitePool, url: &str) -> Result<usize> {
 }
 
 /// Raise/clear a cluster-level high-latency alert from the worst OSD apply latency.
-async fn evaluate_latency_alert(pool: &SqlitePool) -> Result<()> {
+async fn evaluate_latency_alert(pool: &AnyPool) -> Result<()> {
     let id = "alert_osd_latency_high";
     let worst = atlas_inventory::metrics::max_value(pool, "ceph_osd_apply_latency_ms").await?;
     match worst {
@@ -117,7 +117,7 @@ async fn evaluate_latency_alert(pool: &SqlitePool) -> Result<()> {
 
 /// Raise a recovery/backfill alert while PGs are recovering (warning), escalating to critical when
 /// data is at risk (unfound objects). Clears when recovery finishes.
-async fn evaluate_recovery_alert(pool: &SqlitePool) -> Result<()> {
+async fn evaluate_recovery_alert(pool: &AnyPool) -> Result<()> {
     let id = "alert_recovery_in_progress";
     let recovering = atlas_inventory::metrics::sum_value(pool, "ceph_pg_recovering").await?;
     let backfilling = atlas_inventory::metrics::sum_value(pool, "ceph_pg_backfilling").await?;

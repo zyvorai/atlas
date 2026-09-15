@@ -3,7 +3,7 @@
 use anyhow::{Context, Result};
 use atlas_api_types::{Health, StorageVolume};
 use atlas_driver_k8s::{K8sDriver, PvcCreateSpec};
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 use std::sync::Arc;
 
 use super::helpers::{
@@ -12,7 +12,7 @@ use super::helpers::{
 use crate::spec::JobSpec;
 
 pub(crate) async fn dispatch_volumes(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     k8s: &Option<Arc<K8sDriver>>,
     tenant_id: &str,
     spec: JobSpec,
@@ -149,13 +149,12 @@ pub(crate) async fn dispatch_volumes(
             k8s.expand_pvc(&namespace, &pvc_name, new_size_bytes)
                 .await
                 .with_context(|| format!("expand PVC {namespace}/{pvc_name}"))?;
-            sqlx::query(
-                "UPDATE storage_volumes SET size_bytes=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
-            )
-            .bind(new_size_bytes)
-            .bind(&volume_id)
-            .execute(pool)
-            .await?;
+            sqlx::query("UPDATE storage_volumes SET size_bytes=$1, updated_at=$2 WHERE id=$3")
+                .bind(new_size_bytes)
+                .bind(atlas_inventory::now_rfc3339(chrono::Utc::now()))
+                .bind(&volume_id)
+                .execute(pool)
+                .await?;
             Ok(serde_json::json!({ "volume_id": volume_id, "size_bytes": new_size_bytes }))
         }
 

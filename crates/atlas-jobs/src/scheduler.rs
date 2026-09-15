@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{anyhow, Result};
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 
 use crate::engine::JobEngine;
 use crate::spec::JobSpec;
@@ -14,7 +14,7 @@ use crate::spec::JobSpec;
 /// enqueueing a snapshot job for their volume, advance `next_run_at`, and prune the volume's
 /// scheduled snapshots to the schedule's `keep`. `tick_secs == 0` disables it.
 pub fn spawn_scheduler(
-    pool: SqlitePool,
+    pool: AnyPool,
     jobs: JobEngine,
     tick_secs: u64,
     is_leader: Arc<AtomicBool>,
@@ -42,7 +42,7 @@ pub fn spawn_scheduler(
 /// Marker embedded in scheduled snapshot names so retention only prunes scheduler-created snapshots.
 const SCHED_MARKER: &str = "-sched-";
 
-async fn run_due_schedules(pool: &SqlitePool, jobs: &JobEngine) -> Result<()> {
+async fn run_due_schedules(pool: &AnyPool, jobs: &JobEngine) -> Result<()> {
     let due = atlas_inventory::schedules::due(pool).await?;
     for sched in due {
         // Advance the clock first so a slow/failed run doesn't hot-loop this schedule.
@@ -93,7 +93,7 @@ async fn run_due_schedules(pool: &SqlitePool, jobs: &JobEngine) -> Result<()> {
 
 /// Delete the volume's scheduler-created snapshots beyond the newest `keep` (enqueues delete jobs).
 async fn prune_scheduled_snapshots(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     jobs: &JobEngine,
     volume_id: &str,
     keep: i64,
@@ -134,7 +134,7 @@ async fn prune_scheduled_snapshots(
 
 /// Run one backup schedule: snapshot + write a backup to the target bucket, then prune old backups.
 async fn run_backup_schedule(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     jobs: &JobEngine,
     sched: &atlas_api_types::SnapshotSchedule,
     namespace: &str,
@@ -222,7 +222,7 @@ async fn run_backup_schedule(
 
 /// Delete the volume's backups beyond the newest `keep` (enqueues backup-delete jobs). Retains
 /// `keep - 1` persisted backups since one is being created this tick.
-async fn prune_scheduled_backups(pool: &SqlitePool, jobs: &JobEngine, volume_id: &str, keep: i64) {
+async fn prune_scheduled_backups(pool: &AnyPool, jobs: &JobEngine, volume_id: &str, keep: i64) {
     if keep <= 0 {
         return;
     }

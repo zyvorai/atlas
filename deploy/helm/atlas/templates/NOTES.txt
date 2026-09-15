@@ -32,3 +32,13 @@ Secret ({{ .Values.ceph.monSecretName }}) already present — see docs/DEPLOYMEN
 Fake-driver mode: no real Ceph cluster is required. Set ceph.enabled=true (and see
 docs/DEPLOYMENT.md) to deploy against a real Rook Ceph cluster instead.
 {{- end }}
+
+{{- if eq .Values.database.kind "postgres" }}
+
+Database: Postgres ({{ .Values.database.existingSecret }}/{{ .Values.database.secretKey }}),
+{{ .Values.replicaCount }} replica(s), RollingUpdate.
+{{- else }}
+
+Database: SQLite on a ReadWriteOnce PVC, single replica, Recreate rollout. Set
+database.kind=postgres (see README.md) to run multiple replicas.
+{{- end }}

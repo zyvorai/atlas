@@ -9,11 +9,13 @@ use atlas_common::Config;
 use atlas_gateway::routes;
 use atlas_gateway::startup::{build_state, BuildOptions};
 
-fn config(db: &str) -> Config {
+mod common;
+
+fn config(database_url: String) -> Config {
     Config {
         bind_addr: "127.0.0.1:0".into(),
         grpc_addr: "127.0.0.1:0".into(),
-        database_url: format!("sqlite://{db}?mode=rwc"),
+        database_url,
         ceph_driver_mode: CephDriverMode::Fake,
         kubeconfig_path: None,
         jwt_secret: "rl-test-secret-key-at-least-32-bytes!!!".into(),
@@ -52,16 +54,11 @@ fn config(db: &str) -> Config {
 
 #[tokio::test]
 async fn rate_limit_trips_429() {
-    let db = format!(
-        "{}/atlas-rl-{}.db",
-        std::env::temp_dir().display(),
-        std::process::id()
-    );
-    let _ = std::fs::remove_file(&db);
+    let database_url = common::fresh_database_url("ratelimit").await;
     // build_state reads ATLAS_RATE_LIMIT_RPM at startup; set it before, clear it after (value captured).
     std::env::set_var("ATLAS_RATE_LIMIT_RPM", "5");
     let state = build_state(
-        config(&db),
+        config(database_url),
         BuildOptions {
             enable_k8s: false,
             initial_discovery: false,

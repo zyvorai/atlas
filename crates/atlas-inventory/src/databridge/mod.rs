@@ -14,11 +14,32 @@ pub mod validations;
 #[cfg(test)]
 mod tests {
     use crate::{connect, migrate};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+
+    fn temp_db_url(name: &str) -> String {
+        let db = format!(
+            "{}/atlas-databridge-mod-test-{name}-{}-{}.db",
+            std::env::temp_dir().display(),
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::SeqCst),
+        );
+        let _ = std::fs::remove_file(&db);
+        format!("sqlite://{db}?mode=rwc")
+    }
 
     #[tokio::test]
     async fn databridge_round_trip() {
-        let pool = connect("sqlite::memory:").await.unwrap();
-        migrate(&pool).await.unwrap();
+        // A real file (not `sqlite::memory:`): AnyPoolOptions pools multiple connections, and
+        // each fresh connection to `:memory:` gets its own separate empty database — migrate()
+        // would run on one connection while later queries land on another, unmigrated one.
+        let url = temp_db_url("round-trip");
+        // A real file (not `sqlite::memory:`): AnyPoolOptions pools multiple connections, and
+        // each fresh connection to `:memory:` gets its own separate empty database — migrate()
+        // would run on one connection while later queries land on another, unmigrated one.
+        let pool = connect(&url).await.unwrap();
+        migrate(&pool, &url).await.unwrap();
 
         // source
         super::sources::insert_source(
@@ -178,8 +199,9 @@ mod tests {
     #[tokio::test]
     async fn object_migration_round_trip() {
         use super::object_migrations as om;
-        let pool = connect("sqlite::memory:").await.unwrap();
-        migrate(&pool).await.unwrap();
+        let url = temp_db_url("object-migration");
+        let pool = connect(&url).await.unwrap();
+        migrate(&pool, &url).await.unwrap();
 
         om::insert(
             &pool,

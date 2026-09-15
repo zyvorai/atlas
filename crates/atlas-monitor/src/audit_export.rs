@@ -6,13 +6,13 @@
 //! `notify::dispatch`'s webhook pattern.
 
 use anyhow::Result;
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 
 /// Export audit rows older than `keep_days` to `url` as one batched JSON POST, then delete only
 /// the rows that were actually exported. If the sink is unreachable, nothing is deleted — rows
 /// stay in SQLite and are retried on the next tick, so a SIEM outage can never silently lose
 /// audit history the way an unconditional `prune()` would.
-pub async fn export_and_prune(pool: &SqlitePool, keep_days: i64, url: &str) -> Result<u64> {
+pub async fn export_and_prune(pool: &AnyPool, keep_days: i64, url: &str) -> Result<u64> {
     // Audit rows are compliance-sensitive (APRA CPS 234, see module docs) — refuse to ship them
     // over plaintext HTTP even if an operator misconfigures ATLAS_AUDIT_EXPORT_URL. Nothing is
     // pruned when this check fails, same fail-closed behavior as an unreachable sink below.

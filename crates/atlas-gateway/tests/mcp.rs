@@ -12,20 +12,14 @@ use atlas_common::Config;
 use atlas_gateway::routes;
 use atlas_gateway::startup::{build_state, BuildOptions};
 
-static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+mod common;
 
-async fn spawn(auth_required: bool, secret: &str) -> (SocketAddr, sqlx::SqlitePool) {
-    let db = format!(
-        "{}/atlas-mcp-test-{}-{}.db",
-        std::env::temp_dir().display(),
-        std::process::id(),
-        NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-    );
-    let _ = std::fs::remove_file(&db);
+async fn spawn(auth_required: bool, secret: &str) -> (SocketAddr, sqlx::AnyPool) {
+    let database_url = common::fresh_database_url("mcp").await;
     let config = Config {
         bind_addr: "127.0.0.1:0".into(),
         grpc_addr: "127.0.0.1:0".into(),
-        database_url: format!("sqlite://{db}?mode=rwc"),
+        database_url,
         ceph_driver_mode: CephDriverMode::Fake,
         kubeconfig_path: None,
         jwt_secret: secret.into(),

@@ -5,7 +5,9 @@
 
 use anyhow::Result;
 use atlas_api_types::SnapshotSchedule;
-use sqlx::{Row, SqlitePool};
+use sqlx::{AnyPool, Row};
+
+use crate::now_rfc3339;
 
 fn select(tail: &str) -> String {
     format!(
@@ -15,7 +17,7 @@ fn select(tail: &str) -> String {
     )
 }
 
-fn row_to_schedule(r: sqlx::sqlite::SqliteRow) -> SnapshotSchedule {
+fn row_to_schedule(r: sqlx::any::AnyRow) -> SnapshotSchedule {
     SnapshotSchedule {
         id: r.get("id"),
         tenant_id: r.get("tenant_id"),
@@ -36,7 +38,7 @@ fn row_to_schedule(r: sqlx::sqlite::SqliteRow) -> SnapshotSchedule {
 /// `kind` is "snapshot" or "backup"; backups also carry a `bucket_id` + `mode`. Returns the row.
 #[allow(clippy::too_many_arguments)]
 pub async fn insert(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     tenant_id: &str,
     volume_id: &str,
@@ -46,11 +48,11 @@ pub async fn insert(
     interval_secs: i64,
     keep: i64,
 ) -> Result<SnapshotSchedule> {
-    let next = format!("+{interval_secs} seconds");
+    let next = now_rfc3339(chrono::Utc::now() + chrono::Duration::seconds(interval_secs));
     sqlx::query(
         "INSERT INTO snapshot_schedules
             (id, tenant_id, volume_id, kind, bucket_id, mode, interval_secs, keep, next_run_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now', ?))",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
     )
     .bind(id)
     .bind(tenant_id)
@@ -66,18 +68,18 @@ pub async fn insert(
     Ok(get(pool, id).await?.expect("schedule just inserted"))
 }
 
-pub async fn get(pool: &SqlitePool, id: &str) -> Result<Option<SnapshotSchedule>> {
-    let row = sqlx::query(&select("WHERE id = ?"))
+pub async fn get(pool: &AnyPool, id: &str) -> Result<Option<SnapshotSchedule>> {
+    let row = sqlx::query(&select("WHERE id = $1"))
         .bind(id)
         .fetch_optional(pool)
         .await?;
     Ok(row.map(row_to_schedule))
 }
 
-pub async fn list(pool: &SqlitePool, volume_id: Option<&str>) -> Result<Vec<SnapshotSchedule>> {
+pub async fn list(pool: &AnyPool, volume_id: Option<&str>) -> Result<Vec<SnapshotSchedule>> {
     let rows = match volume_id {
         Some(v) => {
-            sqlx::query(&select("WHERE volume_id = ? ORDER BY created_at DESC"))
+            sqlx::query(&select("WHERE volume_id = $1 ORDER BY created_at DESC"))
                 .bind(v)
                 .fetch_all(pool)
                 .await?
@@ -91,8 +93,8 @@ pub async fn list(pool: &SqlitePool, volume_id: Option<&str>) -> Result<Vec<Snap
     Ok(rows.into_iter().map(row_to_schedule).collect())
 }
 
-pub async fn delete(pool: &SqlitePool, id: &str) -> Result<bool> {
-    let res = sqlx::query("DELETE FROM snapshot_schedules WHERE id = ?")
+pub async fn delete(pool: &AnyPool, id: &str) -> Result<bool> {
+    let res = sqlx::query("DELETE FROM snapshot_schedules WHERE id = $1")
         .bind(id)
         .execute(pool)
         .await?;
@@ -100,26 +102,36 @@ pub async fn delete(pool: &SqlitePool, id: &str) -> Result<bool> {
 }
 
 /// Enabled schedules whose `next_run_at` is in the past (i.e. due to run now).
-pub async fn due(pool: &SqlitePool) -> Result<Vec<SnapshotSchedule>> {
+pub async fn due(pool: &AnyPool) -> Result<Vec<SnapshotSchedule>> {
     let rows = sqlx::query(&select(
-        "WHERE enabled = 1 AND next_run_at <= strftime('%Y-%m-%dT%H:%M:%fZ','now') \
-         ORDER BY next_run_at ASC",
+        "WHERE enabled = 1 AND next_run_at <= $1 ORDER BY next_run_at ASC",
     ))
+    .bind(now_rfc3339(chrono::Utc::now()))
     .fetch_all(pool)
     .await?;
     Ok(rows.into_iter().map(row_to_schedule).collect())
 }
 
-/// Record that a schedule just ran: set `last_run_at = now`, advance `next_run_at` by its interval.
-pub async fn mark_ran(pool: &SqlitePool, id: &str) -> Result<()> {
-    sqlx::query(
-        "UPDATE snapshot_schedules
-         SET last_run_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
-             next_run_at = strftime('%Y-%m-%dT%H:%M:%fZ','now', '+' || interval_secs || ' seconds')
-         WHERE id = ?",
-    )
-    .bind(id)
-    .execute(pool)
-    .await?;
+/// Record that a schedule just ran: set `last_run_at = now`, advance `next_run_at` by its
+/// interval. `interval_secs` is read back into Rust first (rather than computed server-side via
+/// `strftime`/interval arithmetic on the stored column) so the "now + offset" math stays in one
+/// place (`now_rfc3339`) instead of forking per backend for this one case.
+pub async fn mark_ran(pool: &AnyPool, id: &str) -> Result<()> {
+    let interval_secs: Option<i64> =
+        sqlx::query_scalar("SELECT interval_secs FROM snapshot_schedules WHERE id = $1")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
+    let Some(interval_secs) = interval_secs else {
+        return Ok(());
+    };
+    let now = chrono::Utc::now();
+    let next = now_rfc3339(now + chrono::Duration::seconds(interval_secs));
+    sqlx::query("UPDATE snapshot_schedules SET last_run_at = $1, next_run_at = $2 WHERE id = $3")
+        .bind(now_rfc3339(now))
+        .bind(next)
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(())
 }

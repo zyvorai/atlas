@@ -22,13 +22,13 @@ pub use spec::{JobSpec, OwnerRef};
 #[cfg(test)]
 mod durability_tests {
     use super::recover;
-    use sqlx::SqlitePool;
+    use sqlx::AnyPool;
     use std::sync::atomic::{AtomicU64, Ordering};
     use tokio::sync::mpsc;
 
     static NEXT: AtomicU64 = AtomicU64::new(0);
 
-    async fn migrated_pool() -> SqlitePool {
+    async fn migrated_pool() -> AnyPool {
         // Temp-file (not in-memory) so the connection pool shares one schema.
         let db = format!(
             "{}/atlas-jobs-test-{}-{}.db",
@@ -37,14 +37,13 @@ mod durability_tests {
             NEXT.fetch_add(1, Ordering::SeqCst),
         );
         let _ = std::fs::remove_file(&db);
-        let pool = SqlitePool::connect(&format!("sqlite://{db}?mode=rwc"))
-            .await
-            .unwrap();
-        atlas_inventory::migrate(&pool).await.unwrap();
+        let url = format!("sqlite://{db}?mode=rwc");
+        let pool = atlas_inventory::connect(&url).await.unwrap();
+        atlas_inventory::migrate(&pool, &url).await.unwrap();
         pool
     }
 
-    async fn seed(pool: &SqlitePool, id: &str, state: &str) {
+    async fn seed(pool: &AnyPool, id: &str, state: &str) {
         atlas_inventory::jobs::insert_job(
             pool,
             id,
@@ -86,7 +85,7 @@ mod durability_tests {
     async fn recover_skips_jobs_waiting_on_next_attempt() {
         let pool = migrated_pool().await;
         seed(&pool, "j_wait", "queued").await;
-        atlas_inventory::jobs::bump_retry(&pool, "j_wait", "+1 hours")
+        atlas_inventory::jobs::bump_retry(&pool, "j_wait", 3600)
             .await
             .unwrap();
 
@@ -132,7 +131,7 @@ mod durability_tests {
                 .unwrap(),
             (0, 2)
         );
-        atlas_inventory::jobs::bump_retry(&pool, "j", "+4 seconds")
+        atlas_inventory::jobs::bump_retry(&pool, "j", 4)
             .await
             .unwrap();
 

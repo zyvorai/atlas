@@ -11,13 +11,13 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use atlas_driver_k8s::K8sDriver;
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 
 use crate::spec::JobSpec;
 
 #[tracing::instrument(skip(pool, k8s, spec), fields(tenant_id = %tenant_id))]
 pub(crate) async fn dispatch(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     k8s: &Option<Arc<K8sDriver>>,
     tenant_id: &str,
     spec: JobSpec,

@@ -5,7 +5,6 @@
 //! (`streaming`) and bumps the restart counter. No cloud, no Kubernetes.
 
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use atlas_common::config::CephDriverMode;
@@ -14,20 +13,14 @@ use atlas_gateway::routes;
 use atlas_gateway::startup::{build_state, BuildOptions};
 use serde_json::{json, Value};
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
+mod common;
 
-async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
-    let db = format!(
-        "{}/atlas-selfheal-{}-{}.db",
-        std::env::temp_dir().display(),
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::SeqCst),
-    );
-    let _ = std::fs::remove_file(&db);
+async fn spawn() -> (SocketAddr, sqlx::AnyPool) {
+    let database_url = common::fresh_database_url("databridge-selfheal").await;
     let config = Config {
         bind_addr: "127.0.0.1:0".into(),
         grpc_addr: "127.0.0.1:0".into(),
-        database_url: format!("sqlite://{db}?mode=rwc"),
+        database_url,
         ceph_driver_mode: CephDriverMode::Fake,
         kubeconfig_path: None,
         jwt_secret: "selfheal-test-secret-at-least-32-bytes!".into(),
@@ -150,7 +143,7 @@ async fn errored_cdc_stream_restarts() {
     }
 
     // Force the stream into `error` (as the reconciler would on a broken connector).
-    sqlx::query("UPDATE cdc_streams SET state='error' WHERE plan_id=?")
+    sqlx::query("UPDATE cdc_streams SET state='error' WHERE plan_id=$1")
         .bind(&pid)
         .execute(&pool)
         .await
