@@ -15,10 +15,13 @@ Before Atlas, storage logic was scattered: `hyper2kvm` shipped its own ceph-csi 
 Atlas centralizes it:
 
 - **One API** — products never talk to Ceph directly.
-- **Pluggable drivers** — Ceph (real), NFS/ZFS (fixture-only MVP proofs-of-architecture) today;
-  SAN/cloud and real NFS/ZFS backends later, with no product changes.
+- **Pluggable drivers** — Ceph, NFS, and ZFS, each with a fake (fixture, zero-dependency default)
+  and real mode; SAN/cloud backends later, with no product changes.
 - **Backend-agnostic model** — a `StorageVolume` may be backed by RBD now and SAN tomorrow.
 - **Ownership + audit** — every volume maps to product/resource/tenant/policy/pool/cluster.
+- **Explainable AI Ops Advisor** — deterministic risk scoring, incident correlation, what-if
+  capacity planning, and anomaly detection layered on the same inventory, read-only
+  (`can_execute: false`) and MCP-exposed for agent-driven ops — see [AI_ADVISOR.md](AI_ADVISOR.md).
 
 ## Crate topology
 
@@ -33,17 +36,17 @@ atlas-common            atlas-driver-core ──► StorageDriver trait, DriverE
         │      atlas-driver-ceph    │   │         atlas-driver-k8s
         │      (real + fake)        │   │         (live StorageClass/PVC/PV)
         │            │       atlas-driver-nfs  atlas-driver-zfs
-        │            │       (fixture MVP)     (fixture MVP)
+        │            │       (real + fake)     (real + fake)
         │            ▼
         │      atlas-driver-rgw (S3 client for RGW buckets/backups)
         │            ▲
         │      atlas-jobs (async job engine)  atlas-policy (intent → placement)
         │            ▲
-        │      atlas-inventory (SQLite RO model + audit)
+        │      atlas-inventory (AnyPool model + audit: SQLite or Postgres)
         │            ▲
         │      atlas-discovery (driver → inventory)   atlas-monitor (alert rules + metrics scrape)
         │            ▲
-        └───── atlas-gateway (axum server: state, auth, routes)  ◄── atlas-cli (atlasctl)
+        └───── atlas-gateway (axum server: state, auth, routes, ai.rs, mcp.rs)  ◄── atlas-cli (atlasctl)
                      ▲
                atlas-databridge (DB/object migration control plane, layered on the same job engine)
 ```
@@ -84,9 +87,11 @@ purely additive.
 | Driver | Crate | What it does | Notes |
 |---|---|---|---|
 | Real Ceph | `atlas-driver-ceph` | Parses `ceph status`, `ceph df detail`, `ceph osd tree`, `rbd ls -l` into DTOs | Arg-arrays only, `--format json`. `ATLAS_CEPH_DRIVER_MODE=real`. |
-| Fake Ceph | `atlas-driver-ceph` | Deterministic fixtures | For local dev/tests/demo. `ATLAS_CEPH_DRIVER_MODE=fake`. |
-| NFS | `atlas-driver-nfs` | Exports → pools, shares → filesystem volumes | **Fixture-only MVP**: instantiated live and discovered immediately via `POST /backends`, but never actually connects — always the same deterministic capacity fixture regardless of the server address. |
-| ZFS | `atlas-driver-zfs` | Zpools → pools, datasets → filesystem volumes | Same fixture-only MVP caveat as NFS. |
+| Fake Ceph | `atlas-driver-ceph` | Deterministic fixtures | For local dev/tests/demo. `ATLAS_CEPH_DRIVER_MODE=fake` (default). |
+| Real NFS | `atlas-driver-nfs` | `showmount -e` for exports → pools; `/proc/mounts` + `df` for capacity when the export happens to already be locally mounted, `None` otherwise | `ATLAS_NFS_DRIVER_MODE=real`. Never fabricates: an export the server doesn't have is dropped, not invented; unreachable → `DriverError::Unreachable`. Needs `nfs-common`/`showmount` on `PATH`. |
+| Fake NFS | `atlas-driver-nfs` | Deterministic fixtures | `ATLAS_NFS_DRIVER_MODE=fake` (default). |
+| Real ZFS | `atlas-driver-zfs` | `zpool list -Hp`/`zfs list -Hp` **locally**, on whatever host the gateway process itself runs on | `ATLAS_ZFS_DRIVER_MODE=real`. No remote/SSH support yet — ZFS has no remote query protocol the way `ceph`/`rbd` does. Never fabricates. Needs `zfsutils-linux`. |
+| Fake ZFS | `atlas-driver-zfs` | Deterministic fixtures | `ATLAS_ZFS_DRIVER_MODE=fake` (default). |
 | Kubernetes | `atlas-driver-k8s` | Lists StorageClasses / PVCs / PVs via `kube-rs`; tags Ceph-backed classes | Always live when a cluster is reachable. |
 
 ## Request flow (discovery)
@@ -107,14 +112,19 @@ gateway: resolve driver from DriverRegistry ──► atlas-discovery::run_disco
 audit row (storage_audit_logs) + JSON summary back to caller
 ```
 
-Reads (`/pools`, `/volumes`, `/clusters`, …) come straight from the SQLite inventory.
+Reads (`/pools`, `/volumes`, `/clusters`, …) come straight from the inventory (SQLite or Postgres,
+selected by `ATLAS_DATABASE_URL`'s scheme).
 `/storage-classes`, `/kubernetes/pvcs`, `/kubernetes/pvs` are served **live** from the k8s driver.
 
-## Data model (SQLite)
+## Data model (SQLite or Postgres, via `sqlx::Any`)
 
-`migrations/0001_init.sql` translates the plan's PostgreSQL schema (PDF §11) to SQLite
+The query layer runs against `sqlx::AnyPool`: the same `$N`-placeholder SQL text dispatches to
+either backend, auto-detected from `ATLAS_DATABASE_URL`'s scheme (`sqlite://` default,
+`postgres://` for HA/multi-replica — see [HA.md](HA.md)). Schema is forked into two migration
+trees kept in lock-step (`migrations/` SQLite, `migrations-postgres/` Postgres dialect; CI fails
+if their highest migration numbers diverge) using a documented type-mapping convention
 (`TIMESTAMPTZ`→RFC3339 `TEXT`, `JSONB`→`TEXT` + `json_valid()` CHECK, `BIGSERIAL`→`INTEGER PK
-AUTOINCREMENT`). Core tables:
+AUTOINCREMENT`/`BIGSERIAL`, `BIGINT`→`INTEGER`). Core tables:
 
 | Table | Purpose |
 |---|---|
@@ -155,10 +165,15 @@ secret-redacting `Debug`:
 | Env | Default | Meaning |
 |---|---|---|
 | `ATLAS_BIND_ADDR` | `127.0.0.1:5110` | Gateway listen address |
-| `ATLAS_DATABASE_URL` | `sqlite://atlas.db?mode=rwc` | SQLite URL (WAL + FK on) |
+| `ATLAS_DATABASE_URL` | `sqlite://atlas.db?mode=rwc` | SQLite URL (WAL + FK on), or `postgres://...` for HA/multi-replica — see [HA.md](HA.md) |
 | `ATLAS_CEPH_DRIVER_MODE` | `fake` | `real` (ceph/rbd CLI) or `fake` (fixtures) |
+| `ATLAS_NFS_DRIVER_MODE` / `ATLAS_ZFS_DRIVER_MODE` | `fake` | `real` (live `showmount`/`zpool`/`zfs`) or `fake` (fixtures) |
+| `ATLAS_RATE_LIMIT_RPM` | `600` | Per-actor per-minute request budget |
+| `ATLAS_RATE_LIMIT_SYNC_SECS` | `2` | Cross-replica rate-limit counter sync interval (Postgres only) |
+| `ATLAS_STATE_BACKUP_SECS` | *(unset)* | Interval for periodic self-state backup to S3/RGW (0/unset disables) |
 | `ATLAS_KUBECONFIG` | *(unset)* | Explicit kubeconfig; else in-cluster/default |
 | `ATLAS_JWT_SECRET` | dev default | HS256 secret (≥32 bytes required when auth is on) |
 | `ATLAS_AUTH_REQUIRED` | `0` (local) / `1` (k8s) | Require JWT on `/api` routes |
 | `ATLAS_BOOTSTRAP_ADMIN_TOKEN` | *(unset)* | One-shot admin bearer for first mint |
+| `ATLAS_AI_BASE_URL` / `ATLAS_AI_MODEL` | *(unset)* | Optional OpenAI-compatible provider for the AI Ops Advisor — see [AI_ADVISOR.md](AI_ADVISOR.md) |
 | `RUST_LOG` | `info` | tracing filter |
