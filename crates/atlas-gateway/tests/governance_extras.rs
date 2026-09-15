@@ -14,7 +14,7 @@ use serde_json::Value;
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
-async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
+async fn spawn() -> (SocketAddr, sqlx::AnyPool) {
     let db = format!(
         "{}/atlas-gov2-{}-{}.db",
         std::env::temp_dir().display(),

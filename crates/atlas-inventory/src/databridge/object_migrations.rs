@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 use atlas_api_types::ObjectMigration;
-use sqlx::{Row, SqlitePool};
+use sqlx::{AnyPool, Row};
 
 /// Fields the caller supplies at create time. Grouped to avoid a 15-argument function.
 #[derive(Debug, Clone)]
@@ -30,13 +30,13 @@ pub struct NewObjectMigration {
     pub part_size_mb: Option<i64>,
 }
 
-pub async fn insert(pool: &SqlitePool, m: &NewObjectMigration) -> Result<()> {
+pub async fn insert(pool: &AnyPool, m: &NewObjectMigration) -> Result<()> {
     sqlx::query(
         "INSERT INTO object_migrations
          (id, tenant_id, name, source_provider, source_endpoint, source_region, source_bucket,
           source_prefix, source_secret_ref, dest_provider, dest_endpoint, dest_region,
           dest_bucket, dest_secret_ref, secret_namespace, mode, concurrency, part_size_mb, state)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'created')",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 'created')",
     )
     .bind(&m.id)
     .bind(&m.tenant_id)
@@ -62,46 +62,48 @@ pub async fn insert(pool: &SqlitePool, m: &NewObjectMigration) -> Result<()> {
 }
 
 /// Mark the copy as started (used to compute throughput).
-pub async fn set_started(pool: &SqlitePool, id: &str) -> Result<()> {
+pub async fn set_started(pool: &AnyPool, id: &str) -> Result<()> {
+    let now = crate::now_rfc3339(chrono::Utc::now());
     sqlx::query(
-        "UPDATE object_migrations SET started_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
-         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND started_at IS NULL",
+        "UPDATE object_migrations SET started_at=$1,
+         updated_at=$2 WHERE id=$3 AND started_at IS NULL",
     )
+    .bind(now.clone())
+    .bind(now)
     .bind(id)
     .execute(pool)
     .await?;
     Ok(())
 }
 
-pub async fn set_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
-    sqlx::query(
-        "UPDATE object_migrations SET state=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
-    )
-    .bind(state)
-    .bind(id)
-    .execute(pool)
-    .await?;
+pub async fn set_state(pool: &AnyPool, id: &str, state: &str) -> Result<()> {
+    sqlx::query("UPDATE object_migrations SET state=$1, updated_at=$2 WHERE id=$3")
+        .bind(state)
+        .bind(crate::now_rfc3339(chrono::Utc::now()))
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
-pub async fn set_job(pool: &SqlitePool, id: &str, job_id: &str) -> Result<()> {
-    sqlx::query(
-        "UPDATE object_migrations SET job_id=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
-    )
-    .bind(job_id)
-    .bind(id)
-    .execute(pool)
-    .await?;
+pub async fn set_job(pool: &AnyPool, id: &str, job_id: &str) -> Result<()> {
+    sqlx::query("UPDATE object_migrations SET job_id=$1, updated_at=$2 WHERE id=$3")
+        .bind(job_id)
+        .bind(crate::now_rfc3339(chrono::Utc::now()))
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
-pub async fn set_totals(pool: &SqlitePool, id: &str, objects: i64, bytes: i64) -> Result<()> {
+pub async fn set_totals(pool: &AnyPool, id: &str, objects: i64, bytes: i64) -> Result<()> {
     sqlx::query(
-        "UPDATE object_migrations SET objects_total=?, bytes_total=?,
-         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+        "UPDATE object_migrations SET objects_total=$1, bytes_total=$2,
+         updated_at=$3 WHERE id=$4",
     )
     .bind(objects)
     .bind(bytes)
+    .bind(crate::now_rfc3339(chrono::Utc::now()))
     .bind(id)
     .execute(pool)
     .await?;
@@ -109,19 +111,20 @@ pub async fn set_totals(pool: &SqlitePool, id: &str, objects: i64, bytes: i64) -
 }
 
 pub async fn set_progress(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     objects_done: i64,
     bytes_done: i64,
     throughput_mbps: f64,
 ) -> Result<()> {
     sqlx::query(
-        "UPDATE object_migrations SET objects_done=?, bytes_done=?, throughput_mbps=?,
-         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+        "UPDATE object_migrations SET objects_done=$1, bytes_done=$2, throughput_mbps=$3,
+         updated_at=$4 WHERE id=$5",
     )
     .bind(objects_done)
     .bind(bytes_done)
     .bind(throughput_mbps)
+    .bind(crate::now_rfc3339(chrono::Utc::now()))
     .bind(id)
     .execute(pool)
     .await?;
@@ -130,37 +133,38 @@ pub async fn set_progress(
 
 /// Terminal outcome: verified + final state, clearing/setting the error.
 pub async fn finish(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     state: &str,
     verified: bool,
     error: Option<&str>,
 ) -> Result<()> {
     sqlx::query(
-        "UPDATE object_migrations SET state=?, verified=?, last_error=?,
-         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+        "UPDATE object_migrations SET state=$1, verified=$2, last_error=$3,
+         updated_at=$4 WHERE id=$5",
     )
     .bind(state)
     .bind(if verified { 1 } else { 0 })
     .bind(error)
+    .bind(crate::now_rfc3339(chrono::Utc::now()))
     .bind(id)
     .execute(pool)
     .await?;
     Ok(())
 }
 
-pub async fn get(pool: &SqlitePool, id: &str) -> Result<Option<ObjectMigration>> {
-    let row = sqlx::query(&select("WHERE id = ?"))
+pub async fn get(pool: &AnyPool, id: &str) -> Result<Option<ObjectMigration>> {
+    let row = sqlx::query(&select("WHERE id = $1"))
         .bind(id)
         .fetch_optional(pool)
         .await?;
     Ok(row.map(row_to))
 }
 
-pub async fn list(pool: &SqlitePool, tenant_id: Option<&str>) -> Result<Vec<ObjectMigration>> {
+pub async fn list(pool: &AnyPool, tenant_id: Option<&str>) -> Result<Vec<ObjectMigration>> {
     let rows = match tenant_id {
         Some(t) => {
-            sqlx::query(&select("WHERE tenant_id = ? ORDER BY created_at DESC"))
+            sqlx::query(&select("WHERE tenant_id = $1 ORDER BY created_at DESC"))
                 .bind(t)
                 .fetch_all(pool)
                 .await?
@@ -174,8 +178,8 @@ pub async fn list(pool: &SqlitePool, tenant_id: Option<&str>) -> Result<Vec<Obje
     Ok(rows.into_iter().map(row_to).collect())
 }
 
-pub async fn delete(pool: &SqlitePool, id: &str) -> Result<()> {
-    sqlx::query("DELETE FROM object_migrations WHERE id=?")
+pub async fn delete(pool: &AnyPool, id: &str) -> Result<()> {
+    sqlx::query("DELETE FROM object_migrations WHERE id=$1")
         .bind(id)
         .execute(pool)
         .await?;
@@ -194,7 +198,7 @@ fn select(tail: &str) -> String {
     )
 }
 
-fn row_to(r: sqlx::sqlite::SqliteRow) -> ObjectMigration {
+fn row_to(r: sqlx::any::AnyRow) -> ObjectMigration {
     let verified: i64 = r.get("verified");
     ObjectMigration {
         id: r.get("id"),

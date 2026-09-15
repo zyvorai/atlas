@@ -9,7 +9,7 @@ use std::time::Duration;
 use anyhow::Result;
 use atlas_api_types::AlertRecord;
 use serde_json::json;
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 
 use super::OpsgenieConfig;
 
@@ -33,14 +33,14 @@ fn priority(a: &AlertRecord) -> &'static str {
 
 /// Create alerts for not-yet-notified open alerts and close ones whose Atlas alert has since
 /// cleared. Returns `(triggered, resolved)`. Failures are logged and retried next tick.
-pub async fn dispatch(pool: &SqlitePool, cfg: &OpsgenieConfig) -> Result<(usize, usize)> {
+pub async fn dispatch(pool: &AnyPool, cfg: &OpsgenieConfig) -> Result<(usize, usize)> {
     dispatch_to(pool, cfg, base_url(cfg)).await
 }
 
 /// Same as [`dispatch`], but against `base` instead of the real Opsgenie API host — exposed for
 /// tests to point at a local mock server.
 pub async fn dispatch_to(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     cfg: &OpsgenieConfig,
     base: &str,
 ) -> Result<(usize, usize)> {

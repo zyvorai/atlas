@@ -7,7 +7,7 @@ use std::time::Duration;
 use anyhow::{anyhow, Context, Result};
 use atlas_api_types::JobRecord;
 use atlas_driver_k8s::K8sDriver;
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 use tokio::sync::{mpsc, Notify};
 
 use crate::spec::JobSpec;
@@ -22,7 +22,7 @@ struct RunningJob {
 /// Handle used by the gateway to enqueue jobs.
 #[derive(Clone)]
 pub struct JobEngine {
-    pool: SqlitePool,
+    pool: AnyPool,
     tx: mpsc::UnboundedSender<String>,
     /// Maintenance pause: when set, the worker holds jobs (leaves them `queued`) until resumed.
     paused: Arc<AtomicBool>,
@@ -54,12 +54,12 @@ impl JobEngine {
     /// Start the engine: spawn the worker + durable DB poller and return a cloneable handle. On
     /// start it recovers work that a previous restart lost — fail-safe any `running` job and
     /// re-enqueue due `queued`/`pending` rows (honoring `next_attempt_at`).
-    pub fn start(pool: SqlitePool, k8s: Option<Arc<K8sDriver>>) -> Self {
+    pub fn start(pool: AnyPool, k8s: Option<Arc<K8sDriver>>) -> Self {
         Self::start_with(pool, k8s, JobEngineOptions::default())
     }
 
     pub fn start_with(
-        pool: SqlitePool,
+        pool: AnyPool,
         k8s: Option<Arc<K8sDriver>>,
         opts: JobEngineOptions,
     ) -> Self {
@@ -226,7 +226,7 @@ impl JobEngine {
 /// Recover jobs the in-memory channel lost across a restart: fail-safe any `running` job (it was
 /// interrupted mid-flight and may have applied partial side effects — discovery/reconcilers re-derive
 /// real state) and re-enqueue anything still due (`queued`/`pending` with `next_attempt_at` ready).
-pub async fn recover(pool: &SqlitePool, tx: &mpsc::UnboundedSender<String>) -> Result<()> {
+pub async fn recover(pool: &AnyPool, tx: &mpsc::UnboundedSender<String>) -> Result<()> {
     let interrupted =
         atlas_inventory::jobs::fail_running(pool, "interrupted by control-plane restart").await?;
     if interrupted > 0 {
@@ -246,7 +246,7 @@ pub async fn recover(pool: &SqlitePool, tx: &mpsc::UnboundedSender<String>) -> R
 /// Periodic DB poller: reclaim stale locks, wake the worker for due jobs. The channel may already
 /// hold the same ids; `try_claim` makes double delivery safe.
 async fn run_poller(
-    pool: SqlitePool,
+    pool: AnyPool,
     tx: mpsc::UnboundedSender<String>,
     paused: Arc<AtomicBool>,
     poll_secs: u64,
@@ -279,7 +279,7 @@ async fn run_poller(
 /// simple). A failing job with retry budget left is re-queued with exponential backoff; otherwise it
 /// is marked `failed`. It never takes down the worker.
 async fn run_worker(
-    pool: SqlitePool,
+    pool: AnyPool,
     k8s: Option<Arc<K8sDriver>>,
     mut rx: mpsc::UnboundedReceiver<String>,
     tx: mpsc::UnboundedSender<String>,
@@ -306,12 +306,8 @@ async fn run_worker(
                 Ok((count, max)) if count < max => {
                     // Exponential backoff capped at 64s: 2^(attempt), attempt in [0, 6].
                     let secs = 1u64 << (count.clamp(0, 6) as u32);
-                    let _ = atlas_inventory::jobs::bump_retry(
-                        &pool,
-                        &job_id,
-                        &format!("+{secs} seconds"),
-                    )
-                    .await;
+                    let _ =
+                        atlas_inventory::jobs::bump_retry(&pool, &job_id, secs as i64).await;
                     tracing::warn!(job = %job_id, "job failed, retry {}/{max} in {secs}s: {err}", count + 1);
                     // Fast wake after backoff; the durable poller also picks up when due.
                     let tx = tx.clone();
@@ -350,7 +346,7 @@ fn job_timeout() -> Duration {
 }
 
 async fn execute_job(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     k8s: &Option<Arc<K8sDriver>>,
     job_id: &str,
     worker_id: &str,
@@ -390,8 +386,8 @@ async fn execute_job(
     }
 }
 
-async fn load_request(pool: &SqlitePool, job_id: &str) -> Result<serde_json::Value> {
-    let s: String = sqlx::query_scalar("SELECT request FROM storage_jobs WHERE id=?")
+async fn load_request(pool: &AnyPool, job_id: &str) -> Result<serde_json::Value> {
+    let s: String = sqlx::query_scalar("SELECT request FROM storage_jobs WHERE id=$1")
         .bind(job_id)
         .fetch_one(pool)
         .await?;

@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use atlas_driver_core::StorageDriver;
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 
 /// Summary returned to the caller after a discovery pass.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -37,7 +37,7 @@ pub type RookPoolKinds = std::collections::HashMap<String, String>;
 /// with the precise kind instead of the driver's own name-heuristic guess.
 #[tracing::instrument(skip(pool, driver, rbd_owners, rook_pool_kinds), fields(backend_id = %driver.backend_id()))]
 pub async fn run_discovery(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     driver: Arc<dyn StorageDriver>,
     rbd_owners: Option<&RbdOwners>,
     rook_pool_kinds: Option<&RookPoolKinds>,

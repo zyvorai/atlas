@@ -464,6 +464,26 @@ runbook; summary:
   SQLite-only query layer (`SqlitePool` used throughout `atlas-inventory`) is unchanged and still
   the explicitly out-of-scope larger effort — see `deploy/postgres-lab/README.md` and the
   known-limitations note below.
+- ✅ **Query layer ported off SQLite-only `SqlitePool`/`?` onto `sqlx::AnyPool`/`$N`** — closes the
+  gap the bullet above deliberately left open. Resolves `docs/HA.md`'s previously-open "dual query
+  modules vs `sqlx::Any`" architecture question in favor of `sqlx::Any`, made viable by first
+  eliminating every genuinely SQLite-specific construct across all ~250 `sqlx::query` call sites in
+  `atlas-inventory`/`atlas-jobs`/`atlas-monitor`/`atlas-gateway`/`atlas-databridge`: `?` →
+  `$N` placeholders (verified live that `sqlx::Any` does zero placeholder rewriting itself, so both
+  backends' concrete drivers now receive identical query text); `strftime('now', ...)` (~80 sites)
+  → a Rust-bound `chrono` timestamp; `INSERT OR IGNORE` → `ON CONFLICT DO NOTHING`; `COLLATE
+  NOCASE` → `lower(x) = lower($N)` (with a new expression index in both migration directories);
+  and a real portability bug caught along the way — SQLite's 2-argument scalar `MAX(a, b)` (used in
+  the job engine's `mark_running`/`try_claim`/`reclaim_stale_running`) has no Postgres equivalent
+  (`MAX()` there is aggregate-only) — rewritten to `CASE WHEN a > b THEN a ELSE b END`. The
+  `atlas-inventory` `postgres` Cargo feature is gone; Postgres support is unconditional.
+  `crates/atlas-inventory/tests/postgres_live.rs` now proves the query layer itself on a real
+  Postgres — not just connect+migrate — exercising the job-claim/reclaim/retry state machine (where
+  the `MAX(a,b)` bug was actually found) and the `COLLATE NOCASE` rewrite's case-insensitive
+  username lookup. `scripts/check-migrations-parity.sh` (new CI gate) prevents `migrations-postgres/`
+  drifting behind `migrations/` again, the way it silently did twice before. See `docs/HA.md`,
+  which this closes most of — remaining: a dual-backend CI job running the full `atlas-gateway`
+  suite against both backends, DB-backed rate limiting, and Helm chart `database.kind` wiring.
 - ✅ **Supply-chain audit gate**: `cargo deny check` (CI job + `make audit`, `deny.toml`) — known-
   vulnerable/yanked advisories, disallowed licenses, unknown registries/git sources. Scoped to
   default features (what's actually shipped); the optional DataBridge connectors are compile-
@@ -523,12 +543,12 @@ runbook; summary:
   destructive-audit-pruning-with-no-export, and rate-limiting/self-state-backup-off-by-default
   from that audit are already fixed above — both `deploy/k8s/atlas-gateway*.yaml` now ship
   `ATLAS_RATE_LIMIT_RPM=600` and a working `ATLAS_STATE_BACKUP_*` block against a dedicated RGW
-  user/bucket): the gateway is single-replica with a `Recreate` rollout (planned downtime per
-  deploy — SQLite's query layer has no Postgres port yet; the connection/migration scaffolding
-  behind the disabled `postgres` feature is now verified against a real Postgres
-  (`deploy/postgres-lab/`), but that only proves connect+migrate work, not that Atlas can run its
-  reads/writes against Postgres — porting the query layer is still a separate, larger, deferred
-  effort); OIDC/SSO is only verified against a throwaway Dex instance, not a real enterprise IdP.
+  user/bucket): the gateway is still single-replica with a `Recreate` rollout (planned downtime per
+  deploy) — but this is now purely a *deployment* gap, not a code one: the query layer itself runs
+  on Postgres (verified live, see the ✅ bullet above), so what's left is deploying a real HA
+  Postgres, DB-backed rate limiting (currently per-pod in-process), and Helm chart wiring
+  (`database.kind`), all tracked in `docs/HA.md`; OIDC/SSO is only verified against a throwaway Dex
+  instance, not a real enterprise IdP.
   The audit-log SIEM export and secrets-manager integration *patterns* are now both verified
   against real (lab) infra (`deploy/siem-lab/`, `deploy/vault-lab/` — see below); a real deployment
   still needs the bank's actual SIEM/Vault swapped in for the lab ones. None of these block a

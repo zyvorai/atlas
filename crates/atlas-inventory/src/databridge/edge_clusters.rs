@@ -4,11 +4,11 @@
 
 use anyhow::Result;
 use atlas_api_types::EdgeDbCluster;
-use sqlx::{Row, SqlitePool};
+use sqlx::{AnyPool, Row};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn insert_edge_cluster(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     tenant_id: &str,
     plan_id: &str,
@@ -24,7 +24,7 @@ pub async fn insert_edge_cluster(
         "INSERT INTO edge_db_clusters
          (id, tenant_id, plan_id, engine, operator, namespace, cr_name, storage_class,
           wal_storage_class, instances, state)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'provisioning')",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'provisioning')",
     )
     .bind(id)
     .bind(tenant_id)
@@ -43,13 +43,13 @@ pub async fn insert_edge_cluster(
 
 /// Mark the cluster ready and record its service endpoint + credentials Secret.
 pub async fn set_ready(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     service_endpoint: &str,
     secret_ref: &str,
 ) -> Result<()> {
     sqlx::query(
-        "UPDATE edge_db_clusters SET service_endpoint=?, secret_ref=?, state='ready' WHERE id=?",
+        "UPDATE edge_db_clusters SET service_endpoint=$1, secret_ref=$2, state='ready' WHERE id=$3",
     )
     .bind(service_endpoint)
     .bind(secret_ref)
@@ -59,8 +59,8 @@ pub async fn set_ready(
     Ok(())
 }
 
-pub async fn set_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
-    sqlx::query("UPDATE edge_db_clusters SET state=? WHERE id=?")
+pub async fn set_state(pool: &AnyPool, id: &str, state: &str) -> Result<()> {
+    sqlx::query("UPDATE edge_db_clusters SET state=$1 WHERE id=$2")
         .bind(state)
         .bind(id)
         .execute(pool)
@@ -70,8 +70,8 @@ pub async fn set_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
 
 /// Record the data volume actually loaded onto the edge cluster (the column otherwise stays stuck
 /// at its SQL default of 0 forever — nothing else ever writes it).
-pub async fn set_size_bytes(pool: &SqlitePool, id: &str, size_bytes: i64) -> Result<()> {
-    sqlx::query("UPDATE edge_db_clusters SET size_bytes=? WHERE id=?")
+pub async fn set_size_bytes(pool: &AnyPool, id: &str, size_bytes: i64) -> Result<()> {
+    sqlx::query("UPDATE edge_db_clusters SET size_bytes=$1 WHERE id=$2")
         .bind(size_bytes)
         .bind(id)
         .execute(pool)
@@ -81,23 +81,23 @@ pub async fn set_size_bytes(pool: &SqlitePool, id: &str, size_bytes: i64) -> Res
 
 /// Delete an edge cluster inventory row (e.g. an orphaned/stale cluster). The backing operator CR
 /// is torn down separately; this only removes the control-plane record.
-pub async fn delete_edge_cluster(pool: &SqlitePool, id: &str) -> Result<()> {
-    sqlx::query("DELETE FROM edge_db_clusters WHERE id=?")
+pub async fn delete_edge_cluster(pool: &AnyPool, id: &str) -> Result<()> {
+    sqlx::query("DELETE FROM edge_db_clusters WHERE id=$1")
         .bind(id)
         .execute(pool)
         .await?;
     Ok(())
 }
 
-pub async fn get_edge_cluster(pool: &SqlitePool, id: &str) -> Result<Option<EdgeDbCluster>> {
-    let row = sqlx::query(&select("WHERE id = ?"))
+pub async fn get_edge_cluster(pool: &AnyPool, id: &str) -> Result<Option<EdgeDbCluster>> {
+    let row = sqlx::query(&select("WHERE id = $1"))
         .bind(id)
         .fetch_optional(pool)
         .await?;
     Ok(row.map(row_to_edge))
 }
 
-pub async fn list_edge_clusters(pool: &SqlitePool) -> Result<Vec<EdgeDbCluster>> {
+pub async fn list_edge_clusters(pool: &AnyPool) -> Result<Vec<EdgeDbCluster>> {
     let rows = sqlx::query(&select("ORDER BY created_at DESC"))
         .fetch_all(pool)
         .await?;
@@ -105,8 +105,8 @@ pub async fn list_edge_clusters(pool: &SqlitePool) -> Result<Vec<EdgeDbCluster>>
 }
 
 /// Clusters in a given state — used by the reconciler to poll provisioning ones.
-pub async fn list_by_state(pool: &SqlitePool, state: &str) -> Result<Vec<EdgeDbCluster>> {
-    let rows = sqlx::query(&select("WHERE state = ? ORDER BY created_at DESC"))
+pub async fn list_by_state(pool: &AnyPool, state: &str) -> Result<Vec<EdgeDbCluster>> {
+    let rows = sqlx::query(&select("WHERE state = $1 ORDER BY created_at DESC"))
         .bind(state)
         .fetch_all(pool)
         .await?;
@@ -121,7 +121,7 @@ fn select(tail: &str) -> String {
     )
 }
 
-fn row_to_edge(r: sqlx::sqlite::SqliteRow) -> EdgeDbCluster {
+fn row_to_edge(r: sqlx::any::AnyRow) -> EdgeDbCluster {
     EdgeDbCluster {
         id: r.get("id"),
         tenant_id: r.get("tenant_id"),

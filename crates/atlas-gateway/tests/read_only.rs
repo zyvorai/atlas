@@ -11,7 +11,7 @@ use atlas_gateway::routes;
 use atlas_gateway::startup::{build_state, BuildOptions};
 
 /// Spin up the gateway on an ephemeral port with the fake driver and a throwaway SQLite file.
-async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
+async fn spawn() -> (SocketAddr, sqlx::AnyPool) {
     let db = format!(
         "{}/atlas-test-{}-{}.db",
         std::env::temp_dir().display(),
@@ -167,7 +167,7 @@ fn client() -> reqwest::Client {
 }
 
 /// Insert a minimal source volume so snapshots can FK-reference it.
-async fn seed_volume(pool: &sqlx::SqlitePool, id: &str, name: &str) {
+async fn seed_volume(pool: &sqlx::AnyPool, id: &str, name: &str) {
     let v = atlas_api_types::StorageVolume {
         id: id.into(),
         cluster_id: None,

@@ -4,12 +4,12 @@
 
 use anyhow::Result;
 use atlas_api_types::MigrationSource;
-use sqlx::{Row, SqlitePool};
+use sqlx::{AnyPool, Row};
 
 /// Insert a registered source (before discovery runs).
 #[allow(clippy::too_many_arguments)]
 pub async fn insert_source(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     tenant_id: &str,
     name: &str,
@@ -27,7 +27,7 @@ pub async fn insert_source(
         "INSERT INTO migration_sources
          (id, tenant_id, name, kind, cloud, endpoint, port, database, secret_ref,
           secret_namespace, tls_mode, driver_mode, state)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'registered')",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'registered')",
     )
     .bind(id)
     .bind(tenant_id)
@@ -48,11 +48,11 @@ pub async fn insert_source(
 
 /// Record a discovery result and flip state to `discovered`.
 pub async fn set_discovered(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     discovered: &serde_json::Value,
 ) -> Result<()> {
-    sqlx::query("UPDATE migration_sources SET discovered=?, state='discovered' WHERE id=?")
+    sqlx::query("UPDATE migration_sources SET discovered=$1, state='discovered' WHERE id=$2")
         .bind(discovered.to_string())
         .bind(id)
         .execute(pool)
@@ -60,8 +60,8 @@ pub async fn set_discovered(
     Ok(())
 }
 
-pub async fn set_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
-    sqlx::query("UPDATE migration_sources SET state=? WHERE id=?")
+pub async fn set_state(pool: &AnyPool, id: &str, state: &str) -> Result<()> {
+    sqlx::query("UPDATE migration_sources SET state=$1 WHERE id=$2")
         .bind(state)
         .bind(id)
         .execute(pool)
@@ -69,23 +69,23 @@ pub async fn set_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn delete_source_row(pool: &SqlitePool, id: &str) -> Result<()> {
-    sqlx::query("DELETE FROM migration_sources WHERE id=?")
+pub async fn delete_source_row(pool: &AnyPool, id: &str) -> Result<()> {
+    sqlx::query("DELETE FROM migration_sources WHERE id=$1")
         .bind(id)
         .execute(pool)
         .await?;
     Ok(())
 }
 
-pub async fn get_source(pool: &SqlitePool, id: &str) -> Result<Option<MigrationSource>> {
-    let row = sqlx::query(&select("WHERE id = ?"))
+pub async fn get_source(pool: &AnyPool, id: &str) -> Result<Option<MigrationSource>> {
+    let row = sqlx::query(&select("WHERE id = $1"))
         .bind(id)
         .fetch_optional(pool)
         .await?;
     Ok(row.map(row_to_source))
 }
 
-pub async fn list_sources(pool: &SqlitePool) -> Result<Vec<MigrationSource>> {
+pub async fn list_sources(pool: &AnyPool) -> Result<Vec<MigrationSource>> {
     let rows = sqlx::query(&select("ORDER BY created_at DESC"))
         .fetch_all(pool)
         .await?;
@@ -100,7 +100,7 @@ fn select(tail: &str) -> String {
     )
 }
 
-fn row_to_source(r: sqlx::sqlite::SqliteRow) -> MigrationSource {
+fn row_to_source(r: sqlx::any::AnyRow) -> MigrationSource {
     let discovered: String = r.get("discovered");
     MigrationSource {
         id: r.get("id"),

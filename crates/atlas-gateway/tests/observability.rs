@@ -65,7 +65,7 @@ fn base_config(db: &str, o: Opts) -> Config {
     }
 }
 
-async fn spawn_with(o: Opts) -> (SocketAddr, sqlx::SqlitePool) {
+async fn spawn_with(o: Opts) -> (SocketAddr, sqlx::AnyPool) {
     let db = format!(
         "{}/atlas-obs-{}-{}.db",
         std::env::temp_dir().display(),
@@ -360,14 +360,17 @@ async fn ai_anomalies_detects_a_write_spike() {
     let mib = 1_048_576_i64;
     for (index, writes) in [0, mib, mib * 2, mib * 3, mib * 20].into_iter().enumerate() {
         let minutes_ago = 5 - index as i64;
+        let ts = atlas_inventory::now_rfc3339(
+            chrono::Utc::now() - chrono::Duration::minutes(minutes_ago),
+        );
         sqlx::query(
             "INSERT INTO metrics_history
              (ts, raw_capacity_bytes, used_capacity_bytes, volumes, snapshots, read_bytes,
               write_bytes, read_ops, write_ops, jobs_running, alerts_open)
-             VALUES (strftime('%Y-%m-%dT%H:%M:%fZ','now', ?), 1000000000, 100000000,
-                     1, 0, 0, ?, 0, ?, 1, 0)",
+             VALUES ($1, 1000000000, 100000000,
+                     1, 0, 0, $2, 0, $3, 1, 0)",
         )
-        .bind(format!("-{minutes_ago} minutes"))
+        .bind(ts)
         .bind(writes as f64)
         .bind(writes as f64)
         .execute(&pool)

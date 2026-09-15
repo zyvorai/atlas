@@ -8,22 +8,24 @@
 
 use anyhow::Result;
 use atlas_api_types::AlertRecord;
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 
 use crate::alerts::row_to_alert;
+use crate::now_rfc3339;
 
 const SELECT_COLS: &str = "id, severity, source, resource_type, resource_id, title, description, \
     evidence, state, created_at, resolved_at, acknowledged_at, acknowledged_by, silenced_until";
 
 /// Open, not-silenced alerts not yet trigger-notified for `sink`.
-pub async fn pending_triggers(pool: &SqlitePool, sink: &str) -> Result<Vec<AlertRecord>> {
+pub async fn pending_triggers(pool: &AnyPool, sink: &str) -> Result<Vec<AlertRecord>> {
     let rows = sqlx::query(&format!(
         "SELECT {SELECT_COLS} FROM storage_alerts
          WHERE state='open'
-           AND (silenced_until IS NULL OR silenced_until < strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-           AND id NOT IN (SELECT alert_id FROM alert_notifications WHERE sink=? AND event='trigger')
+           AND (silenced_until IS NULL OR silenced_until < $1)
+           AND id NOT IN (SELECT alert_id FROM alert_notifications WHERE sink=$2 AND event='trigger')
          ORDER BY created_at ASC"
     ))
+    .bind(now_rfc3339(chrono::Utc::now()))
     .bind(sink)
     .fetch_all(pool)
     .await?;
@@ -34,12 +36,12 @@ pub async fn pending_triggers(pool: &SqlitePool, sink: &str) -> Result<Vec<Alert
 /// PagerDuty/Opsgenie auto-close the incident instead of an operator resolving it by hand there
 /// too. Only fires for alerts the sink actually knew about (skips ones that resolved before the
 /// sink was ever enabled).
-pub async fn pending_resolves(pool: &SqlitePool, sink: &str) -> Result<Vec<AlertRecord>> {
+pub async fn pending_resolves(pool: &AnyPool, sink: &str) -> Result<Vec<AlertRecord>> {
     let rows = sqlx::query(&format!(
         "SELECT {SELECT_COLS} FROM storage_alerts
          WHERE state='resolved'
-           AND id IN (SELECT alert_id FROM alert_notifications WHERE sink=? AND event='trigger')
-           AND id NOT IN (SELECT alert_id FROM alert_notifications WHERE sink=? AND event='resolve')
+           AND id IN (SELECT alert_id FROM alert_notifications WHERE sink=$1 AND event='trigger')
+           AND id NOT IN (SELECT alert_id FROM alert_notifications WHERE sink=$2 AND event='resolve')
          ORDER BY resolved_at ASC"
     ))
     .bind(sink)
@@ -50,9 +52,9 @@ pub async fn pending_resolves(pool: &SqlitePool, sink: &str) -> Result<Vec<Alert
 }
 
 /// Record that `event` ("trigger" or "resolve") was successfully delivered to `sink` for `alert_id`.
-pub async fn mark_sent(pool: &SqlitePool, alert_id: &str, sink: &str, event: &str) -> Result<()> {
+pub async fn mark_sent(pool: &AnyPool, alert_id: &str, sink: &str, event: &str) -> Result<()> {
     sqlx::query(
-        "INSERT INTO alert_notifications (alert_id, sink, event) VALUES (?, ?, ?)
+        "INSERT INTO alert_notifications (alert_id, sink, event) VALUES ($1, $2, $3)
          ON CONFLICT(alert_id, sink, event) DO NOTHING",
     )
     .bind(alert_id)

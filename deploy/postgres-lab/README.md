@@ -2,9 +2,8 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
 # postgres-lab
 
-Throwaway Postgres for verifying atlas-inventory's Phase-1 HA scaffolding
-(`connect_postgres`/`migrate_postgres`, see `docs/HA.md`) against real infrastructure, not just a
-compile-check behind the `postgres` cargo feature.
+Throwaway Postgres for verifying atlas-inventory's query layer (`connect()`/`migrate()`, see
+`docs/HA.md`) against real infrastructure, not just a compile-check against `sqlx::Any`.
 
 ```
 ./up.sh
@@ -19,26 +18,28 @@ Then run the live verification test:
 
 ```
 DATABASE_URL="$(kubectl -n zyvor-system get secret postgres-lab-auth -o jsonpath='{.data.database-url}' | base64 -d | sed 's#postgres-lab.zyvor-system.svc:5432#<NODE_IP>:30432#')"
-cargo test -p atlas-inventory --features postgres --test postgres_live -- --ignored --nocapture
+cargo test -p atlas-inventory --test postgres_live -- --ignored --nocapture
 ```
 
 ## What this proves, and what it doesn't
 
-Proves: `connect_postgres()` opens a real Postgres connection and `migrate_postgres()` runs
-`migrations-postgres/` clean against it — the connection/schema scaffolding described in
-`docs/HA.md` actually works, not just compiles.
+Proves: `connect()` opens a real Postgres connection, `migrate()` runs `migrations-postgres/`
+clean against it, and the query layer actually works there too — `postgres_live.rs` exercises the
+job-claim/reclaim/retry state machine (`jobs.rs`) and case-insensitive username lookup
+(`users.rs`), the two places this migration found real SQLite-vs-Postgres behavioral differences
+(a SQLite-only scalar `MAX(a, b)` and `COLLATE NOCASE`), not just connect+migrate.
 
-Does **not** prove: that Atlas can run its query layer against Postgres. `atlas-inventory`'s
-read/write query paths are still SQLite-only (`SqlitePool` used throughout); porting them to be
-backend-agnostic is a separate, explicitly out-of-scope effort tracked in `docs/HA.md`. A real HA
-deployment also needs replication/failover (e.g. Patroni, CloudNativePG) — this single-replica lab
-target is a schema-verification smoke test, not an HA reference topology.
+Does **not** prove: full multi-replica HA readiness. A real HA deployment also needs
+replication/failover (e.g. Patroni, CloudNativePG) and the remaining items in `docs/HA.md`'s
+"Remaining for a full multi-replica cutover" list (dual-backend CI, DB-backed rate limiting, Helm
+`database.kind`) — this single-replica lab target is a query-layer verification smoke test, not an
+HA reference topology.
 
 ## Adopting this for real
 
 A bank pilot would point `DATABASE_URL` at their own managed/HA Postgres (RDS, CloudNativePG,
-Patroni-managed, etc.) instead of this lab container — the `connect_postgres`/`migrate_postgres`
-code path doesn't change, only the connection string and the operational guarantees behind it.
+Patroni-managed, etc.) instead of this lab container — the `connect()`/`migrate()` code path
+doesn't change, only the connection string and the operational guarantees behind it.
 
 ## Teardown
 

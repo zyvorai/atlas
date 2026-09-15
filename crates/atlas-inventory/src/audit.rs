@@ -3,12 +3,14 @@
 //! Audit-log writes (PDF §14.3). Every state-changing or sensitive action should append here.
 
 use anyhow::Result;
-use sqlx::{Row, SqlitePool};
+use sqlx::{AnyPool, Row};
+
+use crate::now_rfc3339;
 
 /// Append an audit record. `request`/`result` are optional JSON blobs.
 #[allow(clippy::too_many_arguments)]
 pub async fn record(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     tenant_id: Option<&str>,
     actor_id: &str,
     action: &str,
@@ -21,7 +23,7 @@ pub async fn record(
     sqlx::query(
         "INSERT INTO storage_audit_logs
             (tenant_id, actor_id, action, resource_type, resource_id, status, request, result)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
     .bind(tenant_id)
     .bind(actor_id)
@@ -40,7 +42,7 @@ pub async fn record(
 /// case-insensitive substrings (the UI exposes them as free-text search boxes); `resource_type`/
 /// `resource_id` stay exact-match (used for programmatic drill-down, not fuzzy search).
 pub async fn list(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     actor: Option<&str>,
     action: Option<&str>,
     resource_type: Option<&str>,
@@ -54,12 +56,12 @@ pub async fn list(
         "SELECT id, tenant_id, actor_id, action, resource_type, resource_id, status,
                 request, result, created_at
          FROM storage_audit_logs
-         WHERE (? IS NULL OR actor_id LIKE ? ESCAPE '\\')
-           AND (? IS NULL OR action LIKE ? ESCAPE '\\')
-           AND (? IS NULL OR resource_type = ?)
-           AND (? IS NULL OR resource_id = ?)
+         WHERE ($1 IS NULL OR actor_id LIKE $2 ESCAPE '\\')
+           AND ($3 IS NULL OR action LIKE $4 ESCAPE '\\')
+           AND ($5 IS NULL OR resource_type = $6)
+           AND ($7 IS NULL OR resource_id = $8)
          ORDER BY id DESC
-         LIMIT ?",
+         LIMIT $9",
     )
     .bind(&actor_like)
     .bind(&actor_like)
@@ -96,29 +98,28 @@ pub async fn list(
         .collect())
 }
 
-/// Count audit rows for a given action — handy for tests.
 /// Delete audit rows older than `keep_days` (day-2 retention). Returns how many were pruned.
-pub async fn prune(pool: &SqlitePool, keep_days: i64) -> Result<u64> {
-    let res = sqlx::query(
-        "DELETE FROM storage_audit_logs WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ','now', ?)",
-    )
-    .bind(format!("-{} days", keep_days.max(1)))
-    .execute(pool)
-    .await?;
+pub async fn prune(pool: &AnyPool, keep_days: i64) -> Result<u64> {
+    let cutoff = now_rfc3339(chrono::Utc::now() - chrono::Duration::days(keep_days.max(1)));
+    let res = sqlx::query("DELETE FROM storage_audit_logs WHERE created_at < $1")
+        .bind(cutoff)
+        .execute(pool)
+        .await?;
     Ok(res.rows_affected())
 }
 
 /// Rows eligible for retention pruning (same cutoff `prune` uses), oldest first — for a caller
 /// that wants to export them to an external sink (SIEM/syslog) before they're deleted.
-pub async fn rows_older_than(pool: &SqlitePool, keep_days: i64) -> Result<Vec<serde_json::Value>> {
+pub async fn rows_older_than(pool: &AnyPool, keep_days: i64) -> Result<Vec<serde_json::Value>> {
+    let cutoff = now_rfc3339(chrono::Utc::now() - chrono::Duration::days(keep_days.max(1)));
     let rows = sqlx::query(
         "SELECT id, tenant_id, actor_id, action, resource_type, resource_id, status,
                 request, result, created_at
          FROM storage_audit_logs
-         WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ','now', ?)
+         WHERE created_at < $1
          ORDER BY id ASC",
     )
-    .bind(format!("-{} days", keep_days.max(1)))
+    .bind(cutoff)
     .fetch_all(pool)
     .await?;
     let parse = |s: Option<String>| -> serde_json::Value {
@@ -146,11 +147,14 @@ pub async fn rows_older_than(pool: &SqlitePool, keep_days: i64) -> Result<Vec<se
 
 /// Delete specific audit rows by id — used after a successful external export, so nothing is
 /// lost if the export sink is unreachable (unlike `prune`, which deletes unconditionally).
-pub async fn delete_ids(pool: &SqlitePool, ids: &[i64]) -> Result<u64> {
+pub async fn delete_ids(pool: &AnyPool, ids: &[i64]) -> Result<u64> {
     if ids.is_empty() {
         return Ok(0);
     }
-    let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let placeholders = (1..=ids.len())
+        .map(|i| format!("${i}"))
+        .collect::<Vec<_>>()
+        .join(",");
     let sql = format!("DELETE FROM storage_audit_logs WHERE id IN ({placeholders})");
     let mut q = sqlx::query(&sql);
     for id in ids {
@@ -160,8 +164,8 @@ pub async fn delete_ids(pool: &SqlitePool, ids: &[i64]) -> Result<u64> {
     Ok(res.rows_affected())
 }
 
-pub async fn count_for_action(pool: &SqlitePool, action: &str) -> Result<i64> {
-    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM storage_audit_logs WHERE action = ?")
+pub async fn count_for_action(pool: &AnyPool, action: &str) -> Result<i64> {
+    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM storage_audit_logs WHERE action = $1")
         .bind(action)
         .fetch_one(pool)
         .await?;

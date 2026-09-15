@@ -6,18 +6,18 @@
 
 use anyhow::Result;
 use serde_json::{json, Value};
-use sqlx::{Row, SqlitePool};
+use sqlx::{AnyPool, Row};
 
 /// Newest-first activity across jobs, audit, and alerts. Each source contributes up to `limit`
 /// rows; the merged result is truncated to `limit`.
-pub async fn feed(pool: &SqlitePool, limit: i64) -> Result<Vec<Value>> {
+pub async fn feed(pool: &AnyPool, limit: i64) -> Result<Vec<Value>> {
     let limit = limit.clamp(1, 500);
     let mut out: Vec<Value> = Vec::new();
 
     // Jobs — ts is last transition; state drives severity.
     let jobs = sqlx::query(
         "SELECT id, job_type, state, requested_by, error, updated_at
-         FROM storage_jobs ORDER BY updated_at DESC LIMIT ?",
+         FROM storage_jobs ORDER BY updated_at DESC LIMIT $1",
     )
     .bind(limit)
     .fetch_all(pool)
@@ -45,7 +45,7 @@ pub async fn feed(pool: &SqlitePool, limit: i64) -> Result<Vec<Value>> {
     // Audit — a non-"ok" status is worth flagging.
     let audit = sqlx::query(
         "SELECT id, actor_id, action, resource_type, resource_id, status, created_at
-         FROM storage_audit_logs ORDER BY id DESC LIMIT ?",
+         FROM storage_audit_logs ORDER BY id DESC LIMIT $1",
     )
     .bind(limit)
     .fetch_all(pool)
@@ -73,7 +73,7 @@ pub async fn feed(pool: &SqlitePool, limit: i64) -> Result<Vec<Value>> {
     // Alerts — carry their own severity + state.
     let alerts = sqlx::query(
         "SELECT id, severity, source, resource_type, resource_id, title, description, state, created_at
-         FROM storage_alerts ORDER BY created_at DESC LIMIT ?",
+         FROM storage_alerts ORDER BY created_at DESC LIMIT $1",
     )
     .bind(limit)
     .fetch_all(pool)

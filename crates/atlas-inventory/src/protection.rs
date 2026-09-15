@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use atlas_api_types::{BackupRecord, ClusterHealthState, SnapshotSchedule, StorageSnapshot};
 use chrono::Utc;
-use sqlx::{Row, SqlitePool};
+use sqlx::{AnyPool, Row};
 
 use crate::{backups, buckets, dr, schedules, snapshots};
 
@@ -52,7 +52,7 @@ pub struct VolumeProtectionStatus {
 /// see `deploy/postgres-lab/README.md`-style honesty notes elsewhere in this session. Forward-
 /// compatible at zero cost for whenever a policy-CRUD feature starts populating the table.
 async fn policy_targets_by_volume(
-    pool: &SqlitePool,
+    pool: &AnyPool,
 ) -> Result<HashMap<String, (Option<i64>, Option<i64>)>> {
     let rows = sqlx::query(
         "SELECT v.id AS volume_id,
@@ -103,7 +103,7 @@ struct Context {
     policy_targets: HashMap<String, (Option<i64>, Option<i64>)>,
 }
 
-async fn build_context(pool: &SqlitePool) -> Result<Context> {
+async fn build_context(pool: &AnyPool) -> Result<Context> {
     let pools = crate::list_pools(pool)
         .await?
         .into_iter()
@@ -281,7 +281,7 @@ fn compute(v: &atlas_api_types::StorageVolume, ctx: &Context) -> VolumeProtectio
 }
 
 pub async fn volume_protection_status(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     volume_id: &str,
 ) -> Result<Option<VolumeProtectionStatus>> {
     let Some(v) = crate::get_volume(pool, volume_id).await? else {
@@ -292,7 +292,7 @@ pub async fn volume_protection_status(
 }
 
 pub async fn list_protection_status(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     tenant_id: Option<&str>,
 ) -> Result<Vec<VolumeProtectionStatus>> {
     let volumes = crate::list_volumes_filtered(pool, None, tenant_id, None, None).await?;
@@ -304,7 +304,7 @@ pub async fn list_protection_status(
 mod tests {
     use super::*;
 
-    async fn temp_db() -> SqlitePool {
+    async fn temp_db() -> AnyPool {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let db = format!(
             "{}/atlas-protection-test-{}-{}.db",
@@ -313,37 +313,38 @@ mod tests {
             NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
         );
         let _ = std::fs::remove_file(&db);
-        let pool = crate::connect_sqlite(&format!("sqlite://{db}?mode=rwc"))
-            .await
-            .unwrap();
-        crate::migrate(&pool).await.unwrap();
+        let url = format!("sqlite://{db}?mode=rwc");
+        let pool = crate::connect(&url).await.unwrap();
+        crate::migrate(&pool, &url).await.unwrap();
         pool
     }
 
     /// FK prerequisites for storage_volumes/storage_pools: a backend row and a cluster row.
-    /// Idempotent (`INSERT OR IGNORE`) since multiple seed_volume/seed_pool calls in one test
-    /// share the same backend/cluster.
-    async fn seed_backend_and_cluster(pool: &SqlitePool) {
+    /// Idempotent (`ON CONFLICT DO NOTHING`) since multiple seed_volume/seed_pool calls in one
+    /// test share the same backend/cluster.
+    async fn seed_backend_and_cluster(pool: &AnyPool) {
         sqlx::query(
-            "INSERT OR IGNORE INTO storage_backends (id, backend_type, mode, name, status)
-             VALUES ('bkd1', 'ceph', 'managed_rook', 'ceph', 'active')",
+            "INSERT INTO storage_backends (id, backend_type, mode, name, status)
+             VALUES ('bkd1', 'ceph', 'managed_rook', 'ceph', 'active')
+             ON CONFLICT DO NOTHING",
         )
         .execute(pool)
         .await
         .unwrap();
         sqlx::query(
-            "INSERT OR IGNORE INTO storage_clusters (id, backend_id, name) VALUES ('c1', 'bkd1', 'ceph')",
+            "INSERT INTO storage_clusters (id, backend_id, name) VALUES ('c1', 'bkd1', 'ceph')
+             ON CONFLICT DO NOTHING",
         )
         .execute(pool)
         .await
         .unwrap();
     }
 
-    async fn seed_volume(pool: &SqlitePool, id: &str, pool_id: Option<&str>) {
+    async fn seed_volume(pool: &AnyPool, id: &str, pool_id: Option<&str>) {
         seed_backend_and_cluster(pool).await;
         sqlx::query(
             "INSERT INTO storage_volumes (id, tenant_id, backend_id, name, kind, size_bytes, state, pool_id)
-             VALUES (?, 'global', 'bkd1', ?, 'block', 1000, 'ready', ?)",
+             VALUES ($1, 'global', 'bkd1', $2, 'block', 1000, 'ready', $3)",
         )
         .bind(id)
         .bind(id)
@@ -353,11 +354,11 @@ mod tests {
         .unwrap();
     }
 
-    async fn seed_pool(pool: &SqlitePool, id: &str, replica_size: i64) {
+    async fn seed_pool(pool: &AnyPool, id: &str, replica_size: i64) {
         seed_backend_and_cluster(pool).await;
         sqlx::query(
             "INSERT INTO storage_pools (id, cluster_id, name, kind, replica_size)
-             VALUES (?, 'c1', ?, 'rbd', ?)",
+             VALUES ($1, 'c1', $2, 'rbd', $3)",
         )
         .bind(id)
         .bind(id)
@@ -367,10 +368,10 @@ mod tests {
         .unwrap();
     }
 
-    async fn seed_snapshot(pool: &SqlitePool, volume_id: &str, created_at: &str) {
+    async fn seed_snapshot(pool: &AnyPool, volume_id: &str, created_at: &str) {
         sqlx::query(
             "INSERT INTO storage_snapshots (id, tenant_id, volume_id, name, consistency, state, created_at)
-             VALUES (?, 'global', ?, 'snap', 'crash', 'ready', ?)",
+             VALUES ($1, 'global', $2, 'snap', 'crash', 'ready', $3)",
         )
         .bind(format!("snap-{volume_id}-{created_at}"))
         .bind(volume_id)

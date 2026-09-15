@@ -4,7 +4,9 @@
 
 use anyhow::{bail, Result};
 use serde::Serialize;
-use sqlx::{Row, SqlitePool};
+use sqlx::{AnyPool, Row};
+
+use crate::now_rfc3339;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ConsoleUser {
@@ -19,7 +21,7 @@ pub struct ConsoleUser {
     pub updated_at: String,
 }
 
-fn map_row(r: sqlx::sqlite::SqliteRow) -> ConsoleUser {
+fn map_row(r: sqlx::any::AnyRow) -> ConsoleUser {
     ConsoleUser {
         username: r.get("username"),
         role: r.get("role"),
@@ -31,20 +33,22 @@ fn map_row(r: sqlx::sqlite::SqliteRow) -> ConsoleUser {
     }
 }
 
-pub async fn list(pool: &SqlitePool) -> Result<Vec<ConsoleUser>> {
+pub async fn list(pool: &AnyPool) -> Result<Vec<ConsoleUser>> {
+    // `lower(username)`, not `COLLATE NOCASE` (SQLite-only) — portable on both backends. Both
+    // migrations/ and migrations-postgres/ carry a matching `lower(username)` expression index.
     let rows = sqlx::query(
         "SELECT username, role, tenant_id, disabled, created_by, created_at, updated_at \
-         FROM console_users ORDER BY username COLLATE NOCASE",
+         FROM console_users ORDER BY lower(username)",
     )
     .fetch_all(pool)
     .await?;
     Ok(rows.into_iter().map(map_row).collect())
 }
 
-pub async fn get(pool: &SqlitePool, username: &str) -> Result<Option<ConsoleUser>> {
+pub async fn get(pool: &AnyPool, username: &str) -> Result<Option<ConsoleUser>> {
     let row = sqlx::query(
         "SELECT username, role, tenant_id, disabled, created_by, created_at, updated_at \
-         FROM console_users WHERE username = ? COLLATE NOCASE",
+         FROM console_users WHERE lower(username) = lower($1)",
     )
     .bind(username)
     .fetch_optional(pool)
@@ -55,11 +59,11 @@ pub async fn get(pool: &SqlitePool, username: &str) -> Result<Option<ConsoleUser
 /// Fetch password hash + role + tenant_id for login. Returns None when the user is missing or
 /// disabled.
 pub async fn credentials_for_login(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     username: &str,
 ) -> Result<Option<(String, String, String)>> {
     let row = sqlx::query(
-        "SELECT password_hash, role, tenant_id, disabled FROM console_users WHERE username = ? COLLATE NOCASE",
+        "SELECT password_hash, role, tenant_id, disabled FROM console_users WHERE lower(username) = lower($1)",
     )
     .bind(username)
     .fetch_optional(pool)
@@ -78,7 +82,7 @@ pub async fn credentials_for_login(
 }
 
 pub async fn create(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     username: &str,
     password_hash: &str,
     role: &str,
@@ -86,7 +90,7 @@ pub async fn create(
     created_by: &str,
 ) -> Result<ConsoleUser> {
     let res = sqlx::query(
-        "INSERT INTO console_users (username, password_hash, role, tenant_id, created_by) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO console_users (username, password_hash, role, tenant_id, created_by) VALUES ($1, $2, $3, $4, $5)",
     )
     .bind(username)
     .bind(password_hash)
@@ -108,7 +112,7 @@ pub async fn create(
 }
 
 pub async fn update(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     username: &str,
     role: Option<&str>,
     password_hash: Option<&str>,
@@ -123,30 +127,31 @@ pub async fn update(
     }
     sqlx::query(
         "UPDATE console_users SET \
-            role = COALESCE(?, role), \
-            password_hash = COALESCE(?, password_hash), \
-            disabled = COALESCE(?, disabled), \
-            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') \
-         WHERE username = ? COLLATE NOCASE",
+            role = COALESCE($1, role), \
+            password_hash = COALESCE($2, password_hash), \
+            disabled = COALESCE($3, disabled), \
+            updated_at = $4 \
+         WHERE lower(username) = lower($5)",
     )
     .bind(role)
     .bind(password_hash)
     .bind(disabled.map(|d| if d { 1i64 } else { 0 }))
+    .bind(now_rfc3339(chrono::Utc::now()))
     .bind(username)
     .execute(pool)
     .await?;
     get(pool, username).await
 }
 
-pub async fn delete(pool: &SqlitePool, username: &str) -> Result<bool> {
-    let res = sqlx::query("DELETE FROM console_users WHERE username = ? COLLATE NOCASE")
+pub async fn delete(pool: &AnyPool, username: &str) -> Result<bool> {
+    let res = sqlx::query("DELETE FROM console_users WHERE lower(username) = lower($1)")
         .bind(username)
         .execute(pool)
         .await?;
     Ok(res.rows_affected() > 0)
 }
 
-pub async fn count_admins(pool: &SqlitePool) -> Result<i64> {
+pub async fn count_admins(pool: &AnyPool) -> Result<i64> {
     let n: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM console_users WHERE role = 'admin' AND disabled = 0",
     )

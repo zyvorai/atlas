@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use atlas_driver_k8s::K8sDriver;
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 
 use super::helpers::{poll_cr_ready, require_k8s};
 use crate::spec::JobSpec;
@@ -49,7 +49,7 @@ fn csi_secret_params(prefix: &str, ns: &str) -> Vec<(String, String)> {
 }
 
 pub(crate) async fn dispatch_rook(
-    _pool: &SqlitePool,
+    _pool: &AnyPool,
     k8s: &Option<Arc<K8sDriver>>,
     _tenant_id: &str,
     spec: JobSpec,

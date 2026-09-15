@@ -122,7 +122,7 @@ pub(crate) async fn silence_alert(
 ) -> AppResult<Json<Value>> {
     crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
     let secs = q.secs.unwrap_or(3600).clamp(1, 30 * 24 * 3600);
-    if !atlas_inventory::alerts::silence(&s.pool, &id, &format!("+{secs} seconds")).await? {
+    if !atlas_inventory::alerts::silence(&s.pool, &id, secs).await? {
         return Err(AppError::NotFound(format!("alert {id}")));
     }
     let _ = atlas_inventory::audit::record(

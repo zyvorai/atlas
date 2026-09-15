@@ -4,11 +4,11 @@
 
 use anyhow::Result;
 use atlas_api_types::CdcStream;
-use sqlx::{Row, SqlitePool};
+use sqlx::{AnyPool, Row};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn insert_stream(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     tenant_id: &str,
     plan_id: &str,
@@ -20,7 +20,7 @@ pub async fn insert_stream(
     sqlx::query(
         "INSERT INTO cdc_streams
          (id, tenant_id, plan_id, engine, connect_name, connector_name, topic_prefix, state)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'starting')",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'starting')",
     )
     .bind(id)
     .bind(tenant_id)
@@ -34,8 +34,8 @@ pub async fn insert_stream(
     Ok(())
 }
 
-pub async fn set_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
-    sqlx::query("UPDATE cdc_streams SET state=? WHERE id=?")
+pub async fn set_state(pool: &AnyPool, id: &str, state: &str) -> Result<()> {
+    sqlx::query("UPDATE cdc_streams SET state=$1 WHERE id=$2")
         .bind(state)
         .bind(id)
         .execute(pool)
@@ -44,12 +44,12 @@ pub async fn set_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
 }
 
 /// Increment a stream's restart counter (day-2 self-heal) and return the new count.
-pub async fn bump_restart(pool: &SqlitePool, id: &str) -> Result<i64> {
-    sqlx::query("UPDATE cdc_streams SET restart_count = restart_count + 1 WHERE id=?")
+pub async fn bump_restart(pool: &AnyPool, id: &str) -> Result<i64> {
+    sqlx::query("UPDATE cdc_streams SET restart_count = restart_count + 1 WHERE id=$1")
         .bind(id)
         .execute(pool)
         .await?;
-    let n: i64 = sqlx::query_scalar("SELECT restart_count FROM cdc_streams WHERE id=?")
+    let n: i64 = sqlx::query_scalar("SELECT restart_count FROM cdc_streams WHERE id=$1")
         .bind(id)
         .fetch_one(pool)
         .await?;
@@ -59,7 +59,7 @@ pub async fn bump_restart(pool: &SqlitePool, id: &str) -> Result<i64> {
 /// Update the live replication-lag fields (called by the reconciler each tick).
 #[allow(clippy::too_many_arguments)]
 pub async fn update_lag(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     lag_bytes: i64,
     lag_seconds: i64,
@@ -68,37 +68,38 @@ pub async fn update_lag(
     events_total: i64,
 ) -> Result<()> {
     sqlx::query(
-        "UPDATE cdc_streams SET lag_bytes=?, lag_seconds=?, last_source_lsn=?, last_applied_lsn=?,
-         events_total=?, lag_updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+        "UPDATE cdc_streams SET lag_bytes=$1, lag_seconds=$2, last_source_lsn=$3, last_applied_lsn=$4,
+         events_total=$5, lag_updated_at=$6 WHERE id=$7",
     )
     .bind(lag_bytes)
     .bind(lag_seconds)
     .bind(last_source_lsn)
     .bind(last_applied_lsn)
     .bind(events_total)
+    .bind(crate::now_rfc3339(chrono::Utc::now()))
     .bind(id)
     .execute(pool)
     .await?;
     Ok(())
 }
 
-pub async fn get_stream(pool: &SqlitePool, id: &str) -> Result<Option<CdcStream>> {
-    let row = sqlx::query(&select("WHERE id = ?"))
+pub async fn get_stream(pool: &AnyPool, id: &str) -> Result<Option<CdcStream>> {
+    let row = sqlx::query(&select("WHERE id = $1"))
         .bind(id)
         .fetch_optional(pool)
         .await?;
     Ok(row.map(row_to_stream))
 }
 
-pub async fn list_streams(pool: &SqlitePool) -> Result<Vec<CdcStream>> {
+pub async fn list_streams(pool: &AnyPool) -> Result<Vec<CdcStream>> {
     let rows = sqlx::query(&select("ORDER BY created_at DESC"))
         .fetch_all(pool)
         .await?;
     Ok(rows.into_iter().map(row_to_stream).collect())
 }
 
-pub async fn list_by_state(pool: &SqlitePool, state: &str) -> Result<Vec<CdcStream>> {
-    let rows = sqlx::query(&select("WHERE state = ? ORDER BY created_at DESC"))
+pub async fn list_by_state(pool: &AnyPool, state: &str) -> Result<Vec<CdcStream>> {
+    let rows = sqlx::query(&select("WHERE state = $1 ORDER BY created_at DESC"))
         .bind(state)
         .fetch_all(pool)
         .await?;
@@ -114,7 +115,7 @@ fn select(tail: &str) -> String {
     )
 }
 
-fn row_to_stream(r: sqlx::sqlite::SqliteRow) -> CdcStream {
+fn row_to_stream(r: sqlx::any::AnyRow) -> CdcStream {
     CdcStream {
         id: r.get("id"),
         tenant_id: r.get("tenant_id"),

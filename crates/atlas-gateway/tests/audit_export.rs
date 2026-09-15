@@ -35,7 +35,7 @@ async fn spawn_fake_sink() -> (std::net::SocketAddr, Arc<Mutex<Option<serde_json
 
 static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-async fn spawn_db() -> sqlx::SqlitePool {
+async fn spawn_db() -> sqlx::AnyPool {
     // An atomic counter, not a timestamp: #[tokio::test] fns in the same binary run concurrently,
     // and two tests can land in the same nanosecond, colliding on the same SQLite file (the bug
     // that made this test flaky under a parallel `cargo test --workspace` run).
@@ -46,17 +46,16 @@ async fn spawn_db() -> sqlx::SqlitePool {
         NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
     );
     let _ = std::fs::remove_file(&db);
-    let pool = atlas_inventory::connect_sqlite(&format!("sqlite://{db}?mode=rwc"))
-        .await
-        .unwrap();
-    atlas_inventory::migrate(&pool).await.unwrap();
+    let url = format!("sqlite://{db}?mode=rwc");
+    let pool = atlas_inventory::connect(&url).await.unwrap();
+    atlas_inventory::migrate(&pool, &url).await.unwrap();
     pool
 }
 
-async fn insert_old_row(pool: &sqlx::SqlitePool, resource_id: &str) {
+async fn insert_old_row(pool: &sqlx::AnyPool, resource_id: &str) {
     sqlx::query(
         "INSERT INTO storage_audit_logs (actor_id, action, resource_type, resource_id, status, created_at)
-         VALUES ('me', 'old.action', 'res', ?, 'ok', '2000-01-01T00:00:00.000Z')",
+         VALUES ('me', 'old.action', 'res', $1, 'ok', '2000-01-01T00:00:00.000Z')",
     )
     .bind(resource_id)
     .execute(pool)

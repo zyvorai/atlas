@@ -119,7 +119,7 @@ pub async fn resolve_vault_secrets(config: &mut Config) -> Result<()> {
 /// Build fully-wired application state from config.
 pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState> {
     let pool = atlas_inventory::connect(&config.database_url).await?;
-    atlas_inventory::migrate(&pool).await?;
+    atlas_inventory::migrate(&pool, &config.database_url).await?;
 
     // Register the Ceph backend row + driver.
     let (driver, mode): (Arc<dyn StorageDriver>, BackendMode) = match config.ceph_driver_mode {
@@ -361,7 +361,11 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
 
     // Self-state backup: snapshot the control-plane DB to S3/RGW (independent of the monitor block;
     // disabled unless ATLAS_STATE_BACKUP_SECS > 0).
-    spawn_state_backup(state.pool.clone(), state.workers.clone());
+    spawn_state_backup(
+        state.pool.clone(),
+        state.config.database_url.clone(),
+        state.workers.clone(),
+    );
 
     // Audit retention: prune audit rows older than ATLAS_AUDIT_RETENTION_DAYS (0 = keep forever).
     spawn_audit_retention(state.pool.clone());
@@ -373,7 +377,7 @@ pub async fn build_state(config: Config, opts: BuildOptions) -> Result<AppState>
 /// replica so a non-leader can take over when the current leader's lease expires. The instance id is
 /// the pod HOSTNAME (unique per replica in k8s) + pid.
 fn spawn_leader_election(
-    pool: sqlx::SqlitePool,
+    pool: sqlx::AnyPool,
     is_leader: std::sync::Arc<std::sync::atomic::AtomicBool>,
     ttl_secs: i64,
 ) {
@@ -430,7 +434,7 @@ fn opsgenie_from_env() -> Option<atlas_monitor::OpsgenieConfig> {
 /// if the export fails, nothing is deleted this tick, so a sink outage can't silently lose audit
 /// history the way straight-line pruning would. Both vars are kept out of `Config` so they don't
 /// touch every test's `Config` literal (same pattern as `ATLAS_STATE_BACKUP_*` below).
-fn spawn_audit_retention(pool: sqlx::SqlitePool) {
+fn spawn_audit_retention(pool: sqlx::AnyPool) {
     let days: i64 = std::env::var("ATLAS_AUDIT_RETENTION_DAYS")
         .ok()
         .and_then(|v| v.parse().ok())
@@ -467,7 +471,11 @@ fn spawn_audit_retention(pool: sqlx::SqlitePool) {
 /// own inventory / jobs / audit / quotas / DataBridge state (it backs up tenant volumes but, until
 /// now, not itself). Disabled unless `ATLAS_STATE_BACKUP_SECS > 0` and the S3 endpoint/bucket are set.
 /// Reads its own env (kept out of `Config` so it doesn't touch every test's `Config` literal).
-fn spawn_state_backup(pool: sqlx::SqlitePool, workers: crate::state::WorkerHealth) {
+fn spawn_state_backup(
+    pool: sqlx::AnyPool,
+    database_url: String,
+    workers: crate::state::WorkerHealth,
+) {
     let secs: u64 = std::env::var("ATLAS_STATE_BACKUP_SECS")
         .ok()
         .and_then(|v| v.parse().ok())
@@ -507,17 +515,25 @@ fn spawn_state_backup(pool: sqlx::SqlitePool, workers: crate::state::WorkerHealt
         loop {
             tick.tick().await;
             workers.beat("state_backup");
-            if let Err(e) = backup_state_once(&pool, &s3, &prefix, keep).await {
+            if let Err(e) = backup_state_once(&pool, &database_url, &s3, &prefix, keep).await {
                 tracing::warn!("state backup failed: {e:#}");
             }
         }
     });
 }
 
-/// One state-backup pass: `VACUUM INTO` a consistent snapshot of the live DB, upload it, prune to the
-/// newest `keep`. Object keys embed a zero-padded epoch so lexicographic order = chronological order.
+/// One state-backup pass: snapshot the live control-plane DB, upload it, prune to the newest
+/// `keep`. Object keys embed a zero-padded epoch so lexicographic order = chronological order.
+///
+/// The snapshot mechanism branches on backend, same as the existing pattern of shelling out to
+/// the `ceph`/`rbd` CLI rather than reimplementing their protocols in Rust: SQLite uses
+/// `VACUUM INTO` (an in-process, transactionally-consistent copy); Postgres shells out to
+/// `pg_dump --format=custom`, which takes its own consistent MVCC snapshot server-side. `pg_dump`
+/// must be on `PATH` in the gateway image when `database_url` is a `postgres://` URL — mirrors
+/// the existing requirement that the real-Ceph image bundles the `ceph`/`rbd` CLIs.
 async fn backup_state_once(
-    pool: &sqlx::SqlitePool,
+    pool: &sqlx::AnyPool,
+    database_url: &str,
     s3: &atlas_driver_rgw::S3Target,
     prefix: &str,
     keep: usize,
@@ -526,16 +542,32 @@ async fn backup_state_once(
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let snap = std::env::temp_dir().join(format!("atlas-state-{ts}.db"));
-    // VACUUM INTO writes a transactionally-consistent copy while the DB stays in use.
-    sqlx::query(&format!("VACUUM INTO '{}'", snap.display()))
-        .execute(pool)
-        .await
-        .context("VACUUM INTO snapshot")?;
+    let is_postgres = atlas_inventory::is_postgres_url(database_url);
+    let ext = if is_postgres { "dump" } else { "db" };
+    let snap = std::env::temp_dir().join(format!("atlas-state-{ts}.{ext}"));
+    if is_postgres {
+        let status = tokio::process::Command::new("pg_dump")
+            .arg("--format=custom")
+            .arg("--file")
+            .arg(&snap)
+            .arg(database_url)
+            .status()
+            .await
+            .context("spawn pg_dump")?;
+        if !status.success() {
+            anyhow::bail!("pg_dump exited with {status}");
+        }
+    } else {
+        // VACUUM INTO writes a transactionally-consistent copy while the DB stays in use.
+        sqlx::query(&format!("VACUUM INTO '{}'", snap.display()))
+            .execute(pool)
+            .await
+            .context("VACUUM INTO snapshot")?;
+    }
     let bytes = tokio::fs::read(&snap).await.context("read snapshot file")?;
     let _ = tokio::fs::remove_file(&snap).await;
     let size = bytes.len();
-    let key = format!("{prefix}/atlas-state-{ts:020}.db");
+    let key = format!("{prefix}/atlas-state-{ts:020}.{ext}");
     s3.put_object(&key, bytes)
         .await
         .context("upload snapshot")?;
@@ -557,7 +589,7 @@ async fn backup_state_once(
 /// Periodically persist one `metrics_history` sample derived from the current summary + counters.
 /// `interval_secs == 0` disables it (mirrors the monitor/scheduler workers).
 fn spawn_metrics_sampler(
-    pool: sqlx::SqlitePool,
+    pool: sqlx::AnyPool,
     interval_secs: u64,
     workers: crate::state::WorkerHealth,
 ) {
@@ -576,7 +608,7 @@ fn spawn_metrics_sampler(
     });
 }
 
-async fn sample_metrics_history(pool: &sqlx::SqlitePool) -> Result<()> {
+async fn sample_metrics_history(pool: &sqlx::AnyPool) -> Result<()> {
     let summary = atlas_inventory::metrics_summary(pool).await?;
     let running: i64 = atlas_inventory::jobs::count_by_state(pool)
         .await?

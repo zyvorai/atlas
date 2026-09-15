@@ -4,12 +4,12 @@
 
 use anyhow::Result;
 use atlas_api_types::StorageSnapshot;
-use sqlx::{Row, SqlitePool};
+use sqlx::{AnyPool, Row};
 
 /// Insert a snapshot row.
 #[allow(clippy::too_many_arguments)]
 pub async fn insert_snapshot(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     tenant_id: &str,
     volume_id: &str,
@@ -20,7 +20,7 @@ pub async fn insert_snapshot(
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO storage_snapshots (id, tenant_id, volume_id, name, backend_native_id, consistency, state)
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(id)
     .bind(tenant_id)
@@ -34,8 +34,8 @@ pub async fn insert_snapshot(
     Ok(())
 }
 
-pub async fn set_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
-    sqlx::query("UPDATE storage_snapshots SET state=? WHERE id=?")
+pub async fn set_state(pool: &AnyPool, id: &str, state: &str) -> Result<()> {
+    sqlx::query("UPDATE storage_snapshots SET state=$1 WHERE id=$2")
         .bind(state)
         .bind(id)
         .execute(pool)
@@ -44,8 +44,8 @@ pub async fn set_state(pool: &SqlitePool, id: &str, state: &str) -> Result<()> {
 }
 
 /// Mark a snapshot protected (has dependent clones) or not.
-pub async fn set_protected(pool: &SqlitePool, id: &str, protected: bool) -> Result<()> {
-    sqlx::query("UPDATE storage_snapshots SET protected=? WHERE id=?")
+pub async fn set_protected(pool: &AnyPool, id: &str, protected: bool) -> Result<()> {
+    sqlx::query("UPDATE storage_snapshots SET protected=$1 WHERE id=$2")
         .bind(protected as i64)
         .bind(id)
         .execute(pool)
@@ -53,8 +53,8 @@ pub async fn set_protected(pool: &SqlitePool, id: &str, protected: bool) -> Resu
     Ok(())
 }
 
-pub async fn get_snapshot(pool: &SqlitePool, id: &str) -> Result<Option<StorageSnapshot>> {
-    let row = sqlx::query(&select("WHERE id = ?"))
+pub async fn get_snapshot(pool: &AnyPool, id: &str) -> Result<Option<StorageSnapshot>> {
+    let row = sqlx::query(&select("WHERE id = $1"))
         .bind(id)
         .fetch_optional(pool)
         .await?;
@@ -62,12 +62,12 @@ pub async fn get_snapshot(pool: &SqlitePool, id: &str) -> Result<Option<StorageS
 }
 
 pub async fn list_snapshots(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     volume_id: Option<&str>,
 ) -> Result<Vec<StorageSnapshot>> {
     let rows = match volume_id {
         Some(v) => {
-            sqlx::query(&select("WHERE volume_id = ? ORDER BY created_at DESC"))
+            sqlx::query(&select("WHERE volume_id = $1 ORDER BY created_at DESC"))
                 .bind(v)
                 .fetch_all(pool)
                 .await?
@@ -83,16 +83,16 @@ pub async fn list_snapshots(
 
 /// Snapshots in a given state — used to reconcile ones the create job's bounded bind-poll gave up
 /// on (so they'd otherwise show "creating" forever even once the underlying VolumeSnapshot binds).
-pub async fn list_by_state(pool: &SqlitePool, state: &str) -> Result<Vec<StorageSnapshot>> {
-    let rows = sqlx::query(&select("WHERE state = ? ORDER BY created_at DESC"))
+pub async fn list_by_state(pool: &AnyPool, state: &str) -> Result<Vec<StorageSnapshot>> {
+    let rows = sqlx::query(&select("WHERE state = $1 ORDER BY created_at DESC"))
         .bind(state)
         .fetch_all(pool)
         .await?;
     Ok(rows.into_iter().map(row_to_snapshot).collect())
 }
 
-pub async fn delete_snapshot_row(pool: &SqlitePool, id: &str) -> Result<()> {
-    sqlx::query("DELETE FROM storage_snapshots WHERE id=?")
+pub async fn delete_snapshot_row(pool: &AnyPool, id: &str) -> Result<()> {
+    sqlx::query("DELETE FROM storage_snapshots WHERE id=$1")
         .bind(id)
         .execute(pool)
         .await?;
@@ -102,7 +102,7 @@ pub async fn delete_snapshot_row(pool: &SqlitePool, id: &str) -> Result<()> {
 /// The most recent snapshot per volume, in one query — used by `protection::list_protection_status`
 /// so a bank-scale fleet doesn't pay one query per volume.
 pub async fn latest_by_volume(
-    pool: &SqlitePool,
+    pool: &AnyPool,
 ) -> Result<std::collections::HashMap<String, StorageSnapshot>> {
     let rows = sqlx::query(
         "SELECT s.id, s.tenant_id, s.volume_id, s.name, s.backend_native_id, s.consistency, \
@@ -128,7 +128,7 @@ fn select(tail: &str) -> String {
     )
 }
 
-fn row_to_snapshot(r: sqlx::sqlite::SqliteRow) -> StorageSnapshot {
+fn row_to_snapshot(r: sqlx::any::AnyRow) -> StorageSnapshot {
     StorageSnapshot {
         id: r.get("id"),
         tenant_id: r.get("tenant_id"),

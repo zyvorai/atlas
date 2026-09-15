@@ -5,7 +5,7 @@
 //! result the job engine persists. Keeping the logic here keeps the `dispatch` match arms thin.
 
 use anyhow::{anyhow, Result};
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 
 use crate::connector::DiscoveredSchema;
 use crate::{assess, build_connector};
@@ -13,7 +13,7 @@ use crate::{assess, build_connector};
 /// Discover a source's schema and persist it. Advances the source `registered → discovered`. In
 /// real mode the credentials are read from the source's k8s Secret (`username`/`password` keys).
 pub async fn discover(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     k8s: Option<&atlas_driver_k8s::K8sDriver>,
     source_id: &str,
 ) -> Result<serde_json::Value> {
@@ -96,7 +96,7 @@ pub async fn discover(
 
 /// Assess a plan's source: score readiness from the discovered schema. Advances the plan to
 /// `assessed`. Requires the source to have been discovered.
-pub async fn assess_plan(pool: &SqlitePool, plan_id: &str) -> Result<serde_json::Value> {
+pub async fn assess_plan(pool: &AnyPool, plan_id: &str) -> Result<serde_json::Value> {
     let plan = atlas_inventory::databridge::plans::get_plan(pool, plan_id)
         .await?
         .ok_or_else(|| anyhow!("plan {plan_id} not found"))?;
@@ -147,7 +147,7 @@ fn edge_size_gib(source: &atlas_api_types::MigrationSource) -> i64 {
 /// MySQL operator CR (data on Ceph RBD) and leaves the cluster `provisioning` for the reconciler to
 /// poll to `ready`.
 pub async fn provision_edge(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     k8s: Option<&atlas_driver_k8s::K8sDriver>,
     plan_id: &str,
 ) -> Result<serde_json::Value> {
@@ -278,7 +278,7 @@ pub(crate) fn plan_short(plan_id: &str) -> &str {
 /// Full-load: copy the source dataset into the freshly-provisioned edge DB. Fake mode simulates an
 /// instant load; real mode (pg_dump/mydumper batch Job) is a follow-up.
 pub async fn full_load(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     k8s: Option<&atlas_driver_k8s::K8sDriver>,
     plan_id: &str,
 ) -> Result<serde_json::Value> {
@@ -419,7 +419,7 @@ pub async fn full_load(
 /// Start Debezium CDC. Fake mode records a streaming stream with an initial lag the reconciler
 /// drains toward zero; real mode (KafkaConnect + Debezium connector CRs) is a follow-up.
 pub async fn start_cdc(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     k8s: Option<&atlas_driver_k8s::K8sDriver>,
     plan_id: &str,
 ) -> Result<serde_json::Value> {
@@ -675,7 +675,7 @@ pub(crate) async fn teardown_streaming(
 /// `KafkaConnect` cluster stays up so a later start/restart re-instantiates quickly); fake mode just
 /// flips the stream state.
 pub async fn stop_cdc(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     k8s: Option<&atlas_driver_k8s::K8sDriver>,
     plan_id: &str,
 ) -> Result<serde_json::Value> {
@@ -701,7 +701,7 @@ pub async fn stop_cdc(
 /// Debezium source + JDBC sink `KafkaConnector` CRs — an idempotent apply that restarts the failed
 /// connectors (mirrors `start_cdc`'s real applies; the KafkaConnect cluster stays up).
 pub async fn restart_cdc(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     k8s: Option<&atlas_driver_k8s::K8sDriver>,
     plan_id: &str,
 ) -> Result<serde_json::Value> {
@@ -841,7 +841,7 @@ pub async fn restart_cdc(
 
 /// Validate source vs edge (row counts / checksums). Fake mode reports matching counts per table.
 pub async fn validate(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     k8s: Option<&atlas_driver_k8s::K8sDriver>,
     plan_id: &str,
     kind: &str,
@@ -994,7 +994,7 @@ pub async fn validate(
 /// once the CDC stream reports zero lag (tearing the streaming stack down at the switch). Guards
 /// (validated, validation passed, lag under threshold) are enforced in the route.
 pub async fn cutover(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     k8s: Option<&atlas_driver_k8s::K8sDriver>,
     plan_id: &str,
 ) -> Result<serde_json::Value> {
@@ -1078,7 +1078,7 @@ pub async fn cutover(
 }
 
 /// Roll back a cutover within its window: revert the active endpoint to the source.
-pub async fn rollback(pool: &SqlitePool, plan_id: &str) -> Result<serde_json::Value> {
+pub async fn rollback(pool: &AnyPool, plan_id: &str) -> Result<serde_json::Value> {
     let plan = atlas_inventory::databridge::plans::get_plan(pool, plan_id)
         .await?
         .ok_or_else(|| anyhow!("plan {plan_id} not found"))?;

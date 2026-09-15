@@ -7,12 +7,6 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
-[features]
-default = []
-# Phase-1 HA: enables sqlx Postgres + connect_postgres / migrate_postgres.
-# Does not change the default SQLite lab path. See docs/HA.md.
-postgres = ["sqlx/postgres"]
-
 [dependencies]
 atlas-api-types = { workspace = true }
 sqlx = { workspace = true }

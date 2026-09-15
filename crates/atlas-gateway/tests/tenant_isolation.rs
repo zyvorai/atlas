@@ -16,7 +16,7 @@ static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0)
 
 /// Spawn a gateway with auth enabled; returns its base URL and a handle to the inventory pool for
 /// seeding fixtures directly.
-async fn spawn_auth(secret: &str) -> (SocketAddr, sqlx::SqlitePool) {
+async fn spawn_auth(secret: &str) -> (SocketAddr, sqlx::AnyPool) {
     let db = format!(
         "{}/atlas-tenant-iso-{}-{}.db",
         std::env::temp_dir().display(),
@@ -82,7 +82,7 @@ async fn spawn_auth(secret: &str) -> (SocketAddr, sqlx::SqlitePool) {
     (addr, pool)
 }
 
-async fn seed_volume(pool: &sqlx::SqlitePool, id: &str, tenant_id: &str, name: &str) {
+async fn seed_volume(pool: &sqlx::AnyPool, id: &str, tenant_id: &str, name: &str) {
     let v = atlas_api_types::StorageVolume {
         id: id.into(),
         cluster_id: None,
@@ -103,7 +103,7 @@ async fn seed_volume(pool: &sqlx::SqlitePool, id: &str, tenant_id: &str, name: &
         .unwrap();
 }
 
-async fn seed_bucket(pool: &sqlx::SqlitePool, id: &str, tenant_id: &str, name: &str) {
+async fn seed_bucket(pool: &sqlx::AnyPool, id: &str, tenant_id: &str, name: &str) {
     atlas_inventory::buckets::insert_bucket(
         pool,
         id,

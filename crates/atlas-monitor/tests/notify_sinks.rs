@@ -12,11 +12,11 @@ use atlas_monitor::notify::{opsgenie, pagerduty, slack};
 use atlas_monitor::{OpsgenieConfig, PagerDutyConfig};
 use axum::{extract::State, routing::post, Router};
 use serde_json::{json, Value};
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
-async fn fresh_pool() -> SqlitePool {
+async fn fresh_pool() -> AnyPool {
     let db = format!(
         "{}/atlas-notify-sinks-test-{}-{}.db",
         std::env::temp_dir().display(),
@@ -24,14 +24,13 @@ async fn fresh_pool() -> SqlitePool {
         NEXT.fetch_add(1, Ordering::SeqCst),
     );
     let _ = std::fs::remove_file(&db);
-    let pool = atlas_inventory::connect_sqlite(&format!("sqlite://{db}?mode=rwc"))
-        .await
-        .unwrap();
-    atlas_inventory::migrate(&pool).await.unwrap();
+    let url = format!("sqlite://{db}?mode=rwc");
+    let pool = atlas_inventory::connect(&url).await.unwrap();
+    atlas_inventory::migrate(&pool, &url).await.unwrap();
     pool
 }
 
-async fn seed_open_alert(pool: &SqlitePool, id: &str) {
+async fn seed_open_alert(pool: &AnyPool, id: &str) {
     atlas_inventory::alerts::upsert_open(
         pool,
         id,

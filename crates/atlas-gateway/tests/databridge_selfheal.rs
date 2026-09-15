@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
-async fn spawn() -> (SocketAddr, sqlx::SqlitePool) {
+async fn spawn() -> (SocketAddr, sqlx::AnyPool) {
     let db = format!(
         "{}/atlas-selfheal-{}-{}.db",
         std::env::temp_dir().display(),
@@ -150,7 +150,7 @@ async fn errored_cdc_stream_restarts() {
     }
 
     // Force the stream into `error` (as the reconciler would on a broken connector).
-    sqlx::query("UPDATE cdc_streams SET state='error' WHERE plan_id=?")
+    sqlx::query("UPDATE cdc_streams SET state='error' WHERE plan_id=$1")
         .bind(&pid)
         .execute(&pool)
         .await

@@ -7,11 +7,11 @@
 use anyhow::Result;
 use atlas_api_types::AlertRecord;
 use serde_json::json;
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 
 /// Post any not-yet-notified open alerts to `url`, marking each notified on success.
 /// Returns the number successfully delivered. Failures are logged and retried next tick.
-pub async fn dispatch(pool: &SqlitePool, url: &str) -> Result<usize> {
+pub async fn dispatch(pool: &AnyPool, url: &str) -> Result<usize> {
     let pending = atlas_inventory::alerts::list_unnotified_open(pool).await?;
     if pending.is_empty() {
         return Ok(0);

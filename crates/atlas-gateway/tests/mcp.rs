@@ -14,7 +14,7 @@ use atlas_gateway::startup::{build_state, BuildOptions};
 
 static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-async fn spawn(auth_required: bool, secret: &str) -> (SocketAddr, sqlx::SqlitePool) {
+async fn spawn(auth_required: bool, secret: &str) -> (SocketAddr, sqlx::AnyPool) {
     let db = format!(
         "{}/atlas-mcp-test-{}-{}.db",
         std::env::temp_dir().display(),

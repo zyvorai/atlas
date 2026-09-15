@@ -4,14 +4,16 @@
 //! `rbd mirror` operations run as jobs; this is the control-plane catalog they update.
 
 use anyhow::Result;
-use sqlx::{Row, SqlitePool};
+use sqlx::{AnyPool, Row};
+
+use crate::now_rfc3339;
 
 // ---- peers ----
 
 /// Register (or update) a mirroring peer cluster. `secret_ref` names a k8s Secret with its bootstrap
 /// token — never the token itself.
 pub async fn register_peer(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     name: &str,
     cluster_fsid: Option<&str>,
@@ -20,7 +22,7 @@ pub async fn register_peer(
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO dr_peers (id, name, cluster_fsid, direction, bootstrap_secret_ref, state)
-         VALUES (?, ?, ?, ?, ?, 'registered')
+         VALUES ($1, $2, $3, $4, $5, 'registered')
          ON CONFLICT(id) DO UPDATE SET name=excluded.name, cluster_fsid=excluded.cluster_fsid,
             direction=excluded.direction, bootstrap_secret_ref=excluded.bootstrap_secret_ref",
     )
@@ -35,19 +37,19 @@ pub async fn register_peer(
 }
 
 /// Remove a mirroring peer and any mirrors that referenced it (stale/decommissioned peer).
-pub async fn delete_peer(pool: &SqlitePool, id: &str) -> Result<()> {
-    sqlx::query("DELETE FROM dr_mirrors WHERE peer_id=?")
+pub async fn delete_peer(pool: &AnyPool, id: &str) -> Result<()> {
+    sqlx::query("DELETE FROM dr_mirrors WHERE peer_id=$1")
         .bind(id)
         .execute(pool)
         .await?;
-    sqlx::query("DELETE FROM dr_peers WHERE id=?")
+    sqlx::query("DELETE FROM dr_peers WHERE id=$1")
         .bind(id)
         .execute(pool)
         .await?;
     Ok(())
 }
 
-pub async fn list_peers(pool: &SqlitePool) -> Result<Vec<serde_json::Value>> {
+pub async fn list_peers(pool: &AnyPool) -> Result<Vec<serde_json::Value>> {
     let rows = sqlx::query(
         "SELECT id, name, cluster_fsid, direction, bootstrap_secret_ref, state, created_at
          FROM dr_peers ORDER BY created_at DESC",
@@ -74,7 +76,7 @@ pub async fn list_peers(pool: &SqlitePool) -> Result<Vec<serde_json::Value>> {
 /// Record (or update) a mirrored image. Keyed uniquely by `(pool, image)`.
 #[allow(clippy::too_many_arguments)]
 pub async fn upsert_mirror(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     tenant_id: &str,
     volume_id: Option<&str>,
@@ -87,10 +89,10 @@ pub async fn upsert_mirror(
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO dr_mirrors (id, tenant_id, volume_id, pool, image, peer_id, mode, role, state)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT(pool, image) DO UPDATE SET peer_id=excluded.peer_id, mode=excluded.mode,
             role=excluded.role, state=excluded.state,
-            updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')",
+            updated_at=$10",
     )
     .bind(id)
     .bind(tenant_id)
@@ -101,50 +103,46 @@ pub async fn upsert_mirror(
     .bind(mode)
     .bind(role)
     .bind(state)
+    .bind(now_rfc3339(chrono::Utc::now()))
     .execute(pool)
     .await?;
     Ok(())
 }
 
 /// Update a mirror's role and/or state. Returns whether a row changed.
-pub async fn set_mirror(pool: &SqlitePool, id: &str, role: &str, state: &str) -> Result<bool> {
-    let res = sqlx::query(
-        "UPDATE dr_mirrors SET role=?, state=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
-    )
-    .bind(role)
-    .bind(state)
-    .bind(id)
-    .execute(pool)
-    .await?;
+pub async fn set_mirror(pool: &AnyPool, id: &str, role: &str, state: &str) -> Result<bool> {
+    let res = sqlx::query("UPDATE dr_mirrors SET role=$1, state=$2, updated_at=$3 WHERE id=$4")
+        .bind(role)
+        .bind(state)
+        .bind(now_rfc3339(chrono::Utc::now()))
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(res.rows_affected() > 0)
 }
 
 /// Update only `state`, leaving `role` untouched. Used by the enable job so it cannot race a
 /// concurrent demote/promote that already moved the role.
-pub async fn set_mirror_state(pool: &SqlitePool, id: &str, state: &str) -> Result<bool> {
-    let res = sqlx::query(
-        "UPDATE dr_mirrors SET state=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
-    )
-    .bind(state)
-    .bind(id)
-    .execute(pool)
-    .await?;
+pub async fn set_mirror_state(pool: &AnyPool, id: &str, state: &str) -> Result<bool> {
+    let res = sqlx::query("UPDATE dr_mirrors SET state=$1, updated_at=$2 WHERE id=$3")
+        .bind(state)
+        .bind(now_rfc3339(chrono::Utc::now()))
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(res.rows_affected() > 0)
 }
 
 /// A mirror's `(pool, image, role)` — used by the promote/demote/disable jobs.
-pub async fn mirror_target(
-    pool: &SqlitePool,
-    id: &str,
-) -> Result<Option<(String, String, String)>> {
-    let row = sqlx::query("SELECT pool, image, role FROM dr_mirrors WHERE id=?")
+pub async fn mirror_target(pool: &AnyPool, id: &str) -> Result<Option<(String, String, String)>> {
+    let row = sqlx::query("SELECT pool, image, role FROM dr_mirrors WHERE id=$1")
         .bind(id)
         .fetch_optional(pool)
         .await?;
     Ok(row.map(|r| (r.get("pool"), r.get("image"), r.get("role"))))
 }
 
-pub async fn list_mirrors(pool: &SqlitePool) -> Result<Vec<serde_json::Value>> {
+pub async fn list_mirrors(pool: &AnyPool) -> Result<Vec<serde_json::Value>> {
     let rows = sqlx::query(
         "SELECT id, tenant_id, volume_id, pool, image, peer_id, mode, role, state, rpo_seconds,
                 last_failover_at, last_error, force_promoted, updated_at
@@ -176,8 +174,8 @@ pub async fn list_mirrors(pool: &SqlitePool) -> Result<Vec<serde_json::Value>> {
 }
 
 /// Whether a peer id exists in the catalog.
-pub async fn peer_exists(pool: &SqlitePool, id: &str) -> Result<bool> {
-    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM dr_peers WHERE id=?")
+pub async fn peer_exists(pool: &AnyPool, id: &str) -> Result<bool> {
+    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM dr_peers WHERE id=$1")
         .bind(id)
         .fetch_one(pool)
         .await?;
@@ -186,10 +184,10 @@ pub async fn peer_exists(pool: &SqlitePool, id: &str) -> Result<bool> {
 
 /// Full mirror row for transition guards: `(pool, image, role, state)`.
 pub async fn mirror_detail(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
 ) -> Result<Option<(String, String, String, String)>> {
-    let row = sqlx::query("SELECT pool, image, role, state FROM dr_mirrors WHERE id=?")
+    let row = sqlx::query("SELECT pool, image, role, state FROM dr_mirrors WHERE id=$1")
         .bind(id)
         .fetch_optional(pool)
         .await?;
@@ -197,12 +195,13 @@ pub async fn mirror_detail(
 }
 
 /// Stamp an error onto a mirror (real `rbd mirror` failure) without changing role.
-pub async fn set_mirror_error(pool: &SqlitePool, id: &str, error: &str) -> Result<()> {
+pub async fn set_mirror_error(pool: &AnyPool, id: &str, error: &str) -> Result<()> {
     sqlx::query(
-        "UPDATE dr_mirrors SET state='error', last_error=?,
-         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+        "UPDATE dr_mirrors SET state='error', last_error=$1,
+         updated_at=$2 WHERE id=$3",
     )
     .bind(error)
+    .bind(now_rfc3339(chrono::Utc::now()))
     .bind(id)
     .execute(pool)
     .await?;
@@ -210,13 +209,15 @@ pub async fn set_mirror_error(pool: &SqlitePool, id: &str, error: &str) -> Resul
 }
 
 /// Record a successful promote/failover drill.
-pub async fn record_failover(pool: &SqlitePool, id: &str, force: bool) -> Result<()> {
+pub async fn record_failover(pool: &AnyPool, id: &str, force: bool) -> Result<()> {
     sqlx::query(
-        "UPDATE dr_mirrors SET last_failover_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
-         last_error=NULL, force_promoted=?,
-         updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+        "UPDATE dr_mirrors SET last_failover_at=$1,
+         last_error=NULL, force_promoted=$2,
+         updated_at=$3 WHERE id=$4",
     )
+    .bind(now_rfc3339(chrono::Utc::now()))
     .bind(if force { 1 } else { 0 })
+    .bind(now_rfc3339(chrono::Utc::now()))
     .bind(id)
     .execute(pool)
     .await?;
@@ -224,14 +225,13 @@ pub async fn record_failover(pool: &SqlitePool, id: &str, force: bool) -> Result
 }
 
 /// Set observed RPO seconds for a mirrored image (operator/refresh path).
-pub async fn set_rpo(pool: &SqlitePool, id: &str, rpo_seconds: Option<i64>) -> Result<bool> {
-    let res = sqlx::query(
-        "UPDATE dr_mirrors SET rpo_seconds=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
-    )
-    .bind(rpo_seconds)
-    .bind(id)
-    .execute(pool)
-    .await?;
+pub async fn set_rpo(pool: &AnyPool, id: &str, rpo_seconds: Option<i64>) -> Result<bool> {
+    let res = sqlx::query("UPDATE dr_mirrors SET rpo_seconds=$1, updated_at=$2 WHERE id=$3")
+        .bind(rpo_seconds)
+        .bind(now_rfc3339(chrono::Utc::now()))
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(res.rows_affected() > 0)
 }
 
@@ -241,7 +241,7 @@ pub async fn set_rpo(pool: &SqlitePool, id: &str, rpo_seconds: Option<i64>) -> R
 /// is passed in from `Config::dr_dataplane_verified` (see its doc comment) — `false` unless this
 /// specific deployment's operator has personally completed the live two-site drill in
 /// `docs/DR.md`; never inferred from catalog state alone.
-pub async fn preflight(pool: &SqlitePool, dataplane_verified: bool) -> Result<serde_json::Value> {
+pub async fn preflight(pool: &AnyPool, dataplane_verified: bool) -> Result<serde_json::Value> {
     let peers = list_peers(pool).await?;
     let mirrors = list_mirrors(pool).await?;
     let mut checks = Vec::new();
@@ -355,34 +355,21 @@ pub async fn preflight(pool: &SqlitePool, dataplane_verified: bool) -> Result<se
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
-    async fn mem_pool() -> SqlitePool {
-        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        sqlx::query(
-            "CREATE TABLE dr_peers (
-                id TEXT PRIMARY KEY, name TEXT NOT NULL, cluster_fsid TEXT,
-                direction TEXT NOT NULL, bootstrap_secret_ref TEXT, state TEXT NOT NULL,
-                created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-             )",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-        sqlx::query(
-            "CREATE TABLE dr_mirrors (
-                id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, volume_id TEXT,
-                pool TEXT NOT NULL, image TEXT NOT NULL, peer_id TEXT,
-                mode TEXT NOT NULL, role TEXT NOT NULL, state TEXT NOT NULL,
-                rpo_seconds INTEGER, last_failover_at TEXT, last_error TEXT,
-                force_promoted INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-                updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-                UNIQUE(pool, image)
-             )",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
+    static N: AtomicU64 = AtomicU64::new(0);
+
+    async fn mem_pool() -> AnyPool {
+        let db = format!(
+            "{}/atlas-dr-{}-{}.db",
+            std::env::temp_dir().display(),
+            std::process::id(),
+            N.fetch_add(1, Ordering::SeqCst),
+        );
+        let _ = std::fs::remove_file(&db);
+        let url = format!("sqlite://{db}?mode=rwc");
+        let pool = crate::connect(&url).await.unwrap();
+        crate::migrate(&pool, &url).await.unwrap();
         pool
     }
 

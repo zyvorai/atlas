@@ -10,7 +10,7 @@ use atlas_common::Config;
 use atlas_driver_core::DriverRegistry;
 use atlas_driver_k8s::K8sDriver;
 use openidconnect::{EndpointMaybeSet, EndpointNotSet, EndpointSet};
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 
 /// `CoreClient::from_provider_metadata(..).set_redirect_uri(..)`'s exact concrete type — the
 /// crate's endpoint-presence type-state machinery means this can't be named as the bare
@@ -207,7 +207,7 @@ impl RateLimiter {
 
 #[derive(Clone)]
 pub struct AppState {
-    pub pool: SqlitePool,
+    pub pool: AnyPool,
     pub config: Arc<Config>,
     /// Backend storage drivers keyed by backend id (Ceph real/fake in the MVP).
     pub drivers: Arc<DriverRegistry>,

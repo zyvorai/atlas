@@ -14,7 +14,7 @@ use anyhow::Result;
 use atlas_api_types::Health;
 use atlas_driver_core::StorageDriver;
 use serde_json::json;
-use sqlx::{Row, SqlitePool};
+use sqlx::{AnyPool, Row};
 
 pub mod audit_export;
 pub mod notify;
@@ -34,7 +34,7 @@ const POOL_CRITICAL: f64 = 0.85;
 /// only the one-time startup discovery previously did this lookup.
 #[allow(clippy::too_many_arguments)]
 pub fn spawn(
-    pool: SqlitePool,
+    pool: AnyPool,
     driver: Arc<dyn StorageDriver>,
     interval_secs: u64,
     prometheus_url: Option<String>,
@@ -156,7 +156,7 @@ pub fn spawn(
 /// snapshot was invisible to an operator's manual "resync" and could only self-heal on the next
 /// leader-only periodic monitor tick.
 pub async fn reconcile_snapshots(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     k8s: &Option<Arc<atlas_driver_k8s::K8sDriver>>,
 ) -> Result<()> {
     let Some(k8s) = k8s else { return Ok(()) };
@@ -187,7 +187,7 @@ const FORECAST_CRITICAL_DAYS: f64 = 3.0;
 const QUOTA_WARN: f64 = 0.80;
 const QUOTA_CRITICAL: f64 = 0.95;
 
-pub async fn evaluate(pool: &SqlitePool) -> Result<()> {
+pub async fn evaluate(pool: &AnyPool) -> Result<()> {
     evaluate_clusters(pool).await?;
     evaluate_pools(pool).await?;
     evaluate_osds(pool).await?;
@@ -201,12 +201,13 @@ pub async fn evaluate(pool: &SqlitePool) -> Result<()> {
 
 /// Raise a rollup alert when jobs have failed in the recent window (they otherwise fail silently —
 /// the job engine has no alerting). Clears once the window passes with no new failures.
-async fn evaluate_failed_jobs(pool: &SqlitePool) -> Result<()> {
+async fn evaluate_failed_jobs(pool: &AnyPool) -> Result<()> {
     let id = "alert_jobs_failing";
+    let cutoff = atlas_inventory::now_rfc3339(chrono::Utc::now() - chrono::Duration::minutes(15));
     let n: i64 = sqlx::query(
-        "SELECT COUNT(*) AS n FROM storage_jobs WHERE state='failed' \
-         AND completed_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-15 minutes')",
+        "SELECT COUNT(*) AS n FROM storage_jobs WHERE state='failed' AND completed_at >= $1",
     )
+    .bind(cutoff)
     .fetch_one(pool)
     .await?
     .get("n");
@@ -231,7 +232,7 @@ async fn evaluate_failed_jobs(pool: &SqlitePool) -> Result<()> {
 
 /// Alert on CDC streams whose connector is in `error` (replication stalled/broken). The reconciler
 /// flags the state; without this rule nobody is notified that a live migration has stopped.
-async fn evaluate_cdc_streams(pool: &SqlitePool) -> Result<()> {
+async fn evaluate_cdc_streams(pool: &AnyPool) -> Result<()> {
     let rows = sqlx::query("SELECT id, state FROM cdc_streams")
         .fetch_all(pool)
         .await?;
@@ -260,7 +261,7 @@ async fn evaluate_cdc_streams(pool: &SqlitePool) -> Result<()> {
 }
 
 /// Warn a tenant approaching its byte quota (before `check_admission` hard-rejects at the wall).
-async fn evaluate_tenant_quotas(pool: &SqlitePool) -> Result<()> {
+async fn evaluate_tenant_quotas(pool: &AnyPool) -> Result<()> {
     for q in atlas_inventory::tenants::list_overview(pool).await? {
         let id = format!("alert_tenant_quota_{}", q.tenant_id);
         let ratio = if q.max_bytes > 0 {
@@ -299,7 +300,7 @@ async fn evaluate_tenant_quotas(pool: &SqlitePool) -> Result<()> {
 }
 
 /// Raise an alert when the least-squares fill projection (over the last 6h) crosses a threshold.
-async fn evaluate_capacity_forecast(pool: &SqlitePool) -> Result<()> {
+async fn evaluate_capacity_forecast(pool: &AnyPool) -> Result<()> {
     let id = "alert_capacity_forecast";
     let f = atlas_inventory::metrics::forecast(pool, 360).await?;
     let days = f.get("days_to_full").and_then(|v| v.as_f64());
@@ -329,7 +330,7 @@ async fn evaluate_capacity_forecast(pool: &SqlitePool) -> Result<()> {
     Ok(())
 }
 
-async fn evaluate_clusters(pool: &SqlitePool) -> Result<()> {
+async fn evaluate_clusters(pool: &AnyPool) -> Result<()> {
     for c in atlas_inventory::list_clusters(pool).await? {
         let id = format!("alert_cluster_unhealthy_{}", c.id);
         match c.health {
@@ -368,7 +369,7 @@ async fn evaluate_clusters(pool: &SqlitePool) -> Result<()> {
     Ok(())
 }
 
-async fn evaluate_pools(pool: &SqlitePool) -> Result<()> {
+async fn evaluate_pools(pool: &AnyPool) -> Result<()> {
     for p in atlas_inventory::list_pools(pool).await? {
         let id = format!("alert_pool_near_full_{}", p.id);
         match (p.used_bytes, p.max_bytes) {
@@ -402,7 +403,7 @@ async fn evaluate_pools(pool: &SqlitePool) -> Result<()> {
     Ok(())
 }
 
-async fn evaluate_osds(pool: &SqlitePool) -> Result<()> {
+async fn evaluate_osds(pool: &AnyPool) -> Result<()> {
     for o in atlas_inventory::list_osds(pool).await? {
         let id = format!("alert_osd_down_{}_{}", o.cluster_id, o.id);
         if !o.up || !o.in_cluster {

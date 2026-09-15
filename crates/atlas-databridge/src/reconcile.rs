@@ -11,13 +11,13 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 
 use crate::cr::{cnpg, mysql_operator, psmdb};
 
 /// Spawn the reconciler loop. `interval_secs == 0` disables it (the test/Default config).
 pub fn spawn_reconciler(
-    pool: SqlitePool,
+    pool: AnyPool,
     k8s: Option<Arc<atlas_driver_k8s::K8sDriver>>,
     interval_secs: u64,
     is_leader: Arc<std::sync::atomic::AtomicBool>,
@@ -45,7 +45,7 @@ pub fn spawn_reconciler(
 /// One reconcile pass. Advances `provisioning` edge clusters to `ready` by polling their operator
 /// CR status. (Later slices add: full-load / validation Job watching, CDC lag, cutover draining.)
 async fn reconcile_once(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     k8s: Option<&atlas_driver_k8s::K8sDriver>,
 ) -> anyhow::Result<()> {
     // Fake CDC: drain each streaming stream's lag toward zero so the Replication view animates and
@@ -352,7 +352,7 @@ async fn reconcile_once(
 }
 
 /// Drain fake CDC streams toward zero lag each tick (demoable replication without a real Kafka).
-async fn drain_fake_cdc(pool: &SqlitePool) -> anyhow::Result<()> {
+async fn drain_fake_cdc(pool: &AnyPool) -> anyhow::Result<()> {
     for stream in atlas_inventory::databridge::cdc::list_by_state(pool, "streaming").await? {
         if stream.lag_seconds <= 0 && stream.lag_bytes <= 0 {
             continue;

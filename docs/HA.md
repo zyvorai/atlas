@@ -2,28 +2,40 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
 # High availability foundation
 
-Atlas today runs as a **single replica** with SQLite on a ReadWriteOnce PVC. True multi-replica HA
-needs a shared database (PostgreSQL). This document describes what is already durable, what still
-blocks multi-replica, and the cutover plan.
+Atlas has historically run as a **single replica** with SQLite on a ReadWriteOnce PVC. True
+multi-replica HA needs a shared database (PostgreSQL). This document describes what has landed,
+what's proven, and what's left for a production multi-replica cutover.
 
-## Phase-1 status (foundation landed)
+## Status: query layer is backend-agnostic (Phases A + B landed)
 
-Lab and gateway **remain on SQLite** — nothing flips `ATLAS_DATABASE_URL` in deploy.
+Every crate now builds against `sqlx::AnyPool` and connects to either SQLite or Postgres at
+runtime, chosen by `ATLAS_DATABASE_URL`'s scheme — there is no more compile-time `postgres`
+Cargo feature. Lab/gateway **default to SQLite**; nothing in `deploy/` flips the URL yet, so this
+is not a behavior change for existing deployments — it's the query layer becoming capable of
+running on Postgres in the same binary.
 
 | Landed | Detail |
 |---|---|
-| **`migrations-postgres/`** | Postgres dialect of `migrations/` 0001..0025 (`PRAGMA` removed, `AUTOINCREMENT` → `BIGSERIAL`, `strftime` → `to_char` UTC TEXT defaults, `json_valid` → `::json` CHECKs). Same table/column names. |
-| **`atlas-inventory` feature `postgres`** | Enables `sqlx/postgres`. Adds `connect_postgres` + `migrate_postgres` (runs `migrations-postgres` via `sqlx::migrate!`). Default SQLite `connect` / `migrate` unchanged. |
-| **Smoke** | `scripts/smoke-postgres-ha.sh` and `crates/atlas-inventory/tests/postgres_connect.rs` (live migrate is `#[ignore]` — needs `DATABASE_URL`). |
-| **K8s sketch** | `deploy/k8s/atlas-postgres.yaml` (plain Deployment + optional CNPG comment) — **not applied** to lab. |
+| **`migrations-postgres/`** | Postgres dialect of `migrations/`, kept 1:1 in lockstep (`scripts/check-migrations-parity.sh`, wired into CI — fails the build if the two directories' migration numbers ever diverge, which happened silently twice before this check existed). |
+| **`atlas_inventory::connect()`/`migrate()`** | One function each, no feature flag. `connect()` uses `sqlx::any::install_default_drivers()` + `AnyPoolOptions`, auto-detecting SQLite vs Postgres from the URL scheme; SQLite-only pragmas (WAL, `foreign_keys`, `busy_timeout`, `synchronous`) apply via an `after_connect` hook, skipped for Postgres. `migrate()` scheme-dispatches to `migrations/` or `migrations-postgres/`. |
+| **Query portability cleanup** | All ~250 `sqlx::query` call sites across `atlas-inventory`/`atlas-jobs`/`atlas-monitor`/`atlas-gateway`/`atlas-databridge` (the DataBridge control-plane tables, not customer source-DB connections) use `$N` placeholders (both backends' drivers accept these identically — confirmed live, `sqlx::Any` does zero placeholder rewriting itself). `strftime('now', ...)` (~80 sites) replaced with a Rust-bound `chrono` timestamp via `now_rfc3339()`; `INSERT OR IGNORE` → `ON CONFLICT DO NOTHING`; SQLite's `COLLATE NOCASE` → `lower(x) = lower($N)` (with a matching expression index in both migration directories); SQLite's 2-argument scalar `MAX(a, b)` (Postgres's `MAX()` is aggregate-only) → `CASE WHEN a > b THEN a ELSE b END`. |
+| **State backup** | `spawn_state_backup` branches on backend: SQLite keeps `VACUUM INTO`; Postgres shells out to `pg_dump --format=custom` (mirrors the existing pattern of shelling out to the `ceph`/`rbd` CLI — the gateway image needs `pg_dump` on `PATH` when `ATLAS_DATABASE_URL` is a Postgres URL). |
+| **Live-verified against a real Postgres** | `crates/atlas-inventory/tests/postgres_live.rs` (`#[ignore]`, needs `DATABASE_URL`) exercises connect+migrate+schema parity, the job-claim/reclaim/retry state machine in `jobs.rs` (where the `MAX(a,b)` bug was actually found), and `users.rs`'s case-insensitive username lookup — not just that the code compiles against Postgres. Run via `./scripts/smoke-postgres-ha.sh --migrate`. |
 
-Remaining for a full cutover (not Phase-1):
+Remaining for a full multi-replica cutover (Phases C/D — not yet done):
 
-1. Dual query modules (or `sqlx::Any`) — inventory/jobs still use SQLite `?` placeholders and `SqlitePool` end-to-end.
-2. Gateway/job engine wired to `PgPool` when URL is Postgres; raise pool size; keep leader lease + job claim semantics.
-3. Move rate limiting to Redis or DB-backed counters.
-4. Deployments → `RollingUpdate` + no local DB volume / RWX as needed.
-5. Console `COLLATE NOCASE` parity (`citext` or lower() unique index).
+1. A parameterized test-spawn helper so the ~200 existing `atlas-gateway` integration tests run
+   against both backends in CI (a `postgres:16` service container), not just this crate's own
+   live-Postgres tests.
+2. `deploy/postgres-lab/` gets a real smoke test beyond connect+migrate (apply migrations, then
+   exercise real read/write flows).
+3. Move rate limiting from the in-process `HashMap` to DB-backed fixed-window counters (now
+   trivial given the unified `AnyPool` — no new infra like Redis needed).
+4. `deploy/helm/atlas/values.yaml` gets `database.kind`/`database.url` fields; `replicaCount`
+   unpins from `1` and `Recreate`→`RollingUpdate` once `database.kind: postgres`.
+5. Ceph CLI/local `/etc/ceph` credentials — **already not blocking**: the real-Ceph Deployment
+   renders `/etc/ceph` per-pod via its own `initContainer` (see the Helm chart), so this item from
+   an earlier version of this doc no longer applies.
 
 ## What is durable now
 
@@ -32,43 +44,43 @@ Remaining for a full cutover (not Phase-1):
 | **Job rows** | Every write is a `storage_jobs` row. The in-memory channel is only a wake-up. |
 | **DB poller** | `ATLAS_JOB_POLL_SECS` (default `2`) scans for due `queued`/`pending` work and wakes the worker. Survives channel loss and process restarts. |
 | **Retry backoff** | `next_attempt_at` is honored by recovery + poller (jobs are not fired early after a crash). |
-| **Atomic claim** | `try_claim` stamps `locked_by` / `locked_at` and flips state to `running` so channel + poller races cannot double-execute. |
+| **Atomic claim** | `try_claim` stamps `locked_by` / `locked_at` and flips state to `running` so channel + poller races cannot double-execute. Verified on real Postgres, not just SQLite. |
 | **Stale reclaim** | `ATLAS_JOB_STALE_SECS` (default `900`) re-queues `running` jobs whose lock is older than the threshold (hard kill without boot recovery). |
 | **Boot recovery** | Interrupted `running` → `failed` (fail-safe); due queued work is re-enqueued. |
-| **Leader lease** | `leader_lease` table gates monitor / scheduler / DataBridge reconciler so only one holder schedules. |
+| **Leader lease** | `leader_lease` table gates monitor / scheduler / DataBridge reconciler so only one holder schedules. Design was already portable (an atomic conditional `ON CONFLICT ... DO UPDATE ... WHERE` upsert) — only needed dialect translation, not a redesign. |
 
 ## What still blocks multi-replica
 
-1. **SQLite + RWO PVC** — cannot mount on two pods; Deployments use `strategy: Recreate`.
-2. **sqlx queries** — inventory/jobs use SQLite placeholders (`?`) and `SqlitePool` throughout.
-3. **In-process rate limiter** — per-pod fixed windows (`ATLAS_RATE_LIMIT_RPM`).
-4. **Ceph CLI / local `/etc/ceph`** — real driver assumes local credentials rendered into the pod.
+1. **SQLite + RWO PVC** — cannot mount on two pods; Deployments use `strategy: Recreate`. This is
+   the only remaining *structural* blocker — swap `ATLAS_DATABASE_URL` for a real Postgres and the
+   query layer itself is ready (see "Live-verified" above).
+2. **In-process rate limiter** — per-pod fixed windows (`ATLAS_RATE_LIMIT_RPM`); item 3 above.
+3. **Helm chart** doesn't yet expose a Postgres `database.kind`; item 4 above.
 
 ## PostgreSQL cutover
 
-Lab Postgres for development (does **not** switch Atlas yet):
+Lab Postgres for development (does **not** switch Atlas's own deploy manifests yet):
 
 ```bash
-docker compose -f deploy/postgres/docker-compose.yml up -d
-# Connection string for Phase-1 migrate smoke:
-# DATABASE_URL=postgres://atlas:atlas@127.0.0.1:5432/atlas
+deploy/postgres-lab/up.sh   # or: docker compose -f deploy/postgres/docker-compose.yml up -d
+export DATABASE_URL=postgres://atlas:<password>@<host>:<port>/atlas
 ./scripts/smoke-postgres-ha.sh --migrate
 ```
 
-Build / check the optional feature:
+To actually run the gateway against Postgres locally:
 
 ```bash
-cargo check -p atlas-inventory --features postgres
+ATLAS_DATABASE_URL="postgres://atlas:<password>@<host>:<port>/atlas" cargo run -p atlas-gateway
 ```
 
-Default SQLite `connect("postgres://...")` still **rejects** with a pointer here so a mis-set
-`ATLAS_DATABASE_URL` fails loudly. Use `connect_postgres` only behind the `postgres` feature.
+`connect()` auto-detects the backend from the URL scheme — no feature flag, no code change.
 
 ## Config knobs
 
 | Env | Default | Meaning |
 |---|---|---|
-| `ATLAS_DATABASE_URL` | `sqlite://atlas.db?mode=rwc` | SQLite for lab/gateway; Postgres URL refused by default `connect` |
-| `DATABASE_URL` | — | Used by Phase-1 smoke / ignored migrate test |
+| `ATLAS_DATABASE_URL` | `sqlite://atlas.db?mode=rwc` | SQLite or Postgres URL — backend auto-detected by `connect()` |
+| `DATABASE_URL` | — | Used by `scripts/smoke-postgres-ha.sh` / the `#[ignore]`d live Postgres tests |
 | `ATLAS_JOB_POLL_SECS` | `2` | Durable queue poll interval (`0` disables; tests use `0`) |
 | `ATLAS_JOB_STALE_SECS` | `900` | Reclaim stale `running` locks (`0` disables) |
+| `ATLAS_STATE_BACKUP_SECS` | `0` (disabled) | Periodic self-state backup interval; snapshot mechanism (`VACUUM INTO` vs `pg_dump`) auto-selected by backend |
