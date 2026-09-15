@@ -180,5 +180,6 @@ jobs:
           cache-from: type=gha,scope=arm64-probe
           cache-to: type=gha,mode=max,scope=arm64-probe
       - name: TEMP PROBE — done
-        run: date -u +"probe end: %H:%M:%S UTC"
+        run: |
+          date -u +"probe end: %H:%M:%S UTC"
         shell: bash
