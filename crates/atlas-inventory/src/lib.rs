@@ -313,7 +313,12 @@ pub async fn set_volume_size(pool: &AnyPool, id: &str, size_bytes: i64) -> Resul
     Ok(())
 }
 
-/// Record a volume's applied QoS limits under `metadata.qos` (day-2 throttling).
+/// Record a volume's applied QoS limits under `metadata.qos` (day-2 throttling). The merge
+/// (read-modify-write instead of SQLite's `json_set(...)`) happens in Rust rather than server-side
+/// — SQLite's JSON1 functions (`json_set`/`json_extract`/...) have no portable equivalent whose
+/// query *text* is identical on Postgres (Postgres's `jsonb_set`/`->>` use a different path syntax
+/// entirely), so — like the date-math sites elsewhere in this migration — this one small race
+/// window (a concurrent metadata writer between the SELECT and UPDATE) is traded for portability.
 pub async fn set_volume_qos(
     pool: &AnyPool,
     id: &str,
@@ -321,15 +326,25 @@ pub async fn set_volume_qos(
     bps_limit: Option<i64>,
 ) -> Result<()> {
     let qos = serde_json::json!({ "iops_limit": iops_limit, "bps_limit": bps_limit });
-    sqlx::query(
-        "UPDATE storage_volumes SET metadata = json_set(metadata, '$.qos', json($1)),
-         updated_at=$2 WHERE id=$3",
-    )
-    .bind(qos.to_string())
-    .bind(now_rfc3339(chrono::Utc::now()))
-    .bind(id)
-    .execute(pool)
-    .await?;
+    let current: Option<String> =
+        sqlx::query_scalar("SELECT metadata FROM storage_volumes WHERE id=$1")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
+    let mut metadata: serde_json::Value = current
+        .as_deref()
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    if !metadata.is_object() {
+        metadata = serde_json::json!({});
+    }
+    metadata["qos"] = qos;
+    sqlx::query("UPDATE storage_volumes SET metadata=$1, updated_at=$2 WHERE id=$3")
+        .bind(metadata.to_string())
+        .bind(now_rfc3339(chrono::Utc::now()))
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -703,8 +718,11 @@ pub async fn upsert_discovery(
 /// StorageClass their assigned policy resolves to, or whose policy was deleted.
 pub async fn list_policy_drift(pool: &AnyPool) -> Result<Vec<serde_json::Value>> {
     let rows = sqlx::query(
+        // `placement` (raw JSON text) is pulled back and parsed in Rust rather than extracted via
+        // SQLite's json_extract() server-side — no portable equivalent exists whose query text is
+        // identical on Postgres (see set_volume_qos's comment for the same tradeoff).
         "SELECT v.id AS volume_id, v.name AS name, v.storage_class_name AS actual, v.policy_id AS policy_id,
-                json_extract(p.placement,'$.storage_class') AS expected,
+                p.placement AS placement,
                 CASE WHEN p.id IS NULL THEN 1 ELSE 0 END AS policy_missing
          FROM storage_volumes v LEFT JOIN storage_policies p ON p.id = v.policy_id
          WHERE v.policy_id IS NOT NULL",
@@ -714,7 +732,12 @@ pub async fn list_policy_drift(pool: &AnyPool) -> Result<Vec<serde_json::Value>>
     let mut drift = Vec::new();
     for r in rows {
         let actual: Option<String> = r.get("actual");
-        let expected: Option<String> = r.get("expected");
+        let placement: Option<String> = r.get("placement");
+        let expected: Option<String> = placement.as_deref().and_then(|p| {
+            serde_json::from_str::<serde_json::Value>(p)
+                .ok()
+                .and_then(|v| v.get("storage_class").and_then(|s| s.as_str()).map(str::to_string))
+        });
         let missing: i64 = r.get("policy_missing");
         let drifted = missing == 1 || (expected.is_some() && actual != expected);
         if drifted {
@@ -1084,8 +1107,8 @@ pub async fn backend_breakdown(pool: &AnyPool) -> Result<Vec<serde_json::Value>>
         "SELECT b.id AS id, b.backend_type AS backend_type, b.mode AS mode, b.status AS status,
                 (SELECT COUNT(*) FROM storage_clusters c WHERE c.backend_id=b.id) AS clusters,
                 (SELECT COUNT(*) FROM storage_volumes v WHERE v.backend_id=b.id) AS volumes,
-                COALESCE((SELECT SUM(raw_capacity_bytes)  FROM storage_clusters c WHERE c.backend_id=b.id),0) AS raw,
-                COALESCE((SELECT SUM(used_capacity_bytes) FROM storage_clusters c WHERE c.backend_id=b.id),0) AS used
+                CAST(COALESCE((SELECT SUM(raw_capacity_bytes)  FROM storage_clusters c WHERE c.backend_id=b.id),0) AS BIGINT) AS raw,
+                CAST(COALESCE((SELECT SUM(used_capacity_bytes) FROM storage_clusters c WHERE c.backend_id=b.id),0) AS BIGINT) AS used
          FROM storage_backends b ORDER BY b.id",
     )
     .fetch_all(pool)
@@ -1110,10 +1133,13 @@ pub async fn backend_breakdown(pool: &AnyPool) -> Result<Vec<serde_json::Value>>
 /// Aggregate capacity summary across all clusters (PDF §13.2 overview cards).
 pub async fn metrics_summary(pool: &AnyPool) -> Result<serde_json::Value> {
     let row = sqlx::query(
+        // CAST(... AS BIGINT): Postgres's SUM(bigint) returns NUMERIC (overflow-safe by
+        // default), which sqlx's Any driver can't decode — force a plain bigint result,
+        // portable to SQLite (CAST AS BIGINT there just gets INTEGER affinity).
         "SELECT
-            COALESCE(SUM(raw_capacity_bytes),0)       AS raw,
-            COALESCE(SUM(used_capacity_bytes),0)      AS used,
-            COALESCE(SUM(available_capacity_bytes),0) AS avail,
+            CAST(COALESCE(SUM(raw_capacity_bytes),0) AS BIGINT)       AS raw,
+            CAST(COALESCE(SUM(used_capacity_bytes),0) AS BIGINT)      AS used,
+            CAST(COALESCE(SUM(available_capacity_bytes),0) AS BIGINT) AS avail,
             COUNT(*)                                  AS clusters
          FROM storage_clusters",
     )

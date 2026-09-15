@@ -28,7 +28,11 @@ pub async fn list_overview(pool: &AnyPool) -> Result<Vec<TenantQuota>> {
 /// Current usage for a tenant: total provisioned volume bytes and volume count.
 pub async fn usage(pool: &AnyPool, tenant_id: &str) -> Result<(i64, i64)> {
     let row = sqlx::query(
-        "SELECT COALESCE(SUM(size_bytes), 0) AS used, COUNT(*) AS n
+        // CAST(... AS BIGINT), not bare SUM/COALESCE: Postgres's SUM(bigint) returns NUMERIC
+        // (to avoid silent overflow), which sqlx's Any driver can't decode at all — the cast
+        // forces a plain bigint result, portable to SQLite (whose CAST AS BIGINT gets INTEGER
+        // affinity, identical to an uncast integer).
+        "SELECT CAST(COALESCE(SUM(size_bytes), 0) AS BIGINT) AS used, COUNT(*) AS n
          FROM storage_volumes WHERE tenant_id = $1",
     )
     .bind(tenant_id)

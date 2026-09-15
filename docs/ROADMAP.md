@@ -482,10 +482,34 @@ runbook; summary:
   the `MAX(a,b)` bug was actually found) and the `COLLATE NOCASE` rewrite's case-insensitive
   username lookup. `scripts/check-migrations-parity.sh` (new CI gate) prevents `migrations-postgres/`
   drifting behind `migrations/` again, the way it silently did twice before. See `docs/HA.md`,
-  which this closes most of — remaining: a dual-backend CI job running the full `atlas-gateway`
-  suite against both backends, and DB-backed rate limiting (found to be blocked on a real
-  constraint — the gRPC `tonic::Interceptor` closure is synchronous — not just unstarted work; see
-  `docs/HA.md`'s detail).
+  which this closes most of — remaining at the time: a dual-backend CI job (closed by the next
+  bullet) and DB-backed rate limiting (found to be blocked on a real constraint — the gRPC
+  `tonic::Interceptor` closure is synchronous — not just unstarted work; see `docs/HA.md`'s
+  detail).
+- ✅ **Dual-backend CI proves the query layer, not just the connection** — new `postgres-test` job
+  in `.github/workflows/ci.yml` runs the full ~200-test `atlas-gateway` integration suite a second
+  time against a real `postgres:16` service container (plus `atlas-inventory`'s `postgres_live.rs`
+  tests), via a new `crates/atlas-gateway/tests/common/mod.rs` shared helper: every test's
+  database setup goes through one `fresh_database_url()` call that's a throwaway SQLite temp file
+  by default (unchanged from before) or, when `ATLAS_TEST_DATABASE_URL` is set, a freshly
+  `CREATE DATABASE`'d Postgres database per test — same per-test isolation guarantee, different
+  backend, zero changes to any of the ~200 existing test bodies/assertions. This is exactly the
+  "run the existing suite against both backends" idea `docs/HA.md` had flagged as still open, and
+  it did its job immediately: running it for the first time surfaced four real, previously
+  undiscovered Postgres schema/query bugs, none of them caught by "does it compile" or by SQLite
+  alone —
+  (1) several byte-capacity columns declared Postgres `INTEGER` (4 bytes, ~2.1GB max) instead of
+  `BIGINT`, since SQLite's own `INTEGER` is *always* 8 bytes regardless of the declared name
+  (fixed in migration `0032`);
+  (2) `SUM(bigint)` returns Postgres `NUMERIC`, which `sqlx::Any` can't decode at all, requiring an
+  explicit `CAST(... AS BIGINT)` at three call sites;
+  (3) the equivalent gap for floats — `REAL` columns bound to Rust `f64` needed widening to
+  `DOUBLE PRECISION` (migration `0033`);
+  (4) SQLite's JSON1 functions (`json_extract`/`json_set`) have no Postgres equivalent whose query
+  *text* is identical on both backends, so the three call sites using them were rewritten to pull
+  raw JSON text and do the read/merge in Rust instead, matching this migration's established
+  date-math pattern. All four are now covered by the live suite going forward. See `docs/HA.md`'s
+  "Landed" table for the full detail.
 - ✅ **Helm chart: Postgres-backed multi-replica deployment** — `deploy/helm/atlas/values.yaml`'s
   new `database.kind: sqlite|postgres` (+ `database.existingSecret`/`secretKey`, never an inlined
   URL) switches `templates/deployment.yaml`/`pvc.yaml` between the existing single-replica shape

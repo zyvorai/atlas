@@ -54,10 +54,11 @@ pub struct VolumeProtectionStatus {
 async fn policy_targets_by_volume(
     pool: &AnyPool,
 ) -> Result<HashMap<String, (Option<i64>, Option<i64>)>> {
+    // `protection` (raw JSON text) is pulled back and parsed in Rust rather than extracted via
+    // SQLite's json_extract() server-side — no portable equivalent exists whose query text is
+    // identical on Postgres (see atlas_inventory::set_volume_qos's comment for the same tradeoff).
     let rows = sqlx::query(
-        "SELECT v.id AS volume_id,
-                json_extract(p.protection, '$.rpo_target_seconds') AS rpo_target_seconds,
-                json_extract(p.protection, '$.rto_target_seconds') AS rto_target_seconds
+        "SELECT v.id AS volume_id, p.protection AS protection
          FROM storage_volumes v
          LEFT JOIN storage_policies p ON p.id = v.policy_id",
     )
@@ -66,13 +67,18 @@ async fn policy_targets_by_volume(
     Ok(rows
         .into_iter()
         .map(|r| {
-            (
-                r.get::<String, _>("volume_id"),
-                (
-                    r.get::<Option<i64>, _>("rpo_target_seconds"),
-                    r.get::<Option<i64>, _>("rto_target_seconds"),
-                ),
-            )
+            let protection: Option<String> = r.get("protection");
+            let parsed: Option<serde_json::Value> =
+                protection.as_deref().and_then(|s| serde_json::from_str(s).ok());
+            let rpo = parsed
+                .as_ref()
+                .and_then(|v| v.get("rpo_target_seconds"))
+                .and_then(|v| v.as_i64());
+            let rto = parsed
+                .as_ref()
+                .and_then(|v| v.get("rto_target_seconds"))
+                .and_then(|v| v.as_i64());
+            (r.get::<String, _>("volume_id"), (rpo, rto))
         })
         .collect())
 }

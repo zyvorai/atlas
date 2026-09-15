@@ -9,6 +9,8 @@ use std::sync::{Arc, Mutex};
 use axum::{extract::State, routing::post, Json, Router};
 use sqlx::Row;
 
+mod common;
+
 /// A tiny fake SIEM webhook: captures the last POSTed body and always returns 200.
 async fn spawn_fake_sink() -> (std::net::SocketAddr, Arc<Mutex<Option<serde_json::Value>>>) {
     let received: Arc<Mutex<Option<serde_json::Value>>> = Arc::new(Mutex::new(None));
@@ -33,20 +35,8 @@ async fn spawn_fake_sink() -> (std::net::SocketAddr, Arc<Mutex<Option<serde_json
     (addr, received)
 }
 
-static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
 async fn spawn_db() -> sqlx::AnyPool {
-    // An atomic counter, not a timestamp: #[tokio::test] fns in the same binary run concurrently,
-    // and two tests can land in the same nanosecond, colliding on the same SQLite file (the bug
-    // that made this test flaky under a parallel `cargo test --workspace` run).
-    let db = format!(
-        "{}/atlas-audit-export-{}-{}.db",
-        std::env::temp_dir().display(),
-        std::process::id(),
-        NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-    );
-    let _ = std::fs::remove_file(&db);
-    let url = format!("sqlite://{db}?mode=rwc");
+    let url = common::fresh_database_url("audit-export").await;
     let pool = atlas_inventory::connect(&url).await.unwrap();
     atlas_inventory::migrate(&pool, &url).await.unwrap();
     pool

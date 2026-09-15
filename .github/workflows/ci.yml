@@ -95,6 +95,49 @@ jobs:
           cargo check -p atlas-gateway --features mcp
           cargo test -p atlas-gateway --features mcp --test mcp
 
+  # Runs the full atlas-gateway integration suite (~200 tests, unchanged from build-test's run —
+  # see crates/atlas-gateway/tests/common/mod.rs) a second time against a real Postgres instead of
+  # each test's default throwaway SQLite file, proving the sqlx::AnyPool query layer (docs/HA.md)
+  # actually works on both backends, not just that it compiles against both. This is exactly how a
+  # real schema-vs-Rust-type mismatch was found and fixed during that migration (Postgres's
+  # 4-byte REAL/INTEGER vs SQLite's always-8-byte REAL/INTEGER, and SUM(bigint) promoting to
+  # NUMERIC) — a regression here would look identical: green build-test, red postgres-test.
+  postgres-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: atlas
+          POSTGRES_PASSWORD: atlas
+          POSTGRES_DB: atlas
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # ATLAS_TEST_DATABASE_URL: an *admin* connection — crates/atlas-gateway/tests/common/mod.rs
+      # CREATE DATABASEs a fresh, uniquely-named database per test off this connection for
+      # isolation (the same "one throwaway DB per test" guarantee the SQLite temp-file path
+      # already gives), then connects to that instead.
+      ATLAS_TEST_DATABASE_URL: postgres://atlas:atlas@localhost:5432/atlas
+      DATABASE_URL: postgres://atlas:atlas@localhost:5432/atlas
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@ce678459e9fc7500d337468f904b95f1b5c10b5e # 1.98.1
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: postgres-test
+      - name: atlas-gateway integration suite against Postgres
+        run: cargo test -p atlas-gateway --features mcp
+      - name: atlas-inventory live-Postgres query-layer tests
+        run: cargo test -p atlas-inventory --test postgres_live -- --ignored --nocapture
+
   ui:
     runs-on: ubuntu-latest
     defaults:
