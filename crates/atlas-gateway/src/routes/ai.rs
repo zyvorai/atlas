@@ -11,7 +11,10 @@ use std::{
 
 use atlas_api_types::AlertRecord;
 use atlas_common::{AppError, AppResult};
-use axum::{extract::State, Extension, Json};
+use axum::{
+    extract::{Query, State},
+    Extension, Json,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::Row;
@@ -129,6 +132,117 @@ pub(crate) struct WhatIfResponse {
     can_execute: bool,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct AnomalyQuery {
+    #[serde(default = "default_anomaly_minutes")]
+    minutes: i64,
+    #[serde(default = "default_sensitivity")]
+    sensitivity: f64,
+}
+
+fn default_anomaly_minutes() -> i64 {
+    360
+}
+
+fn default_sensitivity() -> f64 {
+    3.5
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct MetricAnomaly {
+    id: String,
+    metric: String,
+    label: String,
+    severity: String,
+    score: f64,
+    current: f64,
+    baseline: f64,
+    median_absolute_deviation: f64,
+    change_percent: f64,
+    direction: &'static str,
+    explanation: String,
+    inspect: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct AnomaliesResponse {
+    generated_at: String,
+    window_minutes: i64,
+    sample_count: usize,
+    sensitivity: f64,
+    model: &'static str,
+    anomalies: Vec<MetricAnomaly>,
+    warnings: Vec<String>,
+    can_execute: bool,
+}
+
+#[derive(Clone, Copy)]
+enum SeriesKind {
+    Gauge,
+    CounterDelta,
+}
+
+#[derive(Clone, Copy)]
+struct MetricSpec {
+    key: &'static str,
+    label: &'static str,
+    kind: SeriesKind,
+    min_change: f64,
+    inspect: &'static str,
+}
+
+const ANOMALY_METRICS: &[MetricSpec] = &[
+    MetricSpec {
+        key: "used_capacity_bytes",
+        label: "Capacity growth",
+        kind: SeriesKind::CounterDelta,
+        min_change: 67_108_864.0,
+        inspect: "/api/atlas/v1/metrics/history",
+    },
+    MetricSpec {
+        key: "read_bytes",
+        label: "Read throughput",
+        kind: SeriesKind::CounterDelta,
+        min_change: 1_048_576.0,
+        inspect: "/api/atlas/v1/metrics/ceph",
+    },
+    MetricSpec {
+        key: "write_bytes",
+        label: "Write throughput",
+        kind: SeriesKind::CounterDelta,
+        min_change: 1_048_576.0,
+        inspect: "/api/atlas/v1/metrics/ceph",
+    },
+    MetricSpec {
+        key: "read_ops",
+        label: "Read operations",
+        kind: SeriesKind::CounterDelta,
+        min_change: 100.0,
+        inspect: "/api/atlas/v1/metrics/ceph",
+    },
+    MetricSpec {
+        key: "write_ops",
+        label: "Write operations",
+        kind: SeriesKind::CounterDelta,
+        min_change: 100.0,
+        inspect: "/api/atlas/v1/metrics/ceph",
+    },
+    MetricSpec {
+        key: "jobs_running",
+        label: "Concurrent jobs",
+        kind: SeriesKind::Gauge,
+        min_change: 1.0,
+        inspect: "/api/atlas/v1/jobs",
+    },
+    MetricSpec {
+        key: "alerts_open",
+        label: "Open alerts",
+        kind: SeriesKind::Gauge,
+        min_change: 1.0,
+        inspect: "/api/atlas/v1/alerts?state=open",
+    },
+];
+
 #[derive(Debug, Serialize)]
 pub(crate) struct AdvisorResponse {
     mode: &'static str,
@@ -214,6 +328,47 @@ pub(crate) async fn ai_advisor(
         summary,
         evidence,
         actions,
+        warnings,
+        can_execute: false,
+    }))
+}
+
+/// `GET /ai/anomalies` — robust local anomaly detection over persisted Atlas metrics. Uses a
+/// median/MAD baseline so a previous spike cannot drag the baseline toward itself.
+pub(crate) async fn ai_anomalies(
+    State(s): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Query(q): Query<AnomalyQuery>,
+) -> AppResult<Json<AnomaliesResponse>> {
+    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    if !(15..=20_160).contains(&q.minutes) {
+        return Err(AppError::Validation(
+            "minutes must be between 15 and 20160".into(),
+        ));
+    }
+    if !q.sensitivity.is_finite() || !(2.0..=10.0).contains(&q.sensitivity) {
+        return Err(AppError::Validation(
+            "sensitivity must be a finite number between 2 and 10".into(),
+        ));
+    }
+    let history = atlas_inventory::metrics::history(&s.pool, q.minutes).await?;
+    let mut anomalies = detect_anomalies(&history, q.sensitivity);
+    anomalies.sort_by(|a, b| b.score.total_cmp(&a.score));
+    let warnings = if history.len() < 5 {
+        vec![format!(
+            "At least 5 samples are required; {} available",
+            history.len()
+        )]
+    } else {
+        Vec::new()
+    };
+    Ok(Json(AnomaliesResponse {
+        generated_at: chrono::Utc::now().to_rfc3339(),
+        window_minutes: q.minutes,
+        sample_count: history.len(),
+        sensitivity: q.sensitivity,
+        model: "robust_median_mad_v1",
+        anomalies,
         warnings,
         can_execute: false,
     }))
@@ -535,6 +690,102 @@ fn projection(score: u8, evidence: &AdvisorEvidence) -> RiskProjection {
         capacity_used_percent: evidence.capacity_used_percent,
         days_to_full: evidence.days_to_full,
     }
+}
+
+fn median(values: &[f64]) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_by(f64::total_cmp);
+    let middle = sorted.len() / 2;
+    if sorted.len().is_multiple_of(2) {
+        (sorted[middle - 1] + sorted[middle]) / 2.0
+    } else {
+        sorted[middle]
+    }
+}
+
+fn normalized_series(history: &[Value], spec: MetricSpec) -> Vec<f64> {
+    let raw: Vec<f64> = history
+        .iter()
+        .map(|sample| number(sample, &[spec.key]))
+        .collect();
+    match spec.kind {
+        SeriesKind::Gauge => raw,
+        SeriesKind::CounterDelta => raw
+            .windows(2)
+            .map(|pair| (pair[1] - pair[0]).max(0.0))
+            .collect(),
+    }
+}
+
+fn anomaly_score(current: f64, baseline: f64, mad: f64, min_change: f64) -> f64 {
+    let change = current - baseline;
+    if change < min_change {
+        return 0.0;
+    }
+    if mad > f64::EPSILON {
+        return 0.674_489_75 * change.abs() / mad;
+    }
+    if baseline.abs() <= f64::EPSILON {
+        return 10.0;
+    }
+    (change.abs() / baseline.abs() * 4.0).min(25.0)
+}
+
+fn detect_metric(history: &[Value], spec: MetricSpec, sensitivity: f64) -> Option<MetricAnomaly> {
+    let values = normalized_series(history, spec);
+    if values.len() < 4 {
+        return None;
+    }
+    let (&current, baseline_values) = values.split_last()?;
+    let baseline = median(baseline_values);
+    let deviations: Vec<f64> = baseline_values
+        .iter()
+        .map(|value| (value - baseline).abs())
+        .collect();
+    let mad = median(&deviations);
+    let score = anomaly_score(current, baseline, mad, spec.min_change);
+    if score < sensitivity {
+        return None;
+    }
+    let severity = if score >= sensitivity * 2.0 {
+        "critical"
+    } else if score >= sensitivity * 1.5 {
+        "high"
+    } else {
+        "warning"
+    };
+    let change_percent = if baseline.abs() > f64::EPSILON {
+        (current - baseline) / baseline.abs() * 100.0
+    } else {
+        100.0
+    };
+    Some(MetricAnomaly {
+        id: format!("anomaly_{}", spec.key),
+        metric: spec.key.into(),
+        label: spec.label.into(),
+        severity: severity.into(),
+        score: (score * 10.0).round() / 10.0,
+        current,
+        baseline,
+        median_absolute_deviation: mad,
+        change_percent: (change_percent * 10.0).round() / 10.0,
+        direction: "higher",
+        explanation: format!(
+            "{} is {:.1}% above its robust historical baseline (anomaly score {:.1}).",
+            spec.label, change_percent, score
+        ),
+        inspect: spec.inspect.into(),
+    })
+}
+
+fn detect_anomalies(history: &[Value], sensitivity: f64) -> Vec<MetricAnomaly> {
+    ANOMALY_METRICS
+        .iter()
+        .filter_map(|spec| detect_metric(history, *spec, sensitivity))
+        .collect()
 }
 
 fn number(value: &Value, path: &[&str]) -> f64 {
@@ -918,5 +1169,63 @@ mod tests {
         assert_eq!(projected.capacity_used_percent, 50.0);
         assert_eq!(projected.days_to_full, None); // growth below the 1 MiB/day noise floor
         assert!(assess(&projected).0 < assess(&baseline).0);
+    }
+
+    fn history_sample(used: f64, writes: f64, jobs: f64, alerts: f64) -> Value {
+        json!({
+            "used_capacity_bytes": used,
+            "read_bytes": 0.0,
+            "write_bytes": writes,
+            "read_ops": 0.0,
+            "write_ops": writes,
+            "jobs_running": jobs,
+            "alerts_open": alerts,
+        })
+    }
+
+    #[test]
+    fn stable_history_has_no_anomalies() {
+        let history = vec![
+            history_sample(100.0, 1000.0, 1.0, 0.0),
+            history_sample(110.0, 1100.0, 1.0, 0.0),
+            history_sample(120.0, 1200.0, 1.0, 0.0),
+            history_sample(130.0, 1300.0, 1.0, 0.0),
+            history_sample(140.0, 1400.0, 1.0, 0.0),
+        ];
+        assert!(detect_anomalies(&history, 3.5).is_empty());
+    }
+
+    #[test]
+    fn robust_baseline_detects_alert_and_job_surge() {
+        let history = vec![
+            history_sample(0.0, 0.0, 1.0, 1.0),
+            history_sample(0.0, 0.0, 1.0, 1.0),
+            history_sample(0.0, 0.0, 1.0, 1.0),
+            history_sample(0.0, 0.0, 1.0, 1.0),
+            history_sample(0.0, 0.0, 8.0, 12.0),
+        ];
+        let anomalies = detect_anomalies(&history, 3.5);
+        assert!(anomalies.iter().any(|a| a.metric == "jobs_running"));
+        assert!(anomalies.iter().any(|a| a.metric == "alerts_open"));
+        assert!(anomalies.iter().all(|a| a.direction == "higher"));
+    }
+
+    #[test]
+    fn counter_detection_uses_deltas_not_cumulative_totals() {
+        let mib = 1_048_576.0;
+        let history = vec![
+            history_sample(0.0, 0.0, 0.0, 0.0),
+            history_sample(0.0, mib, 0.0, 0.0),
+            history_sample(0.0, mib * 2.0, 0.0, 0.0),
+            history_sample(0.0, mib * 3.0, 0.0, 0.0),
+            history_sample(0.0, mib * 20.0, 0.0, 0.0),
+        ];
+        let anomalies = detect_anomalies(&history, 3.5);
+        let write = anomalies
+            .iter()
+            .find(|a| a.metric == "write_bytes")
+            .expect("write spike");
+        assert_eq!(write.baseline, mib);
+        assert_eq!(write.current, mib * 17.0);
     }
 }

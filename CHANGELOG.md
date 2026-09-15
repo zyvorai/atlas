@@ -22,6 +22,8 @@ before `0.2.0` were not tracked here — see `git log` for that history.
   incident families with bounded confidence and visible source signals.
 - Added `POST /ai/what-if` plus console controls to compare baseline risk with capacity, growth,
   alert-resolution, and recovery-completion scenarios without changing live inventory.
+- Added `GET /ai/anomalies` with model-free median/MAD detection for capacity, I/O, job, and alert
+  surges; the console exposes explainable scores and adjustable sensitivity.
 
 ## [0.3.0] — 2026-09-14
 

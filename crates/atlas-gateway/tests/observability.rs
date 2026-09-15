@@ -352,6 +352,55 @@ async fn ai_what_if_projects_capacity_and_validates_inputs() {
     assert_eq!(invalid.status(), 400);
 }
 
+/// The anomaly endpoint uses counter deltas and a robust baseline to surface a latest-interval
+/// spike without needing an external model or training data.
+#[tokio::test]
+async fn ai_anomalies_detects_a_write_spike() {
+    let (addr, pool) = spawn_with(Opts::default()).await;
+    let mib = 1_048_576_i64;
+    for (index, writes) in [0, mib, mib * 2, mib * 3, mib * 20].into_iter().enumerate() {
+        let minutes_ago = 5 - index as i64;
+        sqlx::query(
+            "INSERT INTO metrics_history
+             (ts, raw_capacity_bytes, used_capacity_bytes, volumes, snapshots, read_bytes,
+              write_bytes, read_ops, write_ops, jobs_running, alerts_open)
+             VALUES (strftime('%Y-%m-%dT%H:%M:%fZ','now', ?), 1000000000, 100000000,
+                     1, 0, 0, ?, 0, ?, 1, 0)",
+        )
+        .bind(format!("-{minutes_ago} minutes"))
+        .bind(writes as f64)
+        .bind(writes as f64)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    let base = format!("http://{addr}/api/atlas/v1/ai/anomalies");
+    let body: Value = client()
+        .get(format!("{base}?minutes=60&sensitivity=3.5"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(body["model"], "robust_median_mad_v1");
+    assert_eq!(body["sample_count"], 5);
+    assert_eq!(body["can_execute"], false);
+    assert!(body["anomalies"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|anomaly| anomaly["metric"] == "write_bytes"));
+
+    let invalid = client()
+        .get(format!("{base}?minutes=60&sensitivity=1"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), 400);
+}
+
 /// `/readyz` is a deep check: it probes the actual driver (not a hardcoded ok) and reports worker
 /// heartbeats; `/livez` is the shallow always-alive signal; `/version` names the service.
 #[tokio::test]

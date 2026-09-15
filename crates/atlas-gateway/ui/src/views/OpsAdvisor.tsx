@@ -14,7 +14,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { apiError, http } from "../api/client";
-import type { AdvisorMode, AdvisorResponse, IncidentsResponse, WhatIfResponse } from "../api/types";
+import type { AdvisorMode, AdvisorResponse, AnomaliesResponse, IncidentsResponse, WhatIfResponse } from "../api/types";
 import { navCrumbs } from "../nav/routes";
 import { Badge, Button, RadialGauge } from "../ui/kit";
 import { DashboardHero } from "../ui/templates/DashboardHero";
@@ -42,6 +42,8 @@ export default function OpsAdvisor() {
   const [mode, setMode] = useState<AdvisorMode>("local");
   const [result, setResult] = useState<AdvisorResponse>();
   const [incidents, setIncidents] = useState<IncidentsResponse>();
+  const [anomalies, setAnomalies] = useState<AnomaliesResponse>();
+  const [sensitivity, setSensitivity] = useState("3.5");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [capacityTib, setCapacityTib] = useState("1");
@@ -58,12 +60,14 @@ export default function OpsAdvisor() {
     setLoading(true);
     setError("");
     try {
-      const [advisor, correlated] = await Promise.all([
+      const [advisor, correlated, detected] = await Promise.all([
         http.post<AdvisorResponse>("/ai/advisor", { question, mode }),
         http.get<IncidentsResponse>("/ai/incidents"),
+        http.get<AnomaliesResponse>(`/ai/anomalies?minutes=360&sensitivity=${sensitivity}`),
       ]);
       setResult(advisor.data);
       setIncidents(correlated.data);
+      setAnomalies(detected.data);
     } catch (err) {
       setError(apiError(err));
     } finally {
@@ -244,6 +248,61 @@ export default function OpsAdvisor() {
                 <CheckCircle2 size={17} aria-hidden /> No related active signals were found.
               </div>
             )}
+          </div>
+
+          <div className="at-panel">
+            <div className="at-panel-bar">
+              <span className="at-caption">Telemetry anomalies · 6-hour window</span>
+              <div className="at-chips" style={{ padding: 0, margin: 0 }} aria-label="Anomaly sensitivity">
+                {["3", "3.5", "5"].map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`at-chip${sensitivity === value ? " on" : ""}`}
+                    onClick={() => setSensitivity(value)}
+                    title="Lower values detect smaller deviations"
+                  >
+                    {value === "3" ? "Sensitive" : value === "3.5" ? "Balanced" : "Strict"}
+                  </button>
+                ))}
+              </div>
+              <span className="grow" />
+              <Badge kind={anomalies?.anomalies.length ? "warning" : "success"}>
+                {anomalies?.anomalies.length ?? 0} detected
+              </Badge>
+            </div>
+            {anomalies?.warnings.map((warning) => (
+              <div className="at-list-row" key={warning} style={{ color: "var(--at-warn)" }}>
+                <AlertTriangle size={16} aria-hidden /> {warning}
+              </div>
+            ))}
+            {anomalies?.anomalies.length ? anomalies.anomalies.map((anomaly) => (
+              <div className="at-list-row" key={anomaly.id} style={{ alignItems: "flex-start" }}>
+                <Badge kind={anomaly.severity === "critical" ? "danger" : "warning"} dot>
+                  {anomaly.severity}
+                </Badge>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <strong>{anomaly.label}</strong>
+                    <Badge kind="info">score {anomaly.score.toFixed(1)}</Badge>
+                    <span className="mono" style={{ fontSize: 11 }}>{anomaly.change_percent >= 0 ? "+" : ""}{anomaly.change_percent.toFixed(1)}%</span>
+                  </div>
+                  <p className="at-sub" style={{ margin: "5px 0 8px" }}>{anomaly.explanation}</p>
+                  <code className="mono" style={{ fontSize: 11.5 }}>{anomaly.inspect}</code>
+                </div>
+              </div>
+            )) : anomalies?.warnings.length ? null : (
+              <div className="at-list-row" style={{ color: "var(--at-ok)" }}>
+                <CheckCircle2 size={17} aria-hidden /> No statistically significant upward deviations detected.
+              </div>
+            )}
+            {anomalies ? (
+              <div className="at-list-row">
+                <span className="at-sub" style={{ margin: 0 }}>
+                  {anomalies.sample_count} samples · median/MAD baseline · sensitivity {anomalies.sensitivity}
+                </span>
+              </div>
+            ) : null}
           </div>
 
           <div className="at-instrs">

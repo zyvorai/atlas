@@ -66,3 +66,23 @@ The response compares baseline and projected risk, capacity utilization, days-to
 actions, and explicit assumptions. Horizons are limited to 1–365 days, added capacity to 1 EiB,
 and growth must be finite and non-negative. The endpoint records an `ai.what_if` audit event and
 always returns `can_execute: false`.
+
+## Explainable anomaly detection
+
+`GET /api/atlas/v1/ai/anomalies?minutes=360&sensitivity=3.5` analyzes persisted metric history
+without an external model. It detects upward deviations in:
+
+- capacity growth;
+- read/write byte deltas;
+- read/write operation deltas;
+- concurrent jobs;
+- open alerts.
+
+The detector uses the median and median absolute deviation (MAD), which are resistant to older
+spikes contaminating the baseline. Cumulative counters are converted to per-sample deltas before
+analysis. Each result exposes its current value, baseline, MAD, percentage change, anomaly score,
+severity, explanation, and a read-only inspection endpoint.
+
+The query accepts a 15-minute to 14-day window and sensitivity from 2–10. Lower sensitivity finds
+smaller deviations. At least five history samples are required; Atlas returns a warning rather
+than inventing a result when the baseline is insufficient.

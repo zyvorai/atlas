@@ -202,6 +202,32 @@ export interface WhatIfResponse {
   can_execute: false;
 }
 
+export interface MetricAnomaly {
+  id: string;
+  metric: string;
+  label: string;
+  severity: "warning" | "high" | "critical";
+  score: number;
+  current: number;
+  baseline: number;
+  median_absolute_deviation: number;
+  change_percent: number;
+  direction: "higher";
+  explanation: string;
+  inspect: string;
+}
+
+export interface AnomaliesResponse {
+  generated_at: string;
+  window_minutes: number;
+  sample_count: number;
+  sensitivity: number;
+  model: "robust_median_mad_v1";
+  anomalies: MetricAnomaly[];
+  warnings: string[];
+  can_execute: false;
+}
+
 export interface JobRecord {
   id: string;
   tenant_id: string;
