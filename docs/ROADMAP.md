@@ -508,6 +508,16 @@ runbook; summary:
   fake-mode-tested, but the real `rbd mirror` CLI paths need a live second Ceph cluster to be
   production-verified (`dataplane_verified` is hard-coded `false` until that drill runs). See
   [DR.md](DR.md).
+- **arm64 container images: not shipped, tested and rejected for now.** A real timing probe
+  (`.github/workflows/ci.yml`'s `docker` job, temporarily, on a throwaway branch/PR) built the
+  full `Dockerfile` (heaviest image — all DataBridge features: librdkafka/cmake, ODPI-C, tiberius)
+  for `linux/arm64` via QEMU emulation on the standard `ubuntu-latest` runner: it was cancelled
+  after 70+ minutes still running, vs. ~10.5 minutes for a native amd64 build of the lighter
+  `Dockerfile.ceph` in the same run — 6.7x+ and still climbing, not a one-off fluke. QEMU
+  full-emulation is the wrong approach for this workspace's dependency weight; a real fix would
+  need native cross-compilation (a proper `aarch64-unknown-linux-gnu` toolchain + cross-linked C
+  deps) rather than `platforms: linux/amd64,linux/arm64` on the existing `docker/build-push-action`
+  step, which is a materially larger effort than the one-line change this looked like at first.
 - **Bank-grade hardening gaps** (found via a production-readiness audit; tenant-scoped reads,
   plaintext-secret-in-manifest, weak password hashing, missing supply-chain scanning,
   destructive-audit-pruning-with-no-export, and rate-limiting/self-state-backup-off-by-default
