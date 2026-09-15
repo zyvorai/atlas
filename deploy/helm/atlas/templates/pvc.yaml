@@ -1,0 +1,21 @@
+# Copyright (c) 2026 ZyvorAI Labs Private Limited.
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "atlas.fullname" . }}-data
+  namespace: {{ include "atlas.namespace" . }}
+  labels:
+    {{- include "atlas.labels" . | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- $sc := .Values.persistence.storageClassName }}
+  {{- if and (not $sc) .Values.ceph.enabled }}
+  {{- $sc = .Values.ceph.storageClassName }}
+  {{- end }}
+  {{- if $sc }}
+  storageClassName: {{ $sc }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
