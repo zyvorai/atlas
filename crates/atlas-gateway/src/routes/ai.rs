@@ -118,14 +118,20 @@ fn default_incidents_mode() -> AdvisorMode {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "mcp", derive(schemars::JsonSchema))]
 pub(crate) struct WhatIfRequest {
+    /// Additional raw capacity to assume is added, in bytes.
     #[serde(default)]
     add_capacity_bytes: i64,
+    /// How many days ahead to project.
     #[serde(default = "default_horizon_days")]
     horizon_days: u16,
+    /// Override the observed capacity-growth rate (bytes/day) instead of using the measured trend.
     projected_growth_bytes_per_day: Option<f64>,
+    /// Assume every currently-open alert is resolved before projecting.
     #[serde(default)]
     assume_alerts_resolved: bool,
+    /// Assume degraded/unfound-object recovery has completed before projecting.
     #[serde(default)]
     assume_recovery_complete: bool,
 }
@@ -376,19 +382,33 @@ pub(crate) async fn ai_anomalies(
     Extension(actor): Extension<Actor>,
     Query(q): Query<AnomalyQuery>,
 ) -> AppResult<Json<AnomaliesResponse>> {
-    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
-    if !(15..=20_160).contains(&q.minutes) {
+    Ok(Json(
+        compute_anomalies(&s, &actor, q.minutes, q.sensitivity).await?,
+    ))
+}
+
+/// Shared behind `GET /ai/anomalies` and the `detect_anomalies` MCP tool
+/// (`crates/atlas-gateway/src/mcp.rs`) — one code path for role-check, validation, and detection,
+/// so the MCP edge can't drift from REST (mirrors `compute_advisor`).
+pub(crate) async fn compute_anomalies(
+    s: &AppState,
+    actor: &Actor,
+    minutes: i64,
+    sensitivity: f64,
+) -> AppResult<AnomaliesResponse> {
+    crate::auth::require_role(s.config.auth_required, actor, crate::auth::ROLE_OPERATOR)?;
+    if !(15..=20_160).contains(&minutes) {
         return Err(AppError::Validation(
             "minutes must be between 15 and 20160".into(),
         ));
     }
-    if !q.sensitivity.is_finite() || !(2.0..=10.0).contains(&q.sensitivity) {
+    if !sensitivity.is_finite() || !(2.0..=10.0).contains(&sensitivity) {
         return Err(AppError::Validation(
             "sensitivity must be a finite number between 2 and 10".into(),
         ));
     }
-    let history = atlas_inventory::metrics::history(&s.pool, q.minutes).await?;
-    let mut anomalies = detect_anomalies(&history, q.sensitivity);
+    let history = atlas_inventory::metrics::history(&s.pool, minutes).await?;
+    let mut anomalies = detect_anomalies(&history, sensitivity);
     anomalies.sort_by(|a, b| b.score.total_cmp(&a.score));
     let warnings = if history.len() < 5 {
         vec![format!(
@@ -398,16 +418,16 @@ pub(crate) async fn ai_anomalies(
     } else {
         Vec::new()
     };
-    Ok(Json(AnomaliesResponse {
+    Ok(AnomaliesResponse {
         generated_at: chrono::Utc::now().to_rfc3339(),
-        window_minutes: q.minutes,
+        window_minutes: minutes,
         sample_count: history.len(),
-        sensitivity: q.sensitivity,
+        sensitivity,
         model: "robust_median_mad_v1",
         anomalies,
         warnings,
         can_execute: false,
-    }))
+    })
 }
 
 /// `GET /ai/incidents` — correlate related open alerts and failures into explainable incidents.
@@ -416,7 +436,18 @@ pub(crate) async fn ai_incidents(
     Extension(actor): Extension<Actor>,
     Query(q): Query<IncidentsQuery>,
 ) -> AppResult<Json<IncidentsResponse>> {
-    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    Ok(Json(compute_incidents(&s, &actor, q.mode).await?))
+}
+
+/// Shared behind `GET /ai/incidents` and the `list_incidents` MCP tool
+/// (`crates/atlas-gateway/src/mcp.rs`) — one code path for role-check, correlation, and the
+/// optional-provider narrative, so the MCP edge can't drift from REST (mirrors `compute_advisor`).
+pub(crate) async fn compute_incidents(
+    s: &AppState,
+    actor: &Actor,
+    mode: AdvisorMode,
+) -> AppResult<IncidentsResponse> {
+    crate::auth::require_role(s.config.auth_required, actor, crate::auth::ROLE_OPERATOR)?;
     let alerts = atlas_inventory::alerts::list(&s.pool, Some("open")).await?;
     let failed_jobs_15m = recent_failed_jobs(&s.pool).await?;
     let incidents = correlate_incidents(&alerts, failed_jobs_15m);
@@ -424,12 +455,12 @@ pub(crate) async fn ai_incidents(
     let (narrative_mode, narrative) = if incidents.is_empty() {
         (None, None)
     } else {
-        match q.mode {
+        match mode {
             AdvisorMode::Local => (None, None),
             AdvisorMode::Auto | AdvisorMode::Llm => match ProviderConfig::from_env() {
                 Some(provider) => match provider.summarize_incidents(&incidents).await {
                     Ok(text) => (Some("llm"), Some(text)),
-                    Err(err) if q.mode == AdvisorMode::Auto => {
+                    Err(err) if mode == AdvisorMode::Auto => {
                         tracing::warn!("AI provider unavailable; omitting incident narrative: {err}");
                         (Some("local_fallback"), None)
                     }
@@ -437,7 +468,7 @@ pub(crate) async fn ai_incidents(
                         return Err(AppError::Unavailable(format!("AI provider failed: {err}")))
                     }
                 },
-                None if q.mode == AdvisorMode::Llm => {
+                None if mode == AdvisorMode::Llm => {
                     return Err(AppError::Unavailable(
                         "LLM mode requires ATLAS_AI_BASE_URL and ATLAS_AI_MODEL".into(),
                     ))
@@ -447,14 +478,14 @@ pub(crate) async fn ai_incidents(
         }
     };
 
-    Ok(Json(IncidentsResponse {
+    Ok(IncidentsResponse {
         generated_at: chrono::Utc::now().to_rfc3339(),
         count: incidents.len(),
         incidents,
         narrative_mode,
         narrative,
         can_execute: false,
-    }))
+    })
 }
 
 /// `POST /ai/what-if` — project posture after capacity/growth/recovery assumptions, without
@@ -464,7 +495,18 @@ pub(crate) async fn ai_what_if(
     Extension(actor): Extension<Actor>,
     Json(req): Json<WhatIfRequest>,
 ) -> AppResult<Json<WhatIfResponse>> {
-    crate::auth::require_role(s.config.auth_required, &actor, crate::auth::ROLE_OPERATOR)?;
+    Ok(Json(compute_what_if(&s, &actor, req).await?))
+}
+
+/// Shared behind `POST /ai/what-if` and the `what_if_capacity` MCP tool
+/// (`crates/atlas-gateway/src/mcp.rs`) — one code path for role-check, validation, projection, and
+/// audit recording, so the MCP edge can't drift from REST (mirrors `compute_advisor`).
+pub(crate) async fn compute_what_if(
+    s: &AppState,
+    actor: &Actor,
+    req: WhatIfRequest,
+) -> AppResult<WhatIfResponse> {
+    crate::auth::require_role(s.config.auth_required, actor, crate::auth::ROLE_OPERATOR)?;
     validate_what_if(&req)?;
 
     let metrics = atlas_inventory::metrics_summary(&s.pool).await?;
@@ -508,7 +550,7 @@ pub(crate) async fn ai_what_if(
         })),
     )
     .await;
-    Ok(Json(response))
+    Ok(response)
 }
 
 async fn recent_failed_jobs(pool: &sqlx::AnyPool) -> AppResult<i64> {

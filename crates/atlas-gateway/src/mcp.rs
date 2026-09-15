@@ -28,7 +28,8 @@ use serde_json::{json, Value};
 
 use crate::{
     auth::{tenant_scope, Actor},
-    routes::ai::{compute_advisor, AdvisorMode},
+    routes::ai::{compute_advisor, compute_anomalies, compute_incidents, compute_what_if,
+                 AdvisorMode, WhatIfRequest},
     state::AppState,
 };
 
@@ -100,6 +101,25 @@ struct OpsAdvisorArgs {
     /// The operational question to ask the advisor.
     #[serde(default)]
     question: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct DetectAnomaliesArgs {
+    /// How many minutes of metrics history to analyze (15-20160, i.e. up to 14 days).
+    #[serde(default = "default_anomaly_minutes")]
+    minutes: i64,
+    /// How many median-absolute-deviations from baseline counts as anomalous (2-10; higher = less
+    /// sensitive).
+    #[serde(default = "default_sensitivity")]
+    sensitivity: f64,
+}
+
+fn default_anomaly_minutes() -> i64 {
+    360
+}
+
+fn default_sensitivity() -> f64 {
+    3.5
 }
 
 #[tool_router]
@@ -210,6 +230,60 @@ impl AtlasMcp {
         // Local mode only: an agent-triggered call must never silently fan out to an external LLM
         // provider just because ATLAS_AI_BASE_URL happens to be configured.
         let result = compute_advisor(&self.state, &actor, &args.question, AdvisorMode::Local)
+            .await
+            .map_err(internal_error)?;
+        Ok(ToolJson(json!(result)))
+    }
+
+    #[tool(
+        description = "Correlate open alerts and recent job failures into explainable incidents \
+                        (e.g. a backend outage plus every alert/job it caused, grouped as one). \
+                        Read-only, never executes any action. Requires an operator-or-higher token."
+    )]
+    async fn list_incidents(
+        &self,
+        context: RequestContext<RoleServer>,
+    ) -> Result<ToolJson<Value>, McpError> {
+        let actor = actor_from(&context)?;
+        // Local mode only, same rationale as ops_advisor: an agent-triggered call must never
+        // silently fan out to an external LLM provider just because ATLAS_AI_BASE_URL happens to
+        // be configured.
+        let result = compute_incidents(&self.state, &actor, AdvisorMode::Local)
+            .await
+            .map_err(internal_error)?;
+        Ok(ToolJson(json!(result)))
+    }
+
+    #[tool(
+        description = "Detect statistically anomalous metric samples (capacity growth, IO \
+                        throughput/ops, concurrent jobs, open alerts) over a recent time window, \
+                        via a robust median/MAD baseline. Read-only. Requires an \
+                        operator-or-higher token."
+    )]
+    async fn detect_anomalies(
+        &self,
+        Parameters(args): Parameters<DetectAnomaliesArgs>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<ToolJson<Value>, McpError> {
+        let actor = actor_from(&context)?;
+        let result = compute_anomalies(&self.state, &actor, args.minutes, args.sensitivity)
+            .await
+            .map_err(internal_error)?;
+        Ok(ToolJson(json!(result)))
+    }
+
+    #[tool(
+        description = "Project storage risk posture under hypothetical capacity/growth/recovery \
+                        assumptions, without changing any inventory or executing any action. \
+                        Requires an operator-or-higher token."
+    )]
+    async fn what_if_capacity(
+        &self,
+        Parameters(req): Parameters<WhatIfRequest>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<ToolJson<Value>, McpError> {
+        let actor = actor_from(&context)?;
+        let result = compute_what_if(&self.state, &actor, req)
             .await
             .map_err(internal_error)?;
         Ok(ToolJson(json!(result)))

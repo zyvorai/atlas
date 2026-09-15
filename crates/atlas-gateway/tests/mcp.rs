@@ -127,6 +127,9 @@ async fn mcp_client_can_list_clusters_and_run_advisor() {
     let names: Vec<_> = tools.tools.iter().map(|t| t.name.as_ref()).collect();
     assert!(names.contains(&"list_clusters"), "tools: {names:?}");
     assert!(names.contains(&"ops_advisor"), "tools: {names:?}");
+    assert!(names.contains(&"list_incidents"), "tools: {names:?}");
+    assert!(names.contains(&"detect_anomalies"), "tools: {names:?}");
+    assert!(names.contains(&"what_if_capacity"), "tools: {names:?}");
 
     let clusters = client
         .call_tool(CallToolRequestParams::new("list_clusters"))
@@ -146,6 +149,43 @@ async fn mcp_client_can_list_clusters_and_run_advisor() {
         .await
         .unwrap();
     assert_eq!(advisor.is_error, Some(false));
+
+    let incidents = client
+        .call_tool(CallToolRequestParams::new("list_incidents"))
+        .await
+        .unwrap();
+    assert_eq!(incidents.is_error, Some(false));
+    let incidents_text = incidents
+        .content
+        .first()
+        .and_then(|c| c.as_text())
+        .map(|t| t.text.clone())
+        .unwrap_or_default();
+    // The MCP edge never picks up an LLM narrative even if one happens to be configured
+    // elsewhere in the process — list_incidents always forces local mode.
+    assert!(
+        incidents_text.contains("\"narrative\":null"),
+        "expected no narrative from the MCP edge: {incidents_text}"
+    );
+
+    let anomalies = client
+        .call_tool(CallToolRequestParams::new("detect_anomalies"))
+        .await
+        .unwrap();
+    assert_eq!(anomalies.is_error, Some(false));
+
+    let what_if = client
+        .call_tool(
+            CallToolRequestParams::new("what_if_capacity").with_arguments(
+                serde_json::json!({ "add_capacity_bytes": 1_073_741_824i64, "horizon_days": 30 })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(what_if.is_error, Some(false));
 
     client.cancel().await.unwrap();
 }
