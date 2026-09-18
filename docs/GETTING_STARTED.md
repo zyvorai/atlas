@@ -33,6 +33,10 @@ On startup the gateway:
 
 ```bash
 cargo run -p atlas-cli -- health
+# or: make status
+#     make deploy-remote H=<host> U=sus
+#     make deploy-ceph H=<host> U=sus
+#     make help
 cargo run -p atlas-cli -- discover
 cargo run -p atlas-cli -- clusters
 cargo run -p atlas-cli -- pools
@@ -81,7 +85,10 @@ make lint         # cargo clippy --workspace --all-targets -- -D warnings  (enfo
 make fmt          # cargo fmt --all  (informational in CI — style is denser than rustfmt defaults)
 make features     # compile-check optional DataBridge connectors
 make ui           # React console production build (enforced in CI)
-make ci           # lint + test + features + ui (local static gate)
+make ci           # headers, clippy, tests, cargo-deny, DataBridge features, UI
+make help
+make status       # atlasctl health (ATLAS_BASE_URL, default http://127.0.0.1:5110)
+make deploy-remote H=<host> U=sus
 ./scripts/test-all.sh   # full local gate incl. optional connector containers
 ```
 

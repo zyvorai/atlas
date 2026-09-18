@@ -9,6 +9,10 @@ before `0.2.0` were not tracked here — see `git log` for that history.
 
 ## [Unreleased]
 
+### Added — operator Make targets
+
+- `make help` lists targets. `make status` runs `atlasctl health`. `make deploy-remote H=<host> U=sus` deploys the gateway; `make deploy-ceph` deploys the real-Ceph gateway. `make ci` is unchanged.
+
 ### Added — NFS/ZFS real driver mode
 
 - Added `RealNfsDriver`/`RealZfsDriver` alongside the existing fixture-only drivers, selected per
