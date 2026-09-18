@@ -52,7 +52,7 @@ futures-util = "0.3"
 # Web
 axum = { version = "0.8", features = ["ws"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.7", features = ["cors", "trace"] }
 http = "1"
 
 # Serialization
@@ -61,10 +61,10 @@ serde_json = "1"
 serde_yaml = "0.9"
 
 # Storage
-sqlx = { version = "0.8", features = ["runtime-tokio", "any", "sqlite", "postgres", "chrono", "json", "migrate"] }
+sqlx = { version = "0.9", features = ["runtime-tokio", "any", "sqlite", "postgres", "chrono", "json", "migrate"] }
 
 # Kubernetes
-kube = { version = "0.95", features = ["runtime", "derive"] }
+kube = { version = "4.2", features = ["runtime", "derive"] }
 k8s-openapi = { version = "0.23", features = ["v1_30"] }
 
 # Errors / logging
@@ -74,13 +74,13 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Auth / util
-jsonwebtoken = { version = "10.3", default-features = false, features = ["rust_crypto"] }
+jsonwebtoken = { version = "11.0", default-features = false, features = ["rust_crypto"] }
 # Console password hashing (memory-hard KDF, replaces plain SHA-256).
-argon2 = "0.5"
+argon2 = "0.6"
 # OIDC/SSO login. default-features off + explicit "reqwest" feature keeps it on the workspace's
 # existing rustls-based reqwest instead of pulling openidconnect's own bundled HTTP stack.
 openidconnect = { version = "4", default-features = false, features = ["reqwest"] }
-base64 = "0.22"
+base64 = "0.23"
 ring = "0.17"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive", "env"] }
