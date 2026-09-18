@@ -13,7 +13,7 @@ reqwest = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
 futures-util = { workspace = true }
-sha2 = "0.10"
+sha2 = "0.11"
 hex = "0.4"
 rusty-s3 = { version = "0.10", features = ["full"] }
 url = "2"
