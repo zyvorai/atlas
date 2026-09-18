@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import type {ReactNode} from 'react';
 import clsx from 'clsx';
 import Link from '@docusaurus/Link';
@@ -80,11 +80,12 @@ function TrustBand() {
         <Reveal className={styles.trustGrid}>
           <div>
             <Heading as="h3" className={styles.sectionHeading}>
-              Dual-licensed, operator-honest
+              Free to evaluate. Licensed for production.
             </Heading>
             <p className={styles.lede}>
-              AGPL-3.0 for home and self-host. Atlas Commercial License when you
-              need freedom from copyleft, proprietary integrations, or support.
+              The Zyvor Production License covers development, testing, and
+              non-production labs. Production, customer workloads, and
+              revenue-generating services need a paid commercial license.
             </p>
             <Link to="/docs/licensing">Read the licensing guide →</Link>
           </div>
@@ -94,8 +95,8 @@ function TrustBand() {
               alt="CI status"
             />
             <img
-              src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg"
-              alt="AGPL v3 license"
+              src="https://img.shields.io/badge/License-Zyvor%20Production%20v1.0-blue.svg"
+              alt="Zyvor Production License v1.0"
             />
           </div>
         </Reveal>
@@ -110,17 +111,17 @@ function EnterpriseCTA() {
       <div className="container text--center">
         <Reveal>
           <Heading as="h2" className={styles.sectionHeading}>
-            Need ACL, support, or SLAs?
+            Production use needs a commercial license
           </Heading>
           <p className={styles.enterpriseCopy}>
-            Free under AGPL for home and internal self-host. Buy an Atlas
-            Commercial License for proprietary integrations, warranties, or
-            ongoing support.
+            Evaluation, development, and laboratory use are free. Production
+            deployments, SaaS, managed services, and OEM use are licensed
+            separately by Zyvor.
           </p>
           <Link
             className={clsx('button button--primary button--lg', styles.pill)}
-            to="mailto:sales@zyvor.dev">
-            Contact sales@zyvor.dev
+            to="https://zyvor.dev">
+            zyvor.dev
           </Link>
         </Reveal>
       </div>

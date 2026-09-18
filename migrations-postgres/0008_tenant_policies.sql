@@ -1,5 +1,5 @@
 -- Copyright (c) 2026 ZyvorAI Labs Private Limited.
--- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+-- SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 -- Per-tenant policy overrides (PDF §14): a tenant can remap an intent (e.g. "database") to a
 -- different StorageClass / access+volume mode than the built-in atlas-policy catalog. When a create
 -- names an intent and the tenant has an override for it, the override wins (unless the request pins

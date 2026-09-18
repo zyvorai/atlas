@@ -1,5 +1,5 @@
 -- Copyright (c) 2026 ZyvorAI Labs Private Limited.
--- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+-- SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 -- crates/atlas-inventory/src/users.rs looks up/orders by `lower(username)` (portable replacement
 -- for SQLite's `COLLATE NOCASE`, which Postgres has no equivalent of on a plain TEXT column — see
 -- migrations-postgres/0025_console_users.sql). An expression index lets both backends use an index

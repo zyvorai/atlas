@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 ZyvorAI Labs Private Limited.
-# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
-"""Rewrite Atlas source headers to SPDX dual-license form.
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
+"""Rewrite Atlas source headers to the Zyvor Production License SPDX form.
 
 Replaces leading Zyvor copyright / "All rights reserved" banners with:
   <comment> Copyright (c) 2026 ZyvorAI Labs Private Limited.
-  <comment> SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+  <comment> SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 
 Preserves extra banner lines after the copyright (e.g. CSS product blurbs).
 """
@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SPDX = "AGPL-3.0-only OR LicenseRef-Atlas-Commercial"
+SPDX = "LicenseRef-Zyvor-Production-1.0"
 COPYRIGHT = "Copyright (c) 2026 ZyvorAI Labs Private Limited."
 
 SKIP_DIRS = {
@@ -82,9 +82,6 @@ def should_skip(path: Path) -> bool:
     if path.name in {"LICENSE", "NOTICE", "package-lock.json", "Cargo.lock"}:
         return True
     if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".pdf", ".bin", ".wasm"}:
-        return True
-    # AGPL full text / commercial summary stay as legal docs without code headers.
-    if path.name in {"LICENSE", "COMMERCIAL_LICENSE.md"} and path.parent == ROOT:
         return True
     return False
 

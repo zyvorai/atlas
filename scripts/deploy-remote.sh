@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 ZyvorAI Labs Private Limited.
-# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 # Deploy the Atlas gateway to a remote k3s host (same convention as the other Zyvor projects:
 # `./scripts/deploy-remote.sh <host> <user>`).
 #

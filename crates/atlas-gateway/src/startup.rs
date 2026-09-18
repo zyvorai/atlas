@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 //! Startup wiring shared by the binary and integration tests: open the DB, register the Ceph
 //! backend + driver, optionally attach a live Kubernetes driver, and optionally run an initial
 //! discovery pass.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 ZyvorAI Labs Private Limited.
-# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 # Install the edge-side operators DataBridge needs to run a REAL cloud-to-edge DB migration:
 #   - CloudNativePG           -> Postgres edge targets (data on Ceph RBD)
 #   - Percona XtraDB Cluster  -> MySQL / MariaDB edge targets (data on Ceph RBD)

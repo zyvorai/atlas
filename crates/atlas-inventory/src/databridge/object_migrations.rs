@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 //! Object-storage migration records (cloud object store -> Ceph RGW). Mirrors the
 //! `plans.rs` insert/set/get/list pattern. Credentials are never stored — only secret refs.
 

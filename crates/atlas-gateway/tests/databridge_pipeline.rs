@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 //! End-to-end test for the DataBridge migration pipeline, driven over REST with the fake source
 //! connector (no cloud, no Kubernetes). Walks a plan through every stage and asserts the state
 //! machine + the cutover guard.

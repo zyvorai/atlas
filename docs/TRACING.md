@@ -1,5 +1,5 @@
 <!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
-<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
+<!-- SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0 -->
 # Distributed tracing (OpenTelemetry)
 
 Atlas can export spans over OTLP/HTTP to any OpenTelemetry-compatible backend (Jaeger, Tempo,

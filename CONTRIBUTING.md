@@ -1,10 +1,10 @@
 <!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
-<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
+<!-- SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0 -->
 # Contributing to Atlas
 
-Atlas is dual-licensed (AGPL-3.0 + commercial ACL). Larger changes are reviewed with
-that in mind — see [`docs/LICENSING.md`](docs/LICENSING.md). All participation is governed by
-the [Code of Conduct](CODE_OF_CONDUCT.md).
+Atlas is licensed under the Zyvor Production License v1.0. Non-production use is
+free; production use needs a commercial license — see [`docs/LICENSING.md`](docs/LICENSING.md).
+All participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Conventions
 
@@ -12,10 +12,10 @@ the [Code of Conduct](CODE_OF_CONDUCT.md).
   `scripts/check-license-headers.sh`):
   ```
   // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-  // SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+  // SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
   ```
   (`#` / `<!-- -->` / `/* */` / `--` variants by file type). Workspace Cargo
-  `license = "AGPL-3.0-only OR LicenseRef-Atlas-Commercial"`.
+  `license = "LicenseRef-Zyvor-Production-1.0"`.
 - **Stack**: axum 0.8, `sqlx` (SQLite), `thiserror` 2.0 + `anyhow`, `tracing`, `kube-rs`.
   Match the surrounding monorepo services (`ragnarok`, `machina`).
 - **Errors**: return `atlas_common::AppError` from handlers; it maps to HTTP via `IntoResponse`.
@@ -61,11 +61,12 @@ the [Code of Conduct](CODE_OF_CONDUCT.md).
 ## Licensing
 
 By contributing you agree to the [Contributor License Agreement](CLA.md) (so Zyvor
-can dual-license Atlas under AGPL and the commercial ACL) and certify the
-[Developer Certificate of Origin](DCO.md) on every commit (`git commit -s`).
+can license contributions under the Zyvor Production License and under commercial
+licenses) and certify the [Developer Certificate of Origin](DCO.md) on every commit
+(`git commit -s`).
 
-Inbound Contributions are accepted under AGPL-3.0-only with the CLA grant above.
-Don't submit code you don't have the rights to license that way. See
+Inbound Contributions are accepted under the Zyvor Production License with the CLA
+grant above. Don't submit code you don't have the rights to license that way. See
 [`docs/LICENSING.md`](docs/LICENSING.md), [`NOTICE`](NOTICE), and
 [`LICENSES/`](LICENSES/).
 

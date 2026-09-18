@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 //
 // Load test for Atlas's read-heavy REST surface — approximates the Storage Center console's own
 // traffic pattern (per crates/atlas-gateway/ui/src/api/hooks.ts: every dashboard panel polls its

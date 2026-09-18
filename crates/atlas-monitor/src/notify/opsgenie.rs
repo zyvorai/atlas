@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 //! Opsgenie Alert API (<https://docs.opsgenie.com/docs/alert-api>) — creates an alert per open
 //! Atlas alert (keyed by `alias` = Atlas's alert id, so re-firing the same condition doesn't
 //! duplicate) and closes it once the condition clears.

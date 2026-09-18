@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 //! Minimal S3 client for Ceph RGW (PDF §10.3 "Atlas → RGW: S3 API").
 //!
 //! Uses `rusty-s3` to build SigV4-signed request URLs and `reqwest` to execute them — no heavy

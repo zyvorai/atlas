@@ -1,5 +1,5 @@
 -- Copyright (c) 2026 ZyvorAI Labs Private Limited.
--- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+-- SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 -- Day-2 cross-cluster DR (RBD mirroring). SCAFFOLDING: the control-plane state + API are here; the
 -- real `rbd mirror` operations run as jobs and are UNVERIFIED until exercised against a live second
 -- Ceph cluster (see docs). dr_peers records a mirroring peer (bootstrap token via a k8s Secret ref);

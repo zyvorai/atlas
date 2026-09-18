@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 //! Fake-driver-mode catalog for direct RBD image snapshots. Real mode reads snapshots straight
 //! from Ceph (`rbd snap ls`) and never touches this table.
 

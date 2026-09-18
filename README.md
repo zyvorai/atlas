@@ -1,9 +1,9 @@
 <!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
-<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
+<!-- SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0 -->
 # Atlas
 
 [![CI](https://github.com/zyvorai/atlas/actions/workflows/ci.yml/badge.svg)](https://github.com/zyvorai/atlas/actions/workflows/ci.yml)
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
+[![License: Zyvor Production v1.0](https://img.shields.io/badge/License-Zyvor%20Production%20v1.0-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.3.0-informational)](CHANGELOG.md)
 [![Docs](https://img.shields.io/badge/docs-zyvorai.github.io%2Fatlas-blue)](https://zyvorai.github.io/atlas/)
 
@@ -57,8 +57,8 @@ Deploy to a remote k3s host:
 
 | Track | Where |
 | --- | --- |
-| **Self-host from source** (AGPL, free for home) | This repo |
-| **Commercial license (ACL)** | [sales@zyvor.dev](mailto:sales@zyvor.dev) · [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md) |
+| **Non-production use** (free under the Zyvor Production License) | This repo |
+| **Production / commercial license** | [https://zyvor.dev](https://zyvor.dev) |
 | **Docs site** | https://zyvorai.github.io/atlas/ |
 
 More: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) · [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -118,17 +118,16 @@ Customer-facing feature guide: [docs/atlas-customer-feature-guide.md](docs/atlas
 
 ## 🔍 Important boundaries
 
-What's free under AGPL vs. what needs a commercial license
+What's free under the Zyvor Production License vs. what needs a commercial license
 ([full guide](docs/LICENSING.md)):
 
-| Use case | Allowed under AGPL? |
+| Use case | Allowed without a paid license? |
 | --- | --- |
-| Self-host for home or your own operations | Yes, free |
-| Modify for internal use | Yes, free |
-| Build and publish your own AGPL extensions | Yes, free |
-| Deploy modified Atlas as public SaaS without releasing changes | No — needs ACL |
-| Embed Atlas in a closed-source product | No — needs ACL |
-| White-label proprietary customizations without AGPL | No — needs ACL |
+| Development, testing, evaluation, research, education | Yes |
+| Non-production laboratory and proof-of-concept use | Yes |
+| Production environments and customer workloads | No — needs a commercial license |
+| SaaS, managed services, OEM, appliances | No — needs a commercial license |
+| Redistribution or resale | No — needs written permission and a commercial license |
 
 ## 📈 Star History
 
@@ -136,10 +135,10 @@ What's free under AGPL vs. what needs a commercial license
 
 ## 📄 License
 
-Dual-licensed:
+Licensed under the **[Zyvor Production License v1.0](LICENSE)**.
 
-- **[AGPL-3.0](LICENSE)** — open source; free for home users and self-host under AGPL terms
-- **[Atlas Commercial License (ACL)](COMMERCIAL_LICENSE.md)** — proprietary integrations, freedom from AGPL obligations, support
+- **Free** for development, testing, evaluation, research, education, and non-production labs
+- **Paid commercial license required** for production, customer workloads, SaaS, managed services, OEM, redistribution, and other revenue-generating use
 
-See [docs/LICENSING.md](docs/LICENSING.md). Contributions: [CLA.md](CLA.md) + [DCO.md](DCO.md) (`git commit -s`),
+Commercial terms are issued separately: [https://zyvor.dev](https://zyvor.dev). See [docs/LICENSING.md](docs/LICENSING.md). Contributions: [CLA.md](CLA.md) + [DCO.md](DCO.md) (`git commit -s`),
 governed by our [Code of Conduct](CODE_OF_CONDUCT.md).

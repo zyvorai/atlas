@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 //! gRPC edge (PDF §5.3): a typed contract for products, served alongside REST over the same
 //! `AppState`. Read RPCs plus the async volume-create path (returns a job id).
 

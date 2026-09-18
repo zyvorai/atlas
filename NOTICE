@@ -1,18 +1,18 @@
 SPDX-FileCopyrightText: Copyright (c) 2026 ZyvorAI Labs Private Limited.
-SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 
 Atlas
 Copyright (c) 2026 ZyvorAI Labs Private Limited.
 
-This product is dual-licensed:
+Licensed under the Zyvor Production License v1.0
+(SPDX: LicenseRef-Zyvor-Production-1.0).
 
-  - GNU Affero General Public License v3.0 only (AGPL-3.0-only)
-    See LICENSE and LICENSES/AGPL-3.0-only.txt
+  See LICENSE and LICENSES/LicenseRef-Zyvor-Production-1.0.txt
 
-  - Atlas Commercial License (ACL) — SPDX: LicenseRef-Atlas-Commercial
-    See COMMERCIAL_LICENSE.md and LICENSES/LicenseRef-Atlas-Commercial.txt
+Non-production use is free. Production use requires a separate paid
+commercial license from Zyvor AI Labs Private Limited.
 
-Contact: sales@zyvor.dev · https://zyvor.dev
+Contact: https://zyvor.dev
 
 Third-party open-source components bundled or linked by Atlas retain their
 own copyright notices and license terms. Dependency license policy for the

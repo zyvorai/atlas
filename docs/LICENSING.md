@@ -1,53 +1,46 @@
 <!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
-<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
+<!-- SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0 -->
 # Licensing
 
-Atlas is **dual-licensed**:
+Atlas is licensed under the **[Zyvor Production License v1.0](../LICENSE)**.
 
-| Track | License | Cost |
-| --- | --- | --- |
-| **Open source / community** | [AGPL-3.0](../LICENSE) | Free |
-| **Commercial** | [Atlas Commercial License (ACL)](../COMMERCIAL_LICENSE.md) | See pricing below |
+Non-production use is free. Production use requires a separate paid commercial license from Zyvor AI Labs Private Limited.
 
-SPDX expression used in source headers and Cargo metadata:
-`AGPL-3.0-only OR LicenseRef-Atlas-Commercial` (see [`LICENSES/`](../LICENSES/),
+SPDX identifier used in source headers and Cargo metadata:
+`LicenseRef-Zyvor-Production-1.0` (see [`LICENSES/`](../LICENSES/),
 [`NOTICE`](../NOTICE)).
 
 Contributions require the [CLA](../CLA.md) and [DCO](../DCO.md) (`git commit -s`).
 Header checks: `make headers`.
 
-## Open source — AGPL-3.0 (free for home & self-host)
+There is no runtime license key in this build. A missing key does not grant production rights.
 
-You can use, modify, and self-host Atlas under the GNU Affero General Public License v3.0.
+## Free — Non-Production Use
 
-- **Home users** and personal self-host: free under AGPL
-- **Internal operations** (your org only): free under AGPL
-- **Network copyleft:** if you modify Atlas and make it available over a network to users, you must offer those users the corresponding source under AGPL-3.0 — or buy an ACL
+You may use the Software without payment for:
 
-Full text: [`LICENSE`](../LICENSE).
+- development
+- testing
+- evaluation
+- proofs of concept
+- research
+- education
+- non-production laboratory environments
 
-### What AGPL allows (summary)
+Non-production use must not support live business operations, customers, revenue-generating services, or production workloads. Full text: [`LICENSE`](../LICENSE).
 
-| Use case | Allowed? |
-| --- | --- |
-| Self-host for home or your own operations | Yes, free |
-| Modify for internal use | Yes, free |
-| Build and publish your own AGPL extensions | Yes, free |
-| Deploy modified Atlas as public SaaS without releasing changes | No — needs ACL |
-| Embed Atlas in a closed-source product | No — needs ACL |
-| White-label proprietary customizations without AGPL | No — needs ACL |
+## Paid license required — Production Use
 
-## Atlas Commercial License (ACL)
+A commercial license is required for:
 
-For organizations that need freedom from AGPL obligations, proprietary integrations, warranties/indemnities, or ongoing support:
+- production environments
+- customer workloads
+- internal business-critical workloads
+- commercial services, SaaS, and managed services
+- OEM use and appliances
+- redistribution and resale
+- revenue-generating use
 
-| License Type | Price | Support & Updates | Best For |
-| --- | --- | --- | --- |
-| Annual License | $25,000/year | All upgrades & Business Support included | Continuous updates and support |
-| Monthly License | $2,500/month | All upgrades & Business Support included | Pilots and short-term deployments |
-| Major Version License | $25,000 (one-time) | No ongoing support | Stable single major version |
-| Minor Version License | $15,000 (one-time) | No ongoing support | Locked version deployments |
+Commercial terms — nodes, clusters, support, duration, and other limits — are issued separately and are not published in this repository. A commercial agreement controls where it conflicts with this license.
 
-Details: [`COMMERCIAL_LICENSE.md`](../COMMERCIAL_LICENSE.md).
-
-**Contact:** [sales@zyvor.dev](mailto:sales@zyvor.dev)
+**Contact:** [https://zyvor.dev](https://zyvor.dev)

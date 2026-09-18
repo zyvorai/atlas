@@ -1,5 +1,5 @@
 # Copyright (c) 2026 ZyvorAI Labs Private Limited.
-# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 .PHONY: dev build release test lint fmt fmt-check run run-databridge cli clean ui ui-dev \
 	features docker-smoke ci audit headers help status deploy-remote deploy-ceph
 

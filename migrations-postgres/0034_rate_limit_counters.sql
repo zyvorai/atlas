@@ -1,5 +1,5 @@
 -- Copyright (c) 2026 ZyvorAI Labs Private Limited.
--- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+-- SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 -- Cross-replica rate-limit sync (docs/HA.md). See migrations/0034_rate_limit_counters.sql for the
 -- full design note. `window_minute`/`count` deliberately stay plain INTEGER (not BIGINT, unlike
 -- migration 0032's byte-capacity columns) — both are guaranteed small (a Unix-minute counter and a

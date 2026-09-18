@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 //! `GET /ai/incidents?mode=` — the optional LLM-narrated root-cause paragraph over Atlas's own
 //! (always-computed, always-correct) incident correlation. All tests here mutate the process-wide
 //! `ATLAS_AI_*` env vars `ProviderConfig::from_env` reads, so — like `vault_secrets.rs` — they

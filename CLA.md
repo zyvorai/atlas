@@ -1,15 +1,14 @@
 <!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
-<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
+<!-- SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0 -->
 
 # Contributor License Agreement (CLA)
 
 Thank you for your interest in contributing to Atlas, developed by
 **ZyvorAI Labs Private Limited** ("Zyvor", "we", "us").
 
-Atlas is dual-licensed under the [GNU Affero General Public License v3.0
-only](LICENSE) (AGPL-3.0-only) and the [Atlas Commercial License
-(ACL)](COMMERCIAL_LICENSE.md). To accept your contribution and keep both
-tracks viable, we need you to agree to the terms below.
+Atlas is licensed under the [Zyvor Production License v1.0](LICENSE).
+Production use requires a separate commercial license from Zyvor. To accept
+your contribution, we need you to agree to the terms below.
 
 This CLA is a short grant of rights. It does **not** transfer copyright
 ownership of your contribution away from you.
@@ -31,10 +30,9 @@ irrevocable license to:
 1. Use, reproduce, modify, prepare derivative works of, publicly display,
    publicly perform, sublicense, and distribute your Contribution and such
    derivative works; and
-2. Relicense your Contribution (and derivative works thereof) under
-   **AGPL-3.0-only**, under the **Atlas Commercial License (ACL)**, and/or
-   under any other open-source or proprietary license Zyvor offers for Atlas,
-   including dual-licensing the same Contribution under both AGPL and ACL.
+2. License your Contribution (and derivative works thereof) under the
+   **Zyvor Production License**, under any **commercial license** Zyvor
+   offers for Atlas, and/or under any other license Zyvor offers for Atlas.
 
 You also grant Zyvor a perpetual, worldwide, non-exclusive, royalty-free,
 irrevocable patent license to make, have made, use, sell, offer to sell,
@@ -54,12 +52,12 @@ You represent that:
    other restriction of which you are personally aware and which are associated
    with any part of your Contribution.
 
-## 4. Dual-license purpose
+## 4. Purpose
 
-You acknowledge that Zyvor offers Atlas under AGPL-3.0-only and under a
-commercial ACL, and that the grants in §2 exist specifically so Zyvor can
-continue that dual-license model for Contributions without requiring a
-separate negotiation for each Contribution.
+You acknowledge that Zyvor offers Atlas under the Zyvor Production License
+for non-production use and under separate commercial licenses for production
+use, and that the grants in §2 exist so Zyvor can continue that model for
+Contributions without requiring a separate negotiation for each Contribution.
 
 ## 5. How to accept
 
@@ -73,5 +71,5 @@ Additionally, every commit must carry a DCO `Signed-off-by` line — see
 
 ## 6. Contact
 
-Questions about this CLA: [legal@zyvor.dev](mailto:legal@zyvor.dev) · sales /
-commercial licensing: [sales@zyvor.dev](mailto:sales@zyvor.dev).
+Questions about this CLA: [legal@zyvor.dev](mailto:legal@zyvor.dev).
+Commercial licensing: [https://zyvor.dev](https://zyvor.dev).

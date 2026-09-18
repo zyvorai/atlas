@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 // Apple Store catalog/browse-style index page: header, then a filter row and a content panel
 // (table, nested browser, etc.) supplied by the page — this template owns layout only, not the
 // table implementation, since list pages vary too much (soundings Table, hand-rolled sortable

@@ -1,5 +1,5 @@
 # Copyright (c) 2026 ZyvorAI Labs Private Limited.
-# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 # ---- UI builder (React Storage Center → dist) ----
 FROM docker.io/library/node:26-alpine@sha256:ef24c5053d50fdc3e4e56eb4e7ddb7861874ab0fdc797046ba897581deb8e868 AS ui
 WORKDIR /ui

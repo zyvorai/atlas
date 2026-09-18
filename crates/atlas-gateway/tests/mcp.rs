@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 //! Integration tests for the MCP server (`crates/atlas-gateway/src/mcp.rs`), mirroring the
 //! `spawn`/`spawn_auth` pattern used by the other gateway integration tests (fake driver,
 //! throwaway SQLite file, ephemeral port).

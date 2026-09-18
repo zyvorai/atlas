@@ -1,5 +1,5 @@
 -- Copyright (c) 2026 ZyvorAI Labs Private Limited.
--- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+-- SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 -- No-op on SQLite: this migration's Postgres counterpart
 -- (migrations-postgres/0033_double_precision_real_columns.sql) widens several REAL columns from
 -- Postgres-dialect REAL (4-byte float) to DOUBLE PRECISION (8-byte) — a bug that only ever existed

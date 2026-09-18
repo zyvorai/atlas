@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 ZyvorAI Labs Private Limited.
-# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
-# Verify Atlas source files carry copyright + SPDX dual-license headers.
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
+# Verify Atlas source files carry copyright + SPDX license headers.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-EXPECTED_SPDX='AGPL-3.0-only OR LicenseRef-Atlas-Commercial'
+EXPECTED_SPDX='LicenseRef-Zyvor-Production-1.0'
 COPYRIGHT_NEEDLE='Copyright (c) 2026 ZyvorAI Labs Private Limited'
 
 # File types that must carry headers (first ~20 lines / 2 KiB).
@@ -25,7 +25,6 @@ SKIP_GLOBS=(
   './LICENSES/*'
   './LICENSE'
   './NOTICE'
-  './COMMERCIAL_LICENSE.md'
   './Cargo.lock'
   '*/package-lock.json'
   './deny.toml' # checked separately — hash header
@@ -39,7 +38,7 @@ is_skipped() {
   local f="$1"
   case "$f" in
     ./target/*|./.git/*|*/node_modules/*|*/dist/*|./.docs-tools/*|./LICENSES/*) return 0 ;;
-    ./LICENSE|./NOTICE|./COMMERCIAL_LICENSE.md|./Cargo.lock|*/package-lock.json) return 0 ;;
+    ./LICENSE|./NOTICE|./Cargo.lock|*/package-lock.json) return 0 ;;
   esac
   return 1
 }

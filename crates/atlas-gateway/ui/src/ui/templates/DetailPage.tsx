@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 // Apple "Configurator" detail/drill-down page: breadcrumb-heavy header, an optional instrument
 // (stat-tile) strip, then free-form content — typically `DashboardModule` blocks (see
 // DashboardHero.tsx) for static sections, or a stage rail + active panel for a wizard.

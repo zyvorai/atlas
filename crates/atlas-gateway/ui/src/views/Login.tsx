@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 // Atlas sign-in — same 2-chapter Store shell as h2kvm-, Atlas copy + auth.
 import { useEffect, useState, type FormEvent, useMemo } from "react";
 import {
@@ -366,8 +366,8 @@ export function Login() {
       showSignInChapter
       footer={
         <p className="login-license-notice">
-          Copyright © {new Date().getFullYear()} Atlas · AGPL-3.0 ·{" "}
-          <a href="mailto:sales@zyvor.dev">Commercial (ACL)</a>
+          Copyright © {new Date().getFullYear()} ZyvorAI Labs · Zyvor Production License v1.0 ·{" "}
+          <a href="https://zyvor.dev">Commercial license</a>
         </p>
       }
     >

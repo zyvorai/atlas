@@ -1,5 +1,5 @@
 -- Copyright (c) 2026 ZyvorAI Labs Private Limited.
--- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+-- SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 -- Per-sink delivery tracking for the native PagerDuty/Opsgenie/Slack alerting integrations
 -- (crates/atlas-monitor/src/notify/). Deliberately separate from storage_alerts.notified_at
 -- (the pre-existing generic webhook's own tracking column, left untouched) since a single alert

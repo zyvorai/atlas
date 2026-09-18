@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 //! A fake source connector that serves a canned schema — the DataBridge analog of `FakeCephDriver`.
 //! Lets the whole migration pipeline run under `make run` with no cloud credentials.
 

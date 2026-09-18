@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 //! Alert webhook notifier. Pushes each open alert to a configured HTTP endpoint exactly once per
 //! firing (tracked via `storage_alerts.notified_at`), re-firing when a resolved alert re-opens.
 //! The payload is Slack-compatible (`text`) with a structured `alert` object for generic sinks.

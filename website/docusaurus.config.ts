@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
@@ -105,7 +105,7 @@ const config: Config = {
               href: 'https://github.com/zyvorai/atlas/blob/main/CHANGELOG.md',
             },
             {
-              label: 'License (AGPL-3.0)',
+              label: 'License',
               href: 'https://github.com/zyvorai/atlas/blob/main/LICENSE',
             },
           ],
@@ -114,15 +114,11 @@ const config: Config = {
           title: 'Zyvor Enterprise',
           items: [
             {label: 'zyvor.dev', href: 'https://zyvor.dev'},
-            {label: 'sales@zyvor.dev', href: 'mailto:sales@zyvor.dev'},
-            {
-              label: 'Commercial license (ACL)',
-              href: 'https://github.com/zyvorai/atlas/blob/main/COMMERCIAL_LICENSE.md',
-            },
+            {label: 'Commercial license', href: 'https://zyvor.dev'},
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} ZyvorAI Labs. Atlas is dual-licensed AGPL-3.0 + commercial ACL.`,
+      copyright: `Copyright © ${new Date().getFullYear()} ZyvorAI Labs. Zyvor Production License v1.0.`,
     },
     prism: {
       theme: prismThemes.github,

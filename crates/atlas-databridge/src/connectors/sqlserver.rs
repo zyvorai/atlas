@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 //! Live Microsoft SQL Server source connector (Azure SQL / RDS SQL Server / any TDS endpoint).
 //! Introspects the schema over a real `tiberius` (pure-Rust TDS) connection. SQL Server is a
 //! *heterogeneous* source: it migrates onto a Postgres edge, seeded by Debezium's initial snapshot.

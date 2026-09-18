@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 //! Day-2 cluster-ops & maintenance mode: cordoning a backend rejects new provisioning, the global
 //! maintenance pause holds jobs until resumed, and OSD ops enqueue as jobs. Fake driver, no infra
 //! (the OSD job fails without a real `ceph`, but the enqueue contract + validation are exercised).

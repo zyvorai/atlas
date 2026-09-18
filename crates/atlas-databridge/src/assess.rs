@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 //! Migration readiness scoring. Turns a discovered schema into a 0–100 score plus blockers and
 //! warnings, so an operator sees what stands between the source and a clean cutover before committing.
 

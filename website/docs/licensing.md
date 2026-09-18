@@ -4,17 +4,21 @@ title: Licensing
 ---
 
 {/* Copyright (c) 2026 ZyvorAI Labs Private Limited. */}
-{/* SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial */}
+{/* SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0 */}
 
 # Licensing
 
-Atlas is **dual-licensed**:
+Atlas is licensed under the **[Zyvor Production License v1.0](https://github.com/zyvorai/atlas/blob/main/LICENSE)**.
 
-| Track | License | Cost |
+Non-production use is free. Production use requires a separate paid commercial license from Zyvor.
+
+| Use | License | Cost |
 | --- | --- | --- |
-| Open source / community | [AGPL-3.0](https://github.com/zyvorai/atlas/blob/main/LICENSE) | Free |
-| Commercial | [Atlas Commercial License (ACL)](https://github.com/zyvorai/atlas/blob/main/COMMERCIAL_LICENSE.md) | See ACL |
+| Development, testing, evaluation, research, education, non-production labs | [Zyvor Production License v1.0](https://github.com/zyvorai/atlas/blob/main/LICENSE) | Free |
+| Production, customer workloads, SaaS, managed services, OEM, redistribution | Separate commercial license | Paid — terms issued by Zyvor |
 
-**Contact:** [sales@zyvor.dev](mailto:sales@zyvor.dev)
+Non-production use must not support live business operations, customers, revenue-generating services, or production workloads.
+
+**Contact:** [https://zyvor.dev](https://zyvor.dev)
 
 Full guide: [`docs/LICENSING.md`](https://github.com/zyvorai/atlas/blob/main/docs/LICENSING.md).

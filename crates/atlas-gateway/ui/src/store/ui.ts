@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ZyvorAI Labs Private Limited.
-// SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 // Client UI state (zustand): auth token, spotlight, and the live job feed.
 import { create } from "zustand";
 import type { JobRecord } from "../api/types";

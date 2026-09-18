@@ -1,11 +1,12 @@
 <!-- Copyright (c) 2026 ZyvorAI Labs Private Limited. -->
-<!-- SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial -->
+<!-- SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0 -->
 
 # Developer Certificate of Origin (DCO)
 
 Atlas uses the Developer Certificate of Origin (DCO) for inbound contributions,
-in addition to the [Contributor License Agreement](CLA.md) required for
-dual-licensing under AGPL-3.0 and the Atlas Commercial License (ACL).
+in addition to the [Contributor License Agreement](CLA.md) required so Zyvor
+can license contributions under the Zyvor Production License and under
+commercial licenses.
 
 By making a contribution to this project, you certify that:
 

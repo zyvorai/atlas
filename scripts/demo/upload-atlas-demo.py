@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 ZyvorAI Labs Private Limited.
-# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 """Upload the Atlas Storage Center demo MP4 to YouTube via Data API v3.
 
 Companion to scripts/demo/record-atlas-demo.mjs. Reuses the same OAuth token/client-secrets
