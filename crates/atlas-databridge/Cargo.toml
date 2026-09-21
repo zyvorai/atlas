@@ -39,7 +39,7 @@ mongodb = { version = "3", optional = true }
 rdkafka = { version = "0.36", default-features = false, features = ["cmake-build", "tokio"], optional = true }
 # Native Azure Blob Storage object-migration source (Azure is not S3-compatible). Enable with
 # `--features azure-blob`. Pure-Rust Azure SDK + streaming sha256; no native system libraries.
-azure_core = { version = "0.21", optional = true }
+azure_core = { version = "1.1", optional = true }
 azure_storage = { version = "0.21", optional = true }
 azure_storage_blobs = { version = "0.21", optional = true }
 futures = { version = "0.3", optional = true }
