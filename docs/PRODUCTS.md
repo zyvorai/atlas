@@ -16,6 +16,8 @@ Atlas is the shared storage control plane. Products call **REST** and/or **gRPC*
 | `resource_id` | product UUID / name | Product-side id |
 | `role` | `owner` (default), `consumer`, `data_disk` | Binding role |
 
+The product named **Transiva** is recorded as owner id `hyper2kvm`. That wire id is unchanged.
+
 Enumerate owned volumes with `ListVolumesByOwner(product, resource_id?)`.
 
 ## Auth

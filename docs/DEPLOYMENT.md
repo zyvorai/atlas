@@ -43,8 +43,14 @@ Override only together: `ROOK_VERSION=… CEPH_IMAGE=… ./up.sh …`.
 # e.g. ./scripts/deploy-remote.sh <ephemeral-ip> operator
 ```
 
-NodePort **30510**. Verifies `/health` + `/storage-classes`. Gates automatically on
+NodePort **30510**. Verifies `/health`, `/version`, and `/storage-classes`. Gates automatically on
 `GET /upgrade/preflight` before rolling out (pass `--force` to override a blocked pre-flight).
+
+The script builds `localhost/atlas-gateway:dev` on the host (chart `appVersion` is `0.4.0`).
+Published images are separate: [`deploy/helm/atlas/values-release.yaml`](../deploy/helm/atlas/values-release.yaml)
+pins `ghcr.io/zyvorai/atlas:0.4.0`, and the real-Ceph image is `ghcr.io/zyvorai/atlas-ceph:0.4.0`.
+Do not deploy the floating `:latest` tag. What that build is allowed to claim is
+[STATUS.md](STATUS.md).
 
 Optional flags: `--with-ceph` (also runs `deploy/rook-ceph-lab/up.sh` on the remote — destructive
 to an empty disk, off by default), `--with-k3s-disk` (moves the k3s data-dir onto the disk carved

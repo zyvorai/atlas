@@ -13,7 +13,7 @@ stable REST / gRPC APIs; Atlas talks to backends through pluggable
 `StorageDriver`s. Ceph (RBD / CephFS / RGW) is first; NFS and ZFS are also wired.
 
 ```
- Products (Zeus OS · Veyron · Hyper2KVM · …)
+ Products (Zeus OS · Veyron · Transiva · …)
                     │  REST / gRPC
                     ▼
              Atlas Gateway

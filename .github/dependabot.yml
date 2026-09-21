@@ -9,6 +9,7 @@ updates:
     groups:
       cargo-dependencies:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
     labels: ["dependencies", "rust"]
     commit-message:
       prefix: "chore(deps)"
@@ -20,6 +21,7 @@ updates:
     groups:
       ui-dependencies:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
     labels: ["dependencies", "ui"]
     commit-message:
       prefix: "chore(deps)"

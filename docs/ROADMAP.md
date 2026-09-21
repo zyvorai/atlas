@@ -3,7 +3,9 @@
 # Roadmap
 
 Atlas follows the phased plan in `Zyvor_Ceph_Integration_Developer_Implementation_Plan.pdf`
-(§18 execution plan). This file tracks what's built vs. what's next.
+(§18 execution plan). This file tracks what's built vs. what's next. Maturity — implemented,
+lab-verified, production-supported, experimental, or planned — is the short matrix in
+[STATUS.md](STATUS.md). This file is history; when the two disagree, STATUS.md wins.
 
 ## ✅ Slice 1 — MVP foundation (done, verified)
 
@@ -215,7 +217,7 @@ cert/ingress gives trusted TLS).
   list-by-owner scoped correctly → snapshot → delete, all jobs `succeeded`).
 - ✅ **GetMetricsSummary** + **ListBuckets** — capacity/I/O/recovery rollup and RGW bucket inventory
   for product consoles (see `docs/PRODUCTS.md`).
-- Follow-ups: generated gRPC client stubs vendored into each product (Veyron, Hyper2KVM, …).
+- Follow-ups: generated gRPC client stubs vendored into each product (Veyron, Transiva, …).
 
 ## ✅ DataBridge — cloud-to-edge database mobility (six source engines)
 
@@ -313,7 +315,7 @@ no model required for the default path. See [AI_ADVISOR.md](AI_ADVISOR.md).
   — same advisory-only posture, no write/action tools. See [API.md](API.md#mcp-model-context-protocol).
 
 ## ⏭ Slice 3+ — Enterprise & product integration
-- Product integrations: Veyron (VM datastores), Hyper2KVM (direct-to-RBD migration), GuestKit
+- Product integrations: Veyron (VM datastores), Transiva (direct-to-RBD migration; owner id `hyper2kvm`), GuestKit
   (read-only snapshot inspection), PacketWolf (VM→OSD network/storage RCA), Ragnarok (AI storage
   facts), Aether (intent YAML), Machina (RGW/CephFS artifacts), HyperSDK (install/onboard CLI).
 - ✅ **Monitor worker** (`atlas-monitor`): periodic discovery + alert rules (cluster unhealthy,
@@ -398,7 +400,7 @@ no model required for the default path. See [AI_ADVISOR.md](AI_ADVISOR.md).
   capacity, invisibly to Atlas. Verified live: created a `shared` volume, ran a discovery pass, it
   now survives (previously vanished from `GET /volumes` and returned `404`, requiring manual
   `kubectl delete pvc` to clean up the now-orphaned real resource).
-- **Zeus OS UI** — Storage Center. Note two known collisions to resolve first:
+- **Zeus OS UI** — Storage Center. This collision is unresolved (see [STATUS.md](STATUS.md)):
   - `atlas` is already a Zeus OS module codename ("Machine Finder") in `v9s`.
   - A `ZeusStorageCenter.tsx` + `web/src/routes/storage.rs` already ship — decide whether Atlas's
     Storage Center *absorbs*, *replaces*, or *sits beside* them.
@@ -603,25 +605,21 @@ no model required for the default path. See [AI_ADVISOR.md](AI_ADVISOR.md).
   destructive-audit-pruning-with-no-export, and rate-limiting/self-state-backup-off-by-default
   from that audit are already fixed above — both `deploy/k8s/atlas-gateway*.yaml` now ship
   `ATLAS_RATE_LIMIT_RPM=600` and a working `ATLAS_STATE_BACKUP_*` block against a dedicated RGW
-  user/bucket): the gateway is still single-replica with a `Recreate` rollout (planned downtime per
-  deploy) — but this is now purely a *deployment* gap, not a code one: the query layer itself runs
-  on Postgres (verified live, see the ✅ bullet above), so what's left is deploying a real HA
-  Postgres, DB-backed rate limiting (currently per-pod in-process), and Helm chart wiring
-  (`database.kind`), all tracked in `docs/HA.md`; OIDC/SSO is only verified against a throwaway Dex
-  instance, not a real enterprise IdP.
+  user/bucket): the default deployment is still single-replica SQLite with a `Recreate` rollout.
+  That is a deployment choice, not a missing query layer. Postgres, Helm `database.kind`, and
+  DB-backed cross-replica rate limiting are implemented and lab-verified (see the checkmarks
+  below and `docs/HA.md`). What remains before production support is deploying a real HA
+  Postgres and an enterprise IdP (OIDC/SSO is only verified against a throwaway Dex instance).
   The audit-log SIEM export and secrets-manager integration *patterns* are now both verified
   against real (lab) infra (`deploy/siem-lab/`, `deploy/vault-lab/` — see below); a real deployment
   still needs the bank's actual SIEM/Vault swapped in for the lab ones. None of these block a
   non-production pilot; all are gates before a production go-live.
-- **Non-Postgres DataBridge streaming CDC + cutover**: MySQL is now verified end-to-end
-  including real streaming CDC (provision → full-load → CDC → validate, against a real
-  Kafka/Strimzi/Debezium stack) — but only for `DATETIME` columns; Debezium encodes MySQL
-  `TIMESTAMP` columns as ISO-8601 strings the JDBC sink can't bind, an open gap needing a
-  follow-up SMT fix (see `docs/DATABRIDGE.md`). MariaDB and MongoDB are verified through
-  provision → real full-load → validate (row/document-count parity) only; their streaming-CDC
-  and cutover stages haven't been run against the Kafka/Debezium stack yet. SQL Server and
-  Oracle are verified through discovery only. Cutover itself (for any engine except Postgres)
-  hasn't been driven live yet.
+- **Non-Postgres DataBridge streaming CDC + cutover**: Postgres, MariaDB, and MongoDB are
+  verified live through cutover (see `docs/DATABRIDGE.md`). MySQL streaming CDC is live for
+  `DATETIME` columns only; Debezium encodes `TIMESTAMP` columns as ISO-8601 strings the JDBC
+  sink can't bind, and MySQL cutover has not been driven live (see `docs/DATABRIDGE.md`). SQL
+  Server and Oracle are verified through discovery only. Cutover for MySQL, SQL Server, and
+  Oracle has not been driven live.
 - ✅ **NFS/ZFS drivers now have a real mode, not just fixtures**: `ATLAS_NFS_DRIVER_MODE`/
   `ATLAS_ZFS_DRIVER_MODE` (`fake`, the default — unchanged demo/test behavior — or `real`; Helm
   chart: `nfs.driverMode`/`zfs.driverMode`) select `RealNfsDriver`/`RealZfsDriver`
@@ -664,7 +662,7 @@ no model required for the default path. See [AI_ADVISOR.md](AI_ADVISOR.md).
   `CephBlockPool`/`CephFilesystem`/`CephObjectStore` CRs (see the Rook CRD read integration entry
   above) — implemented and unit-tested, pending a live-cluster verification pass.
 - Single-node Ceph reports `HEALTH_WARN` (expected: 1 OSD < default size 3).
-- Per-product integrations beyond the gRPC surface (Veyron VM datastores, Hyper2KVM direct-to-RBD
+- Per-product integrations beyond the gRPC surface (Veyron VM datastores, Transiva direct-to-RBD
   migration, GuestKit, etc.) are not yet built — see the per-product rows above.
 - `scripts/test-connectors.sh` (container-backed DataBridge connector tests) needs podman/docker;
   the `kafka-lag` feature needs `cmake` to build `rdkafka` — both are opt-in and skipped where that

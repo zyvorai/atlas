@@ -3,7 +3,7 @@
 # Atlas — Zyvor Storage Control Plane
 
 Atlas is the central storage control plane for the Zyvor product suite. Products (Zeus OS/v9s,
-Veyron, Hyper2KVM, GuestKit, PacketWolf, Aether, Ragnarok, Machina, HyperSDK) call **Atlas APIs**;
+Veyron, Transiva, GuestKit, PacketWolf, Aether, Ragnarok, Machina, HyperSDK) call **Atlas APIs**;
 Atlas talks to storage backends through **pluggable drivers**. Ceph is the first driver.
 
 Design authority: `Zyvor_Ceph_Integration_Developer_Implementation_Plan.pdf` (v1.0 engineering draft).

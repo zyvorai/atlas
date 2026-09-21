@@ -15,7 +15,7 @@ Start at the top-level [README](../README.md) for the overview and quickstart.
 - **[DR.md](DR.md)** — cross-cluster RBD mirroring, failover runbook, live two-site checklist.
 - **[HA.md](HA.md)** — durable job queue, leader lease, Postgres cutover plan.
 - **[DATABRIDGE.md](DATABRIDGE.md)** — cloud-to-edge DB / object migration control plane.
-- **[ROADMAP.md](ROADMAP.md)** — what's shipped and what's deferred.
+- **[ROADMAP.md](ROADMAP.md)** — what's shipped and what's deferred. Maturity is [STATUS.md](STATUS.md).
 - **[LICENSING.md](LICENSING.md)** — Zyvor Production License v1.0; SPDX / CLA / DCO.
 - **[../CONTRIBUTING.md](../CONTRIBUTING.md)** — conventions; how to add an endpoint / driver / migration.
 - **[../CLA.md](../CLA.md)** · **[../DCO.md](../DCO.md)** · **[../NOTICE](../NOTICE)** — contribution + attribution.

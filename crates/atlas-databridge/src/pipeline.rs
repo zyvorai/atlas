@@ -276,7 +276,7 @@ pub(crate) fn plan_short(plan_id: &str) -> &str {
 }
 
 /// Full-load: copy the source dataset into the freshly-provisioned edge DB. Fake mode simulates an
-/// instant load; real mode (pg_dump/mydumper batch Job) is a follow-up.
+/// instant load; real mode applies a dump/restore batch Job.
 pub async fn full_load(
     pool: &AnyPool,
     k8s: Option<&atlas_driver_k8s::K8sDriver>,
@@ -417,7 +417,7 @@ pub async fn full_load(
 }
 
 /// Start Debezium CDC. Fake mode records a streaming stream with an initial lag the reconciler
-/// drains toward zero; real mode (KafkaConnect + Debezium connector CRs) is a follow-up.
+/// drains toward zero; real mode applies KafkaConnect and Debezium connector CRs.
 pub async fn start_cdc(
     pool: &AnyPool,
     k8s: Option<&atlas_driver_k8s::K8sDriver>,

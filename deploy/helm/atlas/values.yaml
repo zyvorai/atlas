@@ -9,8 +9,9 @@ nameOverride: ""
 fullnameOverride: ""
 
 image:
-  # Fake/k8s-driver builds use `Dockerfile`; real-Ceph builds use `Dockerfile.ceph` (see
-  # docs/DEPLOYMENT.md). Point this at your own registry — these images aren't published publicly.
+  # Lab/quickstart default: a locally imported image (see scripts/deploy-remote.sh).
+  # Tagged releases are published to ghcr.io/zyvorai/atlas and ghcr.io/zyvorai/atlas-ceph.
+  # Install those with `-f values-release.yaml` (immutable version tag, not `:latest`).
   repository: localhost/atlas-gateway
   tag: dev
   pullPolicy: IfNotPresent

@@ -36,6 +36,25 @@ Expects to run in `ceph.rookNamespace` (default `rook-ceph`) with Rook's mon end
 and admin keyring Secret already present — this chart doesn't stand up Ceph itself, see
 `deploy/rook-ceph-lab/`.
 
+## Published images (0.4.0)
+
+Lab quickstart above keeps `localhost/atlas-gateway:dev`. A tagged release is
+`ghcr.io/zyvorai/atlas:0.4.0` (fake/k8s image) and `ghcr.io/zyvorai/atlas-ceph:0.4.0` (real Ceph
+image). Pin the immutable version tag; do not deploy `:latest`.
+
+```bash
+helm install atlas ./deploy/helm/atlas \
+  -f ./deploy/helm/atlas/values-release.yaml \
+  --create-namespace \
+  --set auth.createSecret=true
+
+helm install atlas-ceph ./deploy/helm/atlas \
+  -f ./deploy/helm/atlas/values-release.yaml \
+  --set ceph.enabled=true \
+  --set image.repository=ghcr.io/zyvorai/atlas-ceph \
+  --set service.grpc.enabled=true
+```
+
 ## What's parameterized
 
 See `values.yaml` for the full set — image, replicas/resources, database backend, service

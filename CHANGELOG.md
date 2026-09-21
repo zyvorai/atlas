@@ -9,9 +9,17 @@ before `0.2.0` were not tracked here — see `git log` for that history.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-09-21
+
+### Upgrade and migration notes
+
+- No database migration is required from 0.3.0 to 0.4.0. Starting a 0.4.0 gateway applies the same `migrations/` or `migrations-postgres/` tree it already applied on `main`; this release does not add a schema revision of its own.
+- Artifacts tagged `v0.3.0` stay under AGPL-3.0 plus the Atlas Commercial License. Artifacts tagged `v0.4.0` use `LicenseRef-Zyvor-Production-1.0`. The texts that applied to v0.3.0 are archived in-tree and linked from the 0.3.0 section below; they are not the current [`LICENSE`](LICENSE).
+- Helm lab installs keep the `localhost/atlas-gateway:dev` default. Published images are `ghcr.io/zyvorai/atlas:0.4.0` and `ghcr.io/zyvorai/atlas-ceph:0.4.0`, selected with [`deploy/helm/atlas/values-release.yaml`](deploy/helm/atlas/values-release.yaml). Do not deploy the floating `:latest` tag. A lab `scripts/deploy-remote.sh` roll-out of this tree reported `GET /version` as `0.4.0` (`/health`, discovery, and live StorageClasses also succeeded). That image is the local `:dev` import, not the GHCR tag, which is published only when `v0.4.0` is pushed.
+
 ### Changed — Zyvor Production License v1.0
 
-- Replaced the AGPL-3.0 + Atlas Commercial License dual license with the [Zyvor Production License v1.0](LICENSE). Non-production use is free. Production, SaaS, managed services, OEM, and redistribution require a separate paid commercial license. Published SKU prices are withdrawn; commercial terms are issued separately ([https://zyvor.dev](https://zyvor.dev)). Source headers use `LicenseRef-Zyvor-Production-1.0`. There is still no runtime license key.
+- Replaced the AGPL-3.0 + Atlas Commercial License dual license with the [Zyvor Production License v1.0](LICENSE). Non-production use is free. Production, SaaS, managed services, OEM, and redistribution require a separate paid commercial license. Published SKU prices are withdrawn; commercial terms are issued separately ([https://zyvor.dev](https://zyvor.dev)). Source headers use `LicenseRef-Zyvor-Production-1.0`. There is still no runtime license key. The v0.3.0 AGPL text is [`LICENSES/AGPL-3.0-only-v0.3.0.txt`](LICENSES/AGPL-3.0-only-v0.3.0.txt); the v0.3.0 commercial summary is [`LICENSES/LicenseRef-Atlas-Commercial-v0.3.0.md`](LICENSES/LicenseRef-Atlas-Commercial-v0.3.0.md).
 
 ### Added — operator Make targets
 
@@ -66,13 +74,16 @@ before `0.2.0` were not tracked here — see `git log` for that history.
 
 ### Changed — Dual license (AGPL-3.0 + ACL); remove trial JWT gate
 
-- Open-source under [AGPL-3.0](LICENSE); commercial track via
-  [Atlas Commercial License (ACL)](COMMERCIAL_LICENSE.md). See [docs/LICENSING.md](docs/LICENSING.md).
+- Open-source under [AGPL-3.0](https://github.com/zyvorai/atlas/blob/v0.3.0/LICENSE)
+  (archived as [`LICENSES/AGPL-3.0-only-v0.3.0.txt`](LICENSES/AGPL-3.0-only-v0.3.0.txt)); commercial track via
+  [Atlas Commercial License (ACL)](https://github.com/zyvorai/atlas/blob/v0.3.0/COMMERCIAL_LICENSE.md)
+  (archived as [`LICENSES/LicenseRef-Atlas-Commercial-v0.3.0.md`](LICENSES/LicenseRef-Atlas-Commercial-v0.3.0.md)).
+  The license notes that applied to this tag are [docs/LICENSING.md at v0.3.0](https://github.com/zyvorai/atlas/blob/v0.3.0/docs/LICENSING.md), not the current license document.
 - Removed Ed25519 JWT trial stack: `atlas-license`, `atlas-license-tool`, gateway
   `license_middleware` / `GET /license/status`, `LicenseBanner`, deploy Secret wiring, and
   `ATLAS_LICENSE_ENFORCE`. AGPL self-host is ungated (same model as Aurora).
 - Per-file `SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Atlas-Commercial` headers;
-  [`LICENSES/`](LICENSES/), [`NOTICE`](NOTICE), [`CLA.md`](CLA.md), [`DCO.md`](DCO.md);
+  [`LICENSES/` at v0.3.0](https://github.com/zyvorai/atlas/tree/v0.3.0/LICENSES), [`NOTICE`](https://github.com/zyvorai/atlas/blob/v0.3.0/NOTICE), [`CLA.md`](https://github.com/zyvorai/atlas/blob/v0.3.0/CLA.md), [`DCO.md`](https://github.com/zyvorai/atlas/blob/v0.3.0/DCO.md);
   `make headers` / CI license-header lint.
 
 ### Added — Relay product ownership
