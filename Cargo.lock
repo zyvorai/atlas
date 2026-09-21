@@ -204,7 +204,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-api-types"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "serde",
@@ -213,7 +213,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -224,7 +224,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-common"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -244,7 +244,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-databridge"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -276,7 +276,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-discovery"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "atlas-api-types",
@@ -289,7 +289,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-driver-ceph"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "atlas-api-types",
@@ -302,7 +302,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-driver-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "atlas-api-types",
@@ -313,7 +313,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-driver-k8s"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "atlas-api-types",
@@ -328,7 +328,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-driver-nfs"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "atlas-api-types",
@@ -341,7 +341,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-driver-rgw"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -357,7 +357,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-driver-zfs"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "atlas-api-types",
@@ -370,7 +370,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-gateway"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "argon2",
@@ -423,7 +423,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-inventory"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "atlas-api-types",
@@ -437,7 +437,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-jobs"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "atlas-api-types",
@@ -460,7 +460,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-monitor"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "atlas-api-types",
@@ -480,7 +480,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-policy"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "atlas-api-types",
  "serde",
@@ -4209,9 +4209,9 @@ dependencies = [
 
 [[package]]
 name = "rdkafka"
-version = "0.36.2"
+version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1beea247b9a7600a81d4cc33f659ce1a77e1988323d7d2809c7ed1c21f4c316d"
+checksum = "d7956f9ac12b5712e50372d9749a3102f4810a8d42481c5eae3748d36d585bcf"
 dependencies = [
  "futures-channel",
  "futures-util",
