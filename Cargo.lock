@@ -204,7 +204,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-api-types"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "serde",
@@ -213,7 +213,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -224,7 +224,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-common"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -244,7 +244,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-databridge"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -276,7 +276,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-discovery"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "atlas-api-types",
@@ -289,7 +289,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-driver-ceph"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "atlas-api-types",
@@ -302,7 +302,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-driver-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "atlas-api-types",
@@ -313,7 +313,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-driver-k8s"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "atlas-api-types",
@@ -328,7 +328,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-driver-nfs"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "atlas-api-types",
@@ -341,7 +341,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-driver-rgw"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -357,7 +357,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-driver-zfs"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "atlas-api-types",
@@ -370,7 +370,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-gateway"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "argon2",
@@ -415,7 +415,7 @@ dependencies = [
  "tonic-build",
  "tonic-reflection",
  "tower 0.5.3",
- "tower-http 0.6.11",
+ "tower-http 0.7.1",
  "tracing",
  "tracing-subscriber",
  "uuid",
@@ -423,7 +423,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-inventory"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "atlas-api-types",
@@ -437,7 +437,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-jobs"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "atlas-api-types",
@@ -460,7 +460,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-monitor"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "atlas-api-types",
@@ -480,7 +480,7 @@ dependencies = [
 
 [[package]]
 name = "atlas-policy"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "atlas-api-types",
  "serde",
@@ -5947,8 +5947,24 @@ dependencies = [
  "tower 0.5.3",
  "tower-layer",
  "tower-service",
- "tracing",
  "url",
+]
+
+[[package]]
+name = "tower-http"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08a05a66a4fdd61cbbe0a1d755ffe0ca6aba159dd4820936a0ff8a8278245b9c"
+dependencies = [
+ "bitflags 2.13.0",
+ "bytes",
+ "http",
+ "http-body",
+ "percent-encoding",
+ "pin-project-lite",
+ "tower-layer",
+ "tower-service",
+ "tracing",
 ]
 
 [[package]]
