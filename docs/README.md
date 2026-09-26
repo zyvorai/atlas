@@ -13,6 +13,7 @@ Start at the top-level [README](../README.md) for the overview and quickstart.
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** — k3s + Rook (Squid / CSI drivers) + gateway scripts; pitfalls table.
 - **[DAY2.md](DAY2.md)** — day-2 ops (alerts, maintenance, governance, DR).
 - **[DR.md](DR.md)** — cross-cluster RBD mirroring, failover runbook, live two-site checklist.
+- **[VMWARE_EXIT_DEMO.md](VMWARE_EXIT_DEMO.md)** — 30-minute lab script. Atlas does not import the disk; CDI boots it on the Ceph StorageClass.
 - **[HA.md](HA.md)** — durable job queue, leader lease, Postgres cutover plan.
 - **[DATABRIDGE.md](DATABRIDGE.md)** — cloud-to-edge DB / object migration control plane.
 - **[ROADMAP.md](ROADMAP.md)** — what's shipped and what's deferred. Maturity is [STATUS.md](STATUS.md).
